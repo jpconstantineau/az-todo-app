@@ -1,83 +1,32 @@
 import pkg from '@azure/functions';
 const { app, HttpResponse } = pkg;
 
-app.http('navbar', {
+app.http('header', {
     methods: ['GET'],
     authLevel: 'anonymous',
-    route: 'navbar',
+    route: 'header',
     handler: async (request, context) => {
        
         context.log(`Http function processed request for url "${request.url}"`);
         context.log(`Invocation ID: "${context.invocationId}"`);       
         context.log(`Http headers "${JSON.stringify(request.headers)}"`);
-const data1 = `
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <header class="d-flex flex-wrap align-items-center justify-content-center justify-content-md-between py-3 mb-4 border-bottom">
-      <div class="col-md-3 mb-2 mb-md-0">
-        <a href="/" class="d-inline-flex link-body-emphasis text-decoration-none">
-          <svg class="bi" width="40" height="32" role="img" aria-label="Bootstrap"><use xlink:href="#bootstrap"/></svg>
-        </a>
-      </div>
-
-      <ul class="nav col-12 col-md-auto mb-2 justify-content-center mb-md-0">
-        <li><a href="#" class="nav-link px-2 link-secondary">Home</a></li>
-        <li><a href="#" class="nav-link px-2">Features</a></li>
-        <li><a href="#" class="nav-link px-2">Pricing</a></li>
-        <li><a href="#" class="nav-link px-2">FAQs</a></li>
-        <li><a href="#" class="nav-link px-2">About</a></li>
-      </ul>
-
-      <div class="col-md-3 text-end">
-        <button type="button" class="btn btn-outline-primary me-2">Login</button>
-        <button type="button" class="btn btn-primary">Sign-up</button>
-      </div>
-    </header>
-    </nav>
-
-    `
 
         const data = `
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-      <div class="container">
-        <a class="navbar-brand" href="#">Navbar</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarSupportedContent">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item">
-              <a class="nav-link active" aria-current="page" href="#">Home</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="#">Link</a>
-            </li>
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                Dropdown
-              </a>
-              <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
-                <li><a class="dropdown-item" href="#">Action</a></li>
-                <li><a class="dropdown-item" href="#">Another action</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="#">Something else here</a></li>
-              </ul>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link disabled">Disabled</a>
-            </li>
-          </ul>
-          <form class="d-flex" role="search">
-            <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">
-            <button class="btn btn-outline-success" type="submit">Search</button>
-          </form>
-        </div>
-      </div>
-    </nav>
-
+      <hgroup>
+        <h1>To Do</h1>
+      </hgroup>
+      <nav>
+        <ul>
+          <li><a href="#" data-theme-switcher="auto">Auto</a></li>
+          <li><a href="#" data-theme-switcher="light">Light</a></li>
+          <li><a href="#" data-theme-switcher="dark">Dark</a></li>
+        </ul>
+      </nav>
+    </header>
         `;
 
         const response = new HttpResponse({ status: 200, 
-            body: data1
+            body: data
         });
         response.headers.set('content-type', 'text/html; charset=utf-8');
 
@@ -96,21 +45,345 @@ app.http('main', {
         context.log(`Invocation ID: "${context.invocationId}"`);       
         context.log(`Http headers "${JSON.stringify(request.headers)}"`);
         const data = `
-    <div class="container my-5">
-      <h1>Hello, world!</h1>
-      <div class="col-lg-8 px-0">
-        <p class="fs-5">You've successfully loaded up the Bootstrap starter example. It includes <a href="https://getbootstrap.com/">Bootstrap 5</a> via the <a href="https://www.jsdelivr.com/package/npm/bootstrap">jsDelivr CDN</a> and includes an additional CSS and JS file for your own code.</p>
-        <p>Feel free to download or copy-and-paste any parts of this example.</p>
+      <!-- Preview -->
+      <section id="preview">
+        <h2>Preview</h2>
+        <p>
+          Sed ultricies dolor non ante vulputate hendrerit. Vivamus sit amet suscipit sapien. Nulla
+          iaculis eros a elit pharetra egestas.
+        </p>
+        <form>
+          <input
+            type="text"
+            name="firstname"
+            placeholder="First name"
+            aria-label="First name"
+            required
+          />
+          <input
+            type="email"
+            name="email"
+            placeholder="Email address"
+            aria-label="Email address"
+            autocomplete="email"
+            required
+          />
+          <button type="submit">Subscribe</button>
+          <fieldset>
+            <label for="terms">
+              <input type="checkbox" role="switch" id="terms" name="terms" />
+              I agree to the
+              <a href="#" onclick="event.preventDefault()">Privacy Policy</a>
+            </label>
+          </fieldset>
+        </form>
+      </section>
+      <!-- ./ Preview -->
 
-        <hr class="col-1 my-4">
+      <!-- Typography-->
+      <section id="typography">
+        <h2>Typography</h2>
+        <p>
+          Aliquam lobortis vitae nibh nec rhoncus. Morbi mattis neque eget efficitur feugiat.
+          Vivamus porta nunc a erat mattis, mattis feugiat turpis pretium. Quisque sed tristique
+          felis.
+        </p>
 
-        <a href="https://getbootstrap.com" class="btn btn-primary">Read the Bootstrap docs</a>
-        <a href="https://github.com/twbs/examples" class="btn btn-secondary">View on GitHub</a>
+        <!-- Blockquote-->
+        <blockquote>
+          "Maecenas vehicula metus tellus, vitae congue turpis hendrerit non. Nam at dui sit amet
+          ipsum cursus ornare."
+          <footer>
+            <cite>- Phasellus eget lacinia</cite>
+          </footer>
+        </blockquote>
 
+        <!-- Lists-->
+        <h3>Lists</h3>
+        <ul>
+          <li>Aliquam lobortis lacus eu libero ornare facilisis.</li>
+          <li>Nam et magna at libero scelerisque egestas.</li>
+          <li>Suspendisse id nisl ut leo finibus vehicula quis eu ex.</li>
+          <li>Proin ultricies turpis et volutpat vehicula.</li>
+        </ul>
 
-        </div>
-    </div>
+        <!-- Inline text elements-->
+        <h3>Inline text elements</h3>
+        <p><a href="#" onclick="event.preventDefault()">Link</a></p>
+        <p><strong>Bold</strong></p>
+        <p><em>Italic</em></p>
+        <p><u>Underline</u></p>
+        <p><del>Deleted</del></p>
+        <p><ins>Inserted</ins></p>
+        <p><s>Strikethrough</s></p>
+        <p><small>Small </small></p>
+        <p>Text <sub>Sub</sub></p>
+        <p>Text <sup>Sup</sup></p>
+        <p>
+          <abbr title="Abbreviation" data-tooltip="Abbreviation">Abbr.</abbr>
+        </p>
+        <p><kbd>Kbd</kbd></p>
+        <p><mark>Highlighted</mark></p>
 
+        <!-- Headings-->
+        <h3>Heading 3</h3>
+        <p>
+          Integer bibendum malesuada libero vel eleifend. Fusce iaculis turpis ipsum, at efficitur
+          sem scelerisque vel. Aliquam auctor diam ut purus cursus fringilla. Class aptent taciti
+          sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+        </p>
+        <h4>Heading 4</h4>
+        <p>
+          Cras fermentum velit vitae auctor aliquet. Nunc non congue urna, at blandit nibh. Donec ac
+          fermentum felis. Vivamus tincidunt arcu ut lacus hendrerit, eget mattis dui finibus.
+        </p>
+        <h5>Heading 5</h5>
+        <p>
+          Donec nec egestas nulla. Sed varius placerat felis eu suscipit. Mauris maximus ante in
+          consequat luctus. Morbi euismod sagittis efficitur. Aenean non eros orci. Vivamus ut diam
+          sem.
+        </p>
+        <h6>Heading 6</h6>
+        <p>
+          Ut sed quam non mauris placerat consequat vitae id risus. Vestibulum tincidunt nulla ut
+          tortor posuere, vitae malesuada tortor molestie. Sed nec interdum dolor. Vestibulum id
+          auctor nisi, a efficitur sem. Aliquam sollicitudin efficitur turpis, sollicitudin
+          hendrerit ligula semper id. Nunc risus felis, egestas eu tristique eget, convallis in
+          velit.
+        </p>
+
+        <!-- Medias-->
+        <figure>
+          <img
+            src="img/aleksandar-jason-a562ZEFKW8I-unsplash-2000x1000.jpg"
+            alt="Minimal landscape"
+          />
+          <figcaption>
+            Image from
+            <a href="https://unsplash.com/photos/a562ZEFKW8I" target="_blank">unsplash.com</a>
+          </figcaption>
+        </figure>
+      </section>
+      <!-- ./ Typography-->
+
+      <!-- Form elements-->
+      <section id="form">
+        <form>
+          <h2>Form elements</h2>
+
+          <!-- Search -->
+          <label for="search">Search</label>
+          <input type="search" id="search" name="search" placeholder="Search" />
+
+          <!-- Text -->
+          <label for="text">Text</label>
+          <input type="text" id="text" name="text" placeholder="Text" />
+          <small>Curabitur consequat lacus at lacus porta finibus.</small>
+
+          <!-- Select -->
+          <label for="select">Select</label>
+          <select id="select" name="select" required>
+            <option value="" selected>Select…</option>
+            <option>…</option>
+          </select>
+
+          <!-- File browser -->
+          <label for="file"
+            >File browser
+            <input type="file" id="file" name="file" />
+          </label>
+
+          <!-- Range slider control -->
+          <label for="range"
+            >Range slider
+            <input type="range" min="0" max="100" value="50" id="range" name="range" />
+          </label>
+
+          <!-- States -->
+
+          <label for="valid">
+            Valid
+            <input type="text" id="valid" name="valid" placeholder="Valid" aria-invalid="false" />
+          </label>
+          <label for="invalid">
+            Invalid
+            <input
+              type="text"
+              id="invalid"
+              name="invalid"
+              placeholder="Invalid"
+              aria-invalid="true"
+            />
+          </label>
+          <label for="disabled">
+            Disabled
+            <input type="text" id="disabled" name="disabled" placeholder="Disabled" disabled />
+          </label>
+
+          <!-- Date-->
+          <label for="date"
+            >Date
+            <input type="date" id="date" name="date" />
+          </label>
+
+          <!-- Time-->
+          <label for="time"
+            >Time
+            <input type="time" id="time" name="time" />
+          </label>
+
+          <!-- Color-->
+          <label for="color"
+            >Color
+            <input type="color" id="color" name="color" value="#0eaaaa" />
+          </label>
+
+          <!-- Checkboxes -->
+          <fieldset>
+            <legend><strong>Checkboxes</strong></legend>
+            <label for="checkbox-1">
+              <input type="checkbox" id="checkbox-1" name="checkbox-1" checked />
+              Checkbox
+            </label>
+            <label for="checkbox-2">
+              <input type="checkbox" id="checkbox-2" name="checkbox-2" />
+              Checkbox
+            </label>
+          </fieldset>
+
+          <!-- Radio buttons -->
+          <fieldset>
+            <legend><strong>Radio buttons</strong></legend>
+            <label for="radio-1">
+              <input type="radio" id="radio-1" name="radio" value="radio-1" checked />
+              Radio button
+            </label>
+            <label for="radio-2">
+              <input type="radio" id="radio-2" name="radio" value="radio-2" />
+              Radio button
+            </label>
+          </fieldset>
+
+          <!-- Switch -->
+          <fieldset>
+            <legend><strong>Switches</strong></legend>
+            <label for="switch-1">
+              <input type="checkbox" id="switch-1" name="switch-1" role="switch" checked />
+              Switch
+            </label>
+            <label for="switch-2">
+              <input type="checkbox" id="switch-2" name="switch-2" role="switch" />
+              Switch
+            </label>
+          </fieldset>
+
+          <!-- Buttons -->
+          <input type="reset" value="Reset" onclick="event.preventDefault()" />
+          <input type="submit" value="Submit" onclick="event.preventDefault()" />
+        </form>
+      </section>
+      <!-- ./ Form elements-->
+
+      <!-- Modal -->
+      <section id="modal">
+        <h2>Modal</h2>
+        <button class="contrast" onclick="modalExample.showModal()">Launch demo modal</button>
+      </section>
+      <!-- ./ Modal -->
+
+      <!-- Accordions -->
+      <section id="accordions">
+        <h2>Accordions</h2>
+        <details>
+          <summary>Accordion 1</summary>
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque urna diam,
+            tincidunt nec porta sed, auctor id velit. Etiam venenatis nisl ut orci consequat, vitae
+            tempus quam commodo. Nulla non mauris ipsum. Aliquam eu posuere orci. Nulla convallis
+            lectus rutrum quam hendrerit, in facilisis elit sollicitudin. Mauris pulvinar pulvinar
+            mi, dictum tristique elit auctor quis. Maecenas ac ipsum ultrices, porta turpis sit
+            amet, congue turpis.
+          </p>
+        </details>
+        <details open>
+          <summary>Accordion 2</summary>
+          <ul>
+            <li>Vestibulum id elit quis massa interdum sodales.</li>
+            <li>Nunc quis eros vel odio pretium tincidunt nec quis neque.</li>
+            <li>Quisque sed eros non eros ornare elementum.</li>
+            <li>Cras sed libero aliquet, porta dolor quis, dapibus ipsum.</li>
+          </ul>
+        </details>
+      </section>
+      <!-- ./ Accordions -->
+
+      <!-- Article-->
+      <article id="article">
+        <h2>Article</h2>
+        <p>
+          Nullam dui arcu, malesuada et sodales eu, efficitur vitae dolor. Sed ultricies dolor non
+          ante vulputate hendrerit. Vivamus sit amet suscipit sapien. Nulla iaculis eros a elit
+          pharetra egestas. Nunc placerat facilisis cursus. Sed vestibulum metus eget dolor pharetra
+          rutrum.
+        </p>
+        <footer>
+          <small>Duis nec elit placerat, suscipit nibh quis, finibus neque.</small>
+        </footer>
+      </article>
+      <!-- ./ Article-->
+
+      <!-- Group -->
+      <section id="group">
+        <h2>Group</h2>
+        <form>
+          <fieldset role="group">
+            <input name="email" type="email" placeholder="Enter your email" autocomplete="email" />
+            <input type="submit" value="Subscribe" />
+          </fieldset>
+        </form>
+      </section>
+      <!-- ./ Group -->
+
+      <!-- Progress -->
+      <section id="progress">
+        <h2>Progress bar</h2>
+        <progress id="progress-1" value="25" max="100"></progress>
+        <progress id="progress-2"></progress>
+      </section>
+      <!-- ./ Progress -->
+
+      <!-- Loading -->
+      <section id="loading">
+        <h2>Loading</h2>
+        <article aria-busy="true"></article>
+        <button aria-busy="true">Please wait…</button>
+      </section>
+      <!-- ./ Loading -->
+        `;
+
+        const response = new HttpResponse({ status: 200, 
+            body: data
+        });
+        response.headers.set('content-type', 'text/html; charset=utf-8');
+
+        return response;
+            
+    }
+});
+
+app.http('footer', {
+    methods: ['GET'],
+    authLevel: 'anonymous',
+    route: 'footer',
+    handler: async (request, context) => {
+       
+        context.log(`Http function processed request for url "${request.url}"`);
+        context.log(`Invocation ID: "${context.invocationId}"`);       
+        context.log(`Http headers "${JSON.stringify(request.headers)}"`);
+        const data = `
+        <small>Built with <a href="https://picocss.com">Pico</a>
+        <a href="https://github.com/picocss/examples/blob/master/v2-html-classless/index.html">Source code</a>
+        </small>
         `;
 
         const response = new HttpResponse({ status: 200, 
