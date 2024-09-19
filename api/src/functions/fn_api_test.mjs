@@ -22,7 +22,7 @@ app.http('header', {
           <li><a href="#" data-theme-switcher="dark">Dark</a></li>
         </ul>
       </nav>
-    </header>
+        <script src="main.js"></script>
         `;
 
         const response = new HttpResponse({ status: 200, 
