@@ -1,0 +1,30 @@
+{
+    "version": "2.0",
+    "extensions": {
+      "cosmosDB": {
+        "connectionMode": "Gateway"
+      },
+      "http": {
+        "routePrefix": "api",
+        "customHeaders": {
+          "Access-Control-Expose-Headers": "*"
+        }
+      }
+    },
+    "logging": {
+      "applicationInsights": {
+        "samplingSettings": {
+          "isEnabled": true,
+          "excludedTypes": "Request"
+        }
+      }
+    },
+    "extensionBundle": {
+      "id": "Microsoft.Azure.Functions.ExtensionBundle",
+      "version": "[4.*, 5.0.0)"
+    },
+    "concurrency": {
+      "dynamicConcurrencyEnabled": true,
+      "snapshotPersistenceEnabled": true
+    }
+  }
