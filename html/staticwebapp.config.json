@@ -1,0 +1,67 @@
+{
+    "routes": [
+      {
+        "route": "/login",
+        "redirect": "/.auth/login/github",
+        "allowedRoles": ["anonymous"]
+      },
+      {
+        "route": "/logout",
+        "redirect": "/.auth/logout"
+      },
+      {
+        "route": "/.auth/login/github",
+        "allowedRoles": ["anonymous"]
+      },
+      {
+        "route": "/.auth/login/twitter",
+        "statusCode": 404
+      },
+      {
+        "route": "/.auth/login/aad",
+        "statusCode": 404
+      },
+      {
+        "route": "/api/header",
+        "allowedRoles": ["anonymous","authenticated"]
+      },
+      {
+        "route": "/api/main",
+        "allowedRoles": ["anonymous","authenticated"]
+      },
+      {
+        "route": "/api/footer",
+        "allowedRoles": ["anonymous","authenticated"]
+      },
+      {
+        "route": "/api/*",
+        "allowedRoles": ["authenticated"]
+      }
+    ],
+    "platformErrorOverrides": [
+        {
+          "errorType": "NotFound",
+          "serve": "/404.html"
+        },
+        {
+          "errorType": "Unauthenticated",
+          "statusCode": "302",
+          "serve": "/login"
+        }
+      ],
+      "responseOverrides": {
+        "401": {
+          "redirect": "/.auth/login/github?post_login_redirect_uri=.referrer",
+          "statusCode": 302
+        },
+        "404": {
+          "rewrite": "/404",
+          "statusCode": 404
+        },        
+        "403": {
+          "rewrite": "/",
+          "statusCode": 302
+        }
+
+      }
+  }
