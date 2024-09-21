@@ -26,8 +26,10 @@ app.http('header', {
                 <li><a href="#" data-theme-switcher="dark">Dark</a></li>
               </ul>
             </details>
-          </li>          
+          </li>
+          <li><button class="secondary"><a href="/login">Login</a></button></li>          
         </ul>
+        
       </nav>
         <script src="main.js"></script>
         `;
