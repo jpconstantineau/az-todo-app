@@ -17,9 +17,16 @@ app.http('header', {
       </hgroup>
       <nav>
         <ul>
-          <li><a href="#" data-theme-switcher="auto">Auto</a></li>
-          <li><a href="#" data-theme-switcher="light">Light</a></li>
-          <li><a href="#" data-theme-switcher="dark">Dark</a></li>
+          <li>
+            <details class="dropdown">
+              <summary role="button" class="secondary">Theme</summary>
+              <ul>
+                <li><a href="#" data-theme-switcher="auto">Auto</a></li>
+                <li><a href="#" data-theme-switcher="light">Light</a></li>
+                <li><a href="#" data-theme-switcher="dark">Dark</a></li>
+              </ul>
+            </details>
+          </li>          
         </ul>
       </nav>
         <script src="main.js"></script>
@@ -380,10 +387,13 @@ app.http('footer', {
         context.log(`Http function processed request for url "${request.url}"`);
         context.log(`Invocation ID: "${context.invocationId}"`);       
         context.log(`Http headers "${JSON.stringify(request.headers)}"`);
+        const username = "jpconstantineau"
         const data = `
         <small>Built with <a href="https://picocss.com">Pico</a>
         <a href="https://github.com/picocss/examples/blob/master/v2-html-classless/index.html">Source code</a>
         </small>
+
+        <img src="https://avatars.githubusercontent.com/` + username + `?size=40" alt="` + username + `" class="circular-square">
         `;
 
         const response = new HttpResponse({ status: 200, 

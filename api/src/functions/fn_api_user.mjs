@@ -28,6 +28,8 @@ app.http('user', {
             switch (object.identityProvider)
             {
                 case "github":
+                    //https://avatars.githubusercontent.com/jpconstantineau?size=40
+                    //
                     break;  
                 }
 
