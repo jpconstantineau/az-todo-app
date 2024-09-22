@@ -32,7 +32,6 @@ app.http('item', {
         const ObjectType = request.params.ObjectType
         const ObjectID = request.params.ObjectID
 
-
         let object= {}
         try
         {
@@ -50,7 +49,7 @@ app.http('item', {
             };
 
         }
-
+/*
 
         try
         {
@@ -136,5 +135,13 @@ app.http('item', {
                     return response;                                                
                 }
         } 
+    */
+        return {
+            status: 200,
+            body: 'Nothing done',
+        };
+
     }
+
+    
 });
