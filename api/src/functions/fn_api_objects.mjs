@@ -24,7 +24,7 @@ app.http('item', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/{ObjectID:minlength(4)}',
-  //  extraInputs: [cosmosInput],
+    extraInputs: [cosmosInput],
   //  extraOutputs: [sendToCosmosDb],
     handler: (request, context) => {
 
@@ -90,7 +90,7 @@ app.http('item', {
         switch(request.method)
         {
             case "POST":
-                let item = {}
+             /*   let item = {}
                 var fd = await request.formData();
                 fd.forEach((value, key) => item[key] = value);    
 
@@ -116,7 +116,7 @@ app.http('item', {
                         body: err.message
                     };
                 }        
-
+*/
                 break
             default: // GET
                 const toDoItem = context.extraInputs.get(cosmosInput);
