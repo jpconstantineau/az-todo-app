@@ -28,12 +28,12 @@ app.http('item', {
   //  extraOutputs: [sendToCosmosDb],
     handler: (request, context) => {
 
-//        const UserID = request.params.UserID
-  //      const ObjectType = request.params.ObjectType
-    //    const ObjectID = request.params.ObjectID
+        const UserID = request.params.UserID
+        const ObjectType = request.params.ObjectType
+        const ObjectID = request.params.ObjectID
 
         let object= {}
-   /*     try
+        try
         {
             const header = request.headers.get('x-ms-client-principal')
             const encoded = Buffer.from(header, 'base64')
@@ -47,7 +47,7 @@ app.http('item', {
                 status: 401,
                 body: 'Not Authorized'
             }
-        }*/
+        }
 /*
 
         try
