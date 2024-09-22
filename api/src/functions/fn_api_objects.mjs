@@ -48,7 +48,7 @@ app.http('item', {
                 body: 'Not Authorized'
             }
         }
-/*
+
 
         try
         {
@@ -86,7 +86,7 @@ app.http('item', {
 
         }
      
-
+/*
         switch(request.method)
         {
             case "POST":
