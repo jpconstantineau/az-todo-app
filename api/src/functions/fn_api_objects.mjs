@@ -86,10 +86,8 @@ app.http('item', {
 
         }
      
-
-        switch(request.method)
+        if (request.method === 'POST')
         {
-            case "POST":
              /*   let item = {}
                 var fd = await request.formData();
                 fd.forEach((value, key) => item[key] = value);    
@@ -117,9 +115,10 @@ app.http('item', {
                     };
                 }        
 */
-                break
-            default: // GET
-        /*        const toDoItem = context.extraInputs.get(cosmosInput);
+        }
+        if (request.method === 'GET')
+        {
+                    const toDoItem = context.extraInputs.get(cosmosInput);
                 if (!toDoItem) {
                     return {
                         status: 404,
@@ -131,7 +130,7 @@ app.http('item', {
                     });
                     response.headers.set('content-type', 'application/json');
                     return response;                                                
-                }*/
+                }
         } 
     
         return {
