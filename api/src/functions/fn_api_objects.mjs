@@ -118,19 +118,19 @@ app.http('item', {
         }
         if (request.method === 'GET')
         {
-                    const toDoItem = context.extraInputs.get(cosmosInput);
-                if (!toDoItem) {
-                    return {
-                        status: 404,
-                        body: 'ToDo item not found',
-                    };
-                } else {
-                    response = new HttpResponse({ status: 200, 
-                        body: JSON.stringify(toDoItem)
-                    });
-                    response.headers.set('content-type', 'application/json');
-                    return response;                                                
-                }
+/*            const toDoItem = context.extraInputs.get(cosmosInput);
+            if (!toDoItem) {
+                return {
+                    status: 404,
+                    body: 'ToDo item not found',
+                };
+            } else {
+                response = new HttpResponse({ status: 200, 
+                    body: JSON.stringify(toDoItem)
+                });
+                response.headers.set('content-type', 'application/json');
+                return response;                                                
+            }*/
         } 
     
         return {
