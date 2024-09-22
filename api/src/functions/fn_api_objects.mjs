@@ -12,10 +12,17 @@ const sendToCosmosDb = output.cosmosDB({
 const cosmosInput = input.cosmosDB({
     databaseName: 'ToToList',
     containerName: 'Items',
-    UserID: '{UserID}',  // PartitionKey1
-    ObjectType: '{ObjectType}',  // PartitionKey2
-    ObjectID: '{ObjectID}',  // PartitionKey3
-    connection: 'CosmosDbConnectionSetting'
+//    UserID: '{UserID}',  
+  //  ObjectType: '{ObjectType}', 
+    //ObjectID: '{ObjectID}',  
+    //connection: 'CosmosDbConnectionSetting'
+
+
+   // databaseName: 'auth',
+    //containerName: 'users',
+    sqlQuery: 'SELECT * FROM c',
+    connection: 'CosmosDbConnectionSetting',
+
 });
 
 
@@ -24,7 +31,7 @@ app.http('item', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/{ObjectID:minlength(4)}',
-  //  extraInputs: [cosmosInput],
+    extraInputs: [cosmosInput],
   //  extraOutputs: [sendToCosmosDb],
     handler: (request, context) => {
 
