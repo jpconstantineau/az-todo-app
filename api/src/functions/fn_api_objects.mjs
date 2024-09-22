@@ -24,7 +24,7 @@ app.http('item', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/{ObjectID:minlength(4)}',
-    extraInputs: [cosmosInput],
+  //  extraInputs: [cosmosInput],
   //  extraOutputs: [sendToCosmosDb],
     handler: (request, context) => {
 
