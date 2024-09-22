@@ -86,14 +86,13 @@ app.http('item', {
 
         }
      
-/*
+
         switch(request.method)
         {
             case "POST":
                 let item = {}
                 var fd = await request.formData();
                 fd.forEach((value, key) => item[key] = value);    
-                data.id = ""
 
                 try {
                     context.extraOutputs.set(sendToCosmosDb, {
@@ -134,7 +133,7 @@ app.http('item', {
                     return response;                                                
                 }
         } 
-    */
+    
         return {
             status: 200,
             body: 'Nothing done'
