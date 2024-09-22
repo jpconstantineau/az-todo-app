@@ -33,7 +33,7 @@ app.http('item', {
     //    const ObjectID = request.params.ObjectID
 
         let object= {}
-        try
+   /*     try
         {
             const header = request.headers.get('x-ms-client-principal')
             const encoded = Buffer.from(header, 'base64')
@@ -47,7 +47,7 @@ app.http('item', {
                 status: 401,
                 body: 'Not Authorized'
             }
-        }
+        }*/
 /*
 
         try
@@ -137,7 +137,7 @@ app.http('item', {
     */
         return {
             status: 200,
-            body: 'Nothing done',
+            body: 'Nothing done'
         };
     }
 });
