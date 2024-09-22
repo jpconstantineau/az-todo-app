@@ -24,20 +24,20 @@ app.http('item', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID}/{ObjectType}/{ObjectID}',
-    extraInputs: [cosmosInput],
-    extraOutputs: [sendToCosmosDb],
+  //  extraInputs: [cosmosInput],
+  //  extraOutputs: [sendToCosmosDb],
     handler: (request, context) => {
 
-        const UserID = request.params.UserID
-        const ObjectType = request.params.ObjectType
-        const ObjectID = request.params.ObjectID
+//        const UserID = request.params.UserID
+  //      const ObjectType = request.params.ObjectType
+    //    const ObjectID = request.params.ObjectID
 
         let object= {}
         try
         {
-            const header = request.headers.get('x-ms-client-principal');
-            const encoded = Buffer.from(header, 'base64');
-            let decoded = encoded.toString('ascii');
+            const header = request.headers.get('x-ms-client-principal')
+            const encoded = Buffer.from(header, 'base64')
+            let decoded = encoded.toString('ascii')
             object= JSON.parse(decoded)
         }
         catch(err)
@@ -45,9 +45,8 @@ app.http('item', {
             context.log(`401 or 500 error on get query"${request.url}" header parse`);
             return {
                 status: 401,
-                body: 'Not Authorized',
-            };
-
+                body: 'Not Authorized'
+            }
         }
 /*
 
@@ -140,8 +139,5 @@ app.http('item', {
             status: 200,
             body: 'Nothing done',
         };
-
     }
-
-    
 });
