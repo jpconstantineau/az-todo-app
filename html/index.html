@@ -23,27 +23,22 @@
             </nav>
       </header>
 
-        <main class = "container-fluid, grid-container" hx-get="/api/main/main" hx-trigger="load delay:100ms">
+        <main class = "container-fluid, grid-container" hx-get="/api/main/main" hx-trigger="load delay:250ms">
             loading...
         </main>
 
         <footer>
             <div class="grid">
-                <p><small>&copy; Pierre Constantineau, 2024 </small></p>
-                <p></p>
-                <p></p>
-                <p></p>
-                <p></p>
-                <p></p>
-            </div>
- 
-            <div class="grid">
-                <p></p>
-                <p><strong>Theme</strong></p>
-                <p><a href="#" data-theme-switcher="light"><i class="fa-solid fa-sun"></i></a></p>
-                <p><a href="#" data-theme-switcher="dark"><i class="fa-solid fa-moon"></i></a></p>
-                <p><a href="https://github.com/jpconstantineau/az-todo-app"><i class="fa-brands fa-github"></i></a></p>
-                <p><a href="https://portal.azure.com"><i class="fa-brands fa-microsoft"></i></a></p>
+                <span><small>&copy; Pierre Constantineau, 2024 </small></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span>                
+                    <a href="#" data-theme-switcher="light"><i class="fa-solid fa-sun"></i></a>
+                    <a href="#" data-theme-switcher="dark"><i class="fa-solid fa-moon"></i></a>
+                    <a href="https://github.com/jpconstantineau/az-todo-app"><i class="fa-brands fa-github"></i></a>
+                    <a href="https://portal.azure.com"><i class="fa-brands fa-microsoft"></i></a>
+                </span>
             </div>
         </footer>
         <script src="main.js"></script>

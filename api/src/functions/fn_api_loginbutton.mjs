@@ -13,7 +13,7 @@ app.http('loginbutton', {
         var chk = new CheckUsers()
         var userdetails = chk.GetUserDetails(request)
         var htmldatastart = ``
-        var buttondata = `<a href="/login"><i class="fa-solid fa-user"></i></a>`
+        var buttondata = `<a href="/login" class="circular-square"><i class="fa-solid fa-user"></i></a>`
         var htmldataend = ``
         if (userdetails.authorized)
         {

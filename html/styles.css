@@ -6,7 +6,7 @@
     --bs-body-bg: var(--bs-gray-100);
   }
 
-  .circular-square { border-radius: 50%; }
+  .circular-square { border-radius: 50%; height: 40px; width: 40px;}
 
   .grid-container {
     display: grid;
