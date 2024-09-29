@@ -4,16 +4,18 @@
 
  :root {
     --bs-body-bg: var(--bs-gray-100);
+    --pico-font-size: 12px;
+    --pico-spacing: 0.1rem;
   }
 
   .circular-square { border-radius: 50%; height: 40px; width: 40px;}
 
   .grid-container {
     display: grid;
-    grid-template-columns: 1fr 15fr;
+    grid-template-columns: 1fr 11fr;
     grid-template-rows: 9fr 1fr;
-    grid-column-gap: 10px;
-    grid-row-gap: 10px;
+    grid-column-gap: 5px;
+    grid-row-gap: 5px;
     justify-items: stretch;
     align-items: stretch;
  }
