@@ -27,8 +27,20 @@
             loading...
         </main>
 
-        <footer hx-get="/api/main/footer" hx-trigger="load">
-            loading...
+        <footer>
+            <div class = "grid">
+                <div>
+                    <a href="#" data-theme-switcher="auto">Auto</a>
+                    <a href="#" data-theme-switcher="light">Light</a>
+                    <a href="#" data-theme-switcher="dark">Dark</a>
+                </div>                
+                <div>
+                    <a href="#" >Hosted on Azure <i class="fa-brands fa-microsoft"></i></a>
+                    <a href="#" >View Source Code on <i class="fa-brands fa-github"></i></a>
+                </div>                
+            </div>
+            
+            <small>&copy; Pierre Constantineau, 2024 </small>
         </footer>
 
         <script src="https://unpkg.com/htmx.org@2.0.2"></script>

@@ -1,7 +1,6 @@
 import pkgfn from '@azure/functions';
 import CheckUsers from "./auth/CheckUsers.mjs";
 
-
 const { app, HttpResponse, input} = pkgfn;
 
 app.http('loginbutton', {
@@ -13,8 +12,6 @@ app.http('loginbutton', {
 
         var chk = new CheckUsers()
         var userdetails = chk.GetUserDetails(request)
-
-
         var htmldatastart = ``
         var buttondata = `<a href="/login"><i class="fa-solid fa-user"></i></a>`
         var htmldataend = ``
