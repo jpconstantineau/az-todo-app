@@ -4,8 +4,9 @@
 
  :root {
     --bs-body-bg: var(--bs-gray-100);
-    --pico-font-size: 12px;
+    --pico-font-size: 16px;
     --pico-spacing: 0.1rem;
+    --pico-nav-element-spacing-vertical: 0.25rem;
   }
 
   .circular-square { border-radius: 50%; height: 40px; width: 40px;}
