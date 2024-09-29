@@ -121,7 +121,7 @@ app.http('item', {
         }
         if (request.method === 'GET')
         {
-/*            const toDoItem = context.extraInputs.get(cosmosInput);
+            const toDoItem = context.extraInputs.get(cosmosInput);
             if (!toDoItem) {
                 return {
                     status: 404,
@@ -133,7 +133,7 @@ app.http('item', {
                 });
                 response.headers.set('content-type', 'application/json');
                 return response;                                                
-            }*/
+            }
         } 
     
         return {
