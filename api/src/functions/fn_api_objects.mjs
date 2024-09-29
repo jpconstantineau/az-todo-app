@@ -12,16 +12,9 @@ const sendToCosmosDb = output.cosmosDB({
 const cosmosInput = input.cosmosDB({
     databaseName: 'ToDoList',
     containerName: 'Items',
-    sqlQuery: 'SELECT * FROM c',
+    sqlQuery: 'SELECT * FROM c WHERE c.UserID = {UserID}',
     connection: 'CosmosDbConnectionSetting'
 });
-/*const cosmosInput1 = input.cosmosDB({
-    databaseName: 'auth',
-    containerName: 'users',
-    sqlQuery: 'SELECT * FROM c WHERE c.provider = {provider} AND c.userid = {userid}',
-    connection: 'CosmosDbConnectionSetting',
-});*/
-
 
 app.http('item', {
     methods: ['GET', 'POST'],
@@ -81,7 +74,7 @@ app.http('item', {
         }
         catch(err)
         {
-            context.log(`500 error on object.identityProvider from cosmosdb"${request.url}"`);
+            context.log(`500 error on object.identityProvider from x-ms-client-principal:"${request.url}"`);
             return {
                 status: 500,
                 body: 'error with identityProvider',
@@ -121,7 +114,20 @@ app.http('item', {
         }
         if (request.method === 'GET')
         {
-            const toDoItem = context.extraInputs.get(cosmosInput);
+            var toDoItem
+            try
+            {
+                toDoItem = context.extraInputs.get(cosmosInput);
+            }
+            catch(err)
+            {
+                context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
+                return {
+                    status: 500,
+                    body: JSON.stringify(err)
+                };
+            }
+            
             if (!toDoItem) {
                 return {
                     status: 404,
