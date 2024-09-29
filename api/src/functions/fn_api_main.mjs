@@ -3,7 +3,7 @@ import CheckUsers from "./auth/CheckUsers.mjs";
 
 const { app, HttpResponse, input} = pkgfn;
 
-app.http('menu', {
+app.http('main', {
     methods: ['GET'],
     authLevel: 'anonymous',
     route: 'main/main',
