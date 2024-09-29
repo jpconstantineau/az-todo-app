@@ -128,12 +128,13 @@ app.http('item', {
                 };
             }
             
-            if (!toDoItem) {
+          /*  if (!toDoItem) {
                 return {
                     status: 404,
                     body: 'ToDo item not found',
                 };
-            } else {
+            } else*/
+            {
                 response = new HttpResponse({ status: 200, 
                     body: JSON.stringify(toDoItem)
                 });
