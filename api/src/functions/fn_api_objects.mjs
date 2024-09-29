@@ -114,17 +114,17 @@ app.http('item', {
         }
         if (request.method === 'GET')
         {
-            var toDoItem
+            var objectsFromDB
             try
             {
-                toDoItem = context.extraInputs.get(cosmosInput);
+                objectsFromDB = context.extraInputs.get(cosmosInput);
             }
             catch(err)
             {
                 context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
                 return {
                     status: 500,
-                    body: JSON.stringify(err)
+                    body: '500 error on object.identityProvider from cosmosInput'
                 };
             }
             
@@ -133,14 +133,19 @@ app.http('item', {
                     status: 404,
                     body: 'ToDo item not found',
                 };
-            } else*/
+            } else
             {
                 response = new HttpResponse({ status: 200, 
                     body: JSON.stringify(toDoItem)
                 });
                 response.headers.set('content-type', 'application/json');
                 return response;                                                
-            }
+            }*/
+
+                const data = JSON.stringify(objectsFromDB)
+                return { 
+                    body: data     
+                   };
         } 
     
         return {
