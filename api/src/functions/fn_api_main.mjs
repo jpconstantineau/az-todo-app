@@ -20,15 +20,23 @@ app.http('main', {
         {
             data = `
             <aside>
-                <nav> <small>
-                <ul>
-                  <li hx-get="/api/mainusers" hx-target="#mainarea">Users</li>
-                  <li hx-get="/api/maincustomers" hx-target="#mainarea">Customers</li>
-                  <li hx-get="/api/mainsubscriptions" hx-target="#mainarea">Subscriptions</li>
-                  <li hx-get="/api/mainproducts" hx-target="#mainarea">Products</li>
-                  <li hx-get="/api/mainallowedemails" hx-target="#mainarea">Allowed Emails</li>
-                </ul> </small>
-                </nav>
+                <nav> 
+                  <details>
+                    <summary>Lists</summary>
+                    <ul>
+                      <li hx-get="/api/mainusers" hx-target="#mainarea">To Do</li>
+                      <li hx-get="/api/maincustomers" hx-target="#mainarea">Shopping</li>
+                      <li hx-get="/api/mainsubscriptions" hx-target="#mainarea">Work</li>
+                    </ul> 
+                  </details>
+                  <details>
+                    <summary>Config</summary>
+                    <ul>
+                      <li hx-get="/api/mainusers" hx-target="#mainarea">Lists</li>
+                      <li hx-get="/api/maincustomers" hx-target="#mainarea">Groups</li>
+                    </ul> 
+                  </details>
+                  </nav>
             </aside>
             `
         }
