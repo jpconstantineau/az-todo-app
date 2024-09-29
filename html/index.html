@@ -5,20 +5,29 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
         <title>To Do</title>
+        <link href="data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAZGhgA/f39AP///wAVFhIAFRcTABYXEwAXGBUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAERERERERERESIiIiIiIiIhIiMzMzMzIiEiIyEiIiMiISIjIyRVIyIhIiMiEiIjIiEiIyMmZiMiISIjIhIiIyIhIiMjEzMjIiEiIyIRIiMiISIjIyMzIyIhIiMiIiIjIiEiIzMAAzMiISIiIxETEiIhIiETMzMSIiEiIRERIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" rel="icon" type="image/x-icon">
         <meta name="description" content="A serverless Todo App" />    
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.classless.min.css"/>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css"/>
         <link rel="stylesheet" href="styles.css"/>
+        <script src="https://kit.fontawesome.com/3431a227b9.js" crossorigin="anonymous"></script>
       </head>
     <body>
-        <header hx-get="/api/header" hx-trigger="load">
-            loading...
-        </header>
+        <header>
+            <nav>
+              <ul>
+                  <li><strong>List Manager</strong></li>
+              </ul>
+              <ul>
+                  <li hx-get="/api/main/loginbutton" hx-trigger="load"><small aria-busy="true"></small></li>          
+              </ul> 
+            </nav>
+      </header>
 
-        <main hx-get="/api/main" hx-trigger="load">
+        <main hx-get="/api/main/main" hx-trigger="load">
             loading...
         </main>
 
-        <footer hx-get="/api/footer" hx-trigger="load">
+        <footer hx-get="/api/main/footer" hx-trigger="load">
             loading...
         </footer>
 

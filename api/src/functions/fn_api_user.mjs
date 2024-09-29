@@ -4,16 +4,9 @@ const { app, HttpResponse, input, output } = pkgfn;
 
 
 const sendToCosmosDb = output.cosmosDB({
-    databaseName: 'ToToList',
+    databaseName: 'ToDoList',
     containerName: 'Items',
     createIfNotExists: false,
-    connection: 'CosmosDbConnectionSetting',
-  });
-
-  const GetFromCosmosDbUser = input.cosmosDB({
-    databaseName: 'ToToList',
-    containerName: 'Items',
-    sqlQuery: 'SELECT * FROM c WHERE c.provider = "github"',
     connection: 'CosmosDbConnectionSetting',
   });
 

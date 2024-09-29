@@ -12,7 +12,7 @@ const sendToCosmosDb = output.cosmosDB({
 const cosmosInput = input.cosmosDB({
     databaseName: 'ToDoList',
     containerName: 'Items',
-    sqlQuery: 'SELECT * FROM c WHERE c.UserID = {UserID}',
+    sqlQuery: 'SELECT * FROM c WHERE c.UserID = {UserID} AND c.ObjectType = {ObjectType} AND c.ObjectID = {ObjectID}',
     connection: 'CosmosDbConnectionSetting'
 });
 
@@ -142,9 +142,9 @@ app.http('item', {
                 return response;                                                
             }*/
 
-                const data = JSON.stringify(objectsFromDB)
+                const returndata = JSON.stringify(objectsFromDB)
                 return { 
-                    body: data     
+                    body: returndata     
                    };
         } 
     

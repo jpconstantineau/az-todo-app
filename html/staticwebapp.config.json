@@ -22,15 +22,7 @@
         "statusCode": 404
       },
       {
-        "route": "/api/header",
-        "allowedRoles": ["anonymous","authenticated"]
-      },
-      {
-        "route": "/api/main",
-        "allowedRoles": ["anonymous","authenticated"]
-      },
-      {
-        "route": "/api/footer",
+        "route": "/api/main/*",
         "allowedRoles": ["anonymous","authenticated"]
       },
       {
