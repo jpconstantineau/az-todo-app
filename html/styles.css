@@ -7,3 +7,13 @@
   }
 
   .circular-square { border-radius: 50%; }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr 15fr;
+    grid-template-rows: 9fr 1fr;
+    grid-column-gap: 10px;
+    grid-row-gap: 10px;
+    justify-items: stretch;
+    align-items: stretch;
+ }

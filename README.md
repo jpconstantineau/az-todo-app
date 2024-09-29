@@ -2,6 +2,10 @@
 
 See the demo [here](https://todo.jpto.dev/)
 
+[![Azure Static Web Apps CI/CD](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml/badge.svg)](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml)
+
+
+## Architecture
 ```mermaid
   graph TD;
     A[Web Client]-->B;
