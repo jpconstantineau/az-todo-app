@@ -10,21 +10,17 @@ const sendToCosmosDb = output.cosmosDB({
   });
 
 const cosmosInput = input.cosmosDB({
-    databaseName: 'ToToList',
+    databaseName: 'ToDoList',
     containerName: 'Items',
-//    UserID: '{UserID}',  
-  //  ObjectType: '{ObjectType}', 
-    //ObjectID: '{ObjectID}',  
-    //connection: 'CosmosDbConnectionSetting'
-
-
-   // databaseName: 'auth',
-    //containerName: 'users',
     sqlQuery: 'SELECT * FROM c',
-    connection: 'CosmosDbConnectionSetting',
-
+    connection: 'CosmosDbConnectionSetting'
 });
-
+/*const cosmosInput1 = input.cosmosDB({
+    databaseName: 'auth',
+    containerName: 'users',
+    sqlQuery: 'SELECT * FROM c WHERE c.provider = {provider} AND c.userid = {userid}',
+    connection: 'CosmosDbConnectionSetting',
+});*/
 
 
 app.http('item', {
