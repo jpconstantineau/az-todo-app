@@ -14,30 +14,38 @@ app.http('main', {
            
         var htmldatastart = ``
         var data = ``
-        var htmldataend = `<article class = "container" id="mainarea"></article>`
+        var htmldataend = `<article class = "container" id="mainarea"></article> 
+                           <article class = "container" id="statusarea"></article>
+                           <article class = "container" id="errorarea"></article>`
 
         if (userdetails.authorized)
         {
+          const userid = userdetails.userId 
+          const listid = "listid"
+          // lists will be dynamic from configured lists for user logged in
             data = `
+            <article>
             <aside>
                 <nav> 
                   <details>
                     <summary>Lists</summary>
                     <ul>
-                      <li hx-get="/api/mainusers" hx-target="#mainarea">To Do</li>
-                      <li hx-get="/api/maincustomers" hx-target="#mainarea">Shopping</li>
-                      <li hx-get="/api/mainsubscriptions" hx-target="#mainarea">Work</li>
+                      <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">To Do</li>
+                      <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">Shopping</li>
+                      <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">Work</li>
                     </ul> 
                   </details>
                   <details>
                     <summary>Config</summary>
                     <ul>
-                      <li hx-get="/api/mainusers" hx-target="#mainarea">Lists</li>
-                      <li hx-get="/api/maincustomers" hx-target="#mainarea">Groups</li>
+                      <li hx-get="/api/config/`+userid+`/`+listid+`" hx-target="#mainarea">Object Types</li>
+                      <li hx-get="/api/config/`+userid+`/`+listid+`" hx-target="#mainarea">Lists</li>
+                      <li hx-get="/api/config/`+userid+`/`+listid+`" hx-target="#mainarea">Groups</li>
                     </ul> 
                   </details>
                   </nav>
             </aside>
+            </article>
             `
         }
         else
