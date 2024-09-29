@@ -20,3 +20,7 @@
     justify-items: stretch;
     align-items: stretch;
  }
+
+ .right {
+  float: right;
+}
