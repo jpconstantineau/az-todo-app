@@ -127,11 +127,11 @@ app.http('item', {
                     body: '500 error on object.identityProvider from cosmosInput'
                 };
             }
-            
-            if (!objectsFromDB) {
+            try{
+            if (objectsFromDB.length()==0) {
                 return {
                     status: 404,
-                    body: 'ToDo item not found',
+                    body: 'item not found',
                 };
             } else
             {
@@ -140,6 +140,13 @@ app.http('item', {
                 });
                 response.headers.set('content-type', 'application/json');
                 return response;                                                
+            }
+            }
+            catch (err){
+                return {
+                    status: 500,
+                    body: '500 error on objectsFromDB.length()'
+                };
             }
 
         } 
