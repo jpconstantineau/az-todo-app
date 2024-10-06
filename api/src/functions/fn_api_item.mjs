@@ -139,7 +139,7 @@ app.http('item', {
                 } 
                 else
                 {
-                    response = new HttpResponse({ status: 200, 
+                    var response = new HttpResponse({ status: 200, 
                         body: JSON.stringify(objectsFromDB)
                     });
                     response.headers.set('content-type', 'application/json');
