@@ -128,7 +128,7 @@ app.http('item', {
                 };
             }
           //  try
-            {
+           // {
                 if (objectsFromDB.length()==0) {
                     return {
                         status: 404,
@@ -143,13 +143,13 @@ app.http('item', {
                     response.headers.set('content-type', 'application/json');
                     return response;                                                
                 }
-            }
+        //    }
            /* catch (err){
                 return {
                     status: 500,
                     body: '500 error on objectsFromDB.length()'
-                };*/
-            }
+                };
+            }*/
 
         } 
     
