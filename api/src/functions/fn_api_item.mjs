@@ -127,9 +127,11 @@ app.http('item', {
                     body: '500 error on object.identityProvider from cosmosInput'
                 };
             }
-          //  try
-           // {
-                if (objectsFromDB.length()==0) {
+
+            var founddata = false
+            for (const object of objectsFromDB) {founddata=true}
+
+                if (!founddata) {
                     return {
                         status: 404,
                         body: 'item not found',
@@ -143,13 +145,6 @@ app.http('item', {
                     response.headers.set('content-type', 'application/json');
                     return response;                                                
                 }
-        //    }
-           /* catch (err){
-                return {
-                    status: 500,
-                    body: '500 error on objectsFromDB.length()'
-                };
-            }*/
 
         } 
     
