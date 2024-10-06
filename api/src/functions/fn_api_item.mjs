@@ -128,7 +128,7 @@ app.http('item', {
                 };
             }
             
-          /*  if (!toDoItem) {
+            if (!objectsFromDB) {
                 return {
                     status: 404,
                     body: 'ToDo item not found',
@@ -136,16 +136,12 @@ app.http('item', {
             } else
             {
                 response = new HttpResponse({ status: 200, 
-                    body: JSON.stringify(toDoItem)
+                    body: JSON.stringify(objectsFromDB)
                 });
                 response.headers.set('content-type', 'application/json');
                 return response;                                                
-            }*/
+            }
 
-                const returndata = JSON.stringify(objectsFromDB)
-                return { 
-                    body: returndata     
-                   };
         } 
     
         return {
