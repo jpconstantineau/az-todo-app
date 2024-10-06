@@ -127,26 +127,28 @@ app.http('item', {
                     body: '500 error on object.identityProvider from cosmosInput'
                 };
             }
-            try{
-            if (objectsFromDB.length()==0) {
-                return {
-                    status: 404,
-                    body: 'item not found',
-                };
-            } else
+          //  try
             {
-                response = new HttpResponse({ status: 200, 
-                    body: JSON.stringify(objectsFromDB)
-                });
-                response.headers.set('content-type', 'application/json');
-                return response;                                                
+                if (objectsFromDB.length()==0) {
+                    return {
+                        status: 404,
+                        body: 'item not found',
+                    };
+                } 
+                else
+                {
+                    response = new HttpResponse({ status: 200, 
+                        body: JSON.stringify(objectsFromDB)
+                    });
+                    response.headers.set('content-type', 'application/json');
+                    return response;                                                
+                }
             }
-            }
-            catch (err){
+           /* catch (err){
                 return {
                     status: 500,
                     body: '500 error on objectsFromDB.length()'
-                };
+                };*/
             }
 
         } 
