@@ -27,21 +27,12 @@ app.http('main', {
             <article>
             <aside>
                 <nav> 
-                  <details>
-                    <summary>Lists</summary>
                     <ul>
                       <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">To Do</li>
                       <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">Shopping</li>
                       <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">Work</li>
-                    </ul> 
-                  </details>
-                  <details>
-                    <summary>Config</summary>
-                    <ul>
-                      <li hx-get="/api/item/`+userid+`/object.type/menu" trigger="onload"></li>
+                      <li hx-get="/api/item/`+userid+`/object.type/menu" trigger="onload">Menu</li>
                       <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Object Types</li>
-                    </ul> 
-                  </details>
                   </nav>
             </aside>
             </article>

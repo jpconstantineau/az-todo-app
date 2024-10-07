@@ -113,7 +113,7 @@ app.http('item', {
                     <table>`      
                     for (const object of objectsFromDB) 
                         {
-                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.type+`</td></tr>`
+                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
                         }
                     htmldata = htmldata + `</table>
                     </div>`
