@@ -28,10 +28,11 @@ app.http('main', {
             <aside>
                 <nav> 
                     <ul>
-                      <li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">Menu</li>
-                      <li hx-get="/api/item/`+userid+`/object.list/list" hx-target="#mainarea">Edit Lists</li>
-                      <li hx-get="/api/item/`+userid+`/object.type/menu" hx-trigger="load" hx-swap="outerHTML">Menu</li>
-                      <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Edit Objects</li>
+                      <li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>
+                      <li hx-get="/api/item/`+userid+`/object.type/menu" hx-trigger="load" hx-swap="outerHTML">Object Menu</li>
+                      <li hx-get="/api/item/`+userid+`/object.list/list" hx-target="#mainarea">Lists</li>
+                      <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Objects</li>
+                      <li hx-get="/api/item/`+userid+`/input.type/list" hx-target="#mainarea">Inputs Types</li>
                   </nav>
             </aside>
             </article>
