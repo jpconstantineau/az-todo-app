@@ -9,10 +9,17 @@ const sendToCosmosDb = output.cosmosDB({
     connection: 'CosmosDbConnectionSetting',
   });
 
-const cosmosInput = input.cosmosDB({
+const cosmosInputItem = input.cosmosDB({
     databaseName: 'ToDoList',
     containerName: 'Items',
     sqlQuery: 'SELECT * FROM c WHERE c.UserID = {UserID} AND c.ObjectType = {ObjectType} AND c.ObjectID = {ObjectID}',
+    connection: 'CosmosDbConnectionSetting'
+});
+
+const cosmosInputList = input.cosmosDB({
+    databaseName: 'ToDoList',
+    containerName: 'Items',
+    sqlQuery: 'SELECT * FROM c WHERE c.UserID = {UserID} AND c.ObjectType = {ObjectType}',
     connection: 'CosmosDbConnectionSetting'
 });
 
@@ -20,14 +27,15 @@ app.http('item', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/{ObjectID:minlength(4)}',
-    extraInputs: [cosmosInput],
-  //  extraOutputs: [sendToCosmosDb],
+    extraInputs: [cosmosInputItem,cosmosInputList],
+    extraOutputs: [sendToCosmosDb],
     handler: (request, context) => {
 
         const UserID = request.params.UserID
         const ObjectType = request.params.ObjectType
         const ObjectID = request.params.ObjectID
 
+        // GET AUTH DETAILS
         let object= {}
         try
         {
@@ -45,7 +53,7 @@ app.http('item', {
             }
         }
 
-
+        // CHECK AUTH DETAILS
         try
         {
             switch (object.identityProvider)
@@ -82,72 +90,89 @@ app.http('item', {
 
         }
      
-        if (request.method === 'POST')
+        // PROCESS REQUEST
+        switch (ObjectID)
         {
-             /*   let item = {}
-                var fd = await request.formData();
-                fd.forEach((value, key) => item[key] = value);    
+            case "list": // list all objects of type "ObjectType"
 
-                try {
-                    context.extraOutputs.set(sendToCosmosDb, {
-                        id: object.userDetails+`.`+ObjectType+`.`+ObjectID,
-                        UserID: UserID,
-                        ObjectType: ObjectType,
-                        ObjectID: ObjectID,
-                        data: item
-                    });  
-                    return {
-                        status: 200,
-                        body: "success"
-                    };
+                break
+            case "create": // return form needed to create object 
 
-                }
-                catch(err)
+                break
+            default: 
+                switch (request.method)
                 {
-                    context.log(`500 error on get user from cosmosdb"${request.url}"`);
-                    return {
-                        status: 500,
-                        body: err.message
-                    };
-                }        
-*/
+                    case "DELETE": // Delete Object
+                        // get object
+                        // update ttl to 1
+                        // save object
+                        break
+                    case "POST": // Create/Update Object
+                            /* let item = {}
+                                var fd = await request.formData();
+                                fd.forEach((value, key) => item[key] = value);    
+                
+                                try {
+                                    context.extraOutputs.set(sendToCosmosDb, {
+                                        id: object.userDetails+`.`+ObjectType+`.`+ObjectID,
+                                        UserID: UserID,
+                                        ObjectType: ObjectType,
+                                        ObjectID: ObjectID,
+                                        data: item
+                                    });  
+                                    return {
+                                        status: 200,
+                                        body: "success"
+                                    };
+                
+                                }
+                                catch(err)
+                                {
+                                    context.log(`500 error on get user from cosmosdb"${request.url}"`);
+                                    return {
+                                        status: 500,
+                                        body: err.message
+                                    };
+                                }
+                                    */        
+                        break
+                    default:     
+                        var objectsFromDB
+                        try
+                        {
+                            objectsFromDB = context.extraInputs.get(cosmosInput);
+                        }
+                        catch(err)
+                        {
+                            context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
+                            return {
+                                status: 500,
+                                body: '500 error on object.identityProvider from cosmosInput'
+                            };
+                        }
+            
+                        var founddata = false
+                        for (const object of objectsFromDB) {founddata=true}
+            
+                            if (!founddata) {
+                                return {
+                                    status: 404,
+                                    body: 'item not found',
+                                };
+                            } 
+                            else
+                            {
+                                var response = new HttpResponse({ status: 200, 
+                                    body: JSON.stringify(objectsFromDB)
+                                });
+                                response.headers.set('content-type', 'application/json');
+                                return response;                                                
+                            }
+
+                }   
         }
-        if (request.method === 'GET')
-        {
-            var objectsFromDB
-            try
-            {
-                objectsFromDB = context.extraInputs.get(cosmosInput);
-            }
-            catch(err)
-            {
-                context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
-                return {
-                    status: 500,
-                    body: '500 error on object.identityProvider from cosmosInput'
-                };
-            }
 
-            var founddata = false
-            for (const object of objectsFromDB) {founddata=true}
-
-                if (!founddata) {
-                    return {
-                        status: 404,
-                        body: 'item not found',
-                    };
-                } 
-                else
-                {
-                    var response = new HttpResponse({ status: 200, 
-                        body: JSON.stringify(objectsFromDB)
-                    });
-                    response.headers.set('content-type', 'application/json');
-                    return response;                                                
-                }
-
-        } 
-    
+        // IF NO CASE IS FOUND
         return {
             status: 200,
             body: 'Nothing done'
