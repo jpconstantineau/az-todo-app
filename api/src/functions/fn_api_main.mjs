@@ -38,9 +38,8 @@ app.http('main', {
                   <details>
                     <summary>Config</summary>
                     <ul>
-                      <li hx-get="/api/item/`+userid+`/object.types/list" hx-target="#mainarea">Object Types</li>
-                      <li hx-get="/api/config/`+userid+`/lists/`+listid+`" hx-target="#mainarea">Lists</li>
-                      <li hx-get="/api/item/`+userid+`/groups/`+listid+`" hx-target="#mainarea">Groups</li>
+                      <li hx-get="/api/item/`+userid+`/object.type/menu" trigger="onload"></li>
+                      <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Object Types</li>
                     </ul> 
                   </details>
                   </nav>

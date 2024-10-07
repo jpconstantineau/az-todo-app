@@ -124,6 +124,32 @@ app.http('item', {
                         body: htmldata,
                     };
                 break
+            case "menu":
+                    try
+                    {
+                        objectsFromDB = context.extraInputs.get(cosmosInputList);
+                    }
+                    catch(err)
+                    {
+                        context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
+                        return {
+                            status: 500,
+                            body: '500 error on object.identityProvider from cosmosInput'
+                        };
+                    }       
+                    htmldata = htmldata + ``      
+                    for (const object of objectsFromDB) 
+                        {
+                            htmldata = htmldata + `<li hx-get="/api/item/`+object.UserID+`/`+object.ObjectType+`/list" hx-target="#mainarea">`+object.data.name+`</li>`
+                        }
+                    htmldata = htmldata + ``
+                    
+
+                    return {
+                        status: 200,
+                        body: htmldata,
+                    };
+                break    
             case "create": // return form needed to create object 
                     var id = Date.now()
                     htmldata = htmldata + `
