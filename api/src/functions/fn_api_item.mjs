@@ -3,7 +3,7 @@ import pkgfn from '@azure/functions';
 const { app, HttpResponse, input, output } = pkgfn;
 
 const sendToCosmosDb = output.cosmosDB({
-    databaseName: 'ToToList',
+    databaseName: 'ToDoList',
     containerName: 'Items',
     createIfNotExists: false,
     connection: 'CosmosDbConnectionSetting',
