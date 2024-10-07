@@ -29,7 +29,7 @@ app.http('item', {
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/{ObjectID:minlength(4)}',
     extraInputs: [cosmosInputItem,cosmosInputList],
     extraOutputs: [sendToCosmosDb],
-    handler: (request, context) => {
+    handler: async (request, context) => {
 
         const UserID = request.params.UserID
         const ObjectType = request.params.ObjectType
@@ -154,21 +154,22 @@ app.http('item', {
                         // save object
                         break
                     case "POST": // Create/Update Object
-                            /* let item = {}
+                             var item = {}
                                 var fd = await request.formData();
                                 fd.forEach((value, key) => item[key] = value);    
                 
                                 try {
                                     context.extraOutputs.set(sendToCosmosDb, {
-                                        id: object.userDetails+`.`+ObjectType+`.`+ObjectID,
+                                        id: ObjectID,
                                         UserID: UserID,
                                         ObjectType: ObjectType,
                                         ObjectID: ObjectID,
+                                        name: item.name,
                                         data: item
                                     });  
                                     return {
                                         status: 200,
-                                        body: "success"
+                                        body:  `<div hx-get="/api/item/`+UserID+`/`+ObjectType+`/`+ObjectID+`" hx-target="this" hx-swap="outerHTML" trigger="onload"></div>`
                                     };
                 
                                 }
@@ -180,7 +181,7 @@ app.http('item', {
                                         body: err.message
                                     };
                                 }
-                                    */        
+                                            
                         break
                     default:     
                         
