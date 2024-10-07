@@ -89,15 +89,61 @@ app.http('item', {
             };
 
         }
-     
+        var objectsFromDB
+        var htmldata = ''
         // PROCESS REQUEST
         switch (ObjectID)
         {
+            
             case "list": // list all objects of type "ObjectType"
+                    try
+                    {
+                        objectsFromDB = context.extraInputs.get(cosmosInputList);
+                    }
+                    catch(err)
+                    {
+                        context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
+                        return {
+                            status: 500,
+                            body: '500 error on object.identityProvider from cosmosInput'
+                        };
+                    }       
+                    htmldata = htmldata + `<div>
+                    <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                    <table>`      
+                    for (const object of objectsFromDB) 
+                        {
+                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.type+`</td></tr>`
+                        }
+                    htmldata = htmldata + `</table>
+                    </div>`
+                    
 
+                    return {
+                        status: 200,
+                        body: htmldata,
+                    };
                 break
             case "create": // return form needed to create object 
+                    var id = Date.now()
+                    htmldata = htmldata + `
+                    <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/`+id+`" hx-target="this" hx-swap="outerHTML">
+                        <div>
+                            <label>Name</label>
+                            <input type="text" name="name" value="name">
+                        </div>
+                        <div class="form-group">
+                            <label>Type</label>
+                            <input type="text" name="type" value="type">
+                        </div>
+                        <button class="btn">Submit</button>
+                        <button class="btn" hx-get="/contact/1">Cancel</button>
+                    </form>`    
 
+                    return {
+                        status: 200,
+                        body: htmldata,
+                    };
                 break
             default: 
                 switch (request.method)
@@ -137,7 +183,7 @@ app.http('item', {
                                     */        
                         break
                     default:     
-                        var objectsFromDB
+                        
                         try
                         {
                             objectsFromDB = context.extraInputs.get(cosmosInput);
