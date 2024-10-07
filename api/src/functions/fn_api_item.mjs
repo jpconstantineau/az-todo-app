@@ -195,7 +195,7 @@ app.http('item', {
                                     });  
                                     return {
                                         status: 200,
-                                        body:  `<div hx-get="/api/item/`+UserID+`/`+ObjectType+`/`+ObjectID+`" hx-target="this" hx-swap="outerHTML" trigger="onload"></div>`
+                                        body:  `<div hx-get="/api/item/`+UserID+`/`+ObjectType+`/`+ObjectID+`" hx-target="this" hx-swap="outerHTML" trigger="load"></div>`
                                     };
                 
                                 }

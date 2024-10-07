@@ -31,7 +31,7 @@ app.http('main', {
                       <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">To Do</li>
                       <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">Shopping</li>
                       <li hx-get="/api/list/`+userid+`/`+listid+`" hx-target="#mainarea">Work</li>
-                      <li hx-get="/api/item/`+userid+`/object.type/menu" trigger="onload" hx-swap="outerHTML">Menu</li>
+                      <li hx-get="/api/item/`+userid+`/object.type/menu" trigger="load" hx-swap="outerHTML">Menu</li>
                       <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Object Types</li>
                   </nav>
             </aside>
