@@ -225,8 +225,7 @@ app.http('item', {
                                     context.extraOutputs.set(sendToCosmosDb, dataobject);  
                                     return {
                                         status: 200,
-                                        body:  `<div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
-                                                <div id="alerts" hx-swap-oob="true">
+                                        body:  `<div hx-swap-oob="beforeend:#tablelist tbody>
                                                     <tr><td>`+dataobject.id+`</td><td>`+dataobject.name+`</td><td>`+dataobject.data.type+`</td></tr> 
                                                 </div>`
 
