@@ -140,7 +140,7 @@ app.http('item', {
                                 </div>`            
                         default:
                                 htmldata = htmldata + `<div>
-                                <div hx-target="#tablelist" hx-swap="afterbegin" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                                <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
                                 <table id="tablelist">`      
                                 for (const object of objectsFromDB) 
                                     {
@@ -184,18 +184,15 @@ app.http('item', {
             case "create": // return form needed to create object 
                     var id = Date.now()
                     htmldata = htmldata + `
-                    <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/`+id+`" hx-target="this" hx-swap="outerHTML"><tr>
-                        <td>
+                    <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                    <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/`+id+`" hx-target="this" hx-swap="outerHTML">
+                        
                             <label>Name</label>
                             <input type="text" name="name" value="name">
-                        </td>
-                        <td >
                             <label>Type</label>
                             <input type="text" name="type" value="type">
-                        </td>
-                        <td>
                         <button class="btn">Submit</button>
-                        <button class="btn" hx-get="/contact/1">Cancel</button></td></tr>
+                        <button class="btn" hx-get="/contact/1">Cancel</button>
                     </form>`    
 
                     return {
@@ -227,7 +224,11 @@ app.http('item', {
                                     });  
                                     return {
                                         status: 200,
-                                        body:  `<div hx-get="/api/item/`+UserID+`/`+ObjectType+`/`+ObjectID+`" hx-target="this" hx-swap="outerHTML" hx-trigger="load"></div>`
+                                        body:  `<div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                                                <div id="alerts" hx-swap-oob="true">
+                                                    <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr> 
+                                                </div>`
+
                                     };
                 
                                 }
@@ -257,7 +258,17 @@ app.http('item', {
                         }
             
                         var founddata = false
-                        for (const object of objectsFromDB) {founddata=true}
+                        for (const object of objectsFromDB) 
+                            {
+                                founddata=true
+                                htmldata = htmldata + `
+                                <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                                <div id="alerts" hx-swap-oob="true">
+                                    <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>
+                                </div>`
+                                
+                                
+                            }
             
                             if (!founddata) {
                                 return {
@@ -268,9 +279,8 @@ app.http('item', {
                             else
                             {
                                 var response = new HttpResponse({ status: 200, 
-                                    body: JSON.stringify(objectsFromDB)
+                                    body: htmldata
                                 });
-                                response.headers.set('content-type', 'application/json');
                                 return response;                                                
                             }
 
