@@ -225,9 +225,9 @@ app.http('item', {
                                     context.extraOutputs.set(sendToCosmosDb, dataobject);  
                                     return {
                                         status: 200,
-                                        body:  `<tbody hx-swap-oob="beforeend:#tablelist tbody>
+                                        body:  `<table hx-swap-oob="beforeend:#tablelist >
                                                     <tr><td>`+dataobject.id+`</td><td>`+dataobject.name+`</td><td>`+dataobject.data.type+`</td></tr> 
-                                                </tbody>`
+                                                </table>`
 
                                     };
                 
