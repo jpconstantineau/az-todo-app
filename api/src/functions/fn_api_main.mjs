@@ -27,13 +27,21 @@ app.http('main', {
             <article>
             <aside>
                 <nav> 
-                    <ul>
-                      <li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>
-                      <li hx-get="/api/item/`+userid+`/object.type/menu" hx-trigger="load" hx-swap="outerHTML">Object Menu</li>
-                      <li hx-get="/api/item/`+userid+`/object.list/list" hx-target="#mainarea">Lists</li>
-                      <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Input Objects</li>
-                      <li hx-get="/api/item/`+userid+`/input.type/list" hx-target="#mainarea">Input Types</li>
-                  </nav>
+                    <details>
+                      <summary>Lists</summary>
+                      <ul>
+                        <li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>
+                      </ul> 
+                    </details>
+                    <details>
+                      <summary>Config</summary>
+                        <ul>
+                          <li hx-get="/api/item/`+userid+`/object.type/menu" hx-trigger="load" hx-swap="outerHTML">Object Menu</li>
+                          <li hx-get="/api/item/`+userid+`/object.list/editlist" hx-target="#mainarea">Lists</li>
+                          <li hx-get="/api/item/`+userid+`/object.type/editlist" hx-target="#mainarea">Input Objects</li>
+                          <li hx-get="/api/item/`+userid+`/input.type/list" hx-target="#mainarea">Input Types</li>
+                        </ul> 
+                      </details>
             </aside>
             </article>
             `

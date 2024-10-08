@@ -94,7 +94,6 @@ app.http('item', {
         // PROCESS REQUEST
         switch (ObjectID)
         {
-            
             case "list": // list all objects of type "ObjectType"
                     try
                     {
@@ -109,8 +108,37 @@ app.http('item', {
                         };
                     }       
                     htmldata = htmldata + `<div>
-                    <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
                     <table>`      
+                    for (const object of objectsFromDB) 
+                        {
+                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                        }
+                    htmldata = htmldata + `</table>
+                    </div>`
+                    
+
+                    return {
+                        status: 200,
+                        body: htmldata,
+                    };
+                break
+            
+            case "editlist": // list all objects of type "ObjectType"
+                    try
+                    {
+                        objectsFromDB = context.extraInputs.get(cosmosInputList);
+                    }
+                    catch(err)
+                    {
+                        context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
+                        return {
+                            status: 500,
+                            body: '500 error on object.identityProvider from cosmosInput'
+                        };
+                    }       
+                    htmldata = htmldata + `<div>
+                    <div hx-target="tablelist" hx-swap="afterbegin" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                    <table id="tablelist">`      
                     for (const object of objectsFromDB) 
                         {
                             htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
