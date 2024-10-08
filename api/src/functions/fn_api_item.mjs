@@ -211,22 +211,23 @@ app.http('item', {
                     case "POST": // Create/Update Object
                              var item = {}
                                 var fd = await request.formData();
-                                fd.forEach((value, key) => item[key] = value);    
+                                fd.forEach((value, key) => item[key] = value);   
+                                var dataobject =   {
+                                    id: ObjectID,
+                                    UserID: UserID,
+                                    ObjectType: ObjectType,
+                                    ObjectID: ObjectID,
+                                    name: item.name,
+                                    data: item
+                                }
                 
                                 try {
-                                    context.extraOutputs.set(sendToCosmosDb, {
-                                        id: ObjectID,
-                                        UserID: UserID,
-                                        ObjectType: ObjectType,
-                                        ObjectID: ObjectID,
-                                        name: item.name,
-                                        data: item
-                                    });  
+                                    context.extraOutputs.set(sendToCosmosDb, dataobject);  
                                     return {
                                         status: 200,
                                         body:  `<div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
                                                 <div id="alerts" hx-swap-oob="true">
-                                                    <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr> 
+                                                    <tr><td>`+dataobject.id+`</td><td>`+dataobject.name+`</td><td>`+dataobject.data.type+`</td></tr> 
                                                 </div>`
 
                                     };
