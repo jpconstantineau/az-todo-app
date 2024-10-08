@@ -26,22 +26,10 @@ app.http('main', {
             data = `
             <article>
             <aside>
-                <nav> 
-                    <details>
-                      <summary>Lists</summary>
-                      <ul>
+                <nav > 
+                      <ul id="navlist">
                         <li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>
                       </ul> 
-                    </details>
-                    <details>
-                      <summary>Config</summary>
-                        <ul>
-                          <li hx-get="/api/item/`+userid+`/object.type/menu" hx-trigger="load" hx-swap="outerHTML">Object Menu</li>
-                          <li hx-get="/api/item/`+userid+`/object.list/editlist" hx-target="#mainarea">Lists</li>
-                          <li hx-get="/api/item/`+userid+`/object.type/editlist" hx-target="#mainarea">Input Objects</li>
-                          <li hx-get="/api/item/`+userid+`/input.type/list" hx-target="#mainarea">Input Types</li>
-                        </ul> 
-                      </details>
             </aside>
             </article>
             `
@@ -61,4 +49,48 @@ app.http('main', {
           body: htmldatastart + data + htmldataend     
          };
     }
+});
+
+app.http('mainconfig', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'main/config',
+  handler: async (request, context) => {
+      context.log(`Http function processed request for url "${request.url}"`);
+      var chk = new CheckUsers()
+      var userdetails = chk.GetUserDetails(request)
+         
+      var data = ``
+
+        const userid = userdetails.userId 
+        // lists will be dynamic from configured lists for user logged in
+          data = `      <li hx-get="/api/item/`+userid+`/object.type/menu" hx-trigger="load" hx-swap="outerHTML">Object Menu</li>
+                        <li hx-get="/api/item/`+userid+`/object.list/list" hx-target="#mainarea">Lists</li>
+                        <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Input Objects</li>
+                        <li hx-get="/api/item/`+userid+`/input.type/list" hx-target="#mainarea">Input Types</li>`
+      return { 
+        body: htmldatastart + data + htmldataend     
+       };
+  }
+});
+
+app.http('mainmenu', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  route: 'main/menu',
+  handler: async (request, context) => {
+      context.log(`Http function processed request for url "${request.url}"`);
+      var chk = new CheckUsers()
+      var userdetails = chk.GetUserDetails(request)
+         
+      var data = ``
+
+        const userid = userdetails.userId 
+        // lists will be dynamic from configured lists for user logged in
+          data = `<li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>`
+
+          return { 
+        body: htmldatastart + data + htmldataend     
+       };
+  }
 });

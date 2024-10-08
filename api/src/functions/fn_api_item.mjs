@@ -107,51 +107,54 @@ app.http('item', {
                             body: '500 error on object.identityProvider from cosmosInput'
                         };
                     }       
-                    htmldata = htmldata + `<div>
-                    <table>`      
-                    for (const object of objectsFromDB) 
-                        {
-                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                    switch(ObjectType)
+                    {
+                        case "input.type":
+                                htmldata = htmldata + `<div>
+                                <table>`      
+                                for (const object of objectsFromDB) 
+                                    {
+                                        htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                                    }
+                                htmldata = htmldata + `</table>
+                                </div>`            
+                            break
+                        case "object.typea":
+                                htmldata = htmldata + `<div>
+                                <table>`      
+                                for (const object of objectsFromDB) 
+                                    {
+                                        htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                                    }
+                                htmldata = htmldata + `</table>
+                                </div>`            
+                            break
+                        case "object.lista":
+                                htmldata = htmldata + `<div>
+                                <table>`      
+                                for (const object of objectsFromDB) 
+                                    {
+                                        htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                                    }
+                                htmldata = htmldata + `</table>
+                                </div>`            
+                        default:
+                                htmldata = htmldata + `<div>
+                                <div hx-target="#tablelist" hx-swap="afterbegin" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                                <table id="tablelist">`      
+                                for (const object of objectsFromDB) 
+                                    {
+                                        htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                                    }
+                                htmldata = htmldata + `</table>`    
                         }
-                    htmldata = htmldata + `</table>
-                    </div>`
                     
-
                     return {
                         status: 200,
                         body: htmldata,
                     };
                 break
             
-            case "editlist": // list all objects of type "ObjectType"
-                    try
-                    {
-                        objectsFromDB = context.extraInputs.get(cosmosInputList);
-                    }
-                    catch(err)
-                    {
-                        context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
-                        return {
-                            status: 500,
-                            body: '500 error on object.identityProvider from cosmosInput'
-                        };
-                    }       
-                    htmldata = htmldata + `<div>
-                    <div hx-target="#tablelist" hx-swap="afterbegin" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
-                    <table id="tablelist">`      
-                    for (const object of objectsFromDB) 
-                        {
-                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
-                        }
-                    htmldata = htmldata + `</table>
-                    </div>`
-                    
-
-                    return {
-                        status: 200,
-                        body: htmldata,
-                    };
-                break
             case "menu":
                     try
                     {
