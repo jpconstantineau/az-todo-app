@@ -137,7 +137,7 @@ app.http('item', {
                         };
                     }       
                     htmldata = htmldata + `<div>
-                    <div hx-target="tablelist" hx-swap="afterbegin" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                    <div hx-target="#tablelist" hx-swap="afterbegin" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
                     <table id="tablelist">`      
                     for (const object of objectsFromDB) 
                         {
