@@ -181,17 +181,18 @@ app.http('item', {
             case "create": // return form needed to create object 
                     var id = Date.now()
                     htmldata = htmldata + `
-                    <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/`+id+`" hx-target="this" hx-swap="outerHTML">
-                        <div>
+                    <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/`+id+`" hx-target="this" hx-swap="outerHTML"><tr>
+                        <td>
                             <label>Name</label>
                             <input type="text" name="name" value="name">
-                        </div>
-                        <div class="form-group">
+                        </td>
+                        <td >
                             <label>Type</label>
                             <input type="text" name="type" value="type">
-                        </div>
+                        </td>
+                        <td>
                         <button class="btn">Submit</button>
-                        <button class="btn" hx-get="/contact/1">Cancel</button>
+                        <button class="btn" hx-get="/contact/1">Cancel</button></td></tr>
                     </form>`    
 
                     return {
