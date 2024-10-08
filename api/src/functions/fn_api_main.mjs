@@ -69,7 +69,7 @@ app.http('mainconfig', {
                         <li hx-get="/api/item/`+userid+`/object.type/list" hx-target="#mainarea">Input Objects</li>
                         <li hx-get="/api/item/`+userid+`/input.type/list" hx-target="#mainarea">Input Types</li>`
       return { 
-        body: htmldatastart + data + htmldataend     
+        body:  data      
        };
   }
 });
@@ -83,14 +83,11 @@ app.http('mainmenu', {
       var chk = new CheckUsers()
       var userdetails = chk.GetUserDetails(request)
          
-      var data = ``
-
         const userid = userdetails.userId 
         // lists will be dynamic from configured lists for user logged in
-          data = `<li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>`
-
+          
           return { 
-        body: htmldatastart + data + htmldataend     
+        body:  `<li hx-get="/api/item/`+userid+`/object.list/menu" hx-trigger="load" hx-swap="outerHTML">List Menu</li>`     
        };
   }
 });
