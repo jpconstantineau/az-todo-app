@@ -264,7 +264,7 @@ app.http('item', {
                                 htmldata = htmldata + `
                                 <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
                                 <div id="alerts" hx-swap-oob="true">
-                                    <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>
+                                    <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td><td><i class="fa-solid fa-pen"></i> <i class="fa-solid fa-trash"></i>  </td></tr>
                                 </div>`
                                 
                                 
