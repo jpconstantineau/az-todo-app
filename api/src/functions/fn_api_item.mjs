@@ -144,7 +144,7 @@ app.http('item', {
                                 <table id="tablelist">`      
                                 for (const object of objectsFromDB) 
                                     {
-                                        htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                                        htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td><td><i class="fa-solid fa-pen"></i> <i class="fa-solid fa-trash"></i>  </td></tr>`
                                     }
                                 htmldata = htmldata + `</table>`    
                         }

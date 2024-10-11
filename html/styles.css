@@ -13,7 +13,7 @@
 
   .grid-container {
     display: grid;
-    grid-template-columns: 2fr 10fr;
+    grid-template-columns: 20ch 10fr;
     grid-template-rows: 7fr 1fr;
     grid-column-gap: 5px;
     grid-row-gap: 5px;
