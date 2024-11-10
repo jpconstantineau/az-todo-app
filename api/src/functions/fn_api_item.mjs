@@ -133,7 +133,7 @@ app.http('item_menu', {
 
         for (const object of objectsFromDB) 
             {
-                htmldata = htmldata + `<li hx-get="/api/item/`+object.UserID+`/`+object.ObjectType+`/list" hx-target="#mainarea">`+object.data.name+`</li>`
+                htmldata = htmldata + `<li hx-get="/api/item/`+object.UserID+`/`+object.data.type+`/list" hx-target="#mainarea">`+object.data.name+`</li>`
             }
         return {
             status: 200,
