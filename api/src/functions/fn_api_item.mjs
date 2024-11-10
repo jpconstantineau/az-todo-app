@@ -109,7 +109,7 @@ app.http('item_list', {
 
 
 app.http('item_menu', {
-    methods: ['GET', 'POST'],
+    methods: ['GET'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/menu',
     extraInputs: [cosmosInputList],
@@ -142,6 +142,81 @@ app.http('item_menu', {
     } 
 });
 
+app.http('item_create', {
+    methods: ['GET', 'POST'],
+    authLevel: 'anonymous',
+    route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/create',
+//    extraInputs: [cosmosInputList],
+    extraOutputs: [sendToCosmosDb],
+    handler: async (request, context) => {
+        const UserID = request.params.UserID      
+        const ObjectType = request.params.ObjectType  
+
+        var chk = new CheckUsers()
+        var userdetails = chk.GetUserDetails(request)
+        if (!(userdetails.userId == UserID))
+        {
+            return {
+                status: 401,
+                body: 'Not Authorized',
+            };
+        }
+        var htmldata = ``
+        if (request.method === 'GET')
+        {
+            htmldata = htmldata + `
+            <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+            <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/create" hx-target="this" hx-swap="outerHTML">
+                
+                    <label>Name</label>
+                    <input type="text" name="name" value="name">
+                    <label>Type</label>
+                    <input type="text" name="type" value="type">
+                <button class="btn">Submit</button>
+                <button class="btn" hx-get="/contact/1">Cancel</button>
+            </form>`                    
+        }
+        if (request.method === 'POST')
+        {
+            var item = {}
+            var RandomID = (Date.now() + 10000000000000*Math.floor(Math.random()*999)).toString(36)
+            var fd = await request.formData();
+            fd.forEach((value, key) => item[key] = value);   
+            var dataobject =   {
+                id: RandomID,
+                UserID: UserID,
+                ObjectType: ObjectType,
+                ObjectID: RandomID,
+                name: item.name,
+                data: item
+            }
+
+            try {
+                context.extraOutputs.set(sendToCosmosDb, dataobject);  
+                return {
+                    status: 200,
+                    body:  `<tbody hx-swap-oob="beforeend:table tbody">
+                                <tr><td>`+dataobject.id+`</td><td>`+dataobject.name+`</td><td>`+dataobject.data.type+`</td></tr> 
+                            </tbody>`
+
+                };
+
+            }
+            catch(err)
+            {
+                context.log(`500 error on get user from cosmosdb"${request.url}"`);
+                return {
+                    status: 500,
+                    body: err.message
+                };
+            }
+        }
+        return {
+            status: 200,
+            body: htmldata,
+        };
+    } 
+});
 
 /*
 app.http('item_delete', {
@@ -221,59 +296,11 @@ app.http('item_delete', {
               };
           break    
       case "create": // return form needed to create object 
-              var id = Date.now()
-              htmldata = htmldata + `
-              <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
-              <form hx-post="/api/item/`+UserID+`/`+ObjectType+`/`+id+`" hx-target="this" hx-swap="outerHTML">
-                  
-                      <label>Name</label>
-                      <input type="text" name="name" value="name">
-                      <label>Type</label>
-                      <input type="text" name="type" value="type">
-                  <button class="btn">Submit</button>
-                  <button class="btn" hx-get="/contact/1">Cancel</button>
-              </form>`    
-
-              return {
-                  status: 200,
-                  body: htmldata,
-              };
           break
       default: 
           switch (request.method)
           {
               case "POST": // Create/Update Object
-                       var item = {}
-                          var fd = await request.formData();
-                          fd.forEach((value, key) => item[key] = value);   
-                          var dataobject =   {
-                              id: ObjectID,
-                              UserID: UserID,
-                              ObjectType: ObjectType,
-                              ObjectID: ObjectID,
-                              name: item.name,
-                              data: item
-                          }
-          
-                          try {
-                              context.extraOutputs.set(sendToCosmosDb, dataobject);  
-                              return {
-                                  status: 200,
-                                  body:  `<tbody hx-swap-oob="beforeend:table tbody">
-                                              <tr><td>`+dataobject.id+`</td><td>`+dataobject.name+`</td><td>`+dataobject.data.type+`</td></tr> 
-                                          </tbody>`
-
-                              };
-          
-                          }
-                          catch(err)
-                          {
-                              context.log(`500 error on get user from cosmosdb"${request.url}"`);
-                              return {
-                                  status: 500,
-                                  body: err.message
-                              };
-                          }
                                       
                   break
               default:     
