@@ -107,6 +107,42 @@ app.http('item_list', {
     } 
 });
 
+
+app.http('item_list', {
+    methods: ['GET', 'POST'],
+    authLevel: 'anonymous',
+    route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/menu',
+    extraInputs: [cosmosInputList],
+//    extraOutputs: [sendToCosmosDb],
+    handler: async (request, context) => {
+        const UserID = request.params.UserID      
+        const ObjectType = request.params.ObjectType  
+
+        var chk = new CheckUsers()
+        var userdetails = chk.GetUserDetails(request)
+        if (!(userdetails.userId == UserID))
+        {
+            return {
+                status: 401,
+                body: 'Not Authorized',
+            };
+        }
+        var htmldata = ``
+        var objectsFromDB = context.extraInputs.get(cosmosInputList);
+
+        for (const object of objectsFromDB) 
+            {
+                htmldata = htmldata + `<li hx-get="/api/item/`+object.UserID+`/`+object.ObjectType+`/list" hx-target="#mainarea">`+object.data.name+`</li>`
+            }
+
+        return {
+            status: 200,
+            body: htmldata 
+        };
+    } 
+});
+
+
 /*
 app.http('item_delete', {
     methods: ['delete'],
