@@ -41,10 +41,11 @@ app.http('item_list', {
                 body: 'Not Authorized',
             };
         }
-        const ObjectType = request.params.ObjectType
-  
-        var objectsFromDB = context.extraInputs.get(cosmosInputList);
         var htmldata = `<div hx-target="this"><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>`
+
+        /*
+        const ObjectType = request.params.ObjectType  
+        var objectsFromDB = context.extraInputs.get(cosmosInputList);
         htmldata = htmldata + `<div><table>`      
         
         for (const object of objectsFromDB) 
@@ -97,7 +98,7 @@ app.http('item_list', {
                 }
                 htmldata = htmldata + `</table>
                 </div>`            
-            }    
+            } */   
         return {
             status: 200,
             body: htmldata 
