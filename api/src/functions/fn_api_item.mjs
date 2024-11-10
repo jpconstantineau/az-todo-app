@@ -45,7 +45,7 @@ app.http('item_list', {
         }
         var htmldata = `<div hx-target="this"><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>`
 
-        /*
+        
         var objectsFromDB = context.extraInputs.get(cosmosInputList);
         htmldata = htmldata + `<div><table>`      
         
@@ -97,9 +97,11 @@ app.http('item_list', {
                             </button></td>
                             </tr>`    
                 }
-                htmldata = htmldata + `</table>
-                </div>`            
-            } */   
+                                 
+            }    
+            htmldata = htmldata + `</table>
+            </div>`
+
         return {
             status: 200,
             body: htmldata 
@@ -113,7 +115,6 @@ app.http('item_menu', {
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/menu',
     extraInputs: [cosmosInputList],
-//    extraOutputs: [sendToCosmosDb],
     handler: async (request, context) => {
         const UserID = request.params.UserID      
         const ObjectType = request.params.ObjectType  
@@ -134,7 +135,6 @@ app.http('item_menu', {
             {
                 htmldata = htmldata + `<li hx-get="/api/item/`+object.UserID+`/`+object.ObjectType+`/list" hx-target="#mainarea">`+object.data.name+`</li>`
             }
-
         return {
             status: 200,
             body: htmldata 
@@ -142,11 +142,11 @@ app.http('item_menu', {
     } 
 });
 
+
 app.http('item_create', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/create',
-//    extraInputs: [cosmosInputList],
     extraOutputs: [sendToCosmosDb],
     handler: async (request, context) => {
         const UserID = request.params.UserID      
@@ -230,6 +230,7 @@ app.http('item_delete', {
         const UserID = request.params.UserID      
         var chk = new CheckUsers()
         var userdetails = chk.GetUserDetails(request)
+        var data = ``
         if (!(userdetails.userId == UserID))
         {
             return {
@@ -259,91 +260,28 @@ app.http('item_delete', {
         }
                            
         return { 
-          body:  ``     
+          body:  data     
          };
     }
   });
 
 
-/*
-  switch (ObjectID)
-  {            
-      case "menu":
-              try
-              {
-                  objectsFromDB = context.extraInputs.get(cosmosInputList);
-              }
-              catch(err)
-              {
-                  context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
-                  return {
-                      status: 500,
-                      body: '500 error on object.identityProvider from cosmosInput'
-                  };
-              }       
-              htmldata = htmldata + ``      
-              for (const object of objectsFromDB) 
-                  {
-                      htmldata = htmldata + `<li hx-get="/api/item/`+object.UserID+`/`+object.ObjectType+`/list" hx-target="#mainarea">`+object.data.name+`</li>`
-                  }
-              htmldata = htmldata + ``
-              
-
-              return {
-                  status: 200,
-                  body: htmldata,
-              };
-          break    
-      case "create": // return form needed to create object 
-          break
-      default: 
-          switch (request.method)
-          {
-              case "POST": // Create/Update Object
-                                      
-                  break
-              default:     
-                  
-                  try
-                  {
-                      objectsFromDB = context.extraInputs.get(cosmosInput);
-                  }
-                  catch(err)
-                  {
-                      context.log(`500 error on object.identityProvider from cosmosInput:"${request.url}"`);
-                      return {
-                          status: 500,
-                          body: '500 error on object.identityProvider from cosmosInput'
-                      };
-                  }
+/*                  
+                objectsFromDB = context.extraInputs.get(cosmosInput);
       
-                  var founddata = false
-                  for (const object of objectsFromDB) 
-                      {
-                          founddata=true
-                          htmldata = htmldata + `
-                          <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
-                          <div id="alerts" hx-swap-oob="true">
-                              <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td><td><i class="fa-solid fa-pen"></i> <i class="fa-solid fa-trash"></i>  </td></tr>
-                          </div>`
-                          
-                          
-                      }
+                var founddata = false
+                for (const object of objectsFromDB) 
+                    {
+                        founddata=true
+                        htmldata = htmldata + `
+                        <div hx-target="this" hx-swap="outerHTML" ><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>
+                        <div id="alerts" hx-swap-oob="true">
+                            <tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td><td><i class="fa-solid fa-pen"></i> <i class="fa-solid fa-trash"></i>  </td></tr>
+                        </div>`                                                    
+                    }
       
-                      if (!founddata) {
-                          return {
-                              status: 404,
-                              body: 'item not found',
-                          };
-                      } 
-                      else
-                      {
-                          var response = new HttpResponse({ status: 200, 
-                              body: htmldata
-                          });
-                          return response;                                                
-                      }
-
-          }   
-  }
+                var response = new HttpResponse({ status: 200, 
+                    body: htmldata
+                });
+                return response;                                                
 */
