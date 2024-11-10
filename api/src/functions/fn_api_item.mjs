@@ -49,20 +49,18 @@ app.http('item_list', {
         
         for (const object of objectsFromDB) 
             {
-
                 switch(ObjectType)
                 {
                     case "input.type":                    
                             htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
                         break
                     case "object.typea":
-                                    htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
+                            htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
                         break
                     case "object.lista":
                             htmldata = htmldata + `<tr><td>`+object.id+`</td><td>`+object.name+`</td><td>`+object.data.type+`</td></tr>`
                         break
                     default:
-                            
                             htmldata = htmldata + `<tr id="row`+object.ObjectID+`"> 
                             <td>`+object.name+`</td>
                             <td>`+object.data.type+`</td>`
@@ -97,7 +95,6 @@ app.http('item_list', {
                             </button></td>
                             </tr>`    
                 }
-        
                 htmldata = htmldata + `</table>
                 </div>`            
             }    
@@ -108,6 +105,7 @@ app.http('item_list', {
     } 
 });
 
+/*
 app.http('item_delete', {
     methods: ['delete'],
     authLevel: 'anonymous',
@@ -153,7 +151,7 @@ app.http('item_delete', {
          };
     }
   });
-
+*/
 
 /*
   switch (ObjectID)
