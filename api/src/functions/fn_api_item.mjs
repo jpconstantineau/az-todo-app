@@ -218,7 +218,7 @@ app.http('item_create', {
     } 
 });
 
-/*
+
 app.http('item_delete', {
     methods: ['delete'],
     authLevel: 'anonymous',
@@ -257,14 +257,13 @@ app.http('item_delete', {
                 data = data + `<div hx-get="/api/item/`+UserID+`/`+ObjectType+`/list" hx-target="#mainarea" hx-trigger="load delay:125ms"></div>`
             }    
         }
-    
-                       
+                           
         return { 
           body:  ``     
          };
     }
   });
-*/
+
 
 /*
   switch (ObjectID)
