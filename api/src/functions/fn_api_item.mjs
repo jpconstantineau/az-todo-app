@@ -108,7 +108,7 @@ app.http('item_list', {
 });
 
 
-app.http('item_list', {
+app.http('item_menu', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
     route: 'item/{UserID:minlength(4)}/{ObjectType:minlength(4)}/menu',
