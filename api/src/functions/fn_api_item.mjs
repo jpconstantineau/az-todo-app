@@ -32,6 +32,8 @@ app.http('item_list', {
 //    extraOutputs: [sendToCosmosDb],
     handler: async (request, context) => {
         const UserID = request.params.UserID      
+        const ObjectType = request.params.ObjectType  
+
         var chk = new CheckUsers()
         var userdetails = chk.GetUserDetails(request)
         if (!(userdetails.userId == UserID))
@@ -44,7 +46,6 @@ app.http('item_list', {
         var htmldata = `<div hx-target="this"><button hx-get="/api/item/`+UserID+`/`+ObjectType+`/create">Add New</button></div>`
 
         /*
-        const ObjectType = request.params.ObjectType  
         var objectsFromDB = context.extraInputs.get(cosmosInputList);
         htmldata = htmldata + `<div><table>`      
         
