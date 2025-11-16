@@ -1,7 +1,11 @@
 {
   "name": "gtd-api",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "type": "module",
+  "main": "index.mjs",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@azure/cosmos": "^4.2.0",
     "@azure/functions": "^4.5.0",
