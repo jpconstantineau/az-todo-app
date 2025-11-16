@@ -1,4 +1,3 @@
-// api/app/index.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -15,8 +14,8 @@ async function getSettings(userId) {
     .query(
       {
         query:
-          "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId='_meta' " +
-          "AND c.type='userSettings'",
+          "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' " +
+          "AND c.ObjectID='_meta'",
         parameters: [{ name: "@u", value: userId }]
       },
       { enableCrossPartition: true }
@@ -36,6 +35,11 @@ async function ensureSettings(userId) {
     type: "userSettings",
     userId,
     listId: "_meta",
+    // Partition key fields
+    UserID: userId,
+    ObjectType: "userSettings",
+    ObjectID: "_meta",
+
     createdUtc: now,
     updatedUtc: now,
     defaults: defaultSettings
@@ -59,12 +63,13 @@ app.http("app-index", {
 
     const settings = await ensureSettings(userId);
 
+    // Lists for user
     const { resources: lists } = await container.items
       .query(
         {
           query:
             "SELECT c.id, c.title, c.listId, c.createdUtc, c.updatedUtc " +
-            "FROM c WHERE c.userId=@u AND c.type='list' " +
+            "FROM c WHERE c.UserID=@u AND c.ObjectType='list' " +
             "ORDER BY c.updatedUtc DESC",
           parameters: [{ name: "@u", value: userId }]
         },
@@ -72,11 +77,12 @@ app.http("app-index", {
       )
       .fetchAll();
 
+    // Default items view: Next actions across lists, order by due
     const { resources: items } = await container.items
       .query(
         {
           query:
-            "SELECT * FROM c WHERE c.userId=@u AND c.type='item' " +
+            "SELECT * FROM c WHERE c.UserID=@u AND c.ObjectType='item' " +
             "AND c.status='next' ORDER BY c.dueDateUtc ASC",
           parameters: [{ name: "@u", value: userId }]
         },

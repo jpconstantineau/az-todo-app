@@ -1,4 +1,3 @@
-// api/lists/quickAddForm.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -21,7 +20,7 @@ app.http("lists-quickAddForm", {
         {
           query:
             "SELECT c.id, c.title, c.listId, c.defaults FROM c " +
-            "WHERE c.userId=@u AND c.type='list' ORDER BY c.updatedUtc DESC",
+            "WHERE c.UserID=@u AND c.ObjectType='list' ORDER BY c.updatedUtc DESC",
           parameters: [{ name: "@u", value: userId }]
         },
         { enableCrossPartition: true }
@@ -36,8 +35,8 @@ app.http("lists-quickAddForm", {
         .query(
           {
             query:
-              "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId='_meta' " +
-              "AND c.type='userSettings'",
+              "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' " +
+              "AND c.ObjectID='_meta'",
             parameters: [{ name: "@u", value: userId }]
           },
           { enableCrossPartition: true }

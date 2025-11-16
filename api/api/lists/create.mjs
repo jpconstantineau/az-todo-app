@@ -1,4 +1,3 @@
-// api/lists/create.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -36,8 +35,8 @@ app.http("lists-create", {
       .query(
         {
           query:
-            "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId='_meta' " +
-            "AND c.type='userSettings'",
+            "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' " +
+            "AND c.ObjectID='_meta'",
           parameters: [{ name: "@u", value: userId }]
         },
         { enableCrossPartition: true }
@@ -55,7 +54,12 @@ app.http("lists-create", {
       createdUtc: now,
       updatedUtc: now,
       areaTags: [],
-      defaults: userDefaults
+      defaults: userDefaults,
+
+      // Partition key fields
+      UserID: userId,
+      ObjectType: "list",
+      ObjectID: listId
     });
 
     const { resources: lists } = await container.items
@@ -63,7 +67,7 @@ app.http("lists-create", {
         {
           query:
             "SELECT c.id, c.title, c.listId, c.createdUtc, c.updatedUtc " +
-            "FROM c WHERE c.userId=@u AND c.type='list' " +
+            "FROM c WHERE c.UserID=@u AND c.ObjectType='list' " +
             "ORDER BY c.updatedUtc DESC",
           parameters: [{ name: "@u", value: userId }]
         },

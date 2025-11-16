@@ -1,4 +1,3 @@
-// api/lists/all.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -17,7 +16,7 @@ app.http("lists-all", {
         {
           query:
             "SELECT c.id, c.title, c.listId, c.createdUtc, c.updatedUtc " +
-            "FROM c WHERE c.userId=@u AND c.type='list' " +
+            "FROM c WHERE c.UserID=@u AND c.ObjectType='list' " +
             "ORDER BY c.updatedUtc DESC",
           parameters: [{ name: "@u", value: userId }]
         },
@@ -25,8 +24,7 @@ app.http("lists-all", {
       )
       .fetchAll();
 
-    const html = listsBlock(lists);
-    return new Response(html, {
+    return new Response(listsBlock(lists), {
       headers: { "content-type": "text/html; charset=utf-8" }
     });
   }

@@ -1,4 +1,3 @@
-// api/settings/update.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -11,8 +10,8 @@ async function loadSettings(userId) {
     .query(
       {
         query:
-          "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId='_meta' " +
-          "AND c.type='userSettings'",
+          "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' " +
+          "AND c.ObjectID='_meta'",
         parameters: [{ name: "@u", value: userId }]
       },
       { enableCrossPartition: true }
@@ -51,6 +50,11 @@ app.http("settings-update", {
         type: "userSettings",
         userId,
         listId: "_meta",
+
+        UserID: userId,
+        ObjectType: "userSettings",
+        ObjectID: "_meta",
+
         createdUtc: now,
         updatedUtc: now,
         defaults: updatedDefaults
@@ -59,7 +63,7 @@ app.http("settings-update", {
     } else {
       doc.defaults = updatedDefaults;
       doc.updatedUtc = now;
-      await container.item("settings", [userId, "_meta"]).replace(doc);
+      await container.item("settings", [userId, "userSettings", "_meta"]).replace(doc);
     }
 
     return new Response(settingsForm(doc), {

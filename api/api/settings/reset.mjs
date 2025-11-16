@@ -1,4 +1,3 @@
-// api/settings/reset.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -22,13 +21,18 @@ app.http("settings-reset", {
       type: "userSettings",
       userId,
       listId: "_meta",
+
+      UserID: userId,
+      ObjectType: "userSettings",
+      ObjectID: "_meta",
+
       createdUtc: now,
       updatedUtc: now,
       defaults: defaultSettings
     };
 
     try {
-      await container.item("settings", [userId, "_meta"]).replace(doc);
+      await container.item("settings", [userId, "userSettings", "_meta"]).replace(doc);
     } catch {
       await container.items.create(doc);
     }

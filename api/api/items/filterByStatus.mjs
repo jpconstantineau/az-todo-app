@@ -1,4 +1,3 @@
-// api/items/filterByStatus.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -37,7 +36,7 @@ app.http("items-filterByStatus", {
     const pageSize = 50;
     const querySpec = {
       query:
-        "SELECT * FROM c WHERE c.userId=@u AND c.type='item' " +
+        "SELECT * FROM c WHERE c.UserID=@u AND c.ObjectType='item' " +
         "AND c.status=@s ORDER BY c.dueDateUtc ASC",
       parameters: [
         { name: "@u", value: userId },

@@ -1,4 +1,3 @@
-// api/items/create.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -64,7 +63,12 @@ app.http("items-create", {
       energy: energy || null,
       timeRequired: timeRequired || null,
       priority: priority || null,
-      referenceLinks: []
+      referenceLinks: [],
+
+      // Partition key fields (co-locate by list)
+      UserID: userId,
+      ObjectType: "item",
+      ObjectID: listId
     };
 
     await container.items.create(doc);
@@ -73,8 +77,8 @@ app.http("items-create", {
       .query(
         {
           query:
-            "SELECT * FROM c WHERE c.userId=@u AND c.listId=@l " +
-            "AND c.type='item' ORDER BY c.createdUtc DESC",
+            "SELECT * FROM c WHERE c.UserID=@u AND c.ObjectType='item' " +
+            "AND c.ObjectID=@l ORDER BY c.createdUtc DESC",
           parameters: [
             { name: "@u", value: userId },
             { name: "@l", value: listId }

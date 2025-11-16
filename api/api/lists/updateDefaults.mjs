@@ -1,4 +1,3 @@
-// api/lists/updateDefaults.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -11,8 +10,8 @@ async function getList(userId, listId) {
     .query(
       {
         query:
-          "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId=@l " +
-          "AND c.type='list'",
+          "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='list' " +
+          "AND c.ObjectID=@l",
         parameters: [
           { name: "@u", value: userId },
           { name: "@l", value: listId }
@@ -53,7 +52,8 @@ app.http("lists-updateDefaults", {
     list.defaults = defaults;
     list.updatedUtc = new Date().toISOString();
 
-    await container.item(list.id, [userId, listId]).replace(list);
+    // point replace with full partition key
+    await container.item(list.id, [userId, "list", listId]).replace(list);
 
     const html = listSettingsForm({
       list,

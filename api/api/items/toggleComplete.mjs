@@ -1,4 +1,3 @@
-// api/items/toggleComplete.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -20,18 +19,21 @@ app.http("items-toggleComplete", {
     const listId = (form.get("listId") || "").toString();
     if (!id || !listId) return new Response("Bad request", { status: 400 });
 
-    const query = {
-      query:
-        "SELECT * FROM c WHERE c.userId=@u AND c.listId=@l " +
-        "AND c.type='item' AND c.id=@id",
-      parameters: [
-        { name: "@u", value: userId },
-        { name: "@l", value: listId },
-        { name: "@id", value: id }
-      ]
-    };
+    // Query (could be point-read if we had ObjectType handy; we do)
     const { resources } = await container.items
-      .query(query, { enableCrossPartition: true })
+      .query(
+        {
+          query:
+            "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='item' " +
+            "AND c.ObjectID=@l AND c.id=@id",
+          parameters: [
+            { name: "@u", value: userId },
+            { name: "@l", value: listId },
+            { name: "@id", value: id }
+          ]
+        },
+        { enableCrossPartition: true }
+      )
       .fetchAll();
     const item = resources[0];
     if (!item) return new Response("Not found", { status: 404 });
@@ -42,7 +44,8 @@ app.http("items-toggleComplete", {
     item.completedUtc = completed ? null : now;
     item.updatedUtc = now;
 
-    await container.item(item.id, [userId, listId]).replace(item);
+    // Replace with full partition key
+    await container.item(item.id, [userId, "item", listId]).replace(item);
 
     const liHtml = `
       <li class="row">

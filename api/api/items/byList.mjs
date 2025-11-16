@@ -1,4 +1,3 @@
-// api/items/byList.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -16,12 +15,13 @@ app.http("items-byList", {
     const listId = url.searchParams.get("listId");
     if (!listId) return new Response("listId required", { status: 400 });
 
+    // All items in the list partition
     const { resources: items } = await container.items
       .query(
         {
           query:
-            "SELECT * FROM c WHERE c.userId=@u AND c.listId=@l " +
-            "AND c.type='item' ORDER BY c.createdUtc DESC",
+            "SELECT * FROM c WHERE c.UserID=@u AND c.ObjectType='item' " +
+            "AND c.ObjectID=@l ORDER BY c.createdUtc DESC",
           parameters: [
             { name: "@u", value: userId },
             { name: "@l", value: listId }
@@ -31,12 +31,13 @@ app.http("items-byList", {
       )
       .fetchAll();
 
+    // Lists for dropdown with defaults
     const { resources: lists } = await container.items
       .query(
         {
           query:
             "SELECT c.id, c.title, c.listId, c.defaults FROM c " +
-            "WHERE c.userId=@u AND c.type='list' ORDER BY c.updatedUtc DESC",
+            "WHERE c.UserID=@u AND c.ObjectType='list' ORDER BY c.updatedUtc DESC",
           parameters: [{ name: "@u", value: userId }]
         },
         { enableCrossPartition: true }
@@ -51,8 +52,8 @@ app.http("items-byList", {
         .query(
           {
             query:
-              "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId='_meta' " +
-              "AND c.type='userSettings'",
+              "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' " +
+              "AND c.ObjectID='_meta'",
             parameters: [{ name: "@u", value: userId }]
           },
           { enableCrossPartition: true }

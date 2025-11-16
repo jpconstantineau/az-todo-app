@@ -1,4 +1,3 @@
-// api/lists/editDefaults.mjs
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
@@ -9,8 +8,8 @@ async function getList(userId, listId) {
     .query(
       {
         query:
-          "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId=@l " +
-          "AND c.type='list'",
+          "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='list' " +
+          "AND c.ObjectID=@l",
         parameters: [
           { name: "@u", value: userId },
           { name: "@l", value: listId }
@@ -27,8 +26,8 @@ async function getUserDefaults(userId) {
     .query(
       {
         query:
-          "SELECT TOP 1 * FROM c WHERE c.userId=@u AND c.listId='_meta' " +
-          "AND c.type='userSettings'",
+          "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' " +
+          "AND c.ObjectID='_meta'",
         parameters: [{ name: "@u", value: userId }]
       },
       { enableCrossPartition: true }
