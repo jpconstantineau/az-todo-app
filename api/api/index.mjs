@@ -13,7 +13,7 @@ import "./lists/quickAddForm.mjs";
 // Items
 import "./items/byList.mjs";
 import "./items/create.mjs";
-//import "./items/toggleComplete.mjs";
+import "./items/toggleComplete.mjs";
 import "./items/filterByStatus.mjs";
 
 // Settings
