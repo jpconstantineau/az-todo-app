@@ -2,7 +2,7 @@
   "name": "gtd-api",
   "version": "0.1.1",
   "type": "module",
-  "main": "index.mjs",
+  "main": "api/index.mjs",
   "engines": {
     "node": ">=18"
   },
