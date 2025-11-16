@@ -2,6 +2,10 @@
   "navigationFallback": { "rewrite": "index.html" },
   "routes": [
     {
+      "route": "/api/app",
+      "allowedRoles": ["anonymous", "authenticated"]
+    },
+    {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
     }
@@ -12,11 +16,5 @@
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "permissions-policy": "geolocation=(), camera=(), microphone=()"
-  },
-  "responseOverrides": {
-    "401": {
-      "rewrite": "/.auth/login/github",
-      "statusCode": 302
-    }
   }
 }
