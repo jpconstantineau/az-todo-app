@@ -1,46 +1,54 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light dark" />
-        <title>To Do</title>
-        <link href="data:image/x-icon;base64,AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAZGhgA/f39AP///wAVFhIAFRcTABYXEwAXGBUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAERERERERERESIiIiIiIiIhIiMzMzMzIiEiIyEiIiMiISIjIyRVIyIhIiMiEiIjIiEiIyMmZiMiISIjIhIiIyIhIiMjEzMjIiEiIyIRIiMiISIjIyMzIyIhIiMiIiIjIiEiIzMAAzMiISIiIxETEiIhIiETMzMSIiEiIRERIiIiIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" rel="icon" type="image/x-icon">
-        <meta name="description" content="Serverless To Do" />    
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css"/>
-        <link rel="stylesheet" href="styles.css"/>
-        <script src="https://kit.fontawesome.com/3431a227b9.js" crossorigin="anonymous"></script>
-      </head>
-    <body>
-        <header>
-            <nav>
-              <ul>
-                  <li><h1>List Manager</h1></li>
-              </ul>
-              <ul>
-                  <li hx-get="/api/main/loginbutton" hx-trigger="load"><small aria-busy="true"></small></li>          
-              </ul> 
-            </nav>
-      </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>GTD To‑Do</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/beercss@3.6.11/dist/cdn/beer.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
+    <style>
+      body {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      .muted {
+        opacity: 0.7;
+      }
+      .chip {
+        margin-right: 6px;
+      }
+      .nowrap {
+        white-space: nowrap;
+      }
+      .center {
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body class="light">
+    <header class="primary container">
+      <nav class="max">
+        <h5 class="max">GTD To‑Do</h5>
+        <a class="button text" href="/.auth/login/github">Sign in</a>
+        <a class="button text" href="/.auth/logout">Sign out</a>
+      </nav>
+    </header>
 
-        <main class = "container-fluid, grid-container" hx-get="/api/main/main" hx-trigger="load delay:250ms">
-            loading...
-        </main>
-
-        <footer>
-            <div class="grid">
-                <span><small>&copy; Pierre Constantineau, 2024 </small></span>
-                <span class="right">
-                    <strong><a  hx-target="#navlist" hx-get="/api/main/menu" role="button" class="outline secondary" ><i class="fa-solid fa-list-check"></i></a></strong>     
-                    <strong><a  hx-target="#navlist" hx-get="/api/main/config" role="button" class="outline secondary" ><i class="fa-solid fa-gear"></i></a></strong>           
-                    <strong><a href="#" role="button" class="outline secondary" data-theme-switcher="light"><i class="fa-solid fa-sun"></i></a></strong>
-                    <strong><a href="#" role="button" class="outline secondary" data-theme-switcher="dark"><i class="fa-solid fa-moon"></i></a></strong>
-                    <strong><a href="https://github.com/jpconstantineau/az-todo-app" role="button" class="outline secondary"><i class="fa-brands fa-github"></i></a></strong>
-                    <strong><a href="https://portal.azure.com" role="button" class="outline secondary"><i class="fa-brands fa-microsoft"></i></a></strong>
-                </span>
-            </div>
-        </footer>
-        <script src="main.js"></script>
-        <script src="https://unpkg.com/htmx.org@2.0.2"></script>
-    </body>
+    <main
+      id="app"
+      class="container"
+      hx-get="/api/app"
+      hx-trigger="load"
+      hx-target="#app"
+      hx-swap="innerHTML"
+    >
+      <div class="muted">Loading…</div>
+    </main>
+  </body>
 </html>

@@ -1,59 +1,22 @@
 {
-    "routes": [
-      {
-        "route": "/login",
-        "redirect": "/.auth/login/github",
-        "allowedRoles": ["anonymous"]
-      },
-      {
-        "route": "/logout",
-        "redirect": "/.auth/logout"
-      },
-      {
-        "route": "/.auth/login/github",
-        "allowedRoles": ["anonymous"]
-      },
-      {
-        "route": "/.auth/login/twitter",
-        "statusCode": 404
-      },
-      {
-        "route": "/.auth/login/aad",
-        "statusCode": 404
-      },
-      {
-        "route": "/api/main/*",
-        "allowedRoles": ["anonymous","authenticated"]
-      },
-      {
-        "route": "/api/*",
-        "allowedRoles": ["authenticated"]
-      }
-    ],
-    "platformErrorOverrides": [
-        {
-          "errorType": "NotFound",
-          "serve": "/404.html"
-        },
-        {
-          "errorType": "Unauthenticated",
-          "statusCode": "302",
-          "serve": "/login"
-        }
-      ],
-      "responseOverrides": {
-        "401": {
-          "redirect": "/.auth/login/github?post_login_redirect_uri=.referrer",
-          "statusCode": 302
-        },
-        "404": {
-          "rewrite": "/404",
-          "statusCode": 404
-        },        
-        "403": {
-          "rewrite": "/",
-          "statusCode": 302
-        }
-
-      }
+  "navigationFallback": { "rewrite": "index.html" },
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
+  "globalHeaders": {
+    "content-security-policy": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "permissions-policy": "geolocation=(), camera=(), microphone=()"
+  },
+  "responseOverrides": {
+    "401": {
+      "rewrite": "/.auth/login/github",
+      "statusCode": 302
+    }
   }
+}
