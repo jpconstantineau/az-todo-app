@@ -181,7 +181,6 @@ export function itemsList(items) {
   </ul>`;
 }
 
-// api/shared/templates.mjs
 export function quickAddItemForm({
   lists,
   defaults,
@@ -196,7 +195,8 @@ export function quickAddItemForm({
     )
     .join("");
 
-  const opts = (arr) => arr.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  const opts = (arr) =>
+    arr.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
 
   return `
   <form
@@ -205,50 +205,90 @@ export function quickAddItemForm({
     hx-target="#items"
     hx-swap="innerHTML"
   >
-    <input
-      class="max"
-      type="text"
-      name="title"
-      placeholder="New item title"
-      required
-      aria-label="New item title"
-      autocomplete="off"
-    />
-    <select
-      name="listId"
-      aria-label="Select list"
-      hx-get="/api/lists/defaultOptions"
-      hx-trigger="change"
-      hx-vals='js:{ listId: this.value }'
-      hx-swap="none"
-      hx-sync="closest form:abort"
-    >${listOpts}</select>
+    <div class="field s12 l6">
+      <label for="qaTitle">Title</label>
+      <input
+        id="qaTitle"
+        class="max"
+        type="text"
+        name="title"
+        placeholder="New item title"
+        required
+        autocomplete="off"
+        aria-label="New item title"
+      />
+    </div>
 
-    <select id="statusSelect" name="status" aria-label="Status">
-      ${opts(defaults.statuses)}
-    </select>
-    <input
-      type="datetime-local"
-      name="dueLocal"
-      aria-label="Due date/time"
-      autocomplete="off"
-    />
-    <select id="contextSelect" name="context" aria-label="Context">
-      ${opts(defaults.contexts)}
-    </select>
-    <select id="areaSelect" name="area" aria-label="Area of Focus">
-      ${opts(defaults.areas)}
-    </select>
-    <select id="energySelect" name="energy" aria-label="Energy">
-      ${opts(defaults.energy)}
-    </select>
-    <select id="timeReqSelect" name="timeRequired" aria-label="Time required">
-      ${opts(defaults.timeRequired)}
-    </select>
-    <select id="prioritySelect" name="priority" aria-label="Priority">
-      ${opts(defaults.priority)}
-    </select>
-    <button class="button primary" aria-label="Add item">Add</button>
+    <div class="field s12 m6 l6">
+      <label for="qaList">List</label>
+      <select
+        id="qaList"
+        name="listId"
+        aria-label="Select list"
+        hx-get="/api/lists/defaultOptions"
+        hx-trigger="change"
+        hx-vals='js:{ listId: this.value }'
+        hx-swap="none"
+        hx-sync="closest form:abort"
+      >${listOpts}</select>
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="statusSelect">Status</label>
+      <select id="statusSelect" name="status" aria-label="Status">
+        ${opts(defaults.statuses)}
+      </select>
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="qaDue">Due</label>
+      <input
+        id="qaDue"
+        type="datetime-local"
+        name="dueLocal"
+        aria-label="Due date/time"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="contextSelect">Context</label>
+      <select id="contextSelect" name="context" aria-label="Context">
+        ${opts(defaults.contexts)}
+      </select>
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="areaSelect">Area of Focus</label>
+      <select id="areaSelect" name="area" aria-label="Area of Focus">
+        ${opts(defaults.areas)}
+      </select>
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="energySelect">Energy</label>
+      <select id="energySelect" name="energy" aria-label="Energy">
+        ${opts(defaults.energy)}
+      </select>
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="timeReqSelect">Time required</label>
+      <select id="timeReqSelect" name="timeRequired" aria-label="Time required">
+        ${opts(defaults.timeRequired)}
+      </select>
+    </div>
+
+    <div class="field s12 m6 l4">
+      <label for="prioritySelect">Priority</label>
+      <select id="prioritySelect" name="priority" aria-label="Priority">
+        ${opts(defaults.priority)}
+      </select>
+    </div>
+
+    <div class="s12">
+      <button class="button primary" aria-label="Add item">Add</button>
+    </div>
   </form>`;
 }
 
