@@ -1,30 +1,27 @@
 // api/index.mjs
-
-// 1) Polyfill must be first
 import "./shared/polyfill.mjs";
 
-// 2) App shell
 import "./app/index.mjs";
 
-// 3) Lists
+// Lists
 import "./lists/all.mjs";
 import "./lists/create.mjs";
 import "./lists/editDefaults.mjs";
 import "./lists/updateDefaults.mjs";
 import "./lists/resetDefaults.mjs";
 import "./lists/quickAddForm.mjs";
+import "./lists/defaultOptions.mjs"; // <-- add this line
 
-// 4) Items
+// Items
 import "./items/byList.mjs";
 import "./items/create.mjs";
 import "./items/toggleComplete.mjs";
 import "./items/filterByStatus.mjs";
 
-// 5) Settings
+// Settings
 import "./settings/ensure.mjs";
 import "./settings/edit.mjs";
 import "./settings/update.mjs";
 import "./settings/reset.mjs";
 
-// 6) Health check (optional)
 import "./misc/health.mjs";
