@@ -1,6 +1,5 @@
 // api/index.mjs
 import "./shared/polyfill.mjs";
-
 import "./app/index.mjs";
 
 // Lists
@@ -10,7 +9,7 @@ import "./lists/editDefaults.mjs";
 import "./lists/updateDefaults.mjs";
 import "./lists/resetDefaults.mjs";
 import "./lists/quickAddForm.mjs";
-import "./lists/defaultOptions.mjs"; // <-- add this line
+import "./lists/defaultOptions.mjs";
 
 // Items
 import "./items/byList.mjs";

@@ -179,13 +179,72 @@ export function quickAddItemForm({ listId = '' } = {}) {
   `;
 }
 
-// small utility to avoid XSS when inserting plain strings in template helpers
-function escapeHtml(s) {
-  if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+// Add: filterBar helper (exported so callers expecting it will work)
+// Keep implementation minimal; adjust markup/styles as needed.
+export function filterBar({ filters = [] } = {}) {
+  if (!filters || filters.length === 0) {
+    return '';
+  }
+  return `
+    <div class="filter-bar row" role="toolbar" aria-label="Filters">
+      ${filters.map(f => `
+        <button class="button text chip" data-filter="${escapeHtml(f.name)}">${escapeHtml(f.label || f.name)}</button>
+      `).join('')}
+    </div>
+  `;
 }
+
+// Minimal list settings form helper (exported to satisfy imports)
+// Adjust fields/route as your API expects.
+export function listSettingsForm({ list = {} } = {}) {
+  return `
+    <form id="listSettings" class="card" method="post"
+          action="/api/lists/${encodeURIComponent(list.id || '')}/settings"
+          hx-post="/api/lists/${encodeURIComponent(list.id || '')}/settings"
+          hx-swap="outerHTML"
+          >
+      <div class="row">
+        <div class="field">
+          <label>Title</label>
+          <input name="title" value="${escapeHtml(list.title || '')}" required />
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <input name="description" value="${escapeHtml(list.description || '')}" />
+        </div>
+        <div>
+          <button class="button primary" type="submit">Save</button>
+        </div>
+      </div>
+    </form>
+  `;
+}
+
+// Add: settingsForm helper (minimal implementation to satisfy imports)
+export function settingsForm({ settings = {} } = {}) {
+  return `
+    <form id="appSettings" class="card" method="post"
+          action="/api/settings"
+          hx-post="/api/settings"
+          hx-swap="outerHTML">
+      <div class="row">
+        <div class="field">
+          <label>Default List</label>
+          <input name="defaultList" value="${escapeHtml(settings.defaultList || '')}" />
+        </div>
+        <div class="field">
+          <label>Theme</label>
+          <select name="theme">
+            <option value="" ${!settings.theme ? 'selected' : ''}>Default</option>
+            <option value="light" ${settings.theme === 'light' ? 'selected' : ''}>Light</option>
+            <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
+          </select>
+        </div>
+        <div>
+          <button class="button primary" type="submit">Save</button>
+        </div>
+      </div>
+    </form>
+  `;
+}
+
