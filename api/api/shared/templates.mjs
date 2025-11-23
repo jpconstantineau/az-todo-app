@@ -7,512 +7,142 @@ export function esc(str = "") {
     .replaceAll('"', "&quot;");
 }
 
-export function layoutShell({ user, listsHtml, filterBarHtml, itemsHtml }) {
-  return `
-  <div class="grid">
-    <div class="s12 m4 l3">
-      <section class="card">
-        <header class="space">
-          <h6 class="max">Lists</h6>
-          <form
-            hx-post="/api/lists/create"
-            hx-target="#lists"
-            hx-swap="innerHTML"
-            class="row"
-          >
-            <input
-              type="text"
-              name="title"
-              placeholder="New list…"
-              required
-              class="max"
-            />
-            <button class="button primary" aria-label="Add list">Add</button>
+export function layoutShell({ title = "GTD To‑Do", user, lists = [], selectedList = null, items = [] , content = '' } = {}) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${title}</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="row">
+      <h1 class="max">${title}</h1>
+      <div class="nav auth" style="margin-left:auto;">
+        ${user ? `
+          <form id="logoutForm" method="post" action="/logout" style="display:inline;">
+            <button class="button text logout" type="submit">Logout</button>
           </form>
-        </header>
-        <div id="lists">${listsHtml}</div>
-      </section>
-    </div>
-    <div class="s12 m8 l9">
-      <section class="card">
-        <header class="space">
-          <h6 class="max">Items</h6>
-          <button
-            class="button text"
-            hx-get="/api/settings/edit"
-            hx-target="#items"
-            hx-swap="innerHTML"
-            title="Edit Settings"
-            aria-label="Edit Settings"
-          >
-            Settings
-          </button>
-          ${filterBarHtml}
-        </header>
-        <div id="items">${itemsHtml}</div>
-      </section>
-    </div>
-  </div>`;
-}
-
-export function listsBlock(lists) {
-  if (!lists?.length) {
-    return `<div class="muted">No lists yet. Create one above.</div>`;
-  }
-  return `
-  <ul class="list">
-    ${lists
-      .map(
-        (l) => `
-      <li>
-        <div class="row hover">
-          <a
-            class="button text"
-            hx-get="/api/items/byList?listId=${encodeURIComponent(
-              l.listId
-            )}"
-            hx-target="#items"
-            hx-swap="innerHTML"
-            title="Open list"
-            aria-label="Open list ${esc(l.title)}"
-          >
-            <span class="max">${esc(l.title)}</span>
-          </a>
-          <button
-            class="button text"
-            title="List settings"
-            aria-label="List settings for ${esc(l.title)}"
-            hx-get="/api/lists/editDefaults?listId=${encodeURIComponent(
-              l.listId
-            )}"
-            hx-target="#items"
-            hx-swap="innerHTML"
-          >⚙</button>
-          <small class="muted nowrap">${new Date(
-            l.updatedUtc || l.createdUtc
-          ).toLocaleDateString()}</small>
-        </div>
-      </li>`
-      )
-      .join("")}
-  </ul>`;
-}
-
-export function filterBar({ statuses }) {
-  const opts = statuses.map(
-    (s) => `<option value="${esc(s)}">${esc(s)}</option>`
-  );
-  return `
-  <form
-    class="row"
-    hx-get="/api/items/filterByStatus"
-    hx-target="#items"
-    hx-swap="innerHTML"
-  >
-    <select name="status" class="max" aria-label="Status filter">
-      ${opts.join("")}
-    </select>
-    <button class="button" aria-label="Filter">Filter</button>
-  </form>`;
-}
-
-export function itemsList(items) {
-  if (!items?.length) return `<div class="muted">No items.</div>`;
-  return `
-  <ul class="list">
-    ${items
-      .map((it) => {
-        const done = it.status === "completed";
-        const due = it.dueDateUtc
-          ? new Date(it.dueDateUtc).toLocaleString()
-          : "";
-        return `
-        <li class="row">
-          <form
-            hx-post="/api/items/toggleComplete"
-            hx-target="closest li"
-            hx-swap="outerHTML"
-          >
-            <input type="hidden" name="id" value="${esc(it.id)}" />
-            <input type="hidden" name="listId" value="${esc(it.listId)}" />
-            <button
-              class="button ${done ? "success" : ""}"
-              title="Toggle complete"
-              aria-label="Toggle complete for ${esc(it.title)}"
-            >
-              ${done ? "✓" : "○"}
-            </button>
-          </form>
-          <div class="max">
-            <div><strong>${esc(it.title)}</strong></div>
-            <div class="muted">${esc(it.description || "")}</div>
-            <div>
-              ${
-                it.contexts
-                  ?.map((c) => `<span class="chip">${esc(c)}</span>`)
-                  .join("") || ""
-              }
-              ${
-                it.areas
-                  ?.map((a) => `<span class="chip">${esc(a)}</span>`)
-                  .join("") || ""
-              }
-              ${
-                it.energy
-                  ? `<span class="chip">Energy: ${esc(it.energy)}</span>`
-                  : ""
-              }
-              ${
-                it.timeRequired
-                  ? `<span class="chip">Time: ${esc(it.timeRequired)}</span>`
-                  : ""
-              }
-              ${
-                it.priority
-                  ? `<span class="chip">Pri: ${esc(it.priority)}</span>`
-                  : ""
-              }
-              ${due ? `<span class="chip">Due: ${esc(due)}</span>` : ""}
-            </div>
-          </div>
-        </li>`;
-      })
-      .join("")}
-  </ul>`;
-}
-
-export function quickAddItemForm({
-  lists,
-  defaults,
-  selectedListId = ""
-}) {
-  const listOpts = lists
-    .map(
-      (l) =>
-        `<option value="${esc(l.listId)}" ${
-          selectedListId === l.listId ? "selected" : ""
-        }>${esc(l.title)}</option>`
-    )
-    .join("");
-
-  const opts = (arr) =>
-    arr.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
-
-  return `
-  <form
-    class="row"
-    hx-post="/api/items/create"
-    hx-target="#items"
-    hx-swap="innerHTML"
-  >
-    <div class="field s12 l6">
-      <label for="qaTitle">Title</label>
-      <input
-        id="qaTitle"
-        class="max"
-        type="text"
-        name="title"
-        placeholder="New item title"
-        required
-        autocomplete="off"
-        aria-label="New item title"
-      />
-    </div>
-
-    <div class="field s12 m6 l6">
-      <label for="qaList">List</label>
-      <select
-        id="qaList"
-        name="listId"
-        aria-label="Select list"
-        hx-get="/api/lists/defaultOptions"
-        hx-trigger="change"
-        hx-vals='js:{ listId: this.value }'
-        hx-swap="none"
-        hx-sync="closest form:abort"
-      >${listOpts}</select>
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="statusSelect">Status</label>
-      <select id="statusSelect" name="status" aria-label="Status">
-        ${opts(defaults.statuses)}
-      </select>
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="qaDue">Due</label>
-      <input
-        id="qaDue"
-        type="datetime-local"
-        name="dueLocal"
-        aria-label="Due date/time"
-        autocomplete="off"
-      />
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="contextSelect">Context</label>
-      <select id="contextSelect" name="context" aria-label="Context">
-        ${opts(defaults.contexts)}
-      </select>
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="areaSelect">Area of Focus</label>
-      <select id="areaSelect" name="area" aria-label="Area of Focus">
-        ${opts(defaults.areas)}
-      </select>
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="energySelect">Energy</label>
-      <select id="energySelect" name="energy" aria-label="Energy">
-        ${opts(defaults.energy)}
-      </select>
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="timeReqSelect">Time required</label>
-      <select id="timeReqSelect" name="timeRequired" aria-label="Time required">
-        ${opts(defaults.timeRequired)}
-      </select>
-    </div>
-
-    <div class="field s12 m6 l4">
-      <label for="prioritySelect">Priority</label>
-      <select id="prioritySelect" name="priority" aria-label="Priority">
-        ${opts(defaults.priority)}
-      </select>
-    </div>
-
-    <div class="s12">
-      <button class="button primary" aria-label="Add item">Add</button>
-    </div>
-  </form>`;
-}
-
-export function settingsForm(settings) {
-  const d = settings?.defaults || {
-    contexts: [],
-    areas: [],
-    energy: [],
-    timeRequired: [],
-    priority: [],
-    statuses: []
-  };
-  const group = (label, name, values = []) => {
-    const rows = values
-      .map(
-        (v) => `
-        <div class="row" data-row>
-          <input class="max" type="text" name="${name}[]" value="${esc(v)}" />
-          <button type="button" class="button text" data-remove-row
-            title="Remove">Remove</button>
-        </div>`
-      )
-      .join("");
-    return `
-      <section class="card">
-        <header class="space">
-          <h6 class="max">${esc(label)}</h6>
-          <button type="button" class="button" data-add-row="${esc(
-            name
-          )}">Add</button>
-        </header>
-        <div class="${esc(name)}-group">
-          ${rows || '<div class="muted">No values</div>'}
-        </div>
-      </section>
-    `;
-  };
-
-  return `
-  <section class="card">
-    <header class="space">
-      <h6 class="max">Settings</h6>
-      <div class="row">
-        <button
-          class="button"
-          hx-post="/api/settings/reset"
-          hx-target="#items"
-          hx-swap="innerHTML"
-        >Reset to defaults</button>
+        ` : `<a class="button text" href="/login">Login</a>`}
       </div>
     </header>
 
-    <form
-      hx-post="/api/settings/update"
-      hx-target="#items"
-      hx-swap="innerHTML"
-    >
-      ${group("Contexts", "contexts", d.contexts)}
-      ${group("Areas of Focus", "areas", d.areas)}
-      ${group("Energy Levels", "energy", d.energy)}
-      ${group("Time Required", "timeRequired", d.timeRequired)}
-      ${group("Priority", "priority", d.priority)}
-      ${group("Statuses", "statuses", d.statuses)}
+    <div class="app-grid">
+      <aside class="sidebar blade">
+        <div class="panel-title">
+          <span>Lists</span>
+          <button id="addListBtn" class="button text">Add</button>
+        </div>
 
-      <div class="row right-align">
-        <button class="button primary">Save Settings</button>
-        <button
-          class="button text"
-          type="button"
-          hx-get="/api/items/filterByStatus?status=next"
-          hx-target="#items"
-          hx-swap="innerHTML"
-        >Back to Items</button>
-      </div>
-    </form>
-  </section>
+        <div id="listsContainer">
+          ${listsBlock({ lists, selectedList })}
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="row">
+          <h2 id="selectedListTitle">${selectedList ? escapeHtml(selectedList.title) : 'No list selected'}</h2>
+        </header>
+
+        <div style="margin:8px 0;">
+          <button id="toggleAddItem" class="add-item-toggle" aria-expanded="false">＋ Add New Item</button>
+        </div>
+
+        <section id="addItemForm" class="add-item-form" aria-hidden="true">
+          ${quickAddItemForm({ listId: selectedList ? selectedList.id : '' })}
+        </section>
+
+        <section id="itemsContainer" class="items-table">
+          ${itemsList({ items })}
+        </section>
+
+        ${content}
+      </main>
+    </div>
+  </div>
+
   <script>
-    (function () {
-      const root = document.currentScript.closest("#items");
-      if (!root) return;
-      root.addEventListener("click", (e) => {
-        const btn = e.target.closest("[data-remove-row]");
-        if (btn) {
-          const row = btn.closest("[data-row]");
-          if (row) row.remove();
-        }
-        const add = e.target.closest("[data-add-row]");
-        if (add) {
-          const name = add.getAttribute("data-add-row");
-          const group = root.querySelector("." + name + "-group");
-          if (group) {
-            if (
-              group.firstElementChild &&
-              group.firstElementChild.classList.contains("muted")
-            ) {
-              group.innerHTML = "";
-            }
-            const div = document.createElement("div");
-            div.className = "row";
-            div.setAttribute("data-row", "");
-            div.innerHTML = \`
-              <input class="max" type="text" name="\${name}[]" value="" />
-              <button type="button" class="button text"
-                data-remove-row title="Remove">Remove</button>
-            \`;
-            group.appendChild(div);
-          }
-        }
-      });
-    })();
+  // Toggle add-item form (keeps behavior consistent for server-rendered pages)
+  (function(){
+    var btn = document.getElementById('toggleAddItem');
+    var form = document.getElementById('addItemForm');
+    if (!btn || !form) return;
+    btn.addEventListener('click', function(){
+      var open = form.classList.toggle('open');
+      form.setAttribute('aria-hidden', String(!open));
+      btn.setAttribute('aria-expanded', String(open));
+      btn.textContent = open ? '✕ Close' : '＋ Add New Item';
+    });
+  })();
   </script>
+</body>
+</html>`;
+}
+
+// Helper: render lists block (keeps simple markup used by styles.css)
+export function listsBlock({ lists = [], selectedList = null } = {}) {
+  return `
+  ${lists.map(list => `
+    <div class="list-item${selectedList && list.id === selectedList.id ? ' active' : ''}" data-id="${list.id}">
+      <div class="title">${escapeHtml(list.title)}</div>
+      <div class="muted nowrap">${list.count ?? ''}</div>
+    </div>
+  `).join('')}
   `;
 }
 
-export function listSettingsForm({
-  list,
-  effectiveDefaults,
-  userDefaults
-}) {
-  const d = list?.defaults || effectiveDefaults;
-  const group = (label, name, values = []) => {
-    const rows = values
-      .map(
-        (v) => `
-        <div class="row" data-row>
-          <input class="max" type="text" name="${name}[]" value="${esc(v)}" />
-          <button type="button" class="button text" data-remove-row>
-            Remove
-          </button>
-        </div>`
-      )
-      .join("");
-    return `
-      <section class="card">
-        <header class="space">
-          <h6 class="max">${esc(label)}</h6>
-          <button type="button" class="button" data-add-row="${esc(
-            name
-          )}">Add</button>
-        </header>
-        <div class="${esc(name)}-group">
-          ${rows || '<div class="muted">No values</div>'}
-        </div>
-      </section>
-    `;
-  };
+// Helper: render items as rows
+export function itemsList({ items = [] } = {}) {
+  if (!items || items.length === 0) {
+    return `<div class="card muted">No items</div>`;
+  }
 
-  return `
-  <section class="card">
-    <header class="space">
-      <h6 class="max">List Settings — ${esc(list?.title || "")}</h6>
-      <div class="row">
-        <form
-          hx-post="/api/lists/resetDefaults"
-          hx-target="#items"
-          hx-swap="innerHTML"
-          class="row"
-        >
-          <input type="hidden" name="listId" value="${esc(list.listId)}" />
-          <button class="button">Reset to user defaults</button>
+  return items.map(it => `
+    <article class="item" data-id="${it.id}">
+      <div class="meta">${it.due ? escapeHtml(it.due) : ''} ${it.tag ? '· ' + escapeHtml(it.tag) : ''}</div>
+      <div class="title">${escapeHtml(it.title)}</div>
+      <div class="actions">
+        <form method="post" action="/items/${it.id}/complete" style="display:inline;">
+          <button class="button text">Done</button>
+        </form>
+        <form method="post" action="/items/${it.id}/delete" style="display:inline;">
+          <button class="button text">Delete</button>
         </form>
       </div>
-    </header>
-    <form
-      hx-post="/api/lists/updateDefaults"
-      hx-target="#items"
-      hx-swap="innerHTML"
-    >
-      <input type="hidden" name="listId" value="${esc(list.listId)}" />
-      ${group("Contexts", "contexts", d.contexts)}
-      ${group("Areas of Focus", "areas", d.areas)}
-      ${group("Energy Levels", "energy", d.energy)}
-      ${group("Time Required", "timeRequired", d.timeRequired)}
-      ${group("Priority", "priority", d.priority)}
-      ${group("Statuses", "statuses", d.statuses)}
-      <div class="row right-align">
-        <button class="button primary">Save List Settings</button>
-        <button
-          class="button text"
-          type="button"
-          hx-get="/api/items/byList?listId=${esc(list.listId)}"
-          hx-target="#items"
-          hx-swap="innerHTML"
-        >Back to List</button>
-      </div>
-    </form>
-  </section>
-  <script>
-    (function () {
-      const root = document.currentScript.closest("#items");
-      if (!root) return;
-      root.addEventListener("click", (e) => {
-        const rm = e.target.closest("[data-remove-row]");
-        if (rm) {
-          e.preventDefault();
-          const row = rm.closest("[data-row]");
-          if (row) row.remove();
-        }
-        const add = e.target.closest("[data-add-row]");
-        if (add) {
-          e.preventDefault();
-          const name = add.getAttribute("data-add-row");
-          const group = root.querySelector("." + name + "-group");
-          if (group) {
-            if (
-              group.firstElementChild &&
-              group.firstElementChild.classList.contains("muted")
-            ) {
-              group.innerHTML = "";
-            }
-            const div = document.createElement("div");
-            div.className = "row";
-            div.setAttribute("data-row", "");
-            div.innerHTML = \`
-              <input class="max" type="text" name="\${name}[]" value="" />
-              <button type="button" class="button text" data-remove-row>
-                Remove
-              </button>
-            \`;
-            group.appendChild(div);
-          }
-        }
-      });
-    })();
-  </script>
+    </article>
+  `).join('');
+}
+
+// Quick add item form (hidden by default; toggled by JS)
+export function quickAddItemForm({ listId = '' } = {}) {
+  return `
+  <form id="quickAdd" class="row" method="post" action="/items">
+    <input type="hidden" name="listId" value="${escapeHtml(listId)}" />
+    <div class="field">
+      <input name="title" placeholder="Item title" required />
+    </div>
+    <div class="field">
+      <input name="due" placeholder="Due (optional)" />
+    </div>
+    <div class="field">
+      <input name="tag" placeholder="Tag (optional)" />
+    </div>
+    <div>
+      <button class="button primary" type="submit">Add</button>
+    </div>
+  </form>
   `;
+}
+
+// small utility to avoid XSS when inserting plain strings in template helpers
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

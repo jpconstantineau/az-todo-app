@@ -6,28 +6,87 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>GTD To‑Do</title>
+    <title>To‑Do</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
   </head>
-  <body class="light">
+  <body>
     <header class="primary container">
       <nav class="max">
-        <h5 class="max">GTD To‑Do</h5>
+        <h5 class="max">To‑Do</h5>
         <a class="button text" href="/.auth/login/github">Sign in</a>
         <a class="button text" href="/.auth/logout">Sign out</a>
       </nav>
     </header>
 
-    <main
-      id="app"
-      class="container"
-      hx-get="/api/app"
-      hx-trigger="load"
-      hx-target="#app"
-      hx-swap="innerHTML"
-    >
-      <div class="muted">Loading…</div>
-    </main>
+    <!-- Wrap the main app content in a two-column grid so the left lists are a blade -->
+    <div class="container">
+      <div class="app-grid">
+        <!-- Left blade: lists + add list -->
+        <aside class="sidebar blade">
+          <div class="panel-title">
+            <span>Lists</span>
+            <button id="addListBtn" class="button text">Add</button>
+          </div>
+          <div class="lists" id="listsContainer">
+            <!-- ...existing server-rendered list items ... -->
+          </div>
+        </aside>
+
+        <!-- Main area: items table -->
+        <main class="main">
+          <header class="row">
+            <h2 id="selectedListTitle">...existing title...</h2>
+            <div class="nav auth" style="margin-left:auto;">
+              <!-- Ensure logout is present and visible when user is logged in -->
+              <!-- ...existing auth buttons ... -->
+              <form
+                id="logoutForm"
+                method="post"
+                action="/logout"
+                style="display:inline;"
+              >
+                <button class="button text logout" type="submit">Logout</button>
+              </form>
+            </div>
+          </header>
+
+          <!-- Add item toggle -->
+          <div style="margin:8px 0;">
+            <button
+              id="toggleAddItem"
+              class="add-item-toggle"
+              aria-expanded="false"
+            >
+              ＋ Add New Item
+            </button>
+          </div>
+
+          <!-- Add item form (hidden by default) -->
+          <section id="addItemForm" class="add-item-form">
+            <!-- ...existing add item form fields ... -->
+          </section>
+
+          <!-- Items list rendered as table-rows -->
+          <section class="items-table" id="itemsContainer">
+            <!-- ...existing items markup ... -->
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      // Toggle add-item form
+      (function () {
+        const btn = document.getElementById("toggleAddItem");
+        const form = document.getElementById("addItemForm");
+        if (!btn || !form) return;
+        btn.addEventListener("click", () => {
+          const open = form.classList.toggle("open");
+          btn.setAttribute("aria-expanded", String(open));
+          btn.textContent = open ? "✕ Close" : "＋ Add New Item";
+        });
+      })();
+    </script>
   </body>
 </html>

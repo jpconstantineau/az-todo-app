@@ -35,6 +35,71 @@ header .max { margin:0; }
 .nowrap { white-space:nowrap; }
 .divider { height:1px; background:#eee; margin:8px 0; }
 
+/* App layout: left blade / right content */
+.app-grid { display:flex; gap:16px; align-items:flex-start; }
+.sidebar.blade {
+  width:280px;
+  min-width:220px;
+  background:linear-gradient(180deg,#fbfdff,#f7fbff);
+  border-right:1px solid #e6eef8;
+  padding:12px;
+  border-radius:8px;
+  box-shadow: 0 6px 18px rgba(18,52,86,0.04);
+  height: calc(100vh - 48px);
+  overflow:auto;
+  box-sizing:border-box;
+}
+.sidebar .panel-title { font-weight:600; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+.sidebar .lists { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.sidebar .list-item { padding:8px 10px; border-radius:6px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+.sidebar .list-item.active { background:#e9f2ff; border-left:3px solid #0d6efd; }
+
+/* Main content */
+.main {
+  flex:1 1 auto;
+  min-width:320px;
+}
+
+/* Items shown as rows like a table */
+.items-table { display:flex; flex-direction:column; gap:6px; }
+.items-table .item {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:10px;
+  border-radius:6px;
+  border:1px solid #eef6ff;
+  background: #fff;
+}
+.items-table .item .meta { color:#666; font-size:0.9em; min-width:160px; }
+.items-table .item .title { flex:1 1 auto; font-weight:500; }
+.items-table .item .actions { display:flex; gap:8px; }
+
+/* Add item toggle and form */
+.add-item-toggle {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:6px;
+  background:#0d6efd;
+  color:#fff;
+  cursor:pointer;
+  border:none;
+}
+.add-item-form { display:none; margin-top:10px; padding:10px; border-radius:8px; background:#fbfeff; border:1px solid #e6eef8; }
+.add-item-form.open { display:block; }
+
+/* Ensure logout button is visible and aligned */
+.nav .auth { display:flex; gap:8px; align-items:center; }
+.nav .logout { display:inline-flex; }
+
+/* Small responsive adjustment: collapse sidebar under 800px */
+@media (max-width:800px) {
+  .app-grid { flex-direction:column; }
+  .sidebar.blade { width:100%; height:auto; border-right:none; border-radius:8px; }
+}
+
 /* Simple responsive tweaks */
 @media (max-width: 800px) {
   .m4, .m8, .l3, .l9 { flex-basis: 100%; max-width:100%; }
