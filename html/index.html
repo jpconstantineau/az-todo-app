@@ -11,16 +11,18 @@
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
   </head>
   <body>
-    <header class="primary container">
-      <nav class="max">
-        <h5 class="max">To‑Do</h5>
-        <a class="button text" href="/.auth/login/github">Sign in</a>
-        <a class="button text" href="/.auth/logout">Sign out</a>
-      </nav>
-    </header>
-
-    <!-- Wrap the main app content in a two-column grid so the left lists are a blade -->
     <div class="container">
+      <header class="app-header">
+        <div class="header-left">
+          <h1 class="app-title">To‑Do</h1>
+        </div>
+        <nav class="header-nav">
+          <a class="button text" href="/.auth/login/github">Sign in</a>
+          <a class="button text" href="/.auth/logout">Sign out</a>
+        </nav>
+      </header>
+
+      <!-- Wrap the main app content in a two-column grid so the left lists are a blade -->
       <div class="app-grid">
         <!-- Left blade: lists + add list -->
         <aside class="sidebar blade">
