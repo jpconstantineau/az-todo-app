@@ -22,73 +22,40 @@
         </nav>
       </header>
 
-      <!-- Wrap the main app content in a two-column grid so the left lists are a blade -->
       <div class="app-grid">
-        <!-- Left blade: lists + add list -->
+        <!-- Left blade: lists + add list (kept intact) -->
         <aside class="sidebar blade">
           <div class="panel-title">
             <span>Lists</span>
             <button id="addListBtn" class="button text">Add</button>
           </div>
-          <div class="lists" id="listsContainer">
-            <!-- ...existing server-rendered list items ... -->
+
+          <!-- Blade list items: load fragment for lists only -->
+          <div class="lists" id="listsList"
+               hx-get="/api/lists"
+               hx-trigger="load"
+               hx-swap="innerHTML">
+            <div class="card">Loading lists…</div>
+            <noscript>
+              <div class="card">Enable JavaScript or open <a href="/api/lists">/api/lists</a></div>
+            </noscript>
           </div>
         </aside>
 
-        <!-- Main area: items table -->
+        <!-- Main area: HTMX will load the main app fragment into #listsContainer -->
         <main class="main">
-          <header class="row">
-            <h2 id="selectedListTitle">...existing title...</h2>
-            <div class="nav auth" style="margin-left:auto;">
-              <!-- Ensure logout is present and visible when user is logged in -->
-              <!-- ...existing auth buttons ... -->
-              <form
-                id="logoutForm"
-                method="post"
-                action="/logout"
-                style="display:inline;"
-              >
-                <button class="button text logout" type="submit">Logout</button>
-              </form>
-            </div>
-          </header>
-
-          <!-- Add item toggle -->
-          <div style="margin:8px 0;">
-            <button
-              id="toggleAddItem"
-              class="add-item-toggle"
-              aria-expanded="false"
-            >
-              ＋ Add New Item
-            </button>
+          <div id="listsContainer"
+               hx-get="/api/app"
+               hx-trigger="load"
+               hx-swap="innerHTML"
+               class="items-shell">
+            <div class="card">Loading app…</div>
+            <noscript>
+              <div class="card">Enable JavaScript or open <a href="/api/app">/api/app</a></div>
+            </noscript>
           </div>
-
-          <!-- Add item form (hidden by default) -->
-          <section id="addItemForm" class="add-item-form">
-            <!-- ...existing add item form fields ... -->
-          </section>
-
-          <!-- Items list rendered as table-rows -->
-          <section class="items-table" id="itemsContainer">
-            <!-- ...existing items markup ... -->
-          </section>
         </main>
       </div>
     </div>
-
-    <script>
-      // Toggle add-item form
-      (function () {
-        const btn = document.getElementById("toggleAddItem");
-        const form = document.getElementById("addItemForm");
-        if (!btn || !form) return;
-        btn.addEventListener("click", () => {
-          const open = form.classList.toggle("open");
-          btn.setAttribute("aria-expanded", String(open));
-          btn.textContent = open ? "✕ Close" : "＋ Add New Item";
-        });
-      })();
-    </script>
   </body>
 </html>
