@@ -35,3 +35,13 @@ See the demo [here](https://todo.jpto.dev/)
 
 
 ```
+
+## Components
+
+- [Azure Static Web Apps](https://docs.microsoft.com/en-us/azure/static-web-apps/overview)
+- [Azure Functions](https://docs.microsoft.com/en-us/azure/azure-functions/functions-overview)
+- [Azure Cosmos DB](https://docs.microsoft.com/en-us/azure/cosmos-db/introduction)
+- [HTMX](https://htmx.org)
+- [Pico CSS](https://picocss.com)
+- [Font Awesome](https://fontawesome.com)
+- - Lightweight local CSS for components; minimal extra CSS to ensure responsive wrapping forms

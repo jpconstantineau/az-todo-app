@@ -1,0 +1,41 @@
+/* Minimal replacement styles for the small subset of BeerCSS classes used */
+/* Layout / container */
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #111; line-height:1.4; background:#fff; }
+.container { max-width:1000px; margin:0 auto; padding:12px; box-sizing:border-box; }
+
+/* Header */
+header.primary { background:#0d6efd; color:#fff; padding:12px; border-radius:6px; margin-bottom:12px; }
+header .max { margin:0; }
+
+/* Card */
+.card { background:#fff; border:1px solid #e6e6e6; border-radius:8px; padding:12px; box-shadow:0 1px 2px rgba(0,0,0,0.02); }
+
+/* Buttons */
+.button { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:6px; border:1px solid transparent; background:transparent; cursor:pointer; text-decoration:none; color:inherit; }
+.button.primary { background:#0d6efd; color:#fff; border-color:rgba(13,110,253,0.9); }
+.button.text { background:transparent; color:#0d6efd; border:1px solid transparent; padding:4px 8px; }
+.button.success { background:#198754; color:#fff; }
+
+/* Grid and responsive cols (s/m/l classes used in templates) */
+.grid { display:flex; gap:12px; flex-wrap:wrap; }
+.s12 { flex: 0 0 100%; max-width:100%; }
+.m4 { flex-basis: 33.3333%; max-width:33.3333%; }
+.m8 { flex-basis: 66.6667%; max-width:66.6667%; }
+.l3 { flex-basis: 25%; max-width:25%; }
+.l9 { flex-basis: 75%; max-width:75%; }
+
+/* Row and fields */
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.field { flex:1 1 auto; min-width:160px; }
+.field > input, .field > select, input.max, select.max { width:100%; padding:8px; border:1px solid #dcdcdc; border-radius:6px; box-sizing:border-box; }
+
+/* Utility */
+.muted { opacity:0.7; font-size:0.95em; }
+.chip { display:inline-block; background:#f1f1f1; padding:4px 8px; border-radius:999px; margin-right:6px; font-size:0.85em; }
+.nowrap { white-space:nowrap; }
+.divider { height:1px; background:#eee; margin:8px 0; }
+
+/* Simple responsive tweaks */
+@media (max-width: 800px) {
+  .m4, .m8, .l3, .l9 { flex-basis: 100%; max-width:100%; }
+}
