@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=10" defer></script>
+  <script src="/pwa.js?v=11" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=10"></script>
+  <script type="module" src="/inbox.js?v=11"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -82,6 +82,25 @@
         <details><summary>Original capture</summary><pre id="original"></pre></details>
         <button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button>
       </form>
+    </dialog>
+    <dialog class="side-panel" id="clarifier" aria-labelledby="clarifyHeading">
+      <p class="eyebrow">Clarify at your pace</p><h2 id="clarifyHeading">Clarification</h2>
+      <details><summary>Original request</summary><pre id="clarifyOriginal"></pre></details>
+      <p id="clarifyTask"></p>
+      <h3 id="clarifyQuestion" tabindex="-1"></h3><p id="clarifyHelp"></p>
+      <p id="clarifyError" role="alert" hidden></p><p id="clarifyDraftStatus" role="status"></p>
+      <form id="clarifyForm">
+        <label id="clarifyTextLabel">Your proposed answer <textarea name="text" rows="4" maxlength="4000" aria-describedby="clarifyHelp"></textarea></label>
+        <div id="clarifyDisposition" hidden>
+          <label>Next state <select name="status"><option value="">Choose or skip</option><option value="keep">Keep current state</option><option value="next">Next action</option><option value="waiting">Waiting</option><option value="deferred">Deferred</option></select></label>
+          <label>Waiting for (person or dependency) <input name="waitingOn" maxlength="4000"></label>
+          <label>Review waiting work on <input name="reviewDate" type="date" min="0001-01-01" max="9999-12-31"></label>
+          <label>Defer until <input name="startDate" type="date" min="0001-01-01" max="9999-12-31"></label>
+        </div>
+        <div class="actions"><button id="clarifyAccept" type="submit">Accept answer</button><button id="clarifySkip" type="button">Skip question</button><button id="clarifySave" type="button">Save proposal without accepting</button><button id="clarifyStop" type="button">Stop for now</button></div>
+      </form>
+      <p class="muted">Typing and stopping keep a device draft. Save proposal shares it with your other devices after sync. Only Accept changes a task. You can edit your answer before accepting, or skip any question.</p>
+      <details><summary>Accepted answers and unknowns</summary><pre id="clarifyAnswers"></pre></details>
     </dialog>
     <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading">
       <h2 id="defaultsHeading">Defaults</h2><p>One option per line. Changing options keeps existing task values.</p>

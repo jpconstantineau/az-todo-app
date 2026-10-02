@@ -16,6 +16,11 @@ validation, calendar versus timed dates, and derived undo metadata. Existing
 receipts remain repeat-safe; unacknowledged incomplete workflow transitions are
 rejected with recoverable field feedback. Deploy that API before shell v8.
 
+The additive [clarification contract](clarification.md#api-and-rollout) introduces
+`type=clarification` records with the same ID as an owned item. Proposals and
+accepted/unknown answers remain separate from the task; accepted task changes
+and session progress share an atomic operation. Deploy that API before shell v11.
+
 **Decision: retain the working account transaction boundary.** The physical
 hierarchical paths remain `[/UserID, /ObjectType, /ObjectID]`; their v1 values are
 `[accountId, "sync", "v1"]`. The last two field names are inherited partition
@@ -164,7 +169,7 @@ to discard a queued operation or assign it to someone else.
 | --- | --- | --- |
 | GET `v1/session` | No parameters | API version, authenticated account ID, `defaultSettings` and nullable archived `legacyDefaults` (read-only) |
 | POST `v1/operations` | JSON operation below | Durable committed receipt (200), or durable conflict receipt (409) |
-| GET `v1/records` | `accountId`, `type=list\|item\|project\|settings`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
+| GET `v1/records` | `accountId`, `type=list\|item\|project\|settings\|clarification`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
 | GET `v1/receipts` | `accountId`, `operationId` | Exact stored receipt (200), whose `status` may be `conflict`; absent receipts return 404 |
 | GET `v1/changes` | `accountId`, `after` (default 0), `limit` (default 10, max 50) | Ordered change entries, `nextAfter`, `highWater`, `hasMore` |
 
