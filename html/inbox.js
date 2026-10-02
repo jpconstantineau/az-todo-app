@@ -1,5 +1,5 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=4';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=4';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=5';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=5';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -313,8 +313,27 @@ async function request(path, operation) {
   if (body.apiVersion !== 1) throw new Error('Unexpected server response. Pending work has been kept.');
   return body;
 }
+let profileRequest = 0;
+async function showAccountName(owner, generation, verified) {
+  const requestId = ++profileRequest;
+  const offline = navigator.onLine ? '' : ' · Offline';
+  $('sessionStatus').textContent = `Your device inbox${offline}`;
+  if (!verified) return;
+  try {
+    const response = await fetch('/.auth/me', { credentials: 'same-origin', cache: 'no-store',
+      redirect: 'error', signal: AbortSignal.timeout(15000) });
+    if (!response.ok) return;
+    const principal = (await response.json())?.clientPrincipal;
+    if (requestId !== profileRequest || generation !== accountGeneration || owner !== accountId) return;
+    if (principal?.userId === owner && typeof principal.userDetails === 'string' && principal.userDetails.trim()) {
+      $('sessionStatus').textContent = `Device inbox for ${principal.userDetails.trim()}${offline}`;
+    }
+  } catch { /* Display metadata must never block capture or synchronization. */ }
+}
 function hideAccount() {
   accountGeneration++;
+  profileRequest++;
+  $('sessionStatus').textContent = 'Your device inbox';
   accountId = null; state = undefined; editing = null; originalInput = undefined;
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
@@ -329,10 +348,11 @@ async function pauseSession(message) {
 }
 async function session({ allowOffline = false } = {}) {
   let generation = accountGeneration;
-  let identity;
+  let identity, verified = false;
   try {
     identity = await request('session');
     if (typeof identity.accountId !== 'string' || !identity.accountId) throw new Error('Missing account identity.');
+    verified = true;
   } catch (failure) {
     if (failure.status === 401 || failure.status === 403) {
       await pauseSession('Sign in to the original account to resume. Its pending work is kept on this device.');
@@ -356,7 +376,7 @@ async function session({ allowOffline = false } = {}) {
     render(); restoreDraft(); broadcast();
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
-  $('sessionStatus').textContent = `Device inbox for ${accountId}${navigator.onLine ? '' : ' · Offline'}`;
+  void showAccountName(accountId, generation, verified);
   return accountId;
 }
 
@@ -474,7 +494,7 @@ channel.onmessage = guard(async () => {
   }
 });
 addEventListener('online', () => { void sync(); });
-addEventListener('offline', () => { $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; });
+addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
 });
@@ -490,7 +510,7 @@ try {
         const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
         reply.port1.onmessage = event => {
           clearTimeout(timeout); reply.port1.close();
-          if (event.data === 'todo-inbox-shell-v4') resolve(); else reject(new Error('Old shell is still active'));
+          if (event.data === 'todo-inbox-shell-v5') resolve(); else reject(new Error('Old shell is still active'));
         };
         (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
       }))
