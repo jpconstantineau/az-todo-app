@@ -146,13 +146,18 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await page.getByRole('button', { name: 'Preferences', exact: true }).focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#preferences:modal [data-appearance]');
   await page.keyboard.press('Escape'); await expectFocus(page, '[data-open-preferences]');
-  // Force both native closes into one task so the earlier close event arrives
+  await page.locator('#openReviews').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#reviews:modal #reviewSessions');
+  await page.keyboard.press('Escape'); await expectFocus(page, '#openReviews');
+  // Force native closes into one task so the earlier close events arrive
   // after focus has moved on. It must not steal the later dialog's return focus.
   await page.evaluate(async () => {
-    const defaults = document.querySelector('#defaultsEditor'), preferences = document.querySelector('#preferences');
-    const closed = [defaults, preferences].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
+    const defaults = document.querySelector('#defaultsEditor'), reviews = document.querySelector('#reviews'), preferences = document.querySelector('#preferences');
+    const closed = [defaults, reviews, preferences].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
     const defaultsButton = document.querySelector('#userDefaults'), preferencesButton = document.querySelector('[data-open-preferences]');
     defaultsButton.focus(); defaultsButton.click(); defaults.close();
+    const reviewsButton = document.querySelector('#openReviews');
+    reviewsButton.focus(); reviewsButton.click(); reviews.close();
     preferencesButton.focus(); preferencesButton.click(); preferences.close();
     await Promise.all(closed);
   });

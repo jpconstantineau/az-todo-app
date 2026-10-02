@@ -2,7 +2,7 @@
 
 Issue #16 remains open for the full pilot flow and real assistive-technology
 verification. This change covers the current capture, editing, clarification,
-list/project/defaults, navigation and device-export controls.
+list/project/defaults, review-dialog focus, navigation and device-export controls.
 
 ## Focus and announcements
 
@@ -32,7 +32,7 @@ list/project/defaults, navigation and device-export controls.
   no forced timer. The existing 44px control targets, visible focus outlines,
   native modal behavior, responsive layout and light/dark colors are retained.
 
-Shell v13 includes these changes and the clarification API/client from v11.
+Shell v14 includes these changes, clarification from v11 and reviews from v12.
 Deploy the compatible API first. As before, updates wait for old tabs to close;
 no forced activation, storage reset or outbox rewrite is introduced.
 
@@ -74,5 +74,6 @@ defect. Include:
 4. Test 200% browser zoom and 320 CSS pixels; on a physical phone show its software
    keyboard and confirm Save remains reachable. Check reduced-motion preference
    and forced colors. The current flows introduce no animated transitions.
-5. Extend these checks to reviews and accepted briefs as those workflows land.
-   Their end-to-end accessibility is not established by this change.
+5. Verify the full daily/weekly review flow with assistive technology, then extend
+   to accepted briefs when available. Review-dialog focus is covered here; full
+   spoken-flow accessibility is not established by this change.
