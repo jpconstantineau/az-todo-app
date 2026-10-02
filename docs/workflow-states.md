@@ -71,8 +71,8 @@ path is unchanged and covered by a workflow preservation test. Unrelated edits
 preserve those values; an explicit workflow change must supply valid required
 metadata. Derived `nextAction` is reconciled on the next live item write.
 
-Deploy the API before shell **v7** and keep its support while clients have pending
-operations. v3–v6 shell upgrade checks retain exact queued operations, drafts and
+Deploy the API before shell **v8** and keep its support while clients have pending
+operations. v3–v7 shell upgrade checks retain exact queued operations, drafts and
 account caches. An old queued incomplete waiting/deferred transition can now be
 rejected: it stays recoverable at the queue head, and is never silently repaired
 or discarded. Copy/export its proposal before removing the rejected save and
@@ -100,3 +100,11 @@ The workflow editor was visually inspected at
 [390px](design/workflow-390.png) and [1440px](design/workflow-1440.png).
 This branch incorporates main's project/day PR #31 (`84f49c6`); its shared
 forms, calendar validator and cache/module versions were reconciled before testing.
+
+CI follow-up: reproduced the reopen/reload race using Chromium 153.0.8010.12.
+The workflow test now waits for the committed Reopen result before reloading.
+Merged PR #32 (`36277d7`) supplies the shared sync helper that waits for persisted
+cursor/queue state and matching rendered items, including a deliberately delayed
+response consumer. Its PWA install flow is retained; the combined shell is v8.
+All **66 tests pass** locally with Chromium after integration, including upgrades
+from shells v3–v7. No test was skipped or assertion weakened.

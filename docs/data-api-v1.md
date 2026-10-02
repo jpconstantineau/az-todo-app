@@ -14,7 +14,7 @@ a prerequisite for this empty-database release.
 The additive [workflow contract](workflow-states.md) defines waiting/deferred
 validation, calendar versus timed dates, and derived undo metadata. Existing
 receipts remain repeat-safe; unacknowledged incomplete workflow transitions are
-rejected with recoverable field feedback. Deploy that API before shell v7.
+rejected with recoverable field feedback. Deploy that API before shell v8.
 
 **Decision: retain the working account transaction boundary.** The physical
 hierarchical paths remain `[/UserID, /ObjectType, /ObjectID]`; their v1 values are
