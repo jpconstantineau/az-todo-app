@@ -1,3 +1,5 @@
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=7';
+
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
 const size = value => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -44,6 +46,15 @@ export function projected(state) {
           ? { statusBeforeCompletion: previous?.status || 'inbox' } : {}),
         version: mutation.expectedVersion + 1, deleted: false,
         localState: entry.failure ? 'Failed — needs attention' : 'Saved on device — pending' };
+      if (mutation.type === 'item') {
+        records[id].nextAction = records[id].status === 'next';
+        if (records[id].status === 'completed' && previous?.status !== 'completed' && previous?.workflowBeforeTransition?.status === 'completed' &&
+            workflowFields.every(name => (records[id][name] ?? null) === (previous.workflowBeforeTransition[name] ?? null))) records[id].statusBeforeCompletion = previous.completionBeforeTransition;
+        if (previous && workflowFields.some(name => name in (mutation.fields || {}) && (mutation.fields[name] ?? null) !== (previous[name] ?? null))) {
+          records[id].workflowBeforeTransition = Object.fromEntries(workflowFields.map(name => [name, previous[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
+          records[id].completionBeforeTransition = previous.statusBeforeCompletion || 'inbox';
+        }
+      }
     }
   }
   return records;
@@ -51,6 +62,13 @@ export function projected(state) {
 
 export function enqueue(state, accountId, mutations) {
   if (!mutations.length || mutations.length > 20) throw new Error('Save 1–20 items at a time (19 with a new list).');
+  const records = projected(state);
+  for (const mutation of mutations) {
+    if (mutation.type === 'item' && mutation.action !== 'delete') {
+      const old = records[key(mutation)];
+      validateWorkflow({ ...old, ...mutation.fields }, old, mutation.fields);
+    }
+  }
   const operation = { apiVersion: 1, accountId, operationId: crypto.randomUUID(), mutations };
   if (size(operation) > 65536) throw new Error('This capture is too large. Save fewer items at a time. Your text is still here.');
   // ponytail: one account document; split stores if measured cache size makes transactions slow.
