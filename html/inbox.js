@@ -1,11 +1,14 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=5';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=5';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=6';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=6';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
+let destination = 'capture';
+const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
+let navigation = emptyNavigation();
 addTaskControls($('captureFields')); addTaskControls($('editFields'));
 for (const [name, title] of Object.entries(optionFields)) {
   const label = document.createElement('label'); label.textContent = title;
@@ -35,7 +38,7 @@ function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open,
-    view: $('view').value, status: $('statusFilter').value, lists: $('listWorkspace').getAttribute('aria-pressed') === 'true' };
+    navigation: structuredClone(navigation) };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -67,11 +70,15 @@ function restoreDraft() {
   fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
   $('previewHelp').hidden = originalInput === undefined;
+  navigation = emptyNavigation();
+  // Preserve the former review filter when upgrading an existing device draft.
+  Object.assign(navigation.work, saved.navigation?.work || { view: saved.view || 'all', status: saved.status || '' });
+  Object.assign(navigation.lists, saved.navigation?.lists || {});
+  workspace(false);
   if (saved.edit) openEditor(saved.edit, false);
   else $('editor').close();
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
-  fillValues({ elements: { namedItem: name => $(name) } }, { view: saved.view || 'all', statusFilter: saved.status || '' });
-  workspace(!!saved.lists, false); refreshOptions(); render();
+  refreshOptions(); render();
 }
 function button(text, handler, label = text) {
   const element = document.createElement('button'); element.textContent = text;
@@ -80,16 +87,23 @@ function button(text, handler, label = text) {
 }
 function render() {
   if (!accountId || !state) return;
+  const focused = document.activeElement;
   const records = Object.values(projected(state)).filter(record => !record.deleted);
   const lists = records.filter(record => record.type === 'list');
   options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
   options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
-  options($('view'), lists, [['all', 'All items'], ['inbox', 'Inbox (no list)']]);
+  const listMode = destination === 'lists';
+  const filters = navigation[listMode ? 'lists' : 'work'];
+  options($('view'), lists, listMode ? [['', 'Choose a list']] : [['all', 'All items'], ['inbox', 'Inbox (no list)']]);
+  $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'all';
+  filters.view = $('view').value;
   refreshOptions();
   const statuses = [...new Set(['inbox', 'next', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses']]);
+  $('statusFilter').value = statuses.includes(filters.status) ? filters.status : '';
+  filters.status = $('statusFilter').value;
   $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
-  $('lists').replaceChildren(...lists.flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
+  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
   const view = $('view').value;
   $('items').replaceChildren(...records.filter(record => record.type === 'item' &&
     (view === 'all' || (view === 'inbox' ? !record.listId : record.listId === view)) &&
@@ -108,7 +122,9 @@ function render() {
       button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`));
     article.append(title, notes, metadata, status, actions); return article;
   }));
-  if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';
+  if (!$('items').childElementCount) $('items').textContent = listMode && !view
+    ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
+    : 'No items match this view. Change the filters or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   $('failure').hidden = !failed;
   if (failed) {
@@ -121,6 +137,7 @@ function render() {
     $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
+  if (!focused.isConnected) focusDestination();
 }
 function openEditor(record, focus = true) {
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
@@ -163,7 +180,7 @@ async function updateRecord(record, fields, close = false) {
   if (owner !== accountId) return;
   if (close) { editing = null; $('editor').close(); }
   clearError(); render();
-  if (close) $('itemsHeading').focus();
+  if (close) focusDestination();
   broadcast(); void sync();
 }
 
@@ -229,15 +246,47 @@ $('previewSplit').onclick = () => {
 $('cancelEdit').onclick = () => $('editor').close();
 $('editor').addEventListener('close', () => { if (editing) void journal(); });
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
-function workspace(lists, focus = true) {
-  document.querySelector('.capture-panel').hidden = lists;
-  $('quickFocus').setAttribute('aria-pressed', String(!lists));
-  $('listWorkspace').setAttribute('aria-pressed', String(lists));
-  if (focus) { (lists ? $('itemsHeading') : capture.elements.text).focus(); void journal(); }
+function focusDestination() {
+  if (!accountId || $('workspace').hidden || document.querySelector('dialog[open]')) return;
+  (destination === 'capture' ? capture.elements.text : $('itemsHeading')).focus();
 }
-$('quickFocus').onclick = () => workspace(false);
-$('listWorkspace').onclick = () => workspace(true);
-$('view').onchange = $('statusFilter').onchange = () => { render(); void journal(); };
+function workspace(focus = true) {
+  destination = ['work', 'lists'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
+  const listMode = destination === 'lists';
+  document.querySelector('.capture-panel').hidden = destination !== 'capture';
+  document.querySelector('.work-panel').hidden = destination === 'capture';
+  $('listTools').hidden = !listMode;
+  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Your Work';
+  $('workEyebrow').textContent = listMode ? 'Organize' : 'Review';
+  $('workHelp').textContent = listMode ? 'Choose a list to manage its details, defaults and items.' : 'Review items across your account, or narrow by list and status.';
+  $('viewLabel').textContent = listMode ? 'List' : 'View';
+  for (const link of document.querySelectorAll('.workspace-nav a')) {
+    if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  document.title = (destination === 'capture' ? 'Capture' : listMode ? 'List Workspace' : 'Your Work') + ' · To-Do';
+  render();
+  if (focus) { focusDestination(); void journal(); }
+}
+addEventListener('hashchange', () => workspace());
+for (const link of document.querySelectorAll('.workspace-nav a')) {
+  link.addEventListener('click', event => {
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && link.hash === location.hash) focusDestination();
+  });
+}
+document.querySelector('.skip-link').onclick = event => {
+  event.preventDefault();
+  if (accountId) focusDestination(); else $('signIn').focus();
+};
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences')]) {
+  dialog.addEventListener('close', () => {
+    if (document.activeElement === document.body || !document.activeElement.getClientRects().length) focusDestination();
+  });
+}
+$('view').onchange = $('statusFilter').onchange = () => {
+  navigation[destination === 'lists' ? 'lists' : 'work'] = { view: $('view').value, status: $('statusFilter').value };
+  render(); void journal();
+};
 $('newList').onclick = () => openEditor({ type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
 function openDefaults(record, focus = true, show = true) {
   if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
@@ -285,7 +334,7 @@ $('defaultsForm').addEventListener('submit', event => {
       });
       if (owner !== accountId) return;
       state = saved; defaultsEditing = null; $('defaultsEditor').close(); clearError(); render();
-      (record.type === 'settings' ? $('userDefaults') : $('itemsHeading')).focus();
+      if (record.type === 'settings') $('userDefaults').focus(); else focusDestination();
       broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
     finally { saving = false; controls.forEach(control => { control.disabled = false; }); }
@@ -331,6 +380,12 @@ async function showAccountName(owner, generation, verified) {
   } catch { /* Display metadata must never block capture or synchronization. */ }
 }
 function hideAccount() {
+  if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
+  navigation = emptyNavigation();
+  $('view').replaceChildren(new Option('All items', 'all'));
+  $('statusFilter').replaceChildren(new Option('All statuses', ''));
+  $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
+  $('syncStatus').textContent = ''; clearError();
   accountGeneration++;
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
@@ -365,7 +420,9 @@ async function session({ allowOffline = false } = {}) {
   }
   if (generation !== accountGeneration) throw new Error('Account changed while checking the session. Retry after signing in.');
   if (accountId !== identity.accountId) {
+    const previous = (await transact(null)).accountId;
     hideAccount();
+    if (previous && previous !== identity.accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
     generation = accountGeneration;
     await transact(null, saved => { saved.accountId = identity.accountId; saved.paused = false; });
     const saved = await transact(identity.accountId, local => {
@@ -510,7 +567,7 @@ try {
         const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
         reply.port1.onmessage = event => {
           clearTimeout(timeout); reply.port1.close();
-          if (event.data === 'todo-inbox-shell-v5') resolve(); else reject(new Error('Old shell is still active'));
+          if (event.data === 'todo-inbox-shell-v6') resolve(); else reject(new Error('Old shell is still active'));
         };
         (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
       }))

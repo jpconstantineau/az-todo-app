@@ -1,3 +1,4 @@
+import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -23,12 +24,12 @@ async function open(page, url) {
   await page.locator('#workspace').waitFor(); await confirmed(page);
 }
 async function capture(page, text) {
-  await page.locator('#captureText').fill(text);
+  await showView(page, 'capture'); await page.locator('#captureText').fill(text);
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
 }
 async function edit(page, title, replacement) {
-  await page.getByRole('button', { name: `Edit ${title}`, exact: true }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: `Edit ${title}`, exact: true }).click();
   await page.locator('#edit [name=title]').fill(replacement);
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
@@ -117,7 +118,7 @@ test('account label: explicit sign-out clears the label and pauses the original 
   // A 204 keeps this page alive so the pre-navigation cleanup can be inspected.
   await page.route('**/.auth/logout?**', route => route.fulfill({ status: 204 }));
   await open(page, url); await label(page, 'Device inbox for alice-handle');
-  await page.locator('#captureText').fill('Keep this draft');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
   await page.locator('#signOut').click();
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).paused);
@@ -127,11 +128,11 @@ test('account label: explicit sign-out clears the label and pauses the original 
 
 test('same-profile tabs share their unsaved draft slot; independent profiles do not', async t => {
   const { page, context, browser, url } = await setup(t);
-  await open(page, url); await page.locator('#captureText').fill('First tab draft');
+  await open(page, url); await showView(page, 'capture'); await page.locator('#captureText').fill('First tab draft');
   await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'First tab draft');
   const second = await context.newPage(); await open(second, url);
   assert.equal(await second.locator('#captureText').inputValue(), 'First tab draft');
-  await second.locator('#captureText').fill('Shared replacement');
+  await showView(second, 'capture'); await second.locator('#captureText').fill('Shared replacement');
   await second.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Shared replacement');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Shared replacement');
