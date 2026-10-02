@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -149,7 +150,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Draft across update');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).draft.capture.text === 'Draft across update');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).draft.capture.text === 'Draft across update');
   const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=7')).transact('alice'));
   const before = await local();
   version = 'failure';

@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -26,7 +27,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.getByRole('button', { name: 'New project', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Family breakfast');
   await page.locator('#edit [name=outcome]').fill('Everyone has breakfast ready for Monday.');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.outcome === 'Everyone has breakfast ready for Monday.');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.outcome === 'Everyone has breakfast ready for Monday.');
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=outcome]').inputValue(), 'Everyone has breakfast ready for Monday.');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
@@ -56,7 +57,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
   await page.locator('#view').selectOption('day'); await page.locator('#day').fill('2026-10-05');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.view === 'day');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.view === 'day');
   const queued = (await local(page)).queue;
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), 'day');

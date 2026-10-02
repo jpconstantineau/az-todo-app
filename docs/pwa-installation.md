@@ -84,7 +84,11 @@ This is software verification, not installed-device certification.
 
 From `api/`, run `npm ci`, `npx playwright install chromium`, then `npm test`.
 
-Result: **58/58 passing**. Coverage includes:
+Result: **60/60 passing** after correcting the CI test synchronization race.
+The multi-device check now waits for persisted changes and matching rendered items;
+asynchronous persistence/worker checks use awaited polling. A deliberately delayed
+change-response consumer and polling regression tests cover the failure.
+Coverage includes:
 
 - Parsed manifest, public asset paths/types, PNG decoding and maskable safe circle;
   anonymous access and SWA fallback exclusions.
