@@ -1,18 +1,18 @@
 # Native task flow and parity verification
 
 Implementation for issue #25. `/` serves `html/index.html`; `/inbox.html` is a native
-redirect to the same workspace. Capture is the default; the List workspace switch
-keeps drafts intact. Navigation redesign remains #26.
+redirect to the same workspace. Capture is the default. [Capture, Your Work and List Workspace](navigation.md)
+are separate addressable views that keep drafts intact.
 
 ## User flow
 
 | Action | Native implementation / contract |
 | --- | --- |
 | Sign in/out | SWA auth; return to `/`; verify `/api/v1/session` before displaying account data |
-| New empty list | New list editor; versioned `list` create with title, notes and a snapshot of user defaults |
+| New empty list | List Workspace → New list editor; versioned `list` create with title, notes and a snapshot of user defaults |
 | Capture | One item per non-empty line; optional original-preserving split preview, notes and new/existing list |
 | Advanced task fields | Status, local due date/time, contexts, areas, energy, time and priority; native controls |
-| Review/filter | All items, inbox or a list, combined with status filter; local view over every fetched change page |
+| Review/filter | Your Work: all items, inbox, list, project or planned day, combined with status filter; local view over every fetched change page |
 | Edit/move | Title, notes, list and advanced fields; only changed fields sent, retaining links, dates with seconds and originals |
 | Complete/reopen | Explicit status write; completion stores prior status; reopen restores it, falling back to `next` for older records without one |
 | Defaults | User defaults or per-list options in a native dialog; one option per line, at most 200 per field and 64 characters per option |

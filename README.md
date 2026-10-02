@@ -14,6 +14,7 @@ flowchart LR
   API --> DB[Azure Cosmos DB]
 ```
 
+- [Capture, Your Work and List Workspace navigation](docs/navigation.md)
 - [Task flow and parity verification](docs/task-flow.md)
 - [Optional projects and planned-day views](docs/projects.md)
 - [Request security and deployed verification gates](docs/request-security.md)
@@ -35,6 +36,6 @@ and run `npm test` with Node 24+. On Windows with Edge installed, set
 handlers with a transactional in-memory storage substitute; deployed Cosmos/auth,
 physical-device and screen-reader verification remain release gates.
 
-PWA installation/update UX is #14, navigation redesign is #26, and account display
-and sync documentation follow-up is #27. This release consolidates the existing
+PWA installation/update UX is #14; physical-device and screen-reader navigation
+verification remain under #26/#17. This release consolidates the existing
 client and preserves its offline protocol.

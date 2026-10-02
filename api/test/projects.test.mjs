@@ -73,7 +73,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   assert.deepEqual(item.areas, ['Personal']); assert.equal(records().filter(r => r.type === 'item').length, 1);
   const otherContext = await browser.newContext({ timezoneId: 'Pacific/Auckland', viewport: { width: 1440, height: 1000 } });
   const other = await otherContext.newPage(); await other.goto(server.url); await other.locator('#workspace').waitFor();
-  await other.getByRole('button', { name: 'Edit Milk', exact: true }).waitFor(); await confirmed(other);
+  await other.getByRole('button', { name: 'Edit Milk', exact: true, includeHidden: true }).waitFor({ state: 'attached' }); await confirmed(other);
   await showView(other, 'work'); await other.locator('#view').selectOption('day'); await other.locator('#day').fill('2026-10-05');
   assert.equal(await other.locator('#items article').getAttribute('data-id'), itemId);
   await other.getByRole('button', { name: 'Edit Milk', exact: true }).click();

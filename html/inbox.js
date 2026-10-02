@@ -1,5 +1,5 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=7';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=7';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=8';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=8';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -75,7 +75,7 @@ function restoreDraft() {
   // Preserve the former review filter when upgrading an existing device draft.
   Object.assign(navigation.work, saved.navigation?.work || { view: saved.view || 'all', status: saved.status || '' });
   Object.assign(navigation.lists, saved.navigation?.lists || {});
-  $('day').value = saved.day || localDate(new Date().toISOString()).slice(0, 10);
+  $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
   workspace(false);
   if (saved.edit) openEditor(saved.edit, false);
   else $('editor').close();
@@ -269,7 +269,12 @@ $('cancelEdit').onclick = () => $('editor').close();
 $('editor').addEventListener('close', () => { if (editing) void journal(); });
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
 function focusDestination() {
-  if (!accountId || $('workspace').hidden || document.querySelector('dialog[open]')) return;
+  if (!accountId || $('workspace').hidden) return;
+  const modal = document.querySelector('dialog[open]');
+  if (modal) {
+    if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
+    return;
+  }
   (destination === 'capture' ? capture.elements.text : $('itemsHeading')).focus();
 }
 function workspace(focus = true) {
@@ -455,7 +460,7 @@ async function session({ allowOffline = false } = {}) {
     });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
     accountId = identity.accountId; state = saved;
-    render(); restoreDraft(); broadcast();
+    render(); $('workspace').hidden = false; restoreDraft(); broadcast();
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
   void showAccountName(accountId, generation, verified);
@@ -592,7 +597,7 @@ try {
         const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
         reply.port1.onmessage = event => {
           clearTimeout(timeout); reply.port1.close();
-          if (event.data === 'todo-inbox-shell-v7') resolve(); else reject(new Error('Old shell is still active'));
+          if (event.data === 'todo-inbox-shell-v8') resolve(); else reject(new Error('Old shell is still active'));
         };
         (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
       }))
