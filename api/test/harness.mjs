@@ -93,10 +93,17 @@ app.http = (name, config) => {
 };
 await import("../api/index.mjs");
 
-export async function startServer({ browserUser = false, assetContents = () => undefined } = {}) {
+export async function startServer({ browserUser = false, assetContents = () => undefined, rejectOperations = () => false } = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     try {
+      // Server-side faults also cover requests made through an active service worker.
+      if (req.method === 'POST' && url.pathname === '/api/v1/operations' && rejectOperations()) {
+        req.resume();
+        res.writeHead(503, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
+        res.end(JSON.stringify({ apiVersion: 1, error: 'storage_unavailable', message: 'Injected operations outage.' }));
+        return;
+      }
       const handler = routes.get(`${req.method} ${url.pathname}`);
       if (handler) {
         const chunks = [];

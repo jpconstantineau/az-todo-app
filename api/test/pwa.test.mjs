@@ -139,12 +139,11 @@ test('PWA: manifest is parsed, public assets work anonymously, and offline navig
 test('PWA: failed asset download retains the active shell; successful update waits with drafts and outbox intact', { timeout: 90000 }, async t => {
   const worker = await readFile(new URL('../../html/inbox-sw.js', import.meta.url), 'utf8');
   let version = 'current';
-  const { page, context, server } = await setup(t, {}, { assetContents: path => {
+  const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
     const next = worker.replaceAll('shell-v12', 'shell-next');
     return version === 'failure' ? next.replace('ASSETS.push(', "ASSETS.push('/missing-update-asset', ") : next;
   } });
-  await context.route('**/api/v1/operations', route => route.abort());
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
   await page.locator('#captureText').fill('Pending across update');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
@@ -153,6 +152,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=12')).transact('alice')).draft.capture.text === 'Draft across update');
   const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=12')).transact('alice'));
   const before = await local();
+  assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
   version = 'failure';
   await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
   await page.waitForFunction(() => document.querySelector('#appUpdateStatus').textContent.includes('could not finish'));

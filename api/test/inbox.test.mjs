@@ -353,8 +353,8 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
 
 for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
   documents.length = 0;
-  let oldWorker = true, rejectUpgrade = false;
-  const server = await startServer({ browserUser: () => 'alice', assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
+  let oldWorker = true, rejectUpgrade = false, rejectOperations = true;
+  const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
     const paths = ['/inbox.js', '/inbox-store.js', '/inbox-fields.js',
       ...(${oldVersion} >= 4 ? ['/inbox.js?v=${oldVersion}', '/inbox-store.js?v=${oldVersion}', '/inbox-fields.js?v=${oldVersion}'] : [])];
     self.addEventListener('install', event => event.waitUntil(caches.open('todo-inbox-shell-v${oldVersion}').then(async cache => {
@@ -368,8 +368,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11]) test(`shell upgrade from
   ` : rejectUpgrade && path === '/inbox-sw.js' ? "self.addEventListener('install', event => event.waitUntil(Promise.reject(new Error('Injected install failure'))));" : undefined }); t.after(server.close);
   const browser = await chromium.launch({ channel }); t.after(() => browser.close());
   const context = await browser.newContext();
-  // Keep one intent unacknowledged across the upgrade.
-  await context.route('**/api/v1/operations', route => route.abort());
+  // Keep one intent unacknowledged at the server, including across worker activation.
   let page = await context.newPage(); const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
@@ -378,6 +377,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11]) test(`shell upgrade from
   await showView(page, 'capture'); await page.locator('#captureText').fill('Old unsubmitted draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=12')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
   const before = await page.evaluate(async () => (await import('/inbox-store.js?v=12')).transact('alice'));
+  assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
   oldWorker = false; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
@@ -394,11 +394,16 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11]) test(`shell upgrade from
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
+  assert.equal(await page.evaluate(async operation => (await fetch('/api/v1/operations', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation)
+  })).status, before.queue[0].operation), 503, 'the outage still applies under the newly active worker');
+  assert.equal(records().length, 0, 'no pending write reached storage during the upgrade');
   await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Old queued item', includeHidden: true }).waitFor({ state: 'attached' });
   assert.deepEqual((await local(page)).queue, before.queue);
-  await context.unroute('**/api/v1/operations'); await context.setOffline(false);
+  rejectOperations = false; await context.setOffline(false);
   await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().filter(record => record.type === 'item').length, 1);
+  assert.ok(documents.some(doc => doc.id === `receipt:${before.queue[0].operation.operationId}`), 'retry acknowledges the original intent');
   assert.deepEqual(errors, []);
 });
 
