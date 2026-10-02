@@ -43,3 +43,7 @@ Final verification at implementation commit `0625415`: all **56 tests pass**, no
 The first Linux CI run exposed two timing-dependent assertions: the design check read visibility before hashchange applied the new destination, and the navigation check read focus before the native dialog close event. Both now wait for the observable completion state, without arbitrary delays or weaker assertions. Async IndexedDB predicates reuse the browser wait helper merged in PR #32.
 
 After integrating main at `36277d7`, all **65 tests pass** locally via `cd api; npm test`, using Node 26.7.0 and Playwright Chromium 153.0.8010.12 on Windows. This includes PWA updates and preserved queue/draft upgrades from shell v3–v8. Shell v9 updates all module URLs, PWA asset caching and the readiness handshake together. The original screenshot layouts remain unchanged apart from the newly merged PWA status/install controls.
+
+The final pre-push check also found PR #33 merged at `e78baf8`. Its waiting/deferred states, undo, date validation and Ready for review filter are integrated. The workflow browser check now verifies that Ready for review survives Capture/List Workspace navigation and offline reload, with independent list filters.
+
+Final combined verification: all **70 tests pass**, none skipped, on Playwright Chromium 153.0.8010.12 / Node 26.7.0. The new workflow store-to-fields module import also uses v9, so every transitive dependency is available after offline reload. `git diff --check` passes.
