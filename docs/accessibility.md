@@ -19,6 +19,8 @@ list/project/defaults, navigation and device-export controls.
   If that control no longer exists in the current view, the view is the fallback.
   Dialogs restored after reload use that fallback; account changes cannot return
   focus to a previous account's action.
+  Delayed close events retain valid focus from a later interaction, including
+  when another dialog has already opened and closed.
 - Clarification focuses each question as it advances. Invalid acceptance keeps
   focus on the initiating control and exposes an alert. Answers remain editable.
 - Draft and sync live regions change only when their message changes. Repeated
@@ -30,7 +32,7 @@ list/project/defaults, navigation and device-export controls.
   no forced timer. The existing 44px control targets, visible focus outlines,
   native modal behavior, responsive layout and light/dark colors are retained.
 
-Shell v12 includes these changes and the clarification API/client from v11.
+Shell v13 includes these changes and the clarification API/client from v11.
 Deploy the compatible API first. As before, updates wait for old tabs to close;
 no forced activation, storage reset or outbox rewrite is introduced.
 

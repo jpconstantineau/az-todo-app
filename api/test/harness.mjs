@@ -93,7 +93,7 @@ app.http = (name, config) => {
 };
 await import("../api/index.mjs");
 
-export async function startServer({ browserUser = false, assetContents = () => undefined } = {}) {
+export async function startServer({ browserUser = false, assetContents = () => undefined, rejectOperations = () => false } = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     try {
@@ -101,6 +101,11 @@ export async function startServer({ browserUser = false, assetContents = () => u
       if (handler) {
         const chunks = [];
         for await (const chunk of req) chunks.push(chunk);
+        // Server-side outage injection also covers service-worker-owned requests.
+        if (req.method === 'POST' && url.pathname === '/api/v1/operations' && rejectOperations()) {
+          res.writeHead(503, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ apiVersion: 1, message: 'Injected operation outage' })); return;
+        }
         const headers = { ...req.headers };
         if (browserUser) {
           const user = typeof browserUser === 'function' ? browserUser() : 'disposable-test-user';

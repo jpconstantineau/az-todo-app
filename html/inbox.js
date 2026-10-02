@@ -1,7 +1,7 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=12';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=12';
-import { deviceExport, readableExport } from './inbox-export.js?v=12';
-import { clarificationUI } from './clarification.js?v=12';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=13';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=13';
+import { deviceExport, readableExport } from './inbox-export.js?v=13';
+import { clarificationUI } from './clarification.js?v=13';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -360,8 +360,12 @@ for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('cla
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
     dialogOpeners.delete(dialog);
-    if (opener?.generation === accountGeneration) restoreFocus(opener.control);
-    else if (document.activeElement === document.body || !document.activeElement.getClientRects().length) focusDestination();
+    // Native close restores focus immediately, but its event can arrive after
+    // another dialog has opened/closed. Keep a valid focus chosen since then.
+    if (document.activeElement === document.body || !document.activeElement.getClientRects().length) {
+      if (opener?.generation === accountGeneration) restoreFocus(opener.control);
+      else focusDestination();
+    }
   });
 }
 $('view').onchange = $('day').onchange = $('statusFilter').onchange = () => {

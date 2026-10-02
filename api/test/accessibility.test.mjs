@@ -141,9 +141,22 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await page.locator('#defaultsForm [type=submit]').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '[aria-label="Defaults: Household"]');
   await page.locator('#userDefaults').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#defaultsEditor:modal #defaultsForm [name=contexts]');
   await page.keyboard.press('Escape'); await expectFocus(page, '#userDefaults');
   await page.getByRole('button', { name: 'Preferences', exact: true }).focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#preferences:modal [data-appearance]');
   await page.keyboard.press('Escape'); await expectFocus(page, '[data-open-preferences]');
+  // Force both native closes into one task so the earlier close event arrives
+  // after focus has moved on. It must not steal the later dialog's return focus.
+  await page.evaluate(async () => {
+    const defaults = document.querySelector('#defaultsEditor'), preferences = document.querySelector('#preferences');
+    const closed = [defaults, preferences].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
+    const defaultsButton = document.querySelector('#userDefaults'), preferencesButton = document.querySelector('[data-open-preferences]');
+    defaultsButton.focus(); defaultsButton.click(); defaults.close();
+    preferencesButton.focus(); preferencesButton.click(); preferences.close();
+    await Promise.all(closed);
+  });
+  await expectFocus(page, '[data-open-preferences]');
   await page.locator('#export').focus();
   const download = page.waitForEvent('download'); await page.keyboard.press('Enter');
   assert.equal((await download).suggestedFilename(), 'todo-device-recovery.json');
