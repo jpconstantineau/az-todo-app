@@ -66,11 +66,14 @@ test('inbox: groceries capture, offline editing/moving/completion, original inpu
   await page.locator('#edit [name=description]').fill('Unsweetened\nTwo cartons');
   await page.locator('#edit [name=listId]').selectOption('');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Complete Oat milk' }).click();
   await page.getByRole('button', { name: 'Reopen Oat milk' }).click();
   await page.getByRole('button', { name: 'Edit list: Groceries' }).click();
   await page.locator('#edit [name=title]').fill('Weekend groceries');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
+  // A click only starts the save. The editor closes after the IDB transaction commits.
+  await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.reload();
   await page.getByRole('button', { name: 'Complete Oat milk' }).waitFor();
   assert.match(await page.locator('#items').innerText(), /Unsweetened/);
@@ -88,6 +91,7 @@ test('inbox: groceries capture, offline editing/moving/completion, original inpu
   await page.locator('#captureText').focus();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await confirmed(page);
   assert.equal(await page.locator('#captureText').evaluate(element => element === document.activeElement), true);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -155,6 +159,7 @@ test('inbox: switching accounts and expired login never display or upload anothe
   assert.equal((await local(page)).queue.length, 1);
   setUser(null); await page.getByRole('button', { name: 'Sync now' }).click();
   await page.locator('#workspace').waitFor({ state: 'hidden' });
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).paused);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true); await page.reload();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sign in online'));
@@ -173,6 +178,7 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
   await page.getByRole('button', { name: 'Edit Shared task' }).click();
   await page.locator('#edit [name=title]').fill('Phone version');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
   await serverEdit(url, records()[0], { title: 'Desktop version' });
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click();
   await page.locator('#failure').waitFor();
@@ -184,6 +190,7 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
   assert.equal(records()[0].title, 'Phone version');
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Complete Phone version' }).click();
+  await page.getByRole('button', { name: 'Reopen Phone version' }).waitFor();
   await serverEdit(url, records()[0], null, 'delete');
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click();
   await page.locator('#failure').waitFor();
@@ -235,6 +242,7 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
   await page.locator('#captureText').fill('oat milk\nbread\neggs');
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
   await page.reload();
   await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'oat milk\nbread\neggs');
