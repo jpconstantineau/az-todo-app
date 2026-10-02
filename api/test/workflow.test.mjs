@@ -133,6 +133,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
+  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
   await page.getByRole('button', { name: 'Complete Get approval', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen Get approval', exact: true }).click();
   // Reopen returns from the click before the IndexedDB transaction completes.

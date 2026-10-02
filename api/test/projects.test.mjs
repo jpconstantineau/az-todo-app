@@ -53,6 +53,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.locator('#view').selectOption('day'); await page.locator('#day').fill('2026-10-05');
   assert.match(await page.locator('#items').textContent(), /Two cartons/);
+  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
   await page.locator('#view').selectOption('inbox');

@@ -14,6 +14,27 @@ On link activation and back/forward, focus moves to the destination heading (Cap
 
 ## Integration and verification
 
+### Completed task visibility (issue #43)
+
+Your Work and List Workspace default to **Incomplete items**, hiding completed
+tasks across account, inbox, list, project and planned-day views. Waiting and
+deferred tasks remain visible. Choose **Completed** to review finished work or
+reopen an accidentally completed task; choose **All statuses** to see both.
+The same list/project/day scope still applies. Completing a task removes it from
+the default view immediately after the device save; it does not delete it.
+
+Each destination retains its selected filter for the current account across
+navigation and offline reload. The former default (empty status filter) now means
+Incomplete items; saved specific-status filters are retained. All statuses is an
+explicit saved choice. If completing or reopening removes the focused row,
+keyboard focus returns to the view heading. Exports still include completed tasks.
+Weekly review sessions retain their existing active-work queue; completed project
+work can be inspected with the project view and Completed filter.
+
+Shell v18 includes the filter change for installed/offline clients. Automated
+navigation checks cover scoped filters, independent destinations, offline
+completion/reopening, saved choices, keyboard focus and account switching.
+
 PR #31 merged while this work was in progress and was integrated from main at 84f49c6. Projects, outcomes and planned-day filters remain available in Your Work; list management stays in List Workspace. The planned day and review filters survive switching away and returning. PR #32 was subsequently merged from main at 36277d7, retaining PWA installation/update behavior and its browser synchronization wait fixes. The combined release uses shell/module version 9, preserving account data and exact queued operations while older worker versions remain active.
 
 Recorded October 2, 2026 on Windows with Node 26.7.0 and Microsoft Edge 154.0.4258.48. Automated tests use production handlers with the existing in-memory Cosmos substitute. The navigation scenarios are in api/test/navigation.test.mjs; existing inbox, security, account-sync, design and project tests are retained.

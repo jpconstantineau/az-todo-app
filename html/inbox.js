@@ -1,9 +1,9 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=17';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=17';
-import { deviceExport, readableExport } from './inbox-export.js?v=17';
-import { clarificationUI } from './clarification.js?v=17';
-import { setupReviews } from './reviews.js?v=17';
-import { setupBriefs } from './briefs.js?v=17';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=18';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=18';
+import { deviceExport, readableExport } from './inbox-export.js?v=18';
+import { clarificationUI } from './clarification.js?v=18';
+import { setupReviews } from './reviews.js?v=18';
+import { setupBriefs } from './briefs.js?v=18';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -167,7 +167,7 @@ function render() {
   filters.view = $('view').value;
   refreshOptions();
   const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
-  options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses'], ['@review-ready', 'Ready for review']]);
+  options($('statusFilter'), statuses.map(status => ({ id: status, title: status === 'completed' ? 'Completed' : status })), [['', 'Incomplete items'], ['@all', 'All statuses'], ['@review-ready', 'Ready for review']]);
   $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
   filters.status = $('statusFilter').value;
   statusText('syncStatus', state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
@@ -179,7 +179,9 @@ function render() {
   $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
   $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`, `${key(project)}:edit`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`)] : []));
   $('items').replaceChildren(...records.filter(record => {
-    if (record.type !== 'item' || ($('statusFilter').value && ($('statusFilter').value === '@review-ready' ? !reviewReady(record) : record.status !== $('statusFilter').value))) return false;
+    if (record.type !== 'item') return false;
+    if (!filters.status && record.status === 'completed') return false;
+    if (filters.status && filters.status !== '@all' && (filters.status === '@review-ready' ? !reviewReady(record) : record.status !== filters.status)) return false;
     if (view === 'all') return true;
     if (view === 'inbox') return !record.listId;
     if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
@@ -211,7 +213,7 @@ function render() {
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
     ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
-    : 'No items match this view. Change the filters or use Capture to add work.';
+    : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   $('failure').hidden = !failed;
   if (failed) {
@@ -520,7 +522,7 @@ function hideAccount() {
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
   navigation = emptyNavigation();
   $('view').replaceChildren(new Option('All items', 'all'));
-  $('statusFilter').replaceChildren(new Option('All statuses', ''));
+  $('statusFilter').replaceChildren(new Option('Incomplete items', ''));
   $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
   $('syncStatus').textContent = ''; clearError();
   accountGeneration++;
