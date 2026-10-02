@@ -27,7 +27,9 @@ All templates use the same `esc` helper for text and attributes.
 | POST `/api/lists/updateDefaults` | `listId` plus the six defaults fields | List defaults inside `#settingsPanel` |
 | POST `/api/lists/resetDefaults` | `listId` | List defaults copied from user defaults inside `#settingsPanel` |
 
-The registered `/api/settings/ensure` and `/api/health` endpoints have no UI controls.
+The registered `POST /api/settings/ensure` and `GET /api/health` endpoints have no UI controls.
+Page loading reads defaults without writing settings. Browser mutations use the
+origin policy and API response headers documented in [Request protection](request-security.md).
 General item/list editing and deletion are not presented as available actions.
 Defaults are edited one option per line; repeated array inputs remain supported.
 Saving defaults refreshes the selected list's options without replacing the capture form.
@@ -85,8 +87,9 @@ Passed locally on Windows with Node 24.19.0 and Edge 154.0.4258.48:
 This is local handler/browser verification, not Azure deployment or physical-phone
 verification. No production records were created. SWA authentication, direct Functions
 ingress, real Cosmos persistence/indexes, and deployed runtime must still be verified
-in a disposable Azure environment under #3/#17. The existing CSRF bypass is outside
-this repair and remains tracked in #3. The current runtime configuration is
+in a disposable Azure environment under #3/#17. The CSRF bypass has since been removed;
+[request-security.md](request-security.md) records the newer protection tests and
+remaining deployed verification gates. The current runtime configuration is
 `api/host.json` (`api` route prefix), entry `api/api/index.mjs`, and
 `CosmosDbConnectionSetting` for the Cosmos connection; older examples in
 `description.md` are not deployment evidence.

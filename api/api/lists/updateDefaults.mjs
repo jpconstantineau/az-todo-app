@@ -1,9 +1,8 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { listSettingsForm } from "../shared/templates.mjs";
-import { checkCsrf } from "../shared/security.mjs";
-import { toArrayClean } from "../shared/validate.mjs";
+import { toArrayClean, readForm, text } from "../shared/validate.mjs";
 
 async function getList(userId, listId) {
   const { resources } = await container.items
@@ -28,13 +27,11 @@ app.http("lists-updateDefaults", {
   methods: ["POST"],
   authLevel: "anonymous",
   handler: async (req) => {
-    if (!checkCsrf(req)) return new Response("Forbidden", { status: 403 });
-
     const userId = getUserId(req.headers);
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
-    const form = await req.formData();
-    const listId = (form.get("listId") || "").toString();
+    const form = await readForm(req);
+    const listId = text(form.get("listId"), 200, "listId");
     if (!listId) return new Response("listId required", { status: 400 });
 
     const list = await getList(userId, listId);

@@ -1,17 +1,14 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { settingsForm, options } from "../shared/templates.mjs";
-import { checkCsrf } from "../shared/security.mjs";
 
 app.http("settings-reset", {
   route: "settings/reset",
   methods: ["POST"],
   authLevel: "anonymous",
   handler: async (req) => {
-    if (!checkCsrf(req)) return new Response("Forbidden", { status: 403 });
-
     const userId = getUserId(req.headers);
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
@@ -33,7 +30,8 @@ app.http("settings-reset", {
 
     try {
       await container.item("settings", [userId, "userSettings", "_meta"]).replace(doc);
-    } catch {
+    } catch (error) {
+      if (error.code !== 404) throw error;
       await container.items.create(doc);
     }
 

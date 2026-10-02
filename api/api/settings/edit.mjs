@@ -1,4 +1,4 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { settingsForm } from "../shared/templates.mjs";

@@ -1,11 +1,11 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { getUserId } from "../shared/auth.mjs";
 
 app.http("settings-ensure", {
   route: "settings/ensure",
-  methods: ["GET"],
+  methods: ["POST"],
   authLevel: "anonymous",
   handler: async (req) => {
     const userId = getUserId(req.headers);

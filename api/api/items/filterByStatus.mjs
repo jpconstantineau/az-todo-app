@@ -1,7 +1,8 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { itemsList, esc } from "../shared/templates.mjs";
+import { cleanTag, text } from "../shared/validate.mjs";
 
 function loadMoreButton(status, ct) {
   return `
@@ -30,8 +31,8 @@ app.http("items-filterByStatus", {
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const url = new URL(req.url);
-    const status = url.searchParams.get("status") || "next";
-    const ct = url.searchParams.get("ct") || undefined;
+    const status = cleanTag(url.searchParams.get("status") || "next", "Status");
+    const ct = text(url.searchParams.get("ct"), 16384, "Continuation token") || undefined;
 
     const pageSize = 50;
     const querySpec = {

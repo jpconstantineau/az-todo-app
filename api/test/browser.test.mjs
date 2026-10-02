@@ -96,6 +96,16 @@ test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile wid
   assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
   await page.unroute("**/api/items/create");
 
+  await page.route("**/api/items/create", async route => {
+    const response = await route.fetch({ headers: { ...route.request().headers(), origin: "https://foreign.example" } });
+    await route.fulfill({ response });
+  });
+  assert.equal(await submit(page.getByRole("button", { name: "Add item", exact: true }), "items/create"), 403);
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
+  assert.equal(await page.locator('#quickAdd [name="description"]').inputValue(), "Do not lose this text");
+  assert.match(await page.locator("#requestError").innerText(), /origin could not be verified/);
+  await page.unroute("**/api/items/create");
+
   assert.equal(await submit(page.getByRole("button", { name: "Settings", exact: true }), "settings/edit"), 200);
   await page.locator('#settingsPanel [name="contexts[]"]').fill("@Shop\n@Kitchen");
   assert.equal(await submit(page.getByRole("button", { name: "Save user defaults" }), "settings/update"), 200);

@@ -1,9 +1,8 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { settingsForm, options } from "../shared/templates.mjs";
-import { checkCsrf } from "../shared/security.mjs";
-import { toArrayClean } from "../shared/validate.mjs";
+import { toArrayClean, readForm } from "../shared/validate.mjs";
 
 async function loadSettings(userId) {
   const { resources } = await container.items
@@ -25,12 +24,10 @@ app.http("settings-update", {
   methods: ["POST"],
   authLevel: "anonymous",
   handler: async (req) => {
-    if (!checkCsrf(req)) return new Response("Forbidden", { status: 403 });
-
     const userId = getUserId(req.headers);
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
-    const form = await req.formData();
+    const form = await readForm(req);
 
     const updatedDefaults = {
       contexts: toArrayClean(form, "contexts[]"),

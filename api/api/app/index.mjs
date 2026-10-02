@@ -1,7 +1,8 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { layoutShell } from "../shared/templates.mjs";
+import { defaultSettings } from "../shared/defaults.mjs";
 
 async function getSettings(userId) {
   const { resources } = await container.items
@@ -18,30 +19,6 @@ async function getSettings(userId) {
   return resources[0];
 }
 
-async function ensureSettings(userId) {
-  const settings = await getSettings(userId);
-  if (settings) return settings;
-
-  const now = new Date().toISOString();
-  const { defaultSettings } = await import("../shared/defaults.mjs");
-  const doc = {
-    id: "settings",
-    type: "userSettings",
-    userId,
-    listId: "_meta",
-    // Partition key fields
-    UserID: userId,
-    ObjectType: "userSettings",
-    ObjectID: "_meta",
-
-    createdUtc: now,
-    updatedUtc: now,
-    defaults: defaultSettings
-  };
-  await container.items.create(doc);
-  return doc;
-}
-
 app.http("app-index", {
   route: "app",
   methods: ["GET"],
@@ -55,7 +32,7 @@ app.http("app-index", {
       );
     }
 
-    const settings = await ensureSettings(userId);
+    const settings = await getSettings(userId);
 
     // Lists for user
     const { resources: lists } = await container.items
@@ -71,7 +48,7 @@ app.http("app-index", {
       )
       .fetchAll();
 
-    const html = layoutShell({ lists, defaults: settings.defaults });
+    const html = layoutShell({ lists, defaults: settings?.defaults || defaultSettings });
 
     return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }

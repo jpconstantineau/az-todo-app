@@ -42,7 +42,7 @@ const container = {
     return { async replace(doc) {
       failWrite();
       const index = documents.findIndex(d => d.id === id && [d.UserID, d.ObjectType, d.ObjectID].every((v, i) => v === partition[i]));
-      if (index < 0) throw new Error("Not found");
+      if (index < 0) throw Object.assign(new Error("Not found"), { code: 404 });
       documents[index] = clone(doc);
       return { resource: clone(doc) };
     } };
