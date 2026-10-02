@@ -126,6 +126,7 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
     await mkdir(process.env.BRIEF_SCREENSHOTS, { recursive: true }); console.log('Brief evidence browser:', browser.version());
     for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 900 }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.locator('#briefs').evaluate(dialog => { dialog.scrollTop = 0; });
       await page.screenshot({ path: `${process.env.BRIEF_SCREENSHOTS}/brief-${width}.png` });
     }
   }

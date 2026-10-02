@@ -69,11 +69,11 @@ test('export rejects mixed accounts, corrupt identities, unsupported envelope ve
 test('unsupported fields and future record types are reported and preserved without claiming workflow support', () => {
   const value = fixture();
   value.state.records['item:milk'].futureWorkflow = { step: 2, unknowns: ['Budget'] };
-  value.state.records['brief:future'] = { accountId: 'alice', type: 'brief', id: 'future', version: 1, deleted: false, revision: 'draft' };
+  value.state.records['future:record'] = { accountId: 'alice', type: 'future', id: 'record', version: 1, deleted: false, revision: 'draft' };
   const before = JSON.stringify(value);
   const report = validateDeviceExport(value);
   assert.ok(report.warnings.some(warning => warning.includes('futureWorkflow')));
-  assert.ok(report.warnings.some(warning => warning.includes('record type brief')));
+  assert.ok(report.warnings.some(warning => warning.includes('record type future')));
   assert.equal(JSON.stringify(value), before);
   assert.match(readableExport(value), /Budget/);
 });

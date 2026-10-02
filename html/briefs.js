@@ -36,7 +36,7 @@ export function setupBriefs({ records, save, journal, showDialog }) {
   }
   const content = () => Object.fromEntries(briefSections.map(([name]) => [name, form.elements[name].value]));
   const selected = () => active?.selectedId ? records()[`brief:${active.selectedId}`] : null;
-  const dirty = () => JSON.stringify(content()) !== JSON.stringify(active?.baseline);
+  const dirty = () => briefSections.some(([name]) => form.elements[name].value !== active?.baseline?.[name]);
   const snapshot = () => active ? { ...structuredClone(active), content: content(), open: dialog.open } : null;
   function error(message) { $('briefError').textContent = message; }
   function draw() {
@@ -102,7 +102,7 @@ export function setupBriefs({ records, save, journal, showDialog }) {
   $('briefExport').onclick = () => {
     if (dirty() || !selected()) return;
     const record = selected(), link = document.createElement('a'), url = URL.createObjectURL(new Blob([readableBrief(record)], { type: 'text/plain;charset=utf-8' }));
-    link.href = url; link.download = `brief-${record.id}-${record.status}.txt`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    link.href = url; link.download = `brief-${record.id}-${record.localState ? 'unconfirmed' : record.status}.txt`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   $('closeBriefs').onclick = () => dialog.close();
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });

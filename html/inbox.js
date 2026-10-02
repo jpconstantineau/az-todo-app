@@ -1,9 +1,9 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=16';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=16';
-import { deviceExport, readableExport } from './inbox-export.js?v=16';
-import { clarificationUI } from './clarification.js?v=16';
-import { setupReviews } from './reviews.js?v=16';
-import { setupBriefs } from './briefs.js?v=16';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=17';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=17';
+import { deviceExport, readableExport } from './inbox-export.js?v=17';
+import { clarificationUI } from './clarification.js?v=17';
+import { setupReviews } from './reviews.js?v=17';
+import { setupBriefs } from './briefs.js?v=17';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -204,8 +204,8 @@ function render() {
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`, `${key(record)}:edit`),
       button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
-      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`),
-      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`));
+      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`),
+      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
     article.append(title, notes, metadata, status, actions); return article;
   }));
