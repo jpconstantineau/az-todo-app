@@ -1,97 +1,136 @@
-# PWA installation assets (issue #14)
+# PWA installation and updates (issue #14)
 
-This is the independently mergeable asset preparation explicitly allowed by
-[#25](https://github.com/jpconstantineau/az-todo-app/issues/25). It does **not**
-enable installation or certify the app as an installed PWA. Existing HTML,
-routing, rollout flags, service worker, API and device data are unchanged.
-Issue #14 stays open.
+The canonical native client at `/` now links the manifest and touch icon from
+PR #28. The `/inbox.html` bookmark redirects to the same app. Installation
+controls live in **Preferences → Install To-Do**, using the existing dialog,
+disclosure, buttons and DESIGN.md styles. Capture and synchronization continue
+using the existing account-bound IndexedDB/outbox.
 
-## Assets and identity
+## Install and reopen
 
-- `html/manifest.json`: To-Do, standalone display, stable `id: "/"`,
-  `start_url: "/"` and `scope: "/"`. The start URL targets #25's planned
-  canonical root entry; do not promote it while root still serves the legacy UI.
-  Keep the ID stable through future entry-point changes to avoid a new identity.
-- `html/icons/icon-192.png` and `icon-512.png`: actual square PNGs.
-  The 512px asset supports both ordinary and maskable use, with opaque black
-  bleed and all foreground artwork inside the central 80%-diameter safe circle.
-- `html/icons/apple-touch-icon.png`: opaque 180px Apple touch asset.
-- `html/icons/icon.svg`: editable vector source. The black canvas, charcoal
-  surface, white border and blue check reuse DESIGN.md and existing app colors.
-  No fonts, external imagery or runtime image dependencies are needed.
+- Chrome/Edge: **Install app** appears only when the browser supplies a
+  `beforeinstallprompt` event. Only clicking it opens a prompt. Acceptance,
+  `appinstalled` or standalone launch hides the installation controls.
+- Dismissal suppresses the app's install button across reloads in that browser
+  profile. Installation help and browser-menu installation remain available.
+  If preference storage is blocked, dismissal lasts for the current page.
+- iPhone/iPad help explains Safari → Share → Add to Home Screen, enabling
+  **Open as Web App** if offered. Android and desktop get their own menu
+  instructions. Unsupported browsers can keep using the web client.
+- Sign in online once and wait for **Ready to reopen this inbox offline**.
+  Installation alone does not initialize an account or back up pending work.
+  A first-ever offline visit cannot download the app; help explains this before
+  disconnection. A cached public shell without a verified device account asks
+  the user to sign in online.
+- Capture/edit, then reconnect and bring the app to the foreground or choose
+  **Sync now**. There is no background-sync, extension or local-AI requirement.
 
-Regenerate from `api/` after installing the existing dependencies and browser:
+An ordinary tab cannot reliably detect installations in another profile or an
+external app. The client uses browser install events and standalone display state,
+not a permanent installed flag that could outlive an uninstall.
 
-```sh
-npm ci
-npx playwright install chromium
-node scripts/generate-pwa-icons.mjs
-node --test test/pwa-assets.test.mjs
-```
+## Identity, assets and hosting
 
-Installed Edge can be used with `PLAYWRIGHT_CHANNEL=msedge`. PNGs are checked
-in, so deploying the app does not require running the generator.
+`html/manifest.json` retains `id`, `start_url` and `scope` set to `/`,
+To-Do naming, standalone display, and black theme/launch background. The 192/512px
+PNGs include maskable artwork inside the central safe circle; the Apple touch icon
+is 180px. `api/scripts/generate-pwa-icons.mjs` regenerates them.
 
-## Integration after the consolidated shell is ready
+SWA configuration excludes `/manifest.json` and `/icons/*` from HTML navigation
+fallback and explicitly maps JSON/PNG MIME types. Assets are public; API routes
+retain authentication and no-store protection. The existing same-origin CSP
+allows the assets. The fixed launch/browser chrome color follows the manifest;
+the existing app appearance preference controls content.
 
-Add these tags to the canonical shell's head (and any separately served inbox
-shell that #25 retains):
+Before release, verify deployed HTTPS 200 responses with `application/json`
+(or `application/manifest+json`) for the manifest and `image/png` for icons.
+A missing icon must return a real failure, not index HTML. The local harness
+checks bodies/types and Chromium manifest parsing; it does not emulate Azure
+hosting or prove deployed headers.
 
-```html
-<link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
-<meta name="theme-color" content="#000000">
-```
+## Safe shell updates
 
-The fixed launch background matches the app's default dark appearance.
-Appearance-aware browser chrome can follow the existing theme preference at
-integration time. Keep both entry points on the same manifest and ID.
+Shell v7 caches only the public root/index/bookmark shell, local scripts/styles,
+manifest and icons. It never caches API/auth responses, task data or arbitrary
+navigation URLs. Root/index navigation query parameters map to the public shell
+offline without storing query-bearing copies.
 
-Serve the manifest anonymously as `application/json` (or
-`application/manifest+json`) and icons as `image/png`. Verify real HTTP headers
-and 200 bodies on Azure: a navigation fallback returning HTML is not a valid
-asset response. No SWA MIME/configuration change is made in this preparation PR;
-JSON uses the existing static-file path. Check that the deployed CSP permits
-same-origin manifests and images.
+The PWA script registers independently of account initialization, so a signed-out
+visitor can prepare the public shell. Account verification still gates task data.
+The shell/module URLs and worker handshake advance together. Fresh versioned
+module URLs bypass old workers' exact allowlists during an upgrade.
 
-Integrate the public assets into #25's versioned shell allowlist only with its
-safe update flow. Do not cache API/auth responses or task data, force worker
-activation, delete old caches still used by clients, or reset IndexedDB. Manifest
-metadata alone neither provides offline capture nor fixes an offline root route.
+Asset installation uses atomic `cache.addAll`. A failed download leaves the active
+worker/cache usable. Successful updates wait until every app tab/window closes;
+there is no forced activation or automatic reload. The update notice asks the
+user to wait for their draft to save on device before closing. No IndexedDB reset,
+outbox rewrite or old-cache deletion occurs. Pending operations synchronize
+normally after reopening. A failed update reports online retry guidance.
 
-Once that shell is verified, implement #14's install experience: expose a
-user-triggered install button only when the browser offers installation; hide it
-after installation and avoid repeat prompts after dismissal. Otherwise offer
-manual platform guidance, including iPhone Add to Home Screen. No extension or
-AI capability should gate installation.
+Old caches are deliberately retained for compatibility. A future retirement policy
+needs evidence that no client uses retired assets; do not clear site storage as an
+update workaround. Unsynced data remains vulnerable to explicit storage clearing,
+browser eviction and device loss; use device export.
 
-## Verification and remaining release gates
+## Automated evidence
 
-The focused Node/Playwright check validates manifest metadata, referenced files,
-PNG signatures and decoded dimensions, opacity, nonempty artwork and the
-maskable safe circle. It runs automatically with the existing `npm test` glob.
-These are repository asset checks, not deployed installability checks.
+Verified October 2, 2026 on Windows `10.0.26200`, Node `v26.7.0`, Playwright
+Chromium `153.0.8010.12`, against the local HTTP harness with disposable in-memory
+records. Revision: the implementation commit introducing this document's install
+flow, based on main `84f49c6`; the PR records the exact tested commit.
+PR #31 merged during implementation; its project/day views are retained, and the
+PWA shell advances from its v6 to v7 to avoid reusing cached module URLs.
+This is software verification, not installed-device certification.
 
-Record exact commit, environment, date, OS/browser version, steps,
-expected/actual results and evidence for each remaining check below. Keep a row
-unverified until exercised; screenshot emulation cannot certify physical devices.
+From `api/`, run `npm ci`, `npx playwright install chromium`, then `npm test`.
 
-| Check | Status in this asset preparation |
+Result: **60/60 passing** after correcting the CI test synchronization race.
+The multi-device check now waits for persisted changes and matching rendered items;
+asynchronous persistence/worker checks use awaited polling. A deliberately delayed
+change-response consumer and polling regression tests cover the failure.
+Coverage includes:
+
+- Parsed manifest, public asset paths/types, PNG decoding and maskable safe circle;
+  anonymous access and SWA fallback exclusions.
+- User-triggered install, dismissal/reload, accepted/installed states, prompt
+  failure, blocked preferences and simulated iPhone/standalone behavior.
+- Existing controls at 320/390/768/1440px in light/dark themes without horizontal
+  overflow; keyboard focus returns to installation help or Close.
+- Root/query/bookmark offline reopen, auth/API exclusion from Cache Storage and
+  offline sign-in guidance for an uninitialized account.
+- Failed asset download, atomic empty failed cache, preserved working shell,
+  waiting-worker notice and unchanged draft/outbox.
+- Upgrades from v3/v4/v5/v6 without mixed modules or changed queued intent; existing
+  offline process restart, exactly-once reconnect, independent-client sync,
+  conflicts, isolation, security and migration checks.
+
+Screenshots: [phone dark](design/pwa/install-dark-390.png),
+[phone light](design/pwa/install-light-390.png),
+[desktop dark](design/pwa/install-dark-1440.png),
+[desktop light](design/pwa/install-light-1440.png).
+These use an emulated iPhone user agent at the stated viewport widths to exercise
+manual guidance; they are not Safari or physical-device evidence. Set
+`PWA_SCREENSHOTS` to an output directory before running
+`node --experimental-test-module-mocks --test test/pwa.test.mjs` to regenerate.
+
+## Remaining release evidence
+
+Issue #14 stays open until the following are exercised, recording commit, date,
+environment, OS/browser version, steps, expected/actual result and evidence:
+
+| Check | Status |
 | --- | --- |
-| Deployed HTTPS manifest/icon paths, headers and browser manifest parsing | Unverified; link after #25 integration |
-| Android Chrome (including Pixel 4a), iPhone Safari, desktop Chrome/Edge install and launcher icon | Unverified |
-| Standalone root/inbox launch, auth return, reload, deep links and back navigation | Unverified |
-| Supported install button, dismissal, already installed and iPhone manual guidance | Pending integration |
-| Offline save/edit, process termination/reopen, reconnect and one acknowledged result on another device | Unverified |
-| Update with a draft/outbox, interrupted asset download and old-worker compatibility | Unverified |
-| Account expiry/switch/logout and absence of API/auth data in shell caches | Unverified for installed app |
-| First-ever offline limitation and foreground retry without background sync | Unverified for installed app |
+| Deployed HTTPS manifest/icon paths, MIME types, missing-asset behavior and CSP | Unverified |
+| Physical Android Chrome (including Pixel 4a), iPhone Safari and desktop Chrome/Edge install, name/icon and launcher reopen | Unverified |
+| Standalone auth return, root/bookmark links, refresh, back and account switching | Unverified |
+| Installed offline save/edit, process restart and one acknowledgement on a second physical device | Unverified |
+| Real deployed shell update and interrupted download with drafts/outbox | Unverified |
+| Real screen reader, 200% zoom and phone software keyboard in installed mode | Unverified |
 
-Use disposable accounts/data for the two-device and account-isolation checks.
-The existing durable inbox is the persistence path; reuse it during integration.
-Full installation/update UX and device evidence remain #14/#17.
+No production flags, database documents, credentials or deployment settings were
+changed during local verification. Use disposable accounts/data for deployed
+checks. Source-level isolation does not certify real SWA ingress or Cosmos.
 
-References:
+References: [MDN install prompts](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Trigger_install_prompt),
 [MDN installability](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable),
-[MDN app icons](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Define_app_icons),
-[manifest identity](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest/Reference/id).
+[Apple iPhone web apps](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios).

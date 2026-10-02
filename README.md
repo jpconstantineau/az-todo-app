@@ -22,6 +22,7 @@ flowchart LR
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)
 - [Multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
 - [Account partition decision and measurements](docs/data-api-v1.md#partition-decision-issue-27)
+- [PWA installation, safe updates and device verification](docs/pwa-installation.md)
 - [Design reference](DESIGN.md)
 
 The canonical entry is `/`; `/inbox.html` remains a bookmark alias. Set the backend
@@ -36,6 +37,7 @@ and run `npm test` with Node 24+. On Windows with Edge installed, set
 handlers with a transactional in-memory storage substitute; deployed Cosmos/auth,
 physical-device and screen-reader verification remain release gates.
 
-PWA installation/update UX is #14; physical-device and screen-reader navigation
-verification remain under #26/#17. This release consolidates the existing
-client and preserves its offline protocol.
+PWA installation is available from Preferences where the browser supports it;
+manual installation guidance and safe update notices are included. Physical-device
+and deployed installation verification remain #14/#17 release gates. Navigation
+verification on physical devices and screen readers remains under #26/#17.

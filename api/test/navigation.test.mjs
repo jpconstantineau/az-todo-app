@@ -1,3 +1,4 @@
+import { waitForBrowser } from './browser-wait.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -77,6 +78,9 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   assert.ok(await page.locator('#editor').evaluate(el => el.contains(document.activeElement)));
   await page.keyboard.press('Escape');
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  // Native close events run after the key event; wait for the promised focus result.
+  await page.waitForFunction(() => document.activeElement.id === 'captureText');
   assert.ok(await page.locator('#captureText').evaluate(el => el === document.activeElement));
   await showView(page, 'lists');
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
@@ -142,7 +146,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   assert.equal(await page.locator('#view').inputValue(), '');
   assert.match(await page.locator('#items').innerText(), /No lists yet/);
   setUser('bob'); await context.setOffline(false); await page.locator('#sync').click();
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   assert.doesNotMatch(await page.locator('body').innerText(), /Private list|Private task|Rejected private task|Recover this draft/);
   assert.equal(await page.locator('#statusFilter').inputValue(), '');

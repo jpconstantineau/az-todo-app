@@ -50,11 +50,11 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep my capture while reviewing');
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole('link', { name: 'List Workspace', exact: true }).click();
+    await showView(page, 'lists');
     assert.equal(await page.locator('#captureText').isVisible(), false);
     assert.equal(await page.locator('#listWorkspace').getAttribute('aria-current'), 'page');
     await fits(); await shot(`lists-${width}`);
-    await page.getByRole('link', { name: 'Capture', exact: true }).click();
+    await showView(page, 'capture');
     assert.equal(await page.locator('#captureText').inputValue(), 'Keep my capture while reviewing');
   }
   await showView(page, 'capture'); await page.locator('#captureText').fill('');

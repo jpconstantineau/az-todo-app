@@ -4,19 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Capture · To-Do</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
+  <script src="/pwa.js?v=9" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=8"></script>
+  <script type="module" src="/inbox.js?v=9"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
   <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Your workspace</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
   <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
     <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
-    <p class="muted">Saved for this browser.</p><button type="button" data-close-preferences>Close preferences</button></dialog>
+    <p class="muted">Saved for this browser.</p>
+    <section aria-labelledby="installHeading"><p class="eyebrow">On this device</p><h2 id="installHeading">Install To-Do</h2>
+      <button id="installApp" type="button" hidden>Install app</button>
+      <p id="installStatus" role="status"></p>
+      <details id="installHelp"><summary>Installation help</summary>
+        <p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p>
+        <p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p>
+      </details>
+    </section><button type="button" data-close-preferences>Close preferences</button></dialog>
   <p id="sessionStatus" role="status">Checking account…</p>
   <p id="offlineStatus" role="status"></p>
+  <p id="appUpdateStatus" role="status"></p>
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>

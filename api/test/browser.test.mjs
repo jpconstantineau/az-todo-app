@@ -1,5 +1,6 @@
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
+import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
@@ -69,7 +70,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Unsaved after settings');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Unsaved after settings');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsaved after settings');
   await showView(page, 'work');

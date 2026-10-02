@@ -114,9 +114,11 @@ export async function startServer({ browserUser = false, assetContents = () => u
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"] };
-        for (const name of ['theme.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-sw.js']) {
+        for (const name of ['theme.js', 'pwa.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
+        assets["/manifest.json"] = ["manifest.json", "application/json"];
+        for (const name of ["icon-192.png", "icon-512.png", "apple-touch-icon.png"]) assets["/icons/" + name] = ["icons/" + name, "image/png"];
         const asset = assets[url.pathname];
         if (!asset) { res.writeHead(404); res.end("Not found"); return; }
         res.writeHead(200, { "content-type": asset[1] });

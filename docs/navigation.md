@@ -14,7 +14,7 @@ On link activation and back/forward, focus moves to the destination heading (Cap
 
 ## Integration and verification
 
-PR #31 merged while this work was in progress and was integrated from main at 84f49c6. Projects, outcomes and planned-day filters remain available in Your Work; list management stays in List Workspace. The planned day and review filters survive switching away and returning. This release uses shell/module version 8, preserving account data and exact queued operations while older worker versions remain active.
+PR #31 merged while this work was in progress and was integrated from main at 84f49c6. Projects, outcomes and planned-day filters remain available in Your Work; list management stays in List Workspace. The planned day and review filters survive switching away and returning. PR #32 was subsequently merged from main at 36277d7, retaining PWA installation/update behavior and its browser synchronization wait fixes. The combined release uses shell/module version 9, preserving account data and exact queued operations while older worker versions remain active.
 
 Recorded October 2, 2026 on Windows with Node 26.7.0 and Microsoft Edge 154.0.4258.48. Automated tests use production handlers with the existing in-memory Cosmos substitute. The navigation scenarios are in api/test/navigation.test.mjs; existing inbox, security, account-sync, design and project tests are retained.
 
@@ -36,4 +36,10 @@ From the repository root, reproduce screenshots with NAVIGATION_SCREENSHOTS=docs
 
 Physical phone keyboard/safe-area behavior, assistive-technology announcements, actual browser 200% zoom, non-Chromium browsers and deployed SWA/Cosmos remain unverified. Automated text enlargement/reflow is not a claim of a physical-device or browser-zoom check. Keep issue #26 open for that evidence. No new workflow or persistence protocol was introduced.
 
-Final verification at implementation commit `0625415`: all **56 tests pass**, none skipped, with `PLAYWRIGHT_CHANNEL=msedge node --experimental-test-module-mocks --test api/test/*.test.mjs`. `git diff --check` passes. Shell version 8 avoids reusing version 7 from the concurrent PWA PR; no unmerged PWA code is included.
+Final verification at implementation commit `0625415`: all **56 tests pass**, none skipped, with `PLAYWRIGHT_CHANNEL=msedge node --experimental-test-module-mocks --test api/test/*.test.mjs`. `git diff --check` passes. This initial verification preceded the PWA integration and CI repair below.
+
+## CI follow-up
+
+The first Linux CI run exposed two timing-dependent assertions: the design check read visibility before hashchange applied the new destination, and the navigation check read focus before the native dialog close event. Both now wait for the observable completion state, without arbitrary delays or weaker assertions. Async IndexedDB predicates reuse the browser wait helper merged in PR #32.
+
+After integrating main at `36277d7`, all **65 tests pass** locally via `cd api; npm test`, using Node 26.7.0 and Playwright Chromium 153.0.8010.12 on Windows. This includes PWA updates and preserved queue/draft upgrades from shell v3–v8. Shell v9 updates all module URLs, PWA asset caching and the readiness handshake together. The original screenshot layouts remain unchanged apart from the newly merged PWA status/install controls.

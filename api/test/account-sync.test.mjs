@@ -1,5 +1,6 @@
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
+import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { documents, faults, startServer } from './harness.mjs';
@@ -37,8 +38,16 @@ async function edit(page, title, replacement) {
 async function sync(page) {
   const response = page.waitForResponse(response => response.url().includes('/api/v1/changes?'));
   await page.getByRole('button', { name: 'Sync now' }).click();
-  // Wait for this pass, even when the previous status already said confirmed.
-  await response;
+  const changes = await (await response).json();
+  // Headers and an unchanged confirmation label do not mean this pull was applied.
+  await waitForBrowser(page, async ({ accountId, highWater }) => {
+    const state = await (await import('/inbox-store.js')).transact(accountId);
+    if (state.after < highWater || state.queue.length) return false;
+    const items = Object.values(state.records).filter(record => record.type === 'item' && !record.deleted);
+    const rendered = [...document.querySelectorAll('#items article')];
+    return rendered.length === items.length && items.every(record => rendered.some(article =>
+      article.dataset.id === record.id && article.querySelector('h3').textContent === record.title));
+  }, changes);
   await confirmed(page);
 }
 
@@ -121,7 +130,7 @@ test('account label: explicit sign-out clears the label and pauses the original 
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
   await page.locator('#signOut').click();
   await page.locator('#workspace').waitFor({ state: 'hidden' });
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).paused);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).paused);
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /alice-handle/);
   assert.equal((await local(page)).draft.capture.text, 'Keep this draft');
 });
@@ -129,11 +138,11 @@ test('account label: explicit sign-out clears the label and pauses the original 
 test('same-profile tabs share their unsaved draft slot; independent profiles do not', async t => {
   const { page, context, browser, url } = await setup(t);
   await open(page, url); await showView(page, 'capture'); await page.locator('#captureText').fill('First tab draft');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'First tab draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'First tab draft');
   const second = await context.newPage(); await open(second, url);
   assert.equal(await second.locator('#captureText').inputValue(), 'First tab draft');
   await showView(second, 'capture'); await second.locator('#captureText').fill('Shared replacement');
-  await second.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Shared replacement');
+  await waitForBrowser(second, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Shared replacement');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Shared replacement');
   const independent = await browser.newContext(), third = await independent.newPage();
@@ -147,6 +156,19 @@ test('independent browser profiles sync records, preserve offline conflicts and 
   await open(phone, url); await open(laptop, url);
   await capture(phone, 'Milk\nBread'); await confirmed(phone);
   assert.equal((await local(laptop)).after, 0, 'independent IndexedDB and no cross-device broadcast');
+  // Reproduce a slow consumer after response headers arrive, as on the CI runner.
+  await laptop.evaluate(() => {
+    const fetch = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await fetch(...args);
+      if (response.url.includes('/api/v1/changes?')) {
+        window.fetch = fetch;
+        const json = response.json.bind(response);
+        response.json = async () => { const body = await json(); await new Promise(resolve => setTimeout(resolve, 500)); return body; };
+      }
+      return response;
+    };
+  });
   await sync(laptop); assert.equal(await laptop.locator('#items article').count(), 2);
   await phoneContext.setOffline(true); await laptopContext.setOffline(true);
   await edit(phone, 'Milk', 'Oat milk'); await edit(laptop, 'Bread', 'Rye bread');
