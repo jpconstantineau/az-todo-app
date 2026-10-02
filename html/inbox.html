@@ -11,20 +11,23 @@
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#captureText">Skip to capture</a>
-  <header class="app-header"><div><p class="eyebrow">Your workspace</p><h1>Inbox</h1></div><nav class="row" aria-label="Account"><label class="appearance">Appearance<select data-appearance><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/inbox.html">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
+  <header class="app-header"><div><p class="eyebrow">Your workspace</p><h1>Inbox</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/inbox.html">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
+  <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
+    <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+    <p class="muted">Saved for this browser.</p><button type="button" data-close-preferences>Close preferences</button></dialog>
   <p id="sessionStatus" role="status">Checking account…</p>
   <p id="offlineStatus" role="status"></p>
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>
-    <div class="toolbar"><button id="quickFocus">Quick capture</button><button id="sync">Sync now</button><button id="export">Export device copy</button></div>
+    <nav class="toolbar" aria-label="Workspace"><button id="quickFocus" aria-pressed="true">Capture inbox</button><button id="listWorkspace" aria-pressed="false">List workspace</button></nav>
     <p id="syncStatus" role="status"></p>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
       <p class="eyebrow">Capture</p><h2 id="captureHeading">Capture first</h2>
       <form id="capture">
         <label for="captureText">What do you need to remember?</label>
-        <textarea id="captureText" name="text" rows="3" maxlength="16000" required aria-describedby="captureHelp"></textarea>
+        <textarea id="captureText" name="text" rows="8" maxlength="16000" required aria-describedby="captureHelp" placeholder="Get it out of your head. Write your items here."></textarea>
         <div class="save-bar"><button type="submit">Save on device</button><span id="draftStatus" role="status"></span></div>
         <p id="captureHelp">One item per non-empty line. Save straight to your inbox. Ctrl/⌘ + Enter saves.</p>
         <details id="captureOptions"><summary>Notes, list, or split a sentence</summary>
@@ -43,12 +46,14 @@
       <button id="discard">Use server version for this save</button>
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading">
-      <p class="eyebrow">Review</p><h2 id="itemsHeading">Your work</h2>
+      <p class="eyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your work</h2>
       <label>View <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
       <div id="lists"></div><div id="items"></div>
     </section>
-    <section class="card" id="editor" hidden aria-labelledby="editHeading">
+    </div>
+    <dialog class="side-panel" id="editor" aria-labelledby="editHeading">
       <p class="eyebrow">Update</p><h2 id="editHeading">Edit</h2>
+      <p id="editError" role="alert" hidden></p>
       <form id="edit">
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
@@ -56,8 +61,8 @@
         <details><summary>Original capture</summary><pre id="original"></pre></details>
         <button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button>
       </form>
-    </section>
-    </div>
+    </dialog>
+    <div class="toolbar device-tools"><button id="sync">Sync now</button><button id="export">Export device copy</button></div>
     <p class="muted">Device copies belong to this browser profile. Unsynced work cannot be recovered after clearing site storage or losing this device. Export a copy before signing out or changing devices. Use a private browser profile on shared devices.</p>
   </main>
   <section class="card" id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>

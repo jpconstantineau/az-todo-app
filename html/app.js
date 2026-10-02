@@ -41,7 +41,12 @@ document.addEventListener("htmx:afterRequest", event => {
   }
   if (form.id === "quickAdd") form.elements.title.focus();
 });
-document.addEventListener("htmx:afterSwap", () => {
+document.addEventListener("htmx:afterSwap", event => {
+  const panel = document.getElementById('settingsPanel');
+  if (event.detail.target === panel && panel.childElementCount) {
+    panel.prepend(statusBox, errorBox);
+    if (!panel.open) panel.showModal();
+  }
   const navigation = document.getElementById("listNavigation");
   if (navigation && !navigation.dataset.initialized) {
     navigation.open = matchMedia('(min-width: 768px)').matches;
@@ -58,8 +63,14 @@ document.addEventListener("htmx:afterSwap", () => {
   });
 });
 document.addEventListener("click", event => {
-  if (event.target.closest("[data-close-settings]")) document.getElementById("settingsPanel").replaceChildren();
+  if (event.target.closest("[data-close-settings]")) document.getElementById("settingsPanel").close();
 });
+document.addEventListener('close', event => {
+  if (event.target.id === 'settingsPanel') document.getElementById('app').before(statusBox, errorBox);
+}, true);
+document.addEventListener('cancel', event => {
+  if (event.target.id === 'settingsPanel' && event.target.querySelector('.htmx-request')) event.preventDefault();
+}, true);
 document.addEventListener("defaultsUpdated", event => {
   const listId = document.getElementById("listSelect")?.value;
   if (listId && (!event.detail.listId || event.detail.listId === listId)) {

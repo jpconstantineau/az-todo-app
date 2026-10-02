@@ -32,9 +32,12 @@ export function destinationSelect({ lists = [], selectedListId = "", oob = false
 // Fragment only: html/index.html owns the document and #app target.
 export function layoutShell({ lists = [], defaults = defaultSettings } = {}) {
   return `<header class="app-header"><div><p class="eyebrow">Your workspace</p><h1>To-Do</h1></div><nav class="row" aria-label="Account">
-    <label class="appearance">Appearance<select data-appearance><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <button type="button" data-open-preferences>Preferences</button>
     <button class="button" hx-get="/api/settings/edit" hx-target="#settingsPanel">Settings</button>
     <a class="button" href="/.auth/logout">Sign out</a></nav></header>
+    <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
+      <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+      <p class="muted">Saved for this browser.</p><button type="button" data-close-preferences>Close preferences</button></dialog>
     <div class="app-grid"><aside class="sidebar card"><details id="listNavigation" open><summary>Lists</summary>
       <div id="listsContainer" class="lists">${listsBlock({ lists })}</div>
       <details id="createList"><summary>Create a list</summary>
@@ -44,7 +47,7 @@ export function layoutShell({ lists = [], defaults = defaultSettings } = {}) {
         <button class="button primary" type="submit">Create list</button>
       </form></details></details>
     </aside><main id="main" class="main" tabindex="-1">
-      <section id="settingsPanel" aria-label="Settings"></section>
+      <dialog id="settingsPanel" class="side-panel" aria-label="Settings"></dialog>
       <section class="card" aria-labelledby="quickAddTitle"><p class="eyebrow">Capture</p><h2 id="quickAddTitle">Add an item</h2>
         <div id="quickAddContainer">${quickAddItemForm({ lists, defaults })}</div>
       </section>${filterBar({ statuses: defaults.statuses })}

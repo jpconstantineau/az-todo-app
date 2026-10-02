@@ -1,6 +1,6 @@
 /* App adaptation of DESIGN.md, shared by both workspaces. */
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
   --canvas: light-dark(#f7f8fa, #000000);
   --surface: light-dark(#ffffff, #15181e);
   --surface-raised: light-dark(#eef0f4, #1f232b);
@@ -42,6 +42,7 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="system"] { color-scheme: light dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--canvas); color: var(--ink); font: var(--weight-body) var(--text-base)/var(--line-body) var(--font); }
@@ -75,6 +76,9 @@ details { min-width: 0; }
 .card, dialog { padding: var(--space-6); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--ink); min-width: 0; }
 dialog { max-width: min(640px, calc(100% - 32px)); }
 dialog::backdrop { background: rgb(0 0 0 / .65); }
+.side-panel { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(560px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-6); }
+.side-panel .card { padding: 0; border: 0; }
+body:has(dialog[open]) { overflow: hidden; }
 .app-grid { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
 .sidebar { min-width: 0; }
 .sidebar > details > summary { font-size: var(--text-heading); padding-top: 0; }
@@ -98,12 +102,13 @@ dialog::backdrop { background: rgb(0 0 0 / .65); }
 .description:empty, .meta:empty, .notes:empty { display: none; }
 .item .description { color: var(--muted); font-size: var(--text-sm); margin: var(--space-2) 0; }
 .success { color: var(--success); }
-#requestError, #error, #failure { border: var(--border-width) solid var(--error); padding: var(--space-4); border-radius: var(--radius-control); background: var(--surface); color: var(--error); }
+#requestError, #error, #editError, #failure { border: var(--border-width) solid var(--error); padding: var(--space-4); border-radius: var(--radius-control); background: var(--surface); color: var(--error); }
 #requestStatus { color: var(--muted); font-size: var(--text-sm); }
 #requestStatus:empty { margin: 0; }
 .skip-link { position: absolute; top: -100px; left: var(--space-4); z-index: 10; padding: var(--space-3); background: var(--surface); }
 .skip-link:focus { top: var(--space-2); }
 @media (max-width: 767px) {
+  .side-panel { inset: auto 0 0; width: 100%; height: auto; max-height: 92dvh; border-radius: var(--radius-panel) var(--radius-panel) 0 0; padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) max(var(--space-4), env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
   .container { padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) var(--space-6) max(var(--space-4), env(safe-area-inset-left)); }
   .app-header { gap: var(--space-3); margin-bottom: var(--space-4); padding-bottom: var(--space-4); }
   .app-header nav { width: 100%; }

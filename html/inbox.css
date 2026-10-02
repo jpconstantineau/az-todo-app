@@ -1,11 +1,10 @@
 /* Inbox layout; visual tokens and native controls come from styles.css. */
 .toolbar, .save-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .toolbar { margin-bottom: var(--space-3); }
-.inbox-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-6); align-items: start; margin: var(--space-6) 0; }
+.inbox-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-items: start; margin: var(--space-6) 0; }
 .inbox-grid > * { min-width: 0; }
-.capture-panel { grid-column: 1; grid-row: 1; }
-.work-panel { grid-column: 2; grid-row: 1 / span 3; }
-#editor, #failure { grid-column: 1; }
+#captureText { min-height: clamp(200px, 32dvh, 400px); }
+.toolbar [aria-pressed="true"] { border-color: var(--link); background: var(--selected); box-shadow: inset 0 -3px var(--link); }
 .inbox-page article { background: var(--surface-raised); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); padding: var(--space-4); margin-top: var(--space-3); overflow-wrap: anywhere; }
 .inbox-page article .notes { font-size: var(--text-sm); color: var(--muted); }
 #lists { display: flex; flex-wrap: wrap; gap: var(--space-2); }

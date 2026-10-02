@@ -111,6 +111,10 @@ test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile wid
 
   assert.equal(await submit(page.getByRole("button", { name: "Settings", exact: true }), "settings/edit"), 200);
   await page.locator('#settingsPanel [name="contexts[]"]').fill("@Shop\n@Kitchen");
+  faults.nextWrite = true;
+  assert.equal(await submit(page.getByRole("button", { name: "Save user defaults" }), "settings/update"), 500);
+  assert.ok(await page.locator('#settingsPanel #requestError').isVisible());
+  assert.equal(await page.locator('#settingsPanel [name="contexts[]"]').inputValue(), '@Shop\n@Kitchen');
   assert.equal(await submit(page.getByRole("button", { name: "Save user defaults" }), "settings/update"), 200);
   await page.getByRole("button", { name: "Close settings" }).click();
   assert.equal(await submit(page.getByRole("button", { name: "List defaults", exact: true }), "lists/editDefaults"), 200);

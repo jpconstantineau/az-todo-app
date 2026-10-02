@@ -1,17 +1,16 @@
 // Runs before CSS to apply a saved choice before the first paint.
 (() => {
   const key = 'todo-appearance';
-  let choice = 'system';
+  let choice = 'dark';
   function apply(value) {
     choice = value;
-    if (value === 'light' || value === 'dark') document.documentElement.dataset.theme = value;
-    else delete document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = value;
     document.querySelectorAll('[data-appearance]').forEach(select => { select.value = value; });
   }
   function restore() {
     let value;
-    try { value = localStorage.getItem(key); } catch { /* System preference works without storage. */ }
-    apply(['light', 'dark'].includes(value) ? value : 'system');
+    try { value = localStorage.getItem(key); } catch { /* Dark remains the default without storage. */ }
+    apply(['light', 'dark', 'system'].includes(value) ? value : 'dark');
   }
   restore();
   document.addEventListener('DOMContentLoaded', () => apply(choice));
@@ -20,9 +19,13 @@
     if (!event.target.matches('[data-appearance]')) return;
     apply(event.target.value);
     try {
-      if (choice === 'system') localStorage.removeItem(key);
-      else localStorage.setItem(key, choice);
+      localStorage.setItem(key, choice);
     } catch { /* Keep the current tab's choice when storage is unavailable. */ }
   });
   addEventListener('storage', event => { if (event.key === key || event.key === null) restore(); });
+  document.addEventListener('click', event => {
+    const opener = event.target.closest('[data-open-preferences]');
+    if (opener) document.getElementById('preferences').showModal();
+    if (event.target.closest('[data-close-preferences]')) document.getElementById('preferences').close();
+  });
 })();
