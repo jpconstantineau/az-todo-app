@@ -76,6 +76,16 @@ test('brief templates use accepted facts, retain unknowns and export exact revis
 });
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+async function confirmedRevision(page, status) {
+  // The global idle message can still describe the state before the click's save.
+  await waitForBrowser(page, async status => {
+    const id = document.querySelector('#briefRevisions').value;
+    const state = await (await import('/inbox-store.js')).transact('alice');
+    return !!id && state.records[`brief:${id}`]?.status === status &&
+      !state.queue.some(entry => entry.operation.mutations.some(mutation => mutation.type === 'brief' && mutation.id === id));
+  }, status);
+  await confirmed(page);
+}
 const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
 async function setup(t) {
   documents.length = 0; let user = 'alice';
@@ -106,7 +116,7 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   await page.locator('#briefAccept').click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 2);
   assert.match(await download(page), /UNCONFIRMED REVISION/);
-  await context.setOffline(false); await page.locator('#closeBriefs').click(); await page.locator('#sync').click(); await confirmed(page);
+  await context.setOffline(false); await page.locator('#closeBriefs').click(); await page.locator('#sync').click(); await confirmedRevision(page, 'accepted');
   await page.getByRole('button', { name: 'Brief Call the insurer', exact: true }).click();
   const first = await page.locator('#briefRevisions').inputValue();
   assert.match(await download(page), /ACCEPTED REVISION/);
@@ -114,9 +124,9 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   assert.equal(await page.locator('#briefExport').isDisabled(), true);
   assert.equal(await page.locator('#briefAccept').isDisabled(), true);
   await page.getByRole('button', { name: 'Save new draft revision' }).click();
-  await page.waitForFunction(first => document.querySelector('#briefRevisions').value !== first, first); await confirmed(page);
+  await page.waitForFunction(first => document.querySelector('#briefRevisions').value !== first, first); await confirmedRevision(page, 'draft');
   assert.match(await download(page), /DRAFT — NOT ACCEPTED/);
-  await page.locator('#briefReject').click(); await confirmed(page);
+  await page.locator('#briefReject').click(); await confirmedRevision(page, 'rejected');
   await page.waitForFunction(() => document.querySelector('#briefState').textContent.startsWith('rejected'));
   assert.equal(await page.locator('#briefAccept').isDisabled(), true);
   await page.locator('#briefRevisions').selectOption(first);
@@ -131,12 +141,15 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
     }
   }
   await page.locator('#closeBriefs').click();
-  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'Brief Call the insurer');
+  await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Brief Call the insurer');
   await post(url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Launch complete' })]);
-  await page.locator('#sync').click(); await confirmed(page); await page.locator('#view').selectOption('project:launch');
+  await page.locator('#sync').click();
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js')).transact('alice')).records['project:launch']);
+  await page.locator('#view').selectOption('project:launch');
   await page.getByRole('button', { name: 'Brief Launch', exact: true }).click();
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Launch complete');
   await page.locator('#closeBriefs').click(); setUser('bob'); await page.locator('#sync').click(); await confirmed(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob' && !document.querySelector('#workspace').hidden);
   assert.equal(await page.locator('#briefOriginal').textContent(), '');
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), '');
   assert.deepEqual(errors, []);
@@ -144,7 +157,7 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
 
 test('brief browser: competing decisions and storage failure retain recoverable drafts', { timeout: 60000 }, async t => {
   const { page, context, url } = await setup(t);
-  await page.getByRole('button', { name: 'Save new draft revision' }).click(); await confirmed(page);
+  await page.getByRole('button', { name: 'Save new draft revision' }).click(); await confirmedRevision(page, 'draft');
   const id = await page.locator('#briefRevisions').inputValue();
   await context.setOffline(true); await page.locator('#briefAccept').click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 1);
