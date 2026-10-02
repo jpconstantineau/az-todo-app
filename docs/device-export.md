@@ -78,9 +78,11 @@ field reporting, overwrite refusal, two-account isolation, offline reload, lates
 cross-tab state, and storage-read failure with recovery of current form text.
 The existing responsive and shell-upgrade tests cover the added native selector
 and cached export module. No database or IndexedDB schema migration is needed.
-After integrating PRs #32 and #33 from main, local verification on October 2, 2026
-passed all 72 tests with Node 26.7.0 and Playwright Chromium on Windows (`npm test`).
-The combined workflow, PWA and export shell uses v9; upgrade checks cover v3–v8.
+After integrating PRs #32, #33 and #34 from main, local verification on October 2,
+2026 passed all 76 tests with Node 26.7.0 and Playwright Chromium on Windows (`npm test`).
+The combined navigation, workflow, PWA and export shell uses v10; upgrade checks
+cover v3–v9. Export tests verify downloads from all three navigation destinations
+while preserving the current capture draft and ignoring the selected filters.
 Export tests use the shared asynchronous browser-state wait helper from main.
 Real-device download UX and deployed Azure data behavior are unverified.
 

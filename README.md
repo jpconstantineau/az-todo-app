@@ -14,6 +14,7 @@ flowchart LR
   API --> DB[Azure Cosmos DB]
 ```
 
+- [Capture, Your Work and List Workspace navigation](docs/navigation.md)
 - [Task flow and parity verification](docs/task-flow.md)
 - [Optional projects and planned-day views](docs/projects.md)
 - [Request security and deployed verification gates](docs/request-security.md)
@@ -41,4 +42,4 @@ physical-device and screen-reader verification remain release gates.
 PWA installation is available from Preferences where the browser supports it;
 manual installation guidance and safe update notices are included. Physical-device
 and deployed installation verification remain #14/#17 release gates. Navigation
-redesign is tracked in #26.
+verification on physical devices and screen readers remains under #26/#17.

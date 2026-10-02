@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
+import { showView } from './navigation-helper.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -35,6 +36,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   await page.locator('#captureText').fill('Alice unfinished draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished draft');
   await page.reload(); await page.locator('#workspace').waitFor();
+  await showView(page, 'work');
   await page.locator('#statusFilter').selectOption('completed');
   assert.equal(await page.locator('#items article').count(), 0);
   // A completed write from another tab need not have broadcast before exporting.
@@ -52,6 +54,14 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   for (const expected of ['Confirmed Alice task', 'Pending Alice task', 'Other tab pending task', 'Alice unfinished draft']) assert.ok(text.includes(expected));
   assert.equal(JSON.stringify(documents), before, 'export does not submit or mutate records');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+
+  for (const view of ['capture', 'work', 'lists']) {
+    await showView(page, view);
+    const exported = JSON.parse(await download(page));
+    assert.equal(exported.draft.capture.text, 'Alice unfinished draft');
+    assert.equal(validateDeviceExport(exported).pendingOperations, 2);
+    assert.equal(Object.values(exported.state.records)[0].title, 'Confirmed Alice task');
+  }
 
   // Hold completion of just the export's storage read while the session changes.
   const downloads = []; page.on('download', file => downloads.push(file));
