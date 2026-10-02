@@ -1,14 +1,15 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=11';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=11';
-import { deviceExport, readableExport } from './inbox-export.js?v=11';
-import { clarificationUI } from './clarification.js?v=11';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=12';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=12';
+import { deviceExport, readableExport } from './inbox-export.js?v=12';
+import { clarificationUI } from './clarification.js?v=12';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
-const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, focus: focusDestination });
+const dialogOpeners = new Map();
+const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, showDialog });
 async function saveClarification(mutations, next) {
   const owner = accountId;
   if (!owner) return false;
@@ -42,10 +43,14 @@ function refreshOptions() {
 }
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
+function statusText(id, text) {
+  // Replacing identical live-region text can announce it again on every keystroke/render.
+  if ($(id).textContent !== text) $(id).textContent = text;
+}
 function error(message, kind = 'local') {
-  $('error').hidden = false; $('error').textContent = message; $('error').dataset.kind = kind;
-  if ($('editor').open) { $('editError').hidden = false; $('editError').textContent = message; }
-  if ($('defaultsEditor').open) { $('defaultsError').hidden = false; $('defaultsError').textContent = message; }
+  $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
+  if ($('editor').open) { $('editError').hidden = false; statusText('editError', message); }
+  if ($('defaultsEditor').open) { $('defaultsError').hidden = false; statusText('defaultsError', message); }
 }
 function clearError(kind) {
   if (!kind || $('error').dataset.kind === kind) { $('error').hidden = true; $('editError').hidden = true; }
@@ -61,7 +66,7 @@ function draft() {
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
-  $('draftStatus').textContent = 'Not saved on device';
+  statusText('draftStatus', 'Not saved on device');
   $('recovery').hidden = false;
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), localCopy: state }, null, 2);
   $('editor').close(); // Make the recovery copy outside the modal reachable.
@@ -76,7 +81,7 @@ async function journal() {
   const owner = accountId, snapshot = draft();
   try {
     const saved = await transact(owner, local => { local.draft = snapshot; });
-    if (owner === accountId) { state = saved; $('draftStatus').textContent = 'Draft saved on device'; $('clarifyDraftStatus').textContent = 'Draft saved on device; not accepted.'; }
+    if (owner === accountId) { state = saved; statusText('draftStatus', 'Draft saved on device'); statusText('clarifyDraftStatus', 'Draft saved on device; not accepted.'); }
   } catch (failure) { if (owner === accountId) storageFailure(failure); }
 }
 function options(select, lists, first, keepMissing = false) {
@@ -103,9 +108,10 @@ function restoreDraft() {
   refreshOptions(); render();
   clarification.restore(saved.clarification);
 }
-function button(text, handler, label = text) {
+function button(text, handler, label = text, focusKey) {
   const element = document.createElement('button'); element.textContent = text;
   element.setAttribute('aria-label', label);
+  if (focusKey) element.dataset.focusKey = focusKey;
   element.addEventListener('click', guard(handler)); return element;
 }
 function render() {
@@ -129,14 +135,14 @@ function render() {
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses'], ['@review-ready', 'Ready for review']]);
   $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
   filters.status = $('statusFilter').value;
-  $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
-  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
+  statusText('syncStatus', state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
+  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list), `Edit list: ${list.title}`, `${key(list)}:edit`), button(`Defaults: ${list.title}`, () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`)]));
   const view = $('view').value;
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
   $('projectOutcome').hidden = !project;
   $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
-  $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`)] : []));
+  $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`, `${key(project)}:edit`)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item' || ($('statusFilter').value && ($('statusFilter').value === '@review-ready' ? !reviewReady(record) : record.status !== $('statusFilter').value))) return false;
     if (view === 'all') return true;
@@ -161,10 +167,10 @@ function render() {
     status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
     const actions = document.createElement('div'); actions.className = 'actions';
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
-    actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`),
-      button('Clarify', () => clarification.open(record), `Clarify ${record.title}`),
-      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`));
-    if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`));
+    actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`, `${key(record)}:edit`),
+      button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
+      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`));
+    if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
     article.append(title, notes, metadata, status, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
@@ -182,11 +188,11 @@ function render() {
     $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
-  if (!focused.isConnected) focusDestination();
+  if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
 function openEditor(record, focus = true) {
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
-    if (!$('editor').open) $('editor').showModal();
+    showDialog($('editor'));
     if (focus) edit.elements.title.focus();
     return;
   }
@@ -207,7 +213,7 @@ function openEditor(record, focus = true) {
   $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
   $('editError').hidden = true;
-  if (!$('editor').open) $('editor').showModal();
+  showDialog($('editor'));
   if (focus) { edit.elements.title.focus(); void journal(); }
 }
 
@@ -233,7 +239,6 @@ async function updateRecord(record, fields, close = false) {
   if (owner !== accountId) return;
   if (close) { editing = null; $('editor').close(); }
   clearError(); render();
-  if (close) focusDestination();
   broadcast(); void sync();
 }
 
@@ -263,7 +268,7 @@ capture.addEventListener('submit', event => {
       if (JSON.stringify(captureDraft()) === JSON.stringify(submitted)) {
         capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
       }
-      clearError(); $('draftStatus').textContent = 'Saved on device';
+      clearError(); statusText('draftStatus', 'Saved on device');
       render(); capture.elements.text.focus(); broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
     finally { saving = false; capture.querySelector('[type=submit]').disabled = false; }
@@ -308,6 +313,19 @@ function focusDestination() {
   }
   (destination === 'capture' ? capture.elements.text : $('itemsHeading')).focus();
 }
+function restoreFocus(control) {
+  if (document.querySelector('dialog[open]')) { focusDestination(); return; }
+  // Labels and DOM nodes can change; record ID plus action remains stable.
+  const target = control?.isConnected ? control : control?.dataset.focusKey
+    ? document.querySelector(`[data-focus-key="${CSS.escape(control.dataset.focusKey)}"]`) : null;
+  if (target && target !== document.body && !target.disabled && target.getClientRects().length) target.focus();
+  else focusDestination();
+}
+function showDialog(dialog) {
+  if (dialog.open) return;
+  dialogOpeners.set(dialog, { control: document.activeElement, generation: accountGeneration });
+  dialog.showModal();
+}
 function workspace(focus = true) {
   destination = ['work', 'lists'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
   const listMode = destination === 'lists';
@@ -337,9 +355,13 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier')]) {
   dialog.addEventListener('close', () => {
-    if (document.activeElement === document.body || !document.activeElement.getClientRects().length) focusDestination();
+    if (dialog.open) return;
+    const opener = dialogOpeners.get(dialog);
+    dialogOpeners.delete(dialog);
+    if (opener?.generation === accountGeneration) restoreFocus(opener.control);
+    else if (document.activeElement === document.body || !document.activeElement.getClientRects().length) focusDestination();
   });
 }
 $('view').onchange = $('day').onchange = $('statusFilter').onchange = () => {
@@ -359,7 +381,7 @@ function openDefaults(record, focus = true, show = true) {
   $('defaultsHeading').textContent = record.type === 'settings' ? 'User defaults' : 'List defaults';
   $('resetDefaults').textContent = record.type === 'settings' ? 'Reset to built-in defaults' : 'Copy user defaults';
   $('defaultsError').hidden = true;
-  if (show && !$('defaultsEditor').open) $('defaultsEditor').showModal();
+  if (show) showDialog($('defaultsEditor'));
   if (focus) {
     const control = $('defaultsForm').elements.contexts;
     control.focus(); control.setSelectionRange(0, 0); control.scrollTop = 0;
@@ -394,7 +416,6 @@ $('defaultsForm').addEventListener('submit', event => {
       });
       if (owner !== accountId) return;
       state = saved; defaultsEditing = null; $('defaultsEditor').close(); clearError(); render();
-      if (record.type === 'settings') $('userDefaults').focus(); else focusDestination();
       broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
     finally { saving = false; controls.forEach(control => { control.disabled = false; }); }
@@ -434,8 +455,8 @@ let profileRequest = 0;
 async function showAccountName(owner, generation, verified) {
   const requestId = ++profileRequest;
   const offline = navigator.onLine ? '' : ' · Offline';
-  $('sessionStatus').textContent = `Your device inbox${offline}`;
-  if (!verified) return;
+  let label = `Your device inbox${offline}`;
+  if (!verified) { statusText('sessionStatus', label); return; }
   try {
     const response = await fetch('/.auth/me', { credentials: 'same-origin', cache: 'no-store',
       redirect: 'error', signal: AbortSignal.timeout(15000) });
@@ -443,9 +464,12 @@ async function showAccountName(owner, generation, verified) {
     const principal = (await response.json())?.clientPrincipal;
     if (requestId !== profileRequest || generation !== accountGeneration || owner !== accountId) return;
     if (principal?.userId === owner && typeof principal.userDetails === 'string' && principal.userDetails.trim()) {
-      $('sessionStatus').textContent = `Device inbox for ${principal.userDetails.trim()}${offline}`;
+      label = `Device inbox for ${principal.userDetails.trim()}${offline}`;
     }
   } catch { /* Display metadata must never block capture or synchronization. */ }
+  finally {
+    if (requestId === profileRequest && generation === accountGeneration && owner === accountId) statusText('sessionStatus', label);
+  }
 }
 function hideAccount() {
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
