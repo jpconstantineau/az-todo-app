@@ -87,7 +87,7 @@ person using the same browser profile or devtools. Use separate profiles on shar
 devices. Explicit site-storage clearing, browser eviction or device loss can
 destroy unsynced work; the UI explains this and offers an export.
 
-The worker caches only `/inbox.html`, `/inbox.css`, `/inbox.js` and
+The worker caches only `/inbox.html`, `/styles.css`, `/theme.js`, `/inbox.css`, `/inbox.js` and
 `/inbox-store.js`, never API responses, auth endpoints, the legacy shell or task
 data. Wait for **Ready to reopen this inbox offline** before relying on offline
 reload. Reopen the inbox URL, not the legacy `/` entry point. Browser termination

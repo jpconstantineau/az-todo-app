@@ -120,8 +120,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination' }).waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v1')).keys()).map(request => new URL(request.url).pathname));
-  assert.deepEqual(cached.sort(), ['/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js'].sort());
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v3')).keys()).map(request => new URL(request.url).pathname));
+  assert.deepEqual(cached.sort(), ['/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/styles.css', '/theme.js'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -258,6 +258,25 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   await confirmed(page); await confirmed(second);
   assert.equal(records().length, 5);
   assert.equal(documents.filter(doc => doc.kind === 'receipt').length, 3);
+});
+
+test('inbox: editor storage failure closes the sheet and exposes a recovery copy', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t);
+  await capture(page, 'Original task'); await confirmed(page);
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Edit Original task', exact: true }).click();
+  await page.locator('#edit [name=title]').fill('Recover this sheet draft');
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Recover this sheet draft');
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.put = function () { throw new DOMException('Storage quota exceeded', 'QuotaExceededError'); };
+  });
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#recovery').waitFor();
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  assert.match(await page.locator('#recoveryText').inputValue(), /Recover this sheet draft/);
+  await page.locator('#recoveryText').focus();
+  assert.ok(await page.locator('#recoveryText').evaluate(el => el === document.activeElement));
+  assert.equal(records()[0].title, 'Original task');
 });
 
 test('client cutover redirects the shell and makes every legacy mutation read-only', async t => {

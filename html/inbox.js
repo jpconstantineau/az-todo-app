@@ -6,8 +6,13 @@ let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
-function error(message, kind = 'local') { $('error').hidden = false; $('error').textContent = message; $('error').dataset.kind = kind; }
-function clearError(kind) { if (!kind || $('error').dataset.kind === kind) $('error').hidden = true; }
+function error(message, kind = 'local') {
+  $('error').hidden = false; $('error').textContent = message; $('error').dataset.kind = kind;
+  if ($('editor').open) { $('editError').hidden = false; $('editError').textContent = message; }
+}
+function clearError(kind) {
+  if (!kind || $('error').dataset.kind === kind) { $('error').hidden = true; $('editError').hidden = true; }
+}
 function captureDraft() {
   return { ...Object.fromEntries(new FormData(capture)), ...(originalInput === undefined ? {} : { original: originalInput }) };
 }
@@ -19,6 +24,7 @@ function storageFailure(failure) {
   $('draftStatus').textContent = 'Not saved on device';
   $('recovery').hidden = false;
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), localCopy: state }, null, 2);
+  $('editor').close(); // Make the recovery copy outside the modal reachable.
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
@@ -45,10 +51,11 @@ function restoreDraft() {
   originalInput = saved.capture?.original;
   $('previewHelp').hidden = originalInput === undefined;
   if (saved.edit) openEditor(saved.edit, false);
-  else $('editor').hidden = true;
+  else $('editor').close();
 }
-function button(text, handler) {
+function button(text, handler, label = text) {
   const element = document.createElement('button'); element.textContent = text;
+  element.setAttribute('aria-label', label);
   element.addEventListener('click', guard(handler)); return element;
 }
 function render() {
@@ -69,8 +76,9 @@ function render() {
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
     status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
     const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(button(`Edit ${record.title}`, () => openEditor(record)),
-      button(`${record.status === 'completed' ? 'Reopen' : 'Complete'} ${record.title}`, () => updateRecord(record, { status: record.status === 'completed' ? 'inbox' : 'completed' })));
+    const action = record.status === 'completed' ? 'Reopen' : 'Complete';
+    actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`),
+      button(action, () => updateRecord(record, { status: record.status === 'completed' ? 'inbox' : 'completed' }), `${action} ${record.title}`));
     article.append(title, notes, status, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';
@@ -88,6 +96,11 @@ function render() {
   }
 }
 function openEditor(record, focus = true) {
+  if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
+    if (!$('editor').open) $('editor').showModal();
+    if (focus) edit.elements.title.focus();
+    return;
+  }
   editing = { type: record.type, id: record.id, version: record.version };
   const fields = record.fields || record;
   edit.elements.title.value = fields.title;
@@ -95,7 +108,8 @@ function openEditor(record, focus = true) {
   edit.elements.listId.value = fields.listId || '';
   $('editListLabel').hidden = record.type === 'list';
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
-  $('editor').hidden = false;
+  $('editError').hidden = true;
+  if (!$('editor').open) $('editor').showModal();
   if (focus) { edit.elements.title.focus(); void journal(); }
 }
 
@@ -114,8 +128,10 @@ async function updateRecord(record, fields, close = false) {
     if (owner === accountId) state = saved;
   } catch (failure) { if (owner === accountId) storageFailure(failure); return; }
   if (owner !== accountId) return;
-  if (close) { editing = null; $('editor').hidden = true; }
-  clearError(); render(); broadcast(); void sync();
+  if (close) { editing = null; $('editor').close(); }
+  clearError(); render();
+  if (close) $('itemsHeading').focus();
+  broadcast(); void sync();
 }
 
 capture.addEventListener('input', () => { void journal(); });
@@ -160,8 +176,17 @@ $('previewSplit').onclick = () => {
   capture.elements.text.value = capture.elements.text.value.split(/[,;\n]+/).map(line => line.trim()).filter(Boolean).join('\n');
   $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
 };
-$('cancelEdit').onclick = () => { editing = null; $('editor').hidden = true; void journal(); };
-$('quickFocus').onclick = () => capture.elements.text.focus();
+$('cancelEdit').onclick = () => $('editor').close();
+$('editor').addEventListener('close', () => { if (editing) void journal(); });
+$('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+function workspace(lists) {
+  document.querySelector('.capture-panel').hidden = lists;
+  $('quickFocus').setAttribute('aria-pressed', String(!lists));
+  $('listWorkspace').setAttribute('aria-pressed', String(lists));
+  (lists ? $('itemsHeading') : capture.elements.text).focus();
+}
+$('quickFocus').onclick = () => workspace(false);
+$('listWorkspace').onclick = () => workspace(true);
 $('view').onchange = render;
 capture.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.repeat) { event.preventDefault(); capture.requestSubmit(); }
@@ -188,6 +213,7 @@ async function request(path, operation) {
 function hideAccount() {
   accountGeneration++;
   accountId = null; state = undefined; editing = null; originalInput = undefined;
+  $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
   $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
 }

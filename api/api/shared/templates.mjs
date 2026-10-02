@@ -31,25 +31,31 @@ export function destinationSelect({ lists = [], selectedListId = "", oob = false
 }
 // Fragment only: html/index.html owns the document and #app target.
 export function layoutShell({ lists = [], defaults = defaultSettings } = {}) {
-  return `<header class="app-header row"><h1>To-Do</h1><nav class="row" aria-label="Account">
+  return `<header class="app-header"><div><p class="eyebrow">Your workspace</p><h1>To-Do</h1></div><nav class="row" aria-label="Account">
+    <button type="button" data-open-preferences>Preferences</button>
     <button class="button" hx-get="/api/settings/edit" hx-target="#settingsPanel">Settings</button>
     <a class="button" href="/.auth/logout">Sign out</a></nav></header>
-    <div class="app-grid"><aside class="sidebar blade"><h2>Lists</h2>
+    <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
+      <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+      <p class="muted">Saved for this browser.</p><button type="button" data-close-preferences>Close preferences</button></dialog>
+    <div class="app-grid"><aside class="sidebar card"><details id="listNavigation" open><summary>Lists</summary>
+      <div id="listsContainer" class="lists">${listsBlock({ lists })}</div>
+      <details id="createList"><summary>Create a list</summary>
       <form id="addListForm" hx-post="/api/lists/create" hx-target="#listsContainer" data-reset-fields="title description" hx-disabled-elt="find button">
         <label>List title<input name="title" required maxlength="200"></label>
         <label>Description<textarea name="description" maxlength="4000"></textarea></label>
         <button class="button primary" type="submit">Create list</button>
-      </form><div id="listsContainer" class="lists">${listsBlock({ lists })}</div>
-    </aside><main class="main">
-      <section id="settingsPanel" aria-label="Settings"></section>
-      <section aria-labelledby="quickAddTitle"><h2 id="quickAddTitle">Add an item</h2>
+      </form></details></details>
+    </aside><main id="main" class="main" tabindex="-1">
+      <dialog id="settingsPanel" class="side-panel" aria-label="Settings"></dialog>
+      <section class="card" aria-labelledby="quickAddTitle"><p class="eyebrow">Capture</p><h2 id="quickAddTitle">Add an item</h2>
         <div id="quickAddContainer">${quickAddItemForm({ lists, defaults })}</div>
       </section>${filterBar({ statuses: defaults.statuses })}
-      <section id="itemsView" aria-live="polite"><h2>Choose a list or a status</h2><p>Your saved items will appear here.</p></section>
+      <section id="itemsView" class="card" aria-live="polite"><p class="eyebrow">Your work</p><h2>Choose a list or a status</h2><p>Your saved items will appear here.</p></section>
     </main></div>`;
 }
 export function listsBlock({ lists = [] } = {}) {
-  if (!lists.length) return '<p class="muted">No lists yet. Create your first list above.</p>';
+  if (!lists.length) return '<p class="muted">No lists yet. Choose “Create a list” to get started.</p>';
   return lists.map(list => `<button class="list-item button" data-list-id="${esc(list.id)}"
     hx-get="/api/items/byList?listId=${esc(encodeURIComponent(list.id))}" hx-target="#itemsView">${esc(list.title)}</button>`).join("");
 }
@@ -68,19 +74,20 @@ export function itemsList({ items = [] } = {}) {
   return items.length ? items.map(itemRow).join("") : '<p class="muted">No items in this view.</p>';
 }
 export function listView({ list, items = [] }) {
-  return `<h2 id="selectedListTitle" data-list-id="${esc(list.id)}">${esc(list.title)}</h2>
+  return `<p class="eyebrow">Your work</p><h2 id="selectedListTitle" data-list-id="${esc(list.id)}">${esc(list.title)}</h2>
     <p class="description">${esc(list.description)}</p>
     <button class="button" hx-get="/api/lists/editDefaults?listId=${esc(encodeURIComponent(list.id))}" hx-target="#settingsPanel">List defaults</button>
     <div id="items" class="items-table">${itemsList({ items })}</div>`;
 }
 export function quickAddItemForm({ lists = [], defaults = defaultSettings, selectedListId = "" } = {}) {
   return `<form id="quickAdd" hx-post="/api/items/create" hx-target="#itemsView" data-reset-fields="title description dueLocal" hx-disabled-elt="#quickAdd button">
-    <div class="row"><label class="field">Destination list${destinationSelect({ lists, selectedListId })}</label>
-    <label class="field">Title<input name="title" required maxlength="200"></label></div>
+    <div class="form-grid"><label>Title<input name="title" required maxlength="200" placeholder="What needs doing?"></label>
+    <label>Destination list${destinationSelect({ lists, selectedListId })}</label></div>
+    <details class="capture-options"><summary>Description, due date &amp; details</summary>
     <label>Description<textarea name="description" maxlength="4000"></textarea></label>
-    <div class="row"><label class="field">Due (your local time)<input type="datetime-local" name="dueLocal"></label>
+    <div class="form-grid"><label>Due (your local time)<input type="datetime-local" name="dueLocal"></label>
     ${fields.map(([key, label, name, id]) => `<label class="field">${label}<select id="${id}" name="${name}">${fieldOptions(defaults, key)}</select></label>`).join("")}</div>
-    <button class="button primary" type="submit">Add item</button>
+    </details><button class="button primary" type="submit">Add item</button>
   </form>`;
 }
 export function filterBar({ statuses = defaultSettings.statuses } = {}) {
@@ -88,8 +95,8 @@ export function filterBar({ statuses = defaultSettings.statuses } = {}) {
     <select id="statusFilterSelect" name="status">${options([...new Set(["next", ...statuses])], "next", false)}</select></label><button class="button" type="submit">Filter by status</button></form>`;
 }
 function defaultsFields(defaults) {
-  return '<p>Enter one option per line. Empty fields remove all options for that field.</p>' + fields.map(([key, label]) =>
-    `<label>${label} options<textarea name="${key}[]" rows="3">${esc((defaults[key] || []).join("\n"))}</textarea></label>`).join("");
+  return '<p>Enter one option per line. Empty fields remove all options for that field.</p><div class="form-grid">' + fields.map(([key, label]) =>
+    `<label>${label} options<textarea name="${key}[]" rows="3">${esc((defaults[key] || []).join("\n"))}</textarea></label>`).join("") + '</div>';
 }
 export function listSettingsForm({ list = {}, effectiveDefaults = defaultSettings } = {}) {
   return `<section class="card"><h2>Defaults for ${esc(list.title)}</h2>

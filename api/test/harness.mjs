@@ -114,7 +114,7 @@ export async function startServer({ browserUser = false } = {}) {
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"], "/app.js": ["app.js", "text/javascript"] };
-        for (const name of ['inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-sw.js']) {
+        for (const name of ['theme.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
         const asset = assets[url.pathname];

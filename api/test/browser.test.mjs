@@ -32,6 +32,7 @@ test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile wid
   await page.goto(server.url);
   await page.locator("#quickAdd").waitFor();
   await settled();
+  await page.locator('#createList summary').click();
   await page.locator('#addListForm [name="title"]').fill('Groceries <script>alert("x")</script>');
   await page.locator('#addListForm [name="description"]').fill("For the weekend & guests");
   assert.equal(await submit(page.getByRole("button", { name: "Create list", exact: true }), "lists/create"), 200);
@@ -50,6 +51,7 @@ test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile wid
   await settled();
   assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Draft while choosing destination");
   await page.locator('#quickAdd [name="title"]').fill('Milk <img src=x onerror="alert(1)">');
+  await page.locator('#quickAdd details summary').click();
   await page.locator('#quickAdd [name="description"]').fill("Bread & eggs\nSecond line");
   await page.locator('[name="dueLocal"]').fill("2026-10-03T12:30");
   await page.locator("#contextSelect").selectOption("@Errands");
@@ -73,6 +75,7 @@ test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile wid
 
   // The form stays outside the swap targets through list selection and errors.
   await page.locator('#quickAdd [name="title"]').fill("Keep my draft");
+  await page.locator('#quickAdd details summary').click();
   await page.locator('#quickAdd [name="description"]').fill("Do not lose this text");
   assert.equal(await submit(page.locator(`#listsContainer [data-list-id="${listId}"]`), "items/byList"), 200);
   assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
@@ -108,6 +111,10 @@ test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile wid
 
   assert.equal(await submit(page.getByRole("button", { name: "Settings", exact: true }), "settings/edit"), 200);
   await page.locator('#settingsPanel [name="contexts[]"]').fill("@Shop\n@Kitchen");
+  faults.nextWrite = true;
+  assert.equal(await submit(page.getByRole("button", { name: "Save user defaults" }), "settings/update"), 500);
+  assert.ok(await page.locator('#settingsPanel #requestError').isVisible());
+  assert.equal(await page.locator('#settingsPanel [name="contexts[]"]').inputValue(), '@Shop\n@Kitchen');
   assert.equal(await submit(page.getByRole("button", { name: "Save user defaults" }), "settings/update"), 200);
   await page.getByRole("button", { name: "Close settings" }).click();
   assert.equal(await submit(page.getByRole("button", { name: "List defaults", exact: true }), "lists/editDefaults"), 200);
