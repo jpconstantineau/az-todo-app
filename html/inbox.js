@@ -1,8 +1,9 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=16';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=16';
-import { deviceExport, readableExport } from './inbox-export.js?v=16';
-import { clarificationUI } from './clarification.js?v=16';
-import { setupReviews } from './reviews.js?v=16';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=17';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=17';
+import { deviceExport, readableExport } from './inbox-export.js?v=17';
+import { clarificationUI } from './clarification.js?v=17';
+import { setupReviews } from './reviews.js?v=17';
+import { setupBriefs } from './briefs.js?v=17';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -10,6 +11,19 @@ let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
 const dialogOpeners = new Map();
+const briefs = setupBriefs({ records: () => accountId ? projected(state) : {}, journal, showDialog, save: async (mutation, next) => {
+  const owner = accountId, generation = accountGeneration;
+  if (!owner) throw new Error('Sign in to save this brief.');
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before saving this brief. Your draft is kept.');
+    const records = projected(local), current = records[key(mutation)];
+    if (current?.deleted || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This revision changed. Close and reopen the brief to review its latest state.');
+    enqueue(local, owner, [mutation]);
+    local.draft.brief = next;
+  }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
+  if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save stays with its original account.');
+  state = saved; render(); broadcast(); void sync();
+} });
 const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, showDialog });
 async function saveClarification(mutations, next) {
   const owner = accountId;
@@ -77,7 +91,7 @@ function captureDraft() {
 function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
-    defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(),
+    defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
     day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft() };
 }
 function storageFailure(failure) {
@@ -89,6 +103,7 @@ function storageFailure(failure) {
   $('defaultsEditor').close();
   $('reviews').close();
   clarification.close();
+  briefs.close();
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
@@ -126,6 +141,7 @@ function restoreDraft() {
   refreshOptions(); render();
   reviews.restore(saved.review);
   clarification.restore(saved.clarification);
+  briefs.restore(saved.brief);
 }
 function button(text, handler, label = text, focusKey) {
   const element = document.createElement('button'); element.textContent = text;
@@ -161,7 +177,7 @@ function render() {
   const project = projects.find(project => view === `project:${project.id}`);
   $('projectOutcome').hidden = !project;
   $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
-  $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`, `${key(project)}:edit`)] : []));
+  $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`, `${key(project)}:edit`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item' || ($('statusFilter').value && ($('statusFilter').value === '@review-ready' ? !reviewReady(record) : record.status !== $('statusFilter').value))) return false;
     if (view === 'all') return true;
@@ -188,7 +204,8 @@ function render() {
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`, `${key(record)}:edit`),
       button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
-      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`));
+      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`),
+      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
     article.append(title, notes, metadata, status, actions); return article;
   }));
@@ -200,14 +217,15 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
-    $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.type === 'review' || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
   reviews.render();
+  briefs.render();
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
 function openEditor(record, focus = true, show = true) {
@@ -375,7 +393,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -498,6 +516,7 @@ async function showAccountName(owner, generation, verified) {
 }
 function hideAccount() {
   reviews.reset();
+  briefs.reset();
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
   navigation = emptyNavigation();
   $('view').replaceChildren(new Option('All items', 'all'));

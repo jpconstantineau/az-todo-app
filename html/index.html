@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=16" defer></script>
+  <script src="/pwa.js?v=17" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=16"></script>
+  <script type="module" src="/inbox.js?v=17"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -130,6 +130,18 @@
         <button id="guidanceUse" type="button" hidden>Use as proposed answer</button>
       </details>
       <details><summary>Accepted answers and unknowns</summary><pre id="clarifyAnswers"></pre></details>
+    </dialog>
+    <dialog class="side-panel" id="briefs" aria-labelledby="briefHeading">
+      <p class="eyebrow">Prepare a brief</p><h2 id="briefHeading" tabindex="-1">Brief</h2>
+      <p>Review the template and unknowns. Saving edited content creates a new draft revision; acceptance applies only to the selected revision. Nothing is sent automatically.</p>
+      <details><summary>Original capture and supplied sources</summary><pre id="briefOriginal"></pre></details>
+      <label>Saved revision<select id="briefRevisions"></select></label>
+      <p id="briefState" role="status"></p><p id="briefError" role="alert"></p>
+      <form id="briefForm"><div id="briefFields"></div>
+        <div class="actions"><button type="submit">Save new draft revision</button><button id="briefAccept" type="button">Accept this revision</button><button id="briefReject" type="button">Reject this revision</button></div>
+      </form>
+      <div class="actions"><button id="briefExport" type="button">Export selected revision</button><button id="closeBriefs" type="button">Stop and close brief</button></div>
+      <p class="muted">Typing keeps a device draft. Saved revisions and decisions sync with your account. Export labels drafts and pending decisions as unaccepted or unconfirmed; only a server-confirmed accepted revision is labeled accepted.</p>
     </dialog>
     <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading">
       <h2 id="defaultsHeading">Defaults</h2><p>One option per line. Changing options keeps existing task values.</p>

@@ -22,6 +22,9 @@ are retained. Additional metadata records `exportedAt`, `scope: "device"` and
   statuses, defaults and deletion markers. Workflow calendar dates and the prior
   transition/completion metadata used by undo are retained. No field is projected
   away or trimmed.
+- Brief records retain immutable content, source references, previous revision
+  IDs and acceptance/rejection decisions. Readable output labels each revision;
+  [selected-revision export](briefs.md) is also available from the brief panel.
 - `state.queue` retains exact operation IDs, expected versions, proposed fields,
   failures and conflict receipts, including competing server versions. A failed
   pending edit never replaces the confirmed record in the exported snapshot.
