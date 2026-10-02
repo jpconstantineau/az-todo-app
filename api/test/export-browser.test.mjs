@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
@@ -32,7 +33,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Alice unfinished draft');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished draft');
   await page.reload(); await page.locator('#workspace').waitFor();
   await page.locator('#statusFilter').selectOption('completed');
   assert.equal(await page.locator('#items article').count(), 0);
@@ -72,7 +73,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   await page.waitForFunction(() => !!window.releaseExport);
   user = 'bob'; await context.setOffline(false);
   await page.getByRole('button', { name: 'Sync now', exact: true }).click();
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await page.locator('#workspace').waitFor();
   await page.evaluate(async () => { window.releaseExport(); await window.pendingExport; });
   assert.equal(downloads.length, 0, 'a delayed Alice export cannot download in Bob’s session');

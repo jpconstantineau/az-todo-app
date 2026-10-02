@@ -1,6 +1,6 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
 const CACHE = 'todo-inbox-shell-v8';
-const ASSETS = ['/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js'];
+const ASSETS = ['/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/pwa.js?v=8', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 // Fresh module URLs bypass older workers' exact asset allowlists.
 ASSETS.push('/inbox.js?v=8', '/inbox-store.js?v=8', '/inbox-fields.js?v=8', '/inbox-export.js?v=8');
 self.addEventListener('install', event => {
@@ -14,6 +14,8 @@ self.addEventListener('message', event => {
 });
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin || !ASSETS.includes(url.pathname + url.search)) return;
-  event.respondWith(caches.open(CACHE).then(cache => cache.match(event.request).then(cached => cached || fetch(event.request))));
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  const navigation = event.request.mode === 'navigate' && ['/', '/index.html', '/inbox.html'].includes(url.pathname);
+  if (!navigation && !ASSETS.includes(url.pathname + url.search)) return;
+  event.respondWith(caches.open(CACHE).then(cache => cache.match(navigation ? url.pathname : event.request).then(cached => cached || fetch(event.request))));
 });

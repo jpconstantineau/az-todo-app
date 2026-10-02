@@ -76,10 +76,11 @@ field reporting, overwrite refusal, two-account isolation, offline reload, lates
 cross-tab state, and storage-read failure with recovery of current form text.
 The existing responsive and shell-upgrade tests cover the added native selector
 and cached export module. No database or IndexedDB schema migration is needed.
-Local verification on October 2, 2026 passed all 59 tests with Node 26.7.0 and
-Playwright using installed Edge on Windows (`PLAYWRIGHT_CHANNEL=msedge npm test`).
-Shell v8 has a distinct cache from the PWA installation PR's v7; upgrade checks
-cover v3 through v7. Real-device download UX and deployed Azure are unverified.
+After integrating PR #32 from main, local verification on October 2, 2026 passed
+all 66 tests with Node 26.7.0 and Playwright Chromium on Windows (`npm test`).
+The combined PWA and export shell uses v8; upgrade checks cover v3 through v7.
+Export tests use the shared asynchronous browser-state wait helper from main.
+Real-device download UX and deployed Azure data behavior are unverified.
 
 This delivers the independently implementable export portion of #13. Workflow
 progress and accepted brief revisions are not implemented yet; future fields are
