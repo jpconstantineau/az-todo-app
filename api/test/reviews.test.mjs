@@ -1,0 +1,135 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
+import { documents, faults, startServer } from './harness.mjs';
+import { workflowSnapshot } from '../api/v1/reviews.mjs';
+import { waitForBrowser } from './browser-wait.mjs';
+import { mkdir } from 'node:fs/promises';
+
+const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
+const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+const op = mutations => ({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations });
+const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+const update = (record, fields) => ({ type: record.type, id: record.id, action: 'update', expectedVersion: record.version, fields });
+function decision(session, item, choice, fields) {
+  return op([update(session, { decisions: [...session.decisions, { index: 0, choice, recordVersion: item.version,
+    before: workflowSnapshot(item), after: workflowSnapshot({ ...item, ...fields }) }] }), update(item, fields)]);
+}
+
+test('review decisions are atomic, repeat-safe, immutable, recoverable and version/account checked', async t => {
+  documents.length = 0;
+  let user = 'alice';
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const post = async body => { const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify(body) }); return { status: response.status, body: await response.json() }; };
+  const get = (type, id) => structuredClone(records().find(r => r.type === type && r.id === id));
+  assert.equal((await post(op([create('item', 'milk', { title: 'Milk', originalText: 'original Milk' })]))).status, 200);
+  assert.equal((await post(op([create('review', 'weekly', { reviewKind: 'weekly', reviewDay: '2026-10-02', included: [{ type: 'item', id: 'milk' }], decisions: [] })]))).status, 200);
+  let session = get('review', 'weekly'), milk = get('item', 'milk');
+  const drop = decision(session, milk, 'drop', { status: 'dropped' });
+  const missingPair = structuredClone(drop); missingPair.mutations.pop();
+  assert.equal((await post(missingPair)).status, 400);
+  const forged = structuredClone(drop); forged.mutations[0].fields.decisions[0].before.status = 'next';
+  assert.equal((await post(forged)).status, 400);
+  faults.batchIndex = 2;
+  assert.equal((await post(drop)).status, 503);
+  assert.equal(get('item', 'milk').version, 1); assert.equal(get('review', 'weekly').decisions.length, 0);
+  const committed = await post(drop);
+  assert.equal(committed.status, 200); assert.deepEqual(await post(drop), committed);
+  milk = get('item', 'milk'); session = get('review', 'weekly');
+  assert.equal(milk.status, 'dropped'); assert.equal(milk.originalText, 'original Milk');
+  assert.equal((await post(op([update(session, { decisions: [] })]))).status, 400);
+  assert.equal((await post(decision(session, milk, 'retain', { title: milk.title }))).status, 400);
+  assert.equal((await post(decision(session, milk, 'undo', session.decisions[0].before))).status, 200);
+  milk = get('item', 'milk'); session = get('review', 'weekly');
+  assert.equal(milk.status, 'inbox'); assert.equal(session.decisions.length, 2);
+  const defer = decision(session, milk, 'defer', { status: 'deferred', startDate: '2026-10-08', startDateUtc: null });
+  assert.equal((await post(defer)).status, 200);
+  session = get('review', 'weekly'); milk = get('item', 'milk');
+  const staleUndo = decision(session, milk, 'undo', session.decisions.at(-1).before);
+  await post(op([update(milk, { title: 'Changed elsewhere' })]));
+  assert.equal((await post(staleUndo)).body.status, 'conflict');
+  assert.equal(get('review', 'weekly').decisions.length, 3);
+  assert.equal((await post(decision(session, get('item', 'milk'), 'undo', session.decisions.at(-1).before))).status, 400);
+  const foreign = get('item', 'milk'); foreign.id = 'foreign'; foreign.accountId = 'bob';
+  documents.push({ id: 'record:item:foreign', UserID: 'bob', ObjectType: 'sync', ObjectID: 'v1', kind: 'record', record: foreign });
+  const newReview = included => op([create('review', crypto.randomUUID(), { reviewKind: 'weekly', reviewDay: '2026-10-02', included, decisions: [] })]);
+  assert.equal((await post(newReview([{ type: 'item', id: 'foreign' }]))).status, 400);
+  assert.equal((await post(newReview([{ type: 'item', id: 'missing' }]))).status, 400);
+  assert.equal((await post(newReview([{ type: 'item', id: 'milk' }, { type: 'item', id: 'milk' }]))).status, 400);
+  assert.equal((await post(newReview([]))).status, 200);
+  assert.equal((await post(op([{ type: 'review', id: 'weekly', action: 'delete', expectedVersion: session.version }]))).status, 400);
+  await post(op([create('review', 'another', { reviewKind: 'daily', reviewDay: '2026-10-02', included: [{ type: 'item', id: 'milk' }], decisions: [] })]));
+  const another = get('review', 'another'), currentMilk = get('item', 'milk');
+  const firstDevice = decision(another, currentMilk, 'retain', { title: currentMilk.title });
+  const secondDevice = decision(another, currentMilk, 'drop', { status: 'dropped' });
+  const concurrent = await Promise.all([post(firstDevice), post(secondDevice)]);
+  assert.deepEqual(concurrent.map(result => result.body.status).sort(), ['committed', 'conflict']);
+  assert.equal(get('review', 'another').decisions.length, 1);
+  await post(op([create('review', 'deleted-review', { reviewKind: 'weekly', reviewDay: '2026-10-02', included: [{ type: 'item', id: 'milk' }], decisions: [] })]));
+  const deletedSession = get('review', 'deleted-review');
+  await post(op([{ type: 'item', id: 'milk', action: 'delete', expectedVersion: get('item', 'milk').version }]));
+  const acknowledge = op([update(deletedSession, { decisions: [{ index: 0, choice: 'unavailable', recordVersion: get('item', 'milk').version, before: {}, after: {} }] })]);
+  assert.equal((await post(acknowledge)).status, 200);
+  assert.deepEqual(await post(acknowledge), await post(acknowledge));
+  assert.equal(get('item', 'milk').deleted, true);
+  user = 'bob';
+  const response = await fetch(server.url + '/api/v1/records?accountId=bob&type=review&id=weekly');
+  assert.equal(response.status, 404);
+  assert.equal((await post(acknowledge)).status, 409);
+});
+
+test('reviews resume offline and across devices, allow retained unknowns and undo, and hide switched accounts', { timeout: 90000 }, async t => {
+  documents.length = 0; let user = 'alice';
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage(), errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
+  await page.locator('#captureText').fill('Milk\nInsurance'); await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll('#items article').length === 2); await confirmed(page);
+  await page.locator('#openReviews').click(); await page.locator('#startDaily').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
+  assert.match(await page.locator('#reviewDetails').textContent(), /empty/); await confirmed(page);
+  await context.setOffline(true);
+  await page.locator('#startWeekly').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2'));
+  await page.locator('#reviewRetain').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
+  assert.match(await page.locator('#reviewProgress').textContent(), /pending/);
+  await page.locator('#reviewDefer').fill('2026-10-08');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.review?.deferUntil === '2026-10-08');
+  await page.reload(); await page.locator('#workspace').waitFor(); await page.locator('#openReviews').click();
+  assert.match(await page.locator('#reviewProgress').textContent(), /1 of 2/); assert.equal(await page.locator('#reviewDefer').inputValue(), '2026-10-08');
+  await page.locator('#reviewDeferSave').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
+  await page.locator('#reviewRecord').selectOption('1'); await page.locator('#reviewUndo').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
+  await page.locator('#reviewDrop').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
+  await page.locator('#closeReviews').click(); await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  const session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
+  assert.deepEqual(session.decisions.map(d => d.choice), ['retain', 'defer', 'undo', 'drop']);
+  const retained = records().find(r => r.id === session.included[0].id);
+  assert.equal(retained.status, 'inbox'); assert.equal(retained.startDate ?? null, null);
+  const second = await browser.newContext(); const other = await second.newPage();
+  await other.goto(server.url); await other.locator('#workspace').waitFor(); await confirmed(other);
+  await other.locator('#openReviews').click(); await other.locator('#reviewSessions').selectOption(session.id);
+  assert.match(await other.locator('#reviewProgress').textContent(), /2 of 2/);
+  await other.locator('#reviewRecord').selectOption('1'); await other.locator('#reviewUndo').click();
+  await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2')); await confirmed(other);
+  assert.equal(records().find(r => r.id === session.included[1].id).status, 'inbox');
+  for (const width of [320, 390, 768, 1440, 2560]) {
+    await other.setViewportSize({ width, height: 900 });
+    assert.ok(await other.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    assert.ok(await other.locator('#reviews').evaluate(el => el.scrollWidth <= el.clientWidth));
+  }
+  if (process.env.REVIEW_SCREENSHOTS) {
+    await mkdir(process.env.REVIEW_SCREENSHOTS, { recursive: true });
+    for (const theme of ['light', 'dark']) {
+      await other.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      await other.setViewportSize({ width: 390, height: 844 });
+      await other.screenshot({ path: `${process.env.REVIEW_SCREENSHOTS}/review-${theme}-390.png` });
+    }
+  }
+  await other.locator('#closeReviews').click();
+  user = 'bob'; await other.locator('#sync').click(); await other.waitForFunction(() => document.querySelector('#workspace').hidden === false && document.querySelectorAll('#items article').length === 0);
+  await other.locator('#openReviews').click(); assert.equal(await other.locator('#reviewSessions option').count(), 1);
+  assert.equal(await other.locator('#reviewHistory').textContent(), ''); assert.deepEqual(errors, []);
+});

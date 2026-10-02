@@ -1,6 +1,7 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=10';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=10';
-import { deviceExport, readableExport } from './inbox-export.js?v=10';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=12';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=12';
+import { deviceExport, readableExport } from './inbox-export.js?v=12';
+import { setupReviews } from './reviews.js?v=12';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -10,6 +11,21 @@ let defaultsEditing = null;
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
 let navigation = emptyNavigation();
+const reviews = setupReviews({ current: () => accountId ? state : null, journal, save: async mutations => {
+  const owner = accountId, generation = accountGeneration;
+  if (!owner) throw new Error('Sign in to resume this review.');
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before continuing this review.');
+    const records = projected(local);
+    for (const mutation of mutations) {
+      const current = records[key(mutation)];
+      if ((current?.version || 0) !== mutation.expectedVersion || current?.deleted) throw new Error('This review or record changed. Reopen the review and inspect the latest state before deciding.');
+    }
+    enqueue(local, owner, mutations);
+  }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
+  if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save remains with its original account.');
+  state = saved; clearError(); render(); broadcast(); void sync();
+} });
 addTaskControls($('captureFields')); addTaskControls($('editFields'));
 for (const [name, title] of Object.entries(optionFields)) {
   const label = document.createElement('label'); label.textContent = title;
@@ -39,7 +55,7 @@ function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open,
-    day: $('day').value, navigation: structuredClone(navigation) };
+    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft() };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -48,6 +64,7 @@ function storageFailure(failure) {
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), localCopy: state }, null, 2);
   $('editor').close(); // Make the recovery copy outside the modal reachable.
   $('defaultsEditor').close();
+  $('reviews').close();
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
@@ -82,6 +99,7 @@ function restoreDraft() {
   else $('editor').close();
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
   refreshOptions(); render();
+  reviews.restore(saved.review);
 }
 function button(text, handler, label = text) {
   const element = document.createElement('button'); element.textContent = text;
@@ -105,7 +123,7 @@ function render() {
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'all';
   filters.view = $('view').value;
   refreshOptions();
-  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
+  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses'], ['@review-ready', 'Ready for review']]);
   $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
   filters.status = $('statusFilter').value;
@@ -154,13 +172,14 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
-    $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.type === 'review' || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
+  reviews.render();
   if (!focused.isConnected) focusDestination();
 }
 function openEditor(record, focus = true) {
@@ -427,6 +446,7 @@ async function showAccountName(owner, generation, verified) {
   } catch { /* Display metadata must never block capture or synchronization. */ }
 }
 function hideAccount() {
+  reviews.reset();
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
   navigation = emptyNavigation();
   $('view').replaceChildren(new Option('All items', 'all'));

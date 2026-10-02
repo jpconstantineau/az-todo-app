@@ -1,13 +1,13 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const knownTypes = ['item', 'list', 'project', 'settings'];
+const knownTypes = ['item', 'list', 'project', 'settings', 'review'];
 const recordFields = ['id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText',
   'listId', 'projectId', 'plannedDay', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'referenceLinks', 'outcome', 'defaults'];
+  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'decisions'];
 
 export function validateDeviceExport(value) {
   const require = (condition, message) => { if (!condition) throw new Error(`Invalid device export: ${message}`); };
