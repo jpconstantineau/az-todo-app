@@ -5,6 +5,7 @@ import { documents, faults, startServer } from './harness.mjs';
 import { workflowSnapshot } from '../api/v1/reviews.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { mkdir } from 'node:fs/promises';
+import { deviceExport, validateDeviceExport } from '../../html/inbox-export.js';
 
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
@@ -72,6 +73,9 @@ test('review decisions are atomic, repeat-safe, immutable, recoverable and versi
   assert.equal((await post(acknowledge)).status, 200);
   assert.deepEqual(await post(acknowledge), await post(acknowledge));
   assert.equal(get('item', 'milk').deleted, true);
+  const snapshot = deviceExport('alice', { records: Object.fromEntries(records().filter(r => r.accountId === 'alice').map(r => [`${r.type}:${r.id}`, r])), queue: [], draft: {}, after: 0 }, {});
+  assert.deepEqual(validateDeviceExport(snapshot).warnings, []);
+  assert.deepEqual(snapshot.state.records['review:weekly'].decisions, get('review', 'weekly').decisions);
   user = 'bob';
   const response = await fetch(server.url + '/api/v1/records?accountId=bob&type=review&id=weekly');
   assert.equal(response.status, 404);
@@ -125,6 +129,7 @@ test('reviews resume offline and across devices, allow retained unknowns and und
     for (const theme of ['light', 'dark']) {
       await other.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
       await other.setViewportSize({ width: 390, height: 844 });
+      await other.locator('#reviews').evaluate(el => el.scrollTop = 0);
       await other.screenshot({ path: `${process.env.REVIEW_SCREENSHOTS}/review-${theme}-390.png` });
     }
   }
@@ -132,4 +137,53 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   user = 'bob'; await other.locator('#sync').click(); await other.waitForFunction(() => document.querySelector('#workspace').hidden === false && document.querySelectorAll('#items article').length === 0);
   await other.locator('#openReviews').click(); assert.equal(await other.locator('#reviewSessions option').count(), 1);
   assert.equal(await other.locator('#reviewHistory').textContent(), ''); assert.deepEqual(errors, []);
+});
+
+test('review cues include projects and waiting work; competing devices and deleted records recover visibly', { timeout: 90000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const post = async mutations => { const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify(op(mutations)) }); assert.equal(response.status, 200); return response.json(); };
+  await post([
+    create('item', 'next', { title: 'Call agent', status: 'next' }),
+    create('item', 'waiting', { title: 'Await policy', status: 'waiting', waitingOn: 'Agent quote', reviewDate: '2020-01-01' }),
+    create('item', 'future', { title: 'Later choice', status: 'deferred', startDate: '9999-01-01' }),
+    create('item', 'inbox', { title: 'Unsorted idea' }),
+    create('item', 'completed', { title: 'Finished work', status: 'completed' }),
+    create('item', 'dropped', { title: 'Dropped work', status: 'dropped' }),
+    create('project', 'project', { title: 'Insurance', outcome: 'Have appropriate coverage' })
+  ]);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const first = await browser.newContext(), second = await browser.newContext();
+  const page = await first.newPage(), other = await second.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.locator('#openReviews').click(); await page.locator('#startDaily').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2')); await confirmed(page);
+  let session = records().find(r => r.type === 'review');
+  assert.deepEqual(session.included.map(r => r.id).sort(), ['next', 'waiting']);
+  await page.locator('#startWeekly').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 5')); await confirmed(page);
+  session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
+  const index = id => String(session.included.findIndex(r => r.id === id));
+  await other.goto(server.url); await other.locator('#workspace').waitFor(); await confirmed(other);
+  await other.locator('#openReviews').click(); await other.locator('#reviewSessions').selectOption(session.id);
+  await second.setOffline(true);
+  await page.locator('#reviewRecord').selectOption(index('next')); await other.locator('#reviewRecord').selectOption(index('next'));
+  await page.locator('#reviewRetain').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 5')); await confirmed(page);
+  await other.locator('#reviewDrop').click(); await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 5'));
+  await other.locator('#closeReviews').click(); await second.setOffline(false); await other.locator('#sync').click(); await other.locator('#failure').waitFor();
+  assert.equal(await other.locator('#resolve').isVisible(), false);
+  assert.equal(records().find(r => r.id === 'next' && r.type === 'item').status, 'next');
+  other.once('dialog', dialog => dialog.accept()); await other.locator('#discard').click(); await other.locator('#failure').waitFor({ state: 'hidden' }); await confirmed(other);
+  const doomed = records().find(r => r.id === 'inbox' && r.type === 'item');
+  await post([{ type: 'item', id: doomed.id, action: 'delete', expectedVersion: doomed.version }]);
+  await other.locator('#sync').click();
+  await waitForBrowser(other, async () => (await (await import('/inbox-store.js')).transact('alice')).records['item:inbox']?.deleted);
+  await other.locator('#openReviews').click(); await other.locator('#reviewRecord').selectOption(index('inbox'));
+  assert.match(await other.locator('#reviewDetails').textContent(), /deleted or is unavailable/);
+  await other.locator('#reviewUnavailable').click(); await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 5')); await confirmed(other);
+  await other.locator('#reviewRecord').selectOption(index('project'));
+  assert.match(await other.locator('#reviewDetails').textContent(), /Have appropriate coverage/);
+  assert.equal(await other.locator('#reviewDrop').isDisabled(), true);
+  await other.locator('#reviewRetain').focus(); await other.keyboard.press('Enter');
+  await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('3 of 5')); await confirmed(other);
+  assert.equal(records().find(r => r.type === 'review' && r.id === session.id).decisions.length, 3);
 });

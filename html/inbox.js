@@ -1,6 +1,7 @@
 import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=12';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=12';
 import { deviceExport, readableExport } from './inbox-export.js?v=12';
+import { clarificationUI } from './clarification.js?v=12';
 import { setupReviews } from './reviews.js?v=12';
 
 const $ = id => document.getElementById(id);
@@ -8,6 +9,23 @@ const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
+const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, focus: focusDestination });
+async function saveClarification(mutations, next) {
+  const owner = accountId;
+  if (!owner) return false;
+  const saved = await transact(owner, local => {
+    const records = projected(local);
+    if (!records[`item:${next.item.id}`] || records[`item:${next.item.id}`].deleted) throw new Error('This item is no longer available. Your proposal remains in the device draft.');
+    for (const mutation of mutations) {
+      const current = records[key(mutation)];
+      if (current?.deleted || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This item or clarification changed. Your draft is kept. Stop, export a copy, and reopen the latest clarification to compare.');
+    }
+    enqueue(local, owner, mutations);
+    local.draft.clarification = next;
+  }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
+  if (owner !== accountId) return false;
+  state = saved; render(); broadcast(); void sync(); return true;
+}
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
 let navigation = emptyNavigation();
@@ -54,7 +72,7 @@ function captureDraft() {
 function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
-    defaultsOpen: $('defaultsEditor').open,
+    defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(),
     day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft() };
 }
 function storageFailure(failure) {
@@ -65,6 +83,7 @@ function storageFailure(failure) {
   $('editor').close(); // Make the recovery copy outside the modal reachable.
   $('defaultsEditor').close();
   $('reviews').close();
+  clarification.close();
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
@@ -74,7 +93,7 @@ async function journal() {
   const owner = accountId, snapshot = draft();
   try {
     const saved = await transact(owner, local => { local.draft = snapshot; });
-    if (owner === accountId) { state = saved; $('draftStatus').textContent = 'Draft saved on device'; }
+    if (owner === accountId) { state = saved; $('draftStatus').textContent = 'Draft saved on device'; $('clarifyDraftStatus').textContent = 'Draft saved on device; not accepted.'; }
   } catch (failure) { if (owner === accountId) storageFailure(failure); }
 }
 function options(select, lists, first, keepMissing = false) {
@@ -100,6 +119,7 @@ function restoreDraft() {
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
   refreshOptions(); render();
   reviews.restore(saved.review);
+  clarification.restore(saved.clarification);
 }
 function button(text, handler, label = text) {
   const element = document.createElement('button'); element.textContent = text;
@@ -160,6 +180,7 @@ function render() {
     const actions = document.createElement('div'); actions.className = 'actions';
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`),
+      button('Clarify', () => clarification.open(record), `Clarify ${record.title}`),
       button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`));
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`));
     article.append(title, notes, metadata, status, actions); return article;
@@ -172,7 +193,7 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
@@ -457,6 +478,7 @@ function hideAccount() {
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
   accountId = null; state = undefined; editing = null; originalInput = undefined;
+  clarification.hide();
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();

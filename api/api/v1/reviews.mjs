@@ -6,6 +6,7 @@ const fail = message => { throw new ValidationError(message); };
 export function reviewFields(action, input) {
   object(input, action === 'create' ? ['reviewKind', 'reviewDay', 'included', 'decisions'] : ['decisions'], 'review');
   if (action === 'create') {
+    // ponytail: bounded session records; paginate history if real reviews exceed the v1 byte cap.
     if (!['daily', 'weekly'].includes(input.reviewKind)) fail('Choose a daily or weekly review.');
     if (!calendarDate(input.reviewDay, 'reviewDay')) fail('reviewDay is required.');
     if (!Array.isArray(input.included) || input.included.length > 200) fail('A review supports up to 200 records.');

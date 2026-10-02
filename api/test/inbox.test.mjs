@@ -126,7 +126,7 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
   const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v12')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/reviews.js', '/reviews.js?v=12', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=12', '/inbox-store.js?v=12', '/inbox-fields.js?v=12', '/pwa.js?v=12', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=12'].sort());
+  assert.deepEqual(cached.sort(), ['/clarification.js', '/clarification.js?v=12', '/reviews.js', '/reviews.js?v=12', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=12', '/inbox-store.js?v=12', '/inbox-fields.js?v=12', '/pwa.js?v=12', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=12'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
 });
