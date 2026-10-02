@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Inbox · To-Do</title>
+  <link rel="stylesheet" href="/inbox.css">
+  <script type="module" src="/inbox.js"></script>
+</head>
+<body>
+  <header><h1>Inbox</h1><nav aria-label="Account"><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/inbox.html">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
+  <p id="sessionStatus" role="status">Checking account…</p>
+  <p id="offlineStatus" role="status"></p>
+  <p id="error" role="alert" hidden></p>
+  <noscript>Enable JavaScript to save and edit your inbox.</noscript>
+  <main id="workspace" hidden>
+    <div class="toolbar"><button id="quickFocus">Quick capture</button><button id="sync">Sync now</button><button id="export">Export device copy</button></div>
+    <p id="syncStatus" role="status"></p>
+    <section aria-labelledby="captureHeading">
+      <h2 id="captureHeading">Capture first</h2>
+      <form id="capture">
+        <label for="captureText">What do you need to remember?</label>
+        <textarea id="captureText" name="text" rows="3" maxlength="16000" required aria-describedby="captureHelp"></textarea>
+        <div class="save-bar"><button type="submit">Save on device</button><span id="draftStatus" role="status"></span></div>
+        <p id="captureHelp">One item per non-empty line. Save straight to your inbox. Ctrl/⌘ + Enter saves.</p>
+        <details id="captureOptions"><summary>Notes, list, or split a sentence</summary>
+          <label>Notes <textarea name="body" rows="2" maxlength="4000"></textarea></label>
+          <label>Existing list <select name="listId"><option value="">Inbox (no list)</option></select></label>
+          <label>Or create a list <input name="newList" maxlength="200" placeholder="e.g. Groceries"></label>
+          <button id="previewSplit" type="button">Preview comma / semicolon split</button>
+          <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
+        </details>
+      </form>
+    </section>
+    <section id="failure" hidden aria-labelledby="failureHeading">
+      <h2 id="failureHeading">A save needs attention</h2><p id="failureMessage"></p>
+      <details><summary>Compare pending and server versions</summary><pre id="comparison"></pre></details>
+      <button id="resolve">Apply my pending edit to the latest version</button>
+      <button id="discard">Use server version for this save</button>
+    </section>
+    <section aria-labelledby="itemsHeading">
+      <h2 id="itemsHeading">Your work</h2>
+      <label>View <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
+      <div id="lists"></div><div id="items"></div>
+    </section>
+    <section id="editor" hidden aria-labelledby="editHeading">
+      <h2 id="editHeading">Edit</h2>
+      <form id="edit">
+        <label>Title <input name="title" maxlength="200" required></label>
+        <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
+        <label id="editListLabel">List <select name="listId"></select></label>
+        <details><summary>Original capture</summary><pre id="original"></pre></details>
+        <button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button>
+      </form>
+    </section>
+    <p class="muted">Device copies belong to this browser profile. Unsynced work cannot be recovered after clearing site storage or losing this device. Export a copy before signing out or changing devices. Use a private browser profile on shared devices.</p>
+  </main>
+  <section id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>
+</body>
+</html>

@@ -1,0 +1,363 @@
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js';
+
+const $ = id => document.getElementById(id);
+const capture = $('capture'), edit = $('edit');
+let accountId = null, state, editing = null, originalInput;
+let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
+const channel = new BroadcastChannel('todo-inbox');
+const broadcast = () => channel.postMessage('changed');
+function error(message, kind = 'local') { $('error').hidden = false; $('error').textContent = message; $('error').dataset.kind = kind; }
+function clearError(kind) { if (!kind || $('error').dataset.kind === kind) $('error').hidden = true; }
+function captureDraft() {
+  return { ...Object.fromEntries(new FormData(capture)), ...(originalInput === undefined ? {} : { original: originalInput }) };
+}
+function draft() {
+  return { capture: captureDraft(), edit: editing ? { ...editing, fields: Object.fromEntries(new FormData(edit)) } : null };
+}
+function storageFailure(failure) {
+  error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
+  $('draftStatus').textContent = 'Not saved on device';
+  $('recovery').hidden = false;
+  $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), localCopy: state }, null, 2);
+}
+function guard(action) {
+  return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
+}
+async function journal() {
+  if (!accountId) return;
+  const owner = accountId, snapshot = draft();
+  try {
+    const saved = await transact(owner, local => { local.draft = snapshot; });
+    if (owner === accountId) { state = saved; $('draftStatus').textContent = 'Draft saved on device'; }
+  } catch (failure) { if (owner === accountId) storageFailure(failure); }
+}
+function options(select, lists, first) {
+  const selected = select.value;
+  select.replaceChildren(...first.map(([value, text]) => new Option(text, value)), ...lists.map(list => new Option(list.title, list.id)));
+  if ([...select.options].some(option => option.value === selected)) select.value = selected;
+}
+function restoreDraft() {
+  capture.reset(); edit.reset(); editing = null; originalInput = undefined;
+  const saved = state.draft;
+  for (const [name, value] of Object.entries(saved.capture || {})) {
+    if (capture.elements.namedItem(name)) capture.elements.namedItem(name).value = value;
+  }
+  originalInput = saved.capture?.original;
+  $('previewHelp').hidden = originalInput === undefined;
+  if (saved.edit) openEditor(saved.edit, false);
+  else $('editor').hidden = true;
+}
+function button(text, handler) {
+  const element = document.createElement('button'); element.textContent = text;
+  element.addEventListener('click', guard(handler)); return element;
+}
+function render() {
+  if (!accountId || !state) return;
+  const records = Object.values(projected(state)).filter(record => !record.deleted);
+  const lists = records.filter(record => record.type === 'list');
+  options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
+  options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
+  options($('view'), lists, [['all', 'All items'], ['inbox', 'Inbox (no list)']]);
+  $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
+  $('lists').replaceChildren(...lists.map(list => button(`Edit list: ${list.title}`, () => openEditor(list))));
+  const view = $('view').value;
+  $('items').replaceChildren(...records.filter(record => record.type === 'item' &&
+    (view === 'all' || (view === 'inbox' ? !record.listId : record.listId === view))).map(record => {
+    const article = document.createElement('article'); article.dataset.id = record.id;
+    const title = document.createElement('h3'); title.textContent = record.title;
+    const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
+    const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
+    status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
+    const actions = document.createElement('div'); actions.className = 'actions';
+    actions.append(button(`Edit ${record.title}`, () => openEditor(record)),
+      button(`${record.status === 'completed' ? 'Reopen' : 'Complete'} ${record.title}`, () => updateRecord(record, { status: record.status === 'completed' ? 'inbox' : 'completed' })));
+    article.append(title, notes, status, actions); return article;
+  }));
+  if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';
+  const failed = state.queue[0]?.failure ? state.queue[0] : null;
+  $('failure').hidden = !failed;
+  if (failed) {
+    $('failureMessage').textContent = failed.failure;
+    const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
+      [['title', 'Title'], ['description', 'Notes'], ['status', 'Status'], ['listId', 'List']]
+        .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : record[field]}`).join('\n');
+    $('comparison').textContent = failed.operation.mutations.map(mutation =>
+      `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
+    $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
+  }
+}
+function openEditor(record, focus = true) {
+  editing = { type: record.type, id: record.id, version: record.version };
+  const fields = record.fields || record;
+  edit.elements.title.value = fields.title;
+  edit.elements.description.value = fields.description || '';
+  edit.elements.listId.value = fields.listId || '';
+  $('editListLabel').hidden = record.type === 'list';
+  $('original').textContent = projected(state)[key(record)]?.originalText || '';
+  $('editor').hidden = false;
+  if (focus) { edit.elements.title.focus(); void journal(); }
+}
+
+async function updateRecord(record, fields, close = false) {
+  const owner = accountId;
+  if (!owner) return;
+  if (fields.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Title must be 1–200 characters.');
+  if ((fields.description?.length ?? 0) > 4000) throw new Error('Notes must be at most 4,000 characters.');
+  try {
+    const saved = await transact(owner, local => {
+      const current = projected(local)[key(record)];
+      if (!current || current.deleted || current.version !== record.version) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
+      enqueue(local, owner, [{ type: record.type, id: record.id, action: 'update', expectedVersion: current.version, fields }]);
+      if (close) local.draft.edit = null;
+    });
+    if (owner === accountId) state = saved;
+  } catch (failure) { if (owner === accountId) storageFailure(failure); return; }
+  if (owner !== accountId) return;
+  if (close) { editing = null; $('editor').hidden = true; }
+  clearError(); render(); broadcast(); void sync();
+}
+
+capture.addEventListener('input', () => { void journal(); });
+edit.addEventListener('input', () => { void journal(); });
+capture.addEventListener('submit', event => {
+  event.preventDefault();
+  if (saving || !accountId) return;
+  saving = true; capture.querySelector('[type=submit]').disabled = true;
+  void (async () => {
+    const owner = accountId, submitted = captureDraft();
+    try {
+      const mutations = captureMutations(submitted);
+      const saved = await transact(owner, local => {
+        enqueue(local, owner, mutations);
+        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) local.draft.capture = {};
+      });
+      if (owner !== accountId) return;
+      state = saved;
+      if (JSON.stringify(captureDraft()) === JSON.stringify(submitted)) {
+        capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+      }
+      clearError(); $('draftStatus').textContent = 'Saved on device';
+      render(); capture.elements.text.focus(); broadcast(); void sync();
+    } catch (failure) { if (owner === accountId) storageFailure(failure); }
+    finally { saving = false; capture.querySelector('[type=submit]').disabled = false; }
+  })();
+});
+edit.addEventListener('submit', event => {
+  event.preventDefault();
+  if (saving || !editing) return;
+  saving = true;
+  const fields = { title: edit.elements.title.value, description: edit.elements.description.value,
+    ...(editing.type === 'item' ? { listId: edit.elements.listId.value || null } : {}) };
+  // Keep the submitted form stable until its local transaction commits.
+  const controls = [...edit.elements]; controls.forEach(control => { control.disabled = true; });
+  void updateRecord(editing, fields, true).catch(failure => error(failure.message)).finally(() => {
+    saving = false; controls.forEach(control => { control.disabled = false; });
+  });
+});
+$('previewSplit').onclick = () => {
+  originalInput ??= capture.elements.text.value;
+  capture.elements.text.value = capture.elements.text.value.split(/[,;\n]+/).map(line => line.trim()).filter(Boolean).join('\n');
+  $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
+};
+$('cancelEdit').onclick = () => { editing = null; $('editor').hidden = true; void journal(); };
+$('quickFocus').onclick = () => capture.elements.text.focus();
+$('view').onchange = render;
+capture.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.repeat) { event.preventDefault(); capture.requestSubmit(); }
+});
+$('export').onclick = () => {
+  const blob = new Blob([JSON.stringify({ formatVersion: 1, accountId, state, draft: draft() }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = 'todo-device-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$('copyRecovery').onclick = guard(async () => {
+  $('recoveryText').select(); await navigator.clipboard.writeText($('recoveryText').value);
+});
+
+async function request(path, operation) {
+  const response = await fetch(`/api/v1/${path}`, { cache: 'no-store', credentials: 'same-origin', redirect: 'error',
+    signal: AbortSignal.timeout(15000), ...(operation ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation) } : {}) });
+  let body;
+  try { body = await response.json(); } catch { body = {}; }
+  if (response.status === 409 && body.status === 'conflict') return body;
+  if (!response.ok) throw Object.assign(new Error(body.message || `Server returned ${response.status}. Pending work has been kept.`), { status: response.status, code: body.error });
+  if (body.apiVersion !== 1) throw new Error('Unexpected server response. Pending work has been kept.');
+  return body;
+}
+function hideAccount() {
+  accountGeneration++;
+  accountId = null; state = undefined; editing = null; originalInput = undefined;
+  capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
+  $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
+}
+async function pauseSession(message) {
+  hideAccount();
+  try { await transact(null, session => { session.paused = true; }); }
+  catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.'); }
+  broadcast(); $('sessionStatus').textContent = message;
+}
+async function session({ allowOffline = false } = {}) {
+  let generation = accountGeneration;
+  let identity;
+  try {
+    identity = await request('session');
+    if (typeof identity.accountId !== 'string' || !identity.accountId) throw new Error('Missing account identity.');
+  } catch (failure) {
+    if (failure.status === 401 || failure.status === 403) {
+      await pauseSession('Sign in to the original account to resume. Its pending work is kept on this device.');
+      throw failure;
+    }
+    if (!allowOffline || failure.status) throw failure;
+    const saved = await transact(null);
+    if (!saved.accountId || saved.paused) throw new Error('Sign in online once before capturing on this device.');
+    identity = { accountId: saved.accountId }; // Last verified account, never a newly guessed identity.
+  }
+  if (generation !== accountGeneration) throw new Error('Account changed while checking the session. Retry after signing in.');
+  if (accountId !== identity.accountId) {
+    hideAccount();
+    generation = accountGeneration;
+    await transact(null, saved => { saved.accountId = identity.accountId; saved.paused = false; });
+    const saved = await transact(identity.accountId);
+    if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
+    accountId = identity.accountId; state = saved;
+    render(); restoreDraft(); broadcast();
+  }
+  $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
+  $('sessionStatus').textContent = `Device inbox for ${accountId}${navigator.onLine ? '' : ' · Offline'}`;
+  return accountId;
+}
+
+async function sync() {
+  if (syncing || !navigator.onLine || document.hidden) return;
+  syncing = true; clearTimeout(retryTimer);
+  let continueSync = false;
+  try {
+    const owner = await session({ allowOffline: true });
+    if (!navigator.locks) throw new Error('This browser cannot coordinate safe sync between tabs. Export your device copy and use a browser with Web Locks.');
+    await navigator.locks.request(`todo-sync:${owner}`, async () => {
+      // Bound foreground work, and atomically persist each page with its cursor.
+      for (let page = 0; page < 10 && accountId === owner; page++) {
+        const local = await transact(owner);
+        const changes = await request(`changes?${new URLSearchParams({ accountId: owner, after: local.after, limit: 50 })}`);
+        if (changes.accountId !== owner || !Number.isSafeInteger(changes.nextAfter) || changes.nextAfter < local.after) throw new Error('Unexpected change page. Local data has been kept.');
+        await transact(owner, current => {
+          for (const receipt of changes.entries) applyReceipt(current, receipt, owner);
+          current.after = changes.nextAfter;
+        });
+        continueSync = changes.hasMore;
+        if (!changes.hasMore) break;
+      }
+      for (let sent = 0; sent < 100 && accountId === owner; sent++) {
+        const active = await transact(null);
+        if (active.paused || active.accountId !== owner) break;
+        const local = await transact(owner), entry = local.queue[0];
+        if (!entry || entry.failure) break;
+        let receipt;
+        try { receipt = await request('operations', entry.operation); }
+        catch (failure) {
+          if (failure.status >= 400 && failure.status < 500 && ![401, 403, 408, 429].includes(failure.status) && failure.code !== 'account_mismatch') {
+            await transact(owner, current => {
+              const pending = current.queue.find(item => item.operation.operationId === entry.operation.operationId);
+              if (pending) pending.failure = failure.message;
+            });
+          }
+          throw failure;
+        }
+        if (receipt.operationId !== entry.operation.operationId) throw new Error('Acknowledgement does not match this save.');
+        await transact(owner, current => applyReceipt(current, receipt, owner));
+      }
+    });
+    if (accountId === owner) {
+      const saved = await transact(owner);
+      if (accountId === owner) {
+        state = saved; render(); $('workspace').hidden = false;
+        continueSync ||= !!state.queue.length && !state.queue[0].failure;
+      }
+    }
+    retryDelay = 2000; clearError('sync'); broadcast();
+  } catch (failure) {
+    if ([401, 403].includes(failure.status) || failure.code === 'account_mismatch') {
+      await pauseSession('Session changed or expired. Sign in to the original account to resume its pending work.');
+    } else {
+      error(`Sync paused: ${failure.message} Pending work stays on this device.`, 'sync');
+      if (accountId) {
+        const owner = accountId;
+        try { const saved = await transact(owner); if (owner === accountId) { state = saved; render(); $('workspace').hidden = false; } }
+        catch (storageError) { storageFailure(storageError); }
+      }
+      retryTimer = setTimeout(() => { void sync(); }, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 60000);
+    }
+  } finally {
+    syncing = false;
+    if (continueSync) retryTimer = setTimeout(() => { void sync(); }, retryDelay);
+  }
+}
+$('sync').onclick = () => { void sync(); };
+$('resolve').onclick = guard(async () => {
+  const owner = accountId, id = state.queue[0].operation.operationId;
+  const reviewed = structuredClone(state.records);
+  if (!confirm('Apply this pending edit to the latest server version shown?')) return;
+  const saved = await transact(owner, local => {
+    const entry = local.queue[0];
+    if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');
+    const mutations = entry.operation.mutations.map(mutation => {
+      const record = local.records[key(mutation)];
+      if (mutation.action !== 'update' || !record || record.deleted) throw new Error('Deleted or missing records cannot be overwritten. Export your pending text to recover it separately.');
+      if (record.version !== reviewed[key(mutation)]?.version) throw new Error('Server version changed again. Review the comparison before applying your edit.');
+      return { ...mutation, expectedVersion: record.version };
+    });
+    local.queue.shift();
+    const later = local.queue; local.queue = [];
+    enqueue(local, owner, mutations); local.queue.push(...later);
+  });
+  if (owner !== accountId) return;
+  state = saved;
+  render(); broadcast(); void sync();
+});
+$('discard').onclick = guard(async () => {
+  if (!confirm('Discard only this failed save and keep the server version? Later queued edits remain and may need review. Export a copy first if needed.')) return;
+  const owner = accountId, id = state.queue[0].operation.operationId;
+  const saved = await transact(owner, local => {
+    if (local.queue[0]?.operation.operationId !== id || !local.queue[0].failure) throw new Error('Queue changed; review it again.');
+    local.queue.shift();
+  });
+  if (owner !== accountId) return;
+  state = saved;
+  render(); broadcast(); void sync();
+});
+$('signOut').onclick = guard(async () => {
+  await journal();
+  await pauseSession('Signed out locally. Pending work remains bound to its original account.');
+  location.href = '/.auth/logout?post_logout_redirect_uri=/inbox.html';
+});
+channel.onmessage = guard(async () => {
+  const saved = await transact(null);
+  if (saved.paused || (accountId && saved.accountId !== accountId)) {
+    hideAccount(); $('sessionStatus').textContent = 'Account changed in another tab. Sign in or reload to continue.';
+  } else if (accountId) {
+    const owner = accountId, savedState = await transact(owner);
+    if (owner === accountId) { state = savedState; render(); }
+  }
+});
+addEventListener('online', () => { void sync(); });
+addEventListener('offline', () => { $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
+});
+addEventListener('focus', () => { if (navigator.onLine) void sync(); });
+
+try {
+  await session({ allowOffline: true });
+  if ('serviceWorker' in navigator) {
+    $('offlineStatus').textContent = 'Preparing offline reopening… Keep this page open until ready.';
+    navigator.serviceWorker.register('/inbox-sw.js').then(() => navigator.serviceWorker.ready)
+      .then(() => { $('offlineStatus').textContent = 'Ready to reopen this inbox offline.'; })
+      .catch(() => { $('offlineStatus').textContent = 'Offline reopening is not ready. Keep this page open and retry an online reload.'; });
+  } else {
+    $('offlineStatus').textContent = 'This browser cannot reopen the inbox offline. Keep this page open or reconnect to reopen it.';
+  }
+} catch (failure) { error(failure.message); }
+syncing = false;
+if (accountId) void sync();
