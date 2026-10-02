@@ -1,5 +1,131 @@
 # Versioned data API (issue #4)
 
+## Partition decision (issue #27)
+
+**Decision: retain the working account transaction boundary.** The physical
+hierarchical paths remain `[/UserID, /ObjectType, /ObjectID]`; their v1 values are
+`[accountId, "sync", "v1"]`. The last two field names are inherited partition
+names, not task classification. Logical identity, storage ID and document kind
+are separate:
+
+| Storage ID | `kind` | Logical identity/classification |
+| --- | --- | --- |
+| `record:item:milk` | `record` | `record.type=item`, `record.id=milk` |
+| `record:list:groceries` | `record` | `record.type=list`, `record.id=groceries` |
+| `receipt:<operationId>` | `receipt` | One immutable operation result |
+| `change:<sequence>` | `change` | One ordered application history entry |
+| `state` | `state` | Account sequence and ETag concurrency coordinator |
+
+All are in the **same full key value** for their owner. A record's membership is
+`record.listId`; moves change that relationship without changing its identity.
+The existing `kind` and `record.type` already provide non-key classification.
+
+| Option | Consequences | Decision |
+| --- | --- | --- |
+| Current account-wide `sync/v1` | One atomic list-plus-items/receipt/history/state batch; stable moves, ordered cursor and account-scoped reads. Same-account writers serialize; history grows. Different users have different partitions. | Keep; no evidence yet justifies a new protocol. |
+| Derive ObjectType/ObjectID from storage-ID prefixes/individual IDs | Splits records, receipt, change and state across full keys; a single Cosmos transactional batch no longer covers them. Also changes point reads, queries and ownership/reference checks. | Reject for this protocol; would require a complete replacement for atomic acknowledgement and sync. |
+| Add clearer non-key classification | Can improve tools/queries without breaking atomicity, but `kind` and `record.type` already express it. | Use existing fields; add metadata only for a concrete missing query. |
+| New container with `/UserID` only | Clearer equivalent account-wide boundary, but no reduction in account contention/history growth. Requires new SDK key calls, transfer, coordinated cutover and rollback. | Defer until an operational need outweighs migration cost. |
+
+This follows Cosmos's documented
+[same-partition batch boundary](https://learn.microsoft.com/en-us/azure/cosmos-db/transactional-batch).
+Changing ID-derived key values without a replacement protocol would lose atomic
+capture, receipts and ordered history. No live documents, partition values,
+queues or cursors are redistributed by this change.
+
+### Read-only inspection
+
+In authorized Cosmos tooling, bind `@account` to the stable account ID and scope
+the query to the full partition `[accountId, "sync", "v1"]`. These deliberately
+omit task text; never paste private records/auth payloads into issue reports.
+
+```sql
+SELECT c.id, c.record.type, c.record.id, c.record.version, c.record.deleted
+FROM c WHERE c.UserID=@account AND c.ObjectType='sync' AND c.ObjectID='v1'
+AND c.kind='record' AND c.record.type='item'
+
+SELECT c.id, c.response.operationId, c.response.sequence, c.response.status
+FROM c WHERE c.UserID=@account AND c.ObjectType='sync' AND c.ObjectID='v1'
+AND c.kind='receipt'
+
+SELECT c.id, c.sequence, c.response.status
+FROM c WHERE c.UserID=@account AND c.ObjectType='sync' AND c.ObjectID='v1'
+AND c.kind='change' ORDER BY c.sequence ASC
+```
+
+For list inspection replace `item` with `list`; use `kind='state'` to inspect
+the sequence. These fields are filters, not substitutes for authenticated API
+ownership validation. Never expose a database key to the browser.
+
+### Measured fixture growth and operational follow-up
+
+Run `node --experimental-test-module-mocks --test test/partition-profile.test.mjs`
+from `api/`. The reproducible workload creates 100 items with 270-character notes,
+then edits each five times (one item per operation), and pulls history at limit
+50. Production validation/commit/change code runs against the existing mock.
+Measurements below are serialized application JSON bytes excluding the mock
+ETag, **not billed Cosmos storage** (indexes/system metadata are excluded).
+
+| Document kind | After 100 creates: count / bytes | After 500 further edits: count / bytes |
+| --- | ---: | ---: |
+| Record | 100 / 96,460 | 100 / 96,460 |
+| Receipt | 100 / 116,242 | 600 / 697,992 |
+| Change | 100 / 108,836 | 600 / 654,636 |
+| State | 1 / 116 | 1 / 116 |
+
+Catch-up took 12 pages, carrying 576,312 JSON response bytes. It requires 600
+change point reads plus 12 state reads for this fixture; a client pass is bounded
+to ten pages, so it schedules further work. Larger entries hit the approximately
+1 MB page bound earlier and may require an extra boundary read. Snapshot text is
+repeated in receipts and history, so editing a fixed item set still grows storage.
+
+Eight simultaneous independent-record writes on the mock's shared account state
+produced five commits and three `account_busy` responses after bounded retries;
+retrying those unchanged sequentially committed all eight. Eight different
+accounts all committed. This deterministic contention check demonstrates the
+retry path, **not** a deployed throughput/latency estimate.
+
+Real request units, indexed storage, contention frequency and page latency remain
+**unmeasured**. Before claiming production capacity, repeat this disposable
+workload against an isolated Cosmos/SWA environment with representative small
+and near-limit records and 1/2/8 concurrent clients. Record SDK `requestCharge`
+for point reads/batches, batch attempts, 412/429/503 counts, response bytes,
+end-to-end p50/p95/p99 latency and container/account size, with consistency,
+region, indexing policy and throughput settings. Include cold-cache catch-up
+from cursor zero and incremental pages. Do not infer RU from JSON bytes or mock
+time. Retain the measurement report with its commit and environment.
+
+Revisit the design when measured per-account storage approaches the configured
+logical-partition capacity, sustained contention causes retry exhaustion, or
+RU/latency/catch-up exceeds the pilot's agreed budget. First evaluate a documented
+snapshot/history-compaction protocol; merely renaming keys or changing containers
+does not solve account-wide serialization. Any redesign must cover every read,
+query and batch, references/moves, receipts/history/state, tombstones, fixtures,
+old clients, device queues/cursors, cutover and rollback before deployment.
+
+### Recovery before any explicit reset or migration
+
+1. Pause writes and preserve a consistent server backup including records,
+   tombstones, receipts, change rows and state. Record the high-water sequence.
+   Export **each device's** account-bound cache, cursor, draft and pending queue;
+   server backups cannot contain unsent device work. Keep exports private.
+2. Investigate `cursor_ahead` (often a restored/reset database) or `history_gap`.
+   Check region/consistency and restore the matching full history where possible.
+   Never delete receipts/change rows, lower cursors or clear IndexedDB as a fix.
+3. Rehearse recovery in disposable storage. Reconcile immutable pending intents
+   against receipts; retry identical committed operations safely. Review missing
+   history/deletions/conflicts explicitly. The device export is a recovery record,
+   not an automatic importer, and current v1 has no automatic reset/rebase protocol.
+4. If a fresh start is deliberately approved after preservation/reconciliation,
+   retire or quarantine **all** old clients/queues/cursors before activating it.
+   Otherwise old queues may recreate work and old cursors may exceed new history.
+   Preserve stable identity and pending work through a designed migration; do not
+   silently assign a new account or discard new v1 captures.
+5. Prefer a compatible roll-forward fix. A rollback needs the matching server
+   backup plus reconciliation of post-backup writes and device queues; restoring
+   an older application/database alone can lose work. Verify two-account isolation,
+   cursor continuity and lost-response retry in the rehearsal before cutover.
+
 The v1 API adds repeat-safe JSON writes alongside the existing HTML API. It is
 disabled unless `V1_API_ENABLED=true`. Use an isolated staging environment until
 the migration and Azure gates below pass. The legacy HTML client uses legacy

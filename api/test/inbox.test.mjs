@@ -120,7 +120,7 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination' }).waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v3')).keys()).map(request => new URL(request.url).pathname));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v4')).keys()).map(request => new URL(request.url).pathname));
   assert.deepEqual(cached.sort(), ['/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/styles.css', '/theme.js'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
@@ -151,7 +151,7 @@ test('inbox: switching accounts and expired login never display or upload anothe
   await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished');
   setUser('bob'); await context.setOffline(false);
   await page.getByRole('button', { name: 'Sync now' }).click();
-  await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.includes('bob'));
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   assert.doesNotMatch(await page.locator('body').innerText(), /Alice private|Alice unfinished/);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   await capture(page, 'Bob work'); await confirmed(page);

@@ -10,6 +10,8 @@ The opt-in JSON contract, retry/conflict protocol and migration rehearsal are
 documented in [Versioned data API](docs/data-api-v1.md).
 Durable offline capture, editing, account-bound retry and controlled client cutover
 are documented in [Durable inbox](docs/durable-inbox.md).
+See [multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
+and the [account partition decision and measurements](docs/data-api-v1.md#partition-decision-issue-27).
 
 [![Azure Static Web Apps CI/CD](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml/badge.svg)](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml)
 

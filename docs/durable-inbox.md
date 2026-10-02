@@ -1,5 +1,112 @@
 # Durable inbox (issue #5)
 
+## Using the same account on phone and laptop
+
+Yes: independent browser profiles/devices signed into the same **SWA account**
+can use the same API/database. Each has its own IndexedDB records, capture/editor
+draft, outbox and change cursor. Different accounts remain isolated; this is not
+shared-list collaboration between users. Same-browser tabs share one account
+database and one unsaved draft slot: save the draft before composing another in
+a second tab. Web Locks and BroadcastChannel coordinate those tabs only.
+
+The account label uses `clientPrincipal.userDetails` from a same-origin, no-store
+`/.auth/me` request after v1 session verification. Its `userId` must match the
+verified `accountId`. The name is rendered as text and never replaces the stable
+ownership/storage ID. Requests from an earlier account/session are ignored, and
+each successful online session refreshes the name (including a renamed handle).
+Missing, malformed, failed or timed-out profiles show **Your device inbox** and
+do not delay capture or sync. Names/auth payloads are not persisted or cached;
+offline reopen uses the neutral label. Logout/expiry/account switch clear the name
+alongside the existing account isolation flow. A profile lookup is display metadata,
+not a second authentication authority. See Microsoft's
+[SWA principal fields](https://learn.microsoft.com/en-us/azure/static-web-apps/user-information).
+
+```mermaid
+sequenceDiagram
+    participant P as Phone
+    participant D as Phone IndexedDB
+    participant A as v1 API / account partition
+    participant L as Laptop
+    P->>D: Save draft + immutable operation in one transaction
+    D-->>P: Transaction complete: Saved on device
+    P->>A: Verify session; pull changes after saved cursor
+    P->>D: Apply page and advance cursor atomically
+    P->>A: Submit operation ID + expected record versions
+    A->>A: Commit records + state + receipt + change together
+    A-->>P: Durable receipt (or conflict)
+    P->>D: Apply receipt; remove acknowledged queue entry
+    L->>A: Next foreground sync: verify session, pull changes
+    A-->>L: Ordered committed snapshots/receipts
+    L->>L: Apply newer versions and persist cursor together
+```
+
+Sync runs at startup, after saves, reconnect, focus/visibility return, **Sync now**,
+and scheduled retries/remaining work. There is no continuous server push or idle
+polling. An already-visible idle laptop may need **Sync now** to see a phone's edit.
+Each pass pulls up to ten pages of at most 50 changes and sends up to 100 queued
+operations; remaining work schedules another pass. Requests time out after 15
+seconds, with 2–60 second retry backoff. No background-sync guarantee is made.
+First-ever sign-in requires online verification; an already initialized account
+can capture offline unless its session has been paused by logout or expiry.
+
+### When edits collide
+
+Suppose both devices have “Milk” at version 3. The phone edits it to “Oat milk”
+and commits version 4. The offline laptop proposes “Two cartons of milk” against
+version 3. On reconnect the laptop pulls version 4, but keeps its original queued
+intent unchanged. Its submission receives a durable conflict: none of that
+operation's proposed record changes apply. The UI retains the laptop text and
+shows the server version. Choose the server version, or explicitly apply the
+reviewed edit as a **new operation** against version 4. Another intervening edit
+will conflict again. Even edits to different fields of one record conflict;
+there is no automatic field merge or last-writer-wins overwrite.
+
+The failed queue head blocks later saves, which stay on device. Resolving one
+save does not silently rebase later queued edits; they may need their own review.
+A deleted record cannot be resurrected by a stale edit. Independent record edits
+can both succeed, but all writes within one account compete for the account-state
+ETag; after five unsuccessful concurrency attempts the API returns `503 account_busy`.
+Retry the same intent later. Separate accounts have separate transaction boundaries.
+
+If the phone's create commits but its HTTP acknowledgement is lost, retrying
+the exact operation ID/content returns the original receipt; a pulled change
+receipt can also acknowledge it. There is still one item. Reusing the ID with
+different content fails with `409 operation_reused`. In contrast, independently
+saving “Milk” on both devices creates two distinct operations/record IDs and two
+items: retry protection is not text deduplication.
+
+The application's `change:<sequence>` documents are an ordered history, not
+Cosmos's native change feed. Receipts and history currently grow without
+compaction/expiration. Deleting them breaks retry/cursor guarantees. Partition
+semantics, inspection queries, measured fixture sizes and recovery steps are in
+the [v1 protocol decision](data-api-v1.md#partition-decision-issue-27).
+
+### Issue #27 verification
+
+Run from `api/` on Node 24+ with installed Playwright Chromium, or set
+`PLAYWRIGHT_CHANNEL=msedge`: `npm test`. New `account-sync.test.mjs` checks
+matching/renamed/untrusted profile names, malformed/null/mismatched profiles,
+HTTP failure, timeout, delayed account-A responses after switching to B, logout, expiry,
+offline reopening and absence of API/auth shell caches. Two **independent browser
+contexts** check A-create/B-pull, independent edits, offline same-record conflict,
+queue blocking, explicit resolution and distinct equal-text captures. A separate
+same-profile-tab check proves the shared draft limitation. Existing
+`inbox.test.mjs` checks competing tabs, lost responses, paused sessions,
+stale deleted-record edits and recovery; `v1.test.mjs` checks changed-content ID
+reuse, atomic conflicts and isolation. These use production handlers and an
+in-memory transactional storage substitute, not live SWA/Cosmos.
+
+Local evidence: October 1, 2026 (America/Regina), Windows, Node 26.7.0,
+Playwright Chromium 153.0.8010.12; exact tested commit and suite result are
+recorded in the PR. Expected results are the assertions above; actual local
+results must pass before merge. Real Android/iPhone/desktop session and Cosmos
+RU/latency evidence remain **unverified**, so #27 remains open for those gates.
+For deployed verification, record commit, disposable environment, OS/browser,
+steps and expected/actual results for each scenario above, using real SWA auth,
+two independent clients plus two accounts, a single write region and at least
+Session consistency. Do not treat the local mock's concurrency timing as Cosmos
+performance or as proof of the production authentication boundary.
+
 `/inbox.html` is the v1 capture and editing client. It uses native JavaScript,
 IndexedDB, Web Locks and a small service worker; it has no build step or new
 dependency. It requires HTTPS (or localhost), a supported modern browser and a
@@ -87,7 +194,7 @@ person using the same browser profile or devtools. Use separate profiles on shar
 devices. Explicit site-storage clearing, browser eviction or device loss can
 destroy unsynced work; the UI explains this and offers an export.
 
-The worker caches only `/inbox.html`, `/styles.css`, `/theme.js`, `/inbox.css`, `/inbox.js` and
+The worker caches only `/inbox.html`, `/styles.css`, `/theme.js`, `/inbox.css`, `/inbox.js?v=4` and
 `/inbox-store.js`, never API responses, auth endpoints, the legacy shell or task
 data. Wait for **Ready to reopen this inbox offline** before relying on offline
 reload. Reopen the inbox URL, not the legacy `/` entry point. Browser termination
