@@ -384,13 +384,19 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11]) test(`shell upgrade from
   assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=12')).transact('alice'))).queue, before.queue);
   rejectUpgrade = false;
+  const nextWorker = context.waitForEvent('serviceworker');
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
+  const upgradedWorker = await nextWorker;
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=12')).transact('alice'))).queue, before.queue);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
-  await page.close(); page = await context.newPage();
+  await page.close();
+  // Closing a tab and releasing its worker client are asynchronous in Chromium.
+  // Reopening early can attach the new page to the old worker and prevent activation.
+  await waitForBrowser(upgradedWorker, () => !self.registration.waiting && self.registration.active?.state === 'activated');
+  page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
