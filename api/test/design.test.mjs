@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 
@@ -15,21 +14,6 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   t.after(() => browser.close());
   const context = await browser.newContext({ colorScheme: 'dark', timezoneId: 'America/Regina' });
   const page = await context.newPage();
-  await page.route('https://cdn.jsdelivr.net/npm/htmx.org@1.9.12', route => route.fulfill({
-    contentType: 'text/javascript', path: fileURLToPath(new URL('../node_modules/htmx.org/dist/htmx.min.js', import.meta.url))
-  }));
-  async function post(path, data) {
-    const response = await context.request.post(server.url + '/api/' + path, { form: data, headers: { origin: server.url } });
-    assert.equal(response.status(), 200);
-  }
-  await post('lists/create', { title: 'Weekend plans', description: 'A little space for life outside work.' });
-  const listId = documents.find(d => d.ObjectType === 'list').id;
-  await post('lists/create', { title: 'Home & errands' });
-  for (const [title, description, status] of [
-    ['Plan a walk by the river', 'Check the weather and pick a trail for Saturday.', 'next'],
-    ['Book the bike tune-up', 'Ask about brake pads and a spring service.', 'waiting'],
-    ['Pick up groceries for dinner', 'Tomatoes, bread, olive oil, and something for dessert.', 'completed']
-  ]) await post('items/create', { title, description, status, listId });
   if (screenshots) await mkdir(screenshots, { recursive: true });
   async function shot(name) {
     if (screenshots) {
@@ -44,53 +28,6 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   }
   async function fits() {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal page overflow');
-  }
-  async function settled() {
-    await page.locator('#quickAdd').waitFor();
-    await page.waitForFunction(() => !document.querySelector('.htmx-request, .htmx-settling') && document.querySelector('#requestStatus').textContent === '');
-  }
-  await page.goto(server.url);
-  await page.locator('#quickAdd').waitFor();
-  await page.locator('#listSelect').selectOption(listId);
-  await page.locator('#items article').first().waitFor();
-  for (const width of [320, 390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    if (!baseline) {
-      await page.reload();
-      await settled();
-      await page.locator('#listSelect').selectOption(listId);
-      await page.locator('#items article').first().waitFor();
-      assert.equal(await page.locator('#listNavigation').evaluate(el => el.open), width >= 768);
-      const capture = await page.locator('#quickAdd [name=title]').boundingBox();
-      assert.ok(capture.y + capture.height < 900, 'capture visible in initial viewport');
-    }
-    await shot(`workspace-${width}`);
-    if (!baseline) await fits();
-  }
-  if (!baseline) {
-    await page.setViewportSize({ width: 320, height: 900 });
-    await page.locator('#quickAdd details summary').click();
-    await fits();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Save user defaults' }).waitFor();
-    assert.ok(await page.locator('#settingsPanel').evaluate(el => el.matches(':modal')));
-    await fits();
-    await shot('settings-sheet-320');
-    await page.getByRole('button', { name: 'Close settings' }).click();
-    await page.locator('#quickAdd details summary').click();
-    await page.locator('#quickAdd [name=title]').focus();
-    await page.keyboard.press('Tab');
-    assert.equal(await page.locator('#listSelect').evaluate(el => el.matches(':focus-visible')), true);
-    assert.equal(await page.locator('#listSelect').evaluate(el => getComputedStyle(el).outlineWidth), '3px');
-    await shot('workspace-keyboard-focus-320');
-    await appearance('light');
-    await page.reload();
-    await settled();
-    await page.locator('#listSelect').selectOption(listId);
-    await page.locator('#items article').first().waitFor();
-    assert.equal(await page.locator('[data-appearance]').inputValue(), 'light');
-    await shot('workspace-light-320');
-    await appearance('dark');
   }
   await page.goto(server.url + '/inbox.html');
   await page.locator('#workspace').waitFor();
@@ -155,6 +92,18 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   assert.equal(await page.locator('#edit [name=title]').inputValue(), 'Preserved sheet draft');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
+  await page.setViewportSize({ width: 320, height: 900 });
+
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+    assert.ok(await page.locator('#defaultsEditor').evaluate(el => el.matches(':modal')));
+    await fits(); await shot('native-defaults-' + width);
+    await page.getByRole('button', { name: 'Close defaults', exact: true }).click();
+    await page.locator('#captureOptions summary').click();
+    await fits(); await shot('native-fields-' + width);
+    await page.locator('#captureOptions summary').click();
+  }
   await page.setViewportSize({ width: 320, height: 900 });
 
   // Measure resolved semantic colors, not just literal token values.

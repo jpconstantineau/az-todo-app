@@ -1,95 +1,70 @@
-# Basic task flow and verification
+# Native task flow and parity verification
 
-Issue: [#2](https://github.com/jpconstantineau/az-todo-app/issues/2).
+Implementation for issue #25. `/` serves `html/index.html`; `/inbox.html` is a native
+redirect to the same workspace. Capture is the default; the List workspace switch
+keeps drafts intact. Navigation redesign remains #26.
 
-`html/index.html` is the only document shell. It loads `/api/app` into `#app`.
-The API returns fragments, never a second document. Anonymous visitors receive
-the SWA GitHub sign-in link; the signed-in workspace offers SWA sign-out and settings.
-All templates use the same `esc` helper for text and attributes.
+## User flow
 
-## Fragment contracts
+| Action | Native implementation / contract |
+| --- | --- |
+| Sign in/out | SWA auth; return to `/`; verify `/api/v1/session` before displaying account data |
+| New empty list | New list editor; versioned `list` create with title, notes and a snapshot of user defaults |
+| Capture | One item per non-empty line; optional original-preserving split preview, notes and new/existing list |
+| Advanced task fields | Status, local due date/time, contexts, areas, energy, time and priority; native controls |
+| Review/filter | All items, inbox or a list, combined with status filter; local view over every fetched change page |
+| Edit/move | Title, notes, list and advanced fields; only changed fields sent, retaining links, dates with seconds and originals |
+| Complete/reopen | Explicit status write; completion stores prior status; reopen restores it, falling back to `next` for older records without one |
+| Defaults | User defaults or per-list options in a native dialog; one option per line, at most 200 per field and 64 characters per option |
+| Reset/copy | Reset user defaults to built-ins, or copy current user defaults into a list form; Save confirms the snapshot as an ordinary versioned operation |
+| Recovery | Durable drafts, queue status, conflict comparison, selectable recovery copy and device export |
 
-| Method and route | Inputs | Response / target |
-| --- | --- | --- |
-| GET `/api/app` | SWA principal | Workspace inside `#app`, or sign-in prompt |
-| GET `/api/lists/all` | — | List buttons inside `#listsContainer` |
-| POST `/api/lists/create` | `title`, `description` | List buttons; OOB destination, defaults and selected list view |
-| GET `/api/items/byList` | `listId` | Heading, description and item rows inside `#itemsView`; OOB destination and defaults |
-| POST `/api/items/create` | `listId`, `title`, `description`, `status`, `dueDateUtc`, `context`, `area`, `energy`, `timeRequired`, `priority` | Updated selected list view inside `#itemsView` |
-| POST `/api/items/toggleComplete` | `id`, `listId` | One `article`, replacing the closest item article |
-| GET `/api/items/filterByStatus` | `status`, optional `ct` | First page inside `#itemsView`; later pages replace their own load-more wrapper |
-| GET `/api/lists/quickAddForm` | `listId` | Form inside `#quickAddContainer` (available, not used during selection) |
-| GET `/api/lists/defaultOptions` | `listId` | OOB select replacements, no ordinary swap |
-| GET `/api/settings/edit` | — | User defaults inside `#settingsPanel` |
-| POST `/api/settings/update` | `contexts[]`, `areas[]`, `energy[]`, `timeRequired[]`, `priority[]`, `statuses[]` | User defaults inside `#settingsPanel`; filter options updated OOB |
-| POST `/api/settings/reset` | — | Same shape as settings update |
-| GET `/api/lists/editDefaults` | `listId` | List defaults inside `#settingsPanel` |
-| POST `/api/lists/updateDefaults` | `listId` plus the six defaults fields | List defaults inside `#settingsPanel` |
-| POST `/api/lists/resetDefaults` | `listId` | List defaults copied from user defaults inside `#settingsPanel` |
+All mutations use `POST /api/v1/operations`. The same queue/receipt/version rules
+apply to settings and tasks; there are no fragment requests or OOB swaps. New lists
+copy effective user options; lists without overrides inherit them. Removed options
+do not erase existing task values. Capture status defaults to `inbox`, so optional
+classification never obstructs quick capture.
 
-The registered `POST /api/settings/ensure` and `GET /api/health` endpoints have no UI controls.
-Page loading reads defaults without writing settings. Browser mutations use the
-origin policy and API response headers documented in [Request protection](request-security.md).
-General item/list editing and deletion are not presented as available actions.
-Defaults are edited one option per line; repeated array inputs remain supported.
-Saving defaults refreshes the selected list's options without replacing the capture form.
+Local date input is converted to UTC. Nonexistent local times during a DST jump
+are rejected; ambiguous times use the browser's Date interpretation. Display uses
+the browser timezone. Date-only/recurrence semantics are outside this change.
 
-The browser converts `dueLocal` from its own timezone to `dueDateUtc` before submission.
-The server stores UTC and the browser displays it in local time. A local-only date
-without its UTC conversion is rejected, rather than interpreted in the server's timezone.
-Completion records the prior status; reopening restores it (legacy completed records
-without that field reopen as `next`). This remains a toggle, not a repeat-safe write.
+Saving or refreshing defaults updates options without replacing capture/editor
+text. Defaults drafts, selected view/filter and workspace choice join the existing
+account draft document. Same-profile tabs still share that draft slot; submitted
+operations remain independently durable. Individual records are limited to 32 KiB
+and operations to 64 KiB, including defaults snapshots.
 
-List selection does not replace the capture form. Validation, HTTP, network and
-session-expiry failures retain entered values and display an error using `textContent`.
-Submit buttons are disabled during requests. Successful creates clear only submitted
-text that has not changed while the request was in flight. A failed or lost response
-may follow a committed write; the UI asks users to inspect the list before retrying.
-Durable offline drafts, operation receipts and conflict recovery belong to #4/#5.
+## Retired endpoints
 
-## Run the tests
+`api/api/legacy.mjs` lists the old method/path pairs. Their GETs return 410 and
+POSTs return 409 after the shared authentication/origin guard; responses explain
+how to copy old form text and reopen `/`. None imports storage or templates.
+`GET /api/app` remains public solely to explain retirement to old shells.
+The shared guard unconditionally rejects non-v1 mutations, regardless of the
+obsolete client flag. Remove compatibility stubs only when old clients no longer
+need a useful recovery response; never restore the old writer.
 
-Use Node 24 for the test runner (module mocking requires a recent Node version).
+## Verification
 
-```sh
-cd api
-npm ci
-npx playwright install chromium
-npm test
-# HTTP/template checks only:
-npm run test:contracts
-```
+From `api/`, use Node 24+, `npm ci`, `npx playwright install chromium`, `npm test`.
+Alternatively use installed Edge with `PLAYWRIGHT_CHANNEL=msedge`.
 
-On a machine with Edge installed, set `PLAYWRIGHT_CHANNEL=msedge` to avoid installing
-Chromium. Set `TEST_SCREENSHOT` to an absolute PNG path for an optional browser capture.
-CI installs Chromium and runs the complete suite on Node 24.
+- `browser.test.mjs`: replaces the old HTMX flow with native settings, list creation,
+  advanced fields, custom status filters, safe text, dates, offline reset/copy and
+  completion/reopen parity.
+- `contracts.test.mjs`: flag matrix, permanently retired writes, local shell and CSP.
+- `inbox.test.mjs`: persistent browser restart, exact queued retries, conflicts,
+  isolation, transaction/quota failure, competing tabs, old-worker upgrade and drafts.
+- `v1.test.mjs`: atomic batches, bounded changes, validation, repeat-safe settings
+  and settings conflicts, preserved prior status and custom values.
+- `security.test.mjs`: origin policy, every route's authentication and headers,
+  read isolation, no GET writes, shared registration guard.
+- `migration.test.mjs`: original export/checksum/rollback compatibility and migrated
+  fields. No migration is needed for the owner's already-empty legacy database.
+- `design.test.mjs`: populated layouts at 320–2560px, modal focus, themes and contrast.
 
-The harness imports the production entry point and captures its registered handlers.
-Requests cross a real loopback HTTP server using Azure `HttpRequest`/`HttpResponse`
-types. Only Cosmos storage and function registration are substituted. Storage is
-disposable, in memory, and implements the query/projection/partition behavior used by
-these handlers; it does not certify Cosmos queries, indexing, or durability. The
-browser uses the exact HTMX 1.9.12 package corresponding to the deployed CDN script.
-
-## Evidence and limits — October 1, 2026
-
-Passed locally on Windows with Node 24.19.0 and Edge 154.0.4258.48:
-
-- Signed-in create-list → select-list → add-item → reload/reselect → complete/reopen.
-- Titles, descriptions, destination, UTC due time and context/area/energy/time/priority round trips.
-- Empty, populated and adversarial templates; all advertised API methods/routes registered;
-  one document, no duplicate IDs, and no executable user markup.
-- User and list defaults save/reset; status filtering and continuation-page contract.
-- Validation, injected storage failure, network failure and 401 retain form text.
-  Text typed during a pending successful save also survives.
-- Desktop and 390 × 844 viewport; America/Regina timezone conversion; no page JavaScript errors.
-
-This is local handler/browser verification, not Azure deployment or physical-phone
-verification. No production records were created. SWA authentication, direct Functions
-ingress, real Cosmos persistence/indexes, and deployed runtime must still be verified
-in a disposable Azure environment under #3/#17. The CSRF bypass has since been removed;
-[request-security.md](request-security.md) records the newer protection tests and
-remaining deployed verification gates. The current runtime configuration is
-`api/host.json` (`api` route prefix), entry `api/api/index.mjs`, and
-`CosmosDbConnectionSetting` for the Cosmos connection; older examples in
-`description.md` are not deployment evidence.
+These checks are local automation, not evidence of live Azure topology, real Cosmos
+isolation/transactions, physical phones or screen readers. Keep #3/#4/#5/#17 open
+until their remaining deployed checks are recorded. See the inbox release checklist
+before merging/deploying the replacement client.

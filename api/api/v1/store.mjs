@@ -1,6 +1,7 @@
 import { container } from "../shared/db.mjs";
 import { bytes, digest, document, partition, recordId, MAX_RECORD_BYTES } from "./contract.mjs";
 import { ValidationError } from "../shared/validate.mjs";
+import { defaultSettings } from "../shared/defaults.mjs";
 
 export class ApiError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -8,6 +9,9 @@ export class ApiError extends Error {
 export async function read(accountId, id) {
   try { return (await container.item(id, partition(accountId)).read()).resource ?? null; }
   catch (error) { if (error.code === 404) return null; throw error; }
+}
+export async function legacyDefaults(accountId) {
+  return (await read(accountId, "legacy-settings"))?.settings?.defaults ?? null;
 }
 const create = resourceBody => ({ operationType: "Create", resourceBody });
 const replace = (resourceBody, ifMatch) => ({ operationType: "Replace", id: resourceBody.id, resourceBody, ifMatch });
@@ -47,17 +51,29 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         version: m.expectedVersion + 1, createdUtc: old?.createdUtc ?? now, updatedUtc: now,
         deleted: m.action === "delete", deletedUtc: m.action === "delete" ? now : null };
       if (m.type === "item") {
+        if (record.status === "completed" && old?.status !== "completed") record.statusBeforeCompletion = old?.status || "inbox";
         record.completedUtc = record.status === "completed" ? (old?.completedUtc ?? now) : null;
         record.nextAction = record.status === "next";
       }
       if (bytes(record) > MAX_RECORD_BYTES) throw new ValidationError("Record exceeds the 32 KiB limit; shorten its text or links.");
       return record;
     });
-    for (const record of records) {
+    const settings = records.find(record => record.type === "settings") ?? (await read(accountId, recordId("settings", "settings")))?.record;
+    const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? await legacyDefaults(accountId)) };
+    for (const [i, record] of records.entries()) {
+      let list;
       if (record.type === "item" && !record.deleted && record.listId) {
         const pending = records.find(r => r.type === "list" && r.id === record.listId);
-        const list = pending ?? (await read(accountId, recordId("list", record.listId)))?.record;
+        list = pending ?? (await read(accountId, recordId("list", record.listId)))?.record;
         if (!list || list.deleted) throw new ApiError(404, "list_not_found", "Destination list not found in this account.");
+      }
+      if (record.type === "item" && !record.deleted) {
+        const mutation = input.mutations[i], old = current[i]?.record;
+        const allowed = ["inbox", "next", "deferred", "completed", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
+        // Historic values stay editable; unrelated edits and moves never erase them.
+        if (mutation.fields?.status !== undefined && ![...allowed, old?.status, old?.statusBeforeCompletion].includes(record.status)) {
+          throw new ValidationError("status is not configured for this list or account.");
+        }
       }
       if (record.type === "list" && record.deleted && await hasItems(accountId, record.id)) {
         throw new ApiError(409, "list_not_empty", "Move or delete this list's items before deleting the list.");

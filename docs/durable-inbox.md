@@ -1,6 +1,6 @@
 # Durable inbox (issue #5)
 
-`/inbox.html` is the v1 capture and editing client. It uses native JavaScript,
+`/` is the native v1 client; `/inbox.html` is a bookmark alias. It uses native JavaScript,
 IndexedDB, Web Locks and a small service worker; it has no build step or new
 dependency. It requires HTTPS (or localhost), a supported modern browser and a
 successful first sign-in while online. Installation as a PWA, update prompts and
@@ -22,9 +22,11 @@ physical-device certification remain #14/#17 work.
   operation limit. Larger input stays in the form with a visible error. Titles
   are limited to 200 characters, notes to 4,000 and original capture to 16,000.
 - Edit titles/notes, move items between existing lists or back to the inbox,
-  complete, and reopen offline. Reopen explicitly sets `inbox`; richer workflow
-  transitions and their previous-state semantics belong to #8. List titles and
-  notes are editable. Projects and AI are not prerequisites.
+  complete, and reopen offline. Reopen restores `statusBeforeCompletion`; older
+  completed records without a prior status use `next`. List titles and
+  notes are editable. New list creates an empty list with title/notes. Optional task
+  details expose status, due date/time, contexts, areas, energy, time and priority;
+  Your work filters the local cache by destination and status. Projects and AI are not prerequisites.
 - Quick capture focuses the text box; Ctrl/Command + Enter saves. The submit
   guard prevents concurrent submissions, preserves input entered during a local
   save, and restores capture focus. The action follows the textarea in normal
@@ -87,41 +89,73 @@ person using the same browser profile or devtools. Use separate profiles on shar
 devices. Explicit site-storage clearing, browser eviction or device loss can
 destroy unsynced work; the UI explains this and offers an export.
 
-The worker caches only `/inbox.html`, `/styles.css`, `/theme.js`, `/inbox.css`, `/inbox.js` and
-`/inbox-store.js`, never API responses, auth endpoints, the legacy shell or task
-data. Wait for **Ready to reopen this inbox offline** before relying on offline
-reload. Reopen the inbox URL, not the legacy `/` entry point. Browser termination
-preserves the cache and IndexedDB under normal browser storage retention.
-For a shell update, change the cache version in `inbox-sw.js` with the assets,
-keep compatible IndexedDB/API contracts, and close all inbox tabs before reopening
-online to activate the waiting worker. Do not force-activate incompatible clients;
-the fuller update/recovery UX is #14. There is no install manifest in this change.
+## Canonical shell and updates
 
-## Controlled rollout
+The worker caches only the public root/index/bookmark shell, local CSS, theme
+script and native modules, never API/auth responses or task data. Wait for
+**Ready to reopen this inbox offline** before relying on offline reload. Both
+root and the inbox alias work offline once worker v4 is active.
 
-1. Keep production flags unchanged. In isolated staging, enable
-   `V1_API_ENABLED=true`, then open `/inbox.html` directly with disposable accounts.
-   This explicit staging URL does not import legacy data. Do not edit live user
-   data in both clients/namespaces.
-2. Complete the trusted-ingress gates in [Request security](request-security.md)
-   and the frozen export, preparation, restore and comparison rehearsal in
-   [Versioned data API](data-api-v1.md). Keep original settings/defaults in the
-   migration archive; this focused client does not yet edit advanced defaults.
-3. After migration verification, set **both** `V1_API_ENABLED=true` and
-   `V1_CLIENT_ENABLED=true`. The authenticated legacy shell redirects to the
-   durable inbox. The shared API guard rejects every legacy mutation with 409,
-   including requests from an old open tab; its form text is retained. No source
-   default enables this cutover.
-4. Verify two real accounts and physical phone/desktop behavior before inviting
-   pilot users. After v1 writes, rollback requires retaining/reconciling that new
-   work; do not simply point users back at the old namespace. Follow #4's backup
-   and rollback procedure.
+Module URLs carry `?v=4`; the previous v3 worker ignores query URLs, preventing a
+new shell from importing old cached modules. A worker-version handshake reports
+readiness only when the matching worker is active. A waiting worker is not forcibly
+activated: save work locally, close every app tab/window, then reopen online. Old
+shell caches are retained so old clients keep their assets. Cache installation
+failure leaves the old worker/cache usable at its original inbox URL; it does not
+clear IndexedDB. Full update prompts, cache-retirement UX and PWA installation are
+still #14. Update the shell/module version together when changing cached modules.
+
+## Defaults and compatibility
+
+User/list defaults are versioned records in the same outbox as tasks. Reset/copy
+loads a snapshot into the defaults editor and Save explicitly commits that snapshot
+on device. Drafts survive closing and reload. Custom statuses are validated against
+effective options, while existing/prior statuses are preserved. New lists copy user
+defaults; lists without defaults inherit user/built-in options. Changing options
+does not overwrite text or selected values in an open capture/editor.
+
+The existing `todo-inbox-v1` database and account object store are retained unchanged.
+Built-in and archived defaults are additive metadata inside the account document;
+old queues, operation IDs, snapshots, cursors and drafts are not reset or rewritten.
+An older offline profile without option metadata must reconnect once before editing
+defaults. Settings records use the new `settings:settings` logical identity.
+
+## Release and recovery checklist
+
+1. Keep deployment and Cosmos settings unchanged during PR review. On the target
+   environment confirm `V1_API_ENABLED=true`, exact `APP_ORIGIN` and the existing
+   Cosmos connection, hierarchical partition paths and Session consistency/single
+   write region. `V1_CLIENT_ENABLED` is obsolete and ignored by this release.
+2. The owner emptied the legacy database and has opened the new UI. No legacy import
+   is required for that cutover. Preserve any new v1 server records and device data.
+   Retain the old migration tool/checksum fixtures for other archived datasets.
+3. Deploy the additive API and native shell together. Test root, inbox bookmark and
+   GitHub auth return. Legacy POSTs must return 409 for legitimate authenticated
+   requests; old GETs return 410. The shared guard blocks non-v1 writes even with
+   the old client flag false/unset. A disabled API shows an error, never old data.
+4. Verify task/default saves, offline reopen/reconnect and two-account isolation in
+   disposable Azure staging, then two real devices. Check custom values, previous
+   status, API headers and exact retry outcomes against real Cosmos.
+5. Test an existing browser profile: preserve/export a draft and pending operation,
+   upgrade the worker with old tabs present, close/reopen, sync once and compare IDs,
+   text and cursor. Never clear site storage merely to make the upgrade pass.
+6. Before reverting an application deployment, stop new writes and preserve v1
+   records/history/receipts plus each device's pending export. Prefer rolling forward
+   to a compatible fix. An old server cannot accept the new settings contract; an
+   old backup alone loses newer work. Reconciliation is required before a downgrade.
+
+A database reset does not reset browser cursors or queues. `cursor_ahead`/`history_gap`
+require recovery/investigation; do not automatically reset pending work. Explicit
+storage clearing is a deliberate fresh start only after exports and user confirmation.
 
 ## Verification and remaining gates
 
+See the [issue #25 verification report](design/vanilla.md) for the 37-test local
+result, upgrade checks, responsive screenshots and outstanding release gates.
+
 Run `npm test` in `api/` (Node 24+ for module-mocking tests). Use
 `PLAYWRIGHT_CHANNEL=msedge` on a machine with Edge, or install Playwright Chromium
-as in CI. The existing HTTP/HTMX, security, transaction and migration tests remain.
+as in CI. The native parity, security, transaction and migration checks are described in [Task flow](task-flow.md).
 
 The new browser checks exercise real IndexedDB, service workers and the production
 v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitute:
@@ -137,7 +171,9 @@ v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitu
   rejection, copy/export recovery, queue bounds, quota and transaction abort.
 - Editable split preview, competing-tab saves, duplicate submit guard,
   keyboard shortcut/focus, 390px width and a shortened keyboard viewport.
-- Cutover redirects and rejection of every registered legacy mutation.
+- Canonical root/bookmark, all flag combinations and unconditional rejection of every retired mutation.
+- Defaults/copy/reset, custom states, advanced task fields, previous-status restore,
+  persisted settings drafts, old-worker upgrade and exact pending intent retention.
 
 Local verification uses Edge 154 and Node 26.7 on Windows. These are browser
 automation checks, not physical Android/iPhone keyboard or OS-eviction evidence.
