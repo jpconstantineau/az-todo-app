@@ -35,3 +35,5 @@ Final screenshots: [Capture phone](design/navigation/navigation-capture-dark-390
 From the repository root, reproduce screenshots with NAVIGATION_SCREENSHOTS=docs/design/navigation and run node --experimental-test-module-mocks --test api/test/navigation.test.mjs (set PLAYWRIGHT_CHANNEL=msedge on Windows). The proposal HTML and screenshots were prepared before the implementation.
 
 Physical phone keyboard/safe-area behavior, assistive-technology announcements, actual browser 200% zoom, non-Chromium browsers and deployed SWA/Cosmos remain unverified. Automated text enlargement/reflow is not a claim of a physical-device or browser-zoom check. Keep issue #26 open for that evidence. No new workflow or persistence protocol was introduced.
+
+Final verification at implementation commit `0625415`: all **56 tests pass**, none skipped, with `PLAYWRIGHT_CHANNEL=msedge node --experimental-test-module-mocks --test api/test/*.test.mjs`. `git diff --check` passes. Shell version 8 avoids reusing version 7 from the concurrent PWA PR; no unmerged PWA code is included.
