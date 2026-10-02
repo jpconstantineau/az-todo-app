@@ -1,5 +1,5 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=6';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=6';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=7';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=7';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -524,23 +524,6 @@ addEventListener('focus', () => { if (navigator.onLine) void sync(); });
 
 try {
   await session({ allowOffline: true });
-  if ('serviceWorker' in navigator) {
-    $('offlineStatus').textContent = 'Preparing offline reopening… Keep this page open until ready.';
-    navigator.serviceWorker.register('/inbox-sw.js').then(() => navigator.serviceWorker.ready)
-      .then(registration => new Promise((resolve, reject) => {
-        const reply = new MessageChannel();
-        const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
-        reply.port1.onmessage = event => {
-          clearTimeout(timeout); reply.port1.close();
-          if (event.data === 'todo-inbox-shell-v6') resolve(); else reject(new Error('Old shell is still active'));
-        };
-        (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
-      }))
-      .then(() => { $('offlineStatus').textContent = 'Ready to reopen this inbox offline.'; })
-      .catch(() => { $('offlineStatus').textContent = 'Offline reopening is not ready. Save your work on device, close all app tabs, then reopen online to finish the update.'; });
-  } else {
-    $('offlineStatus').textContent = 'This browser cannot reopen the inbox offline. Keep this page open or reconnect to reopen it.';
-  }
 } catch (failure) { error(failure.message); }
 syncing = false;
 if (accountId) void sync();
