@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { documents, faults, startServer } from "./harness.mjs";
 import capture from "./fixtures/v1-operations.json" with { type: "json" };
+import projectCapture from "./fixtures/v1-project.json" with { type: "json" };
 
 async function fixture(t) {
   documents.length = 0;
@@ -26,6 +27,60 @@ const edit = (operationId, id, expectedVersion, fields, action = "update", type 
   mutations: [{ type, id, expectedVersion, action, ...(fields ? { fields } : {}) }]
 });
 const records = () => documents.filter(d => d.kind === "record").map(d => d.record);
+
+test("projects link canonical actions atomically, preserve capture and keep optional relationships independent", async t => {
+  const f = await fixture(t);
+  await f.post(capture);
+  faults.batchIndex = 2;
+  assert.equal((await f.post(projectCapture)).status, 503);
+  assert.equal((await f.get('project', 'breakfast')).status, 404);
+  assert.equal((await f.get('item', 'milk')).body.record.version, 1);
+  const linked = await f.post(projectCapture);
+  assert.equal(linked.status, 200);
+  assert.deepEqual(await f.post(projectCapture), linked);
+  const original = capture.mutations[1].fields;
+  let milk = (await f.get('item', 'milk')).body.record;
+  assert.equal(milk.projectId, 'breakfast'); assert.equal(milk.plannedDay, '2026-10-05');
+  assert.equal(milk.listId, 'groceries'); assert.deepEqual(milk.areas, ['Home']);
+  assert.equal(milk.originalText, original.originalText); assert.equal(milk.sourceUrl, original.sourceUrl);
+  assert.equal((await f.post(edit('project-move', 'milk', 2, { listId: null, status: 'completed' }))).status, 200);
+  milk = (await f.get('item', 'milk')).body.record;
+  assert.equal(milk.projectId, 'breakfast'); assert.equal(milk.plannedDay, '2026-10-05');
+  assert.equal(records().filter(r => r.type === 'item').length, 3);
+  assert.equal(records().filter(r => r.id === 'milk').length, 1);
+  assert.equal((await f.get('item', 'bread')).body.record.projectId, null);
+  assert.equal((await f.get('item', 'bread')).body.record.plannedDay, null);
+  assert.equal((await f.post(edit('rename-project', 'breakfast', 1, { title: 'Monday breakfast', outcome: 'All ready by 8.' }, 'update', 'project'))).status, 200);
+  assert.equal((await f.post(edit('delete-linked-project', 'breakfast', 2, undefined, 'delete', 'project'))).body.error, 'project_not_empty');
+  assert.equal((await f.post(edit('unlink-project', 'milk', 3, { projectId: null, plannedDay: null }))).status, 200);
+  assert.equal((await f.post(edit('delete-empty-project', 'breakfast', 2, undefined, 'delete', 'project'))).status, 200);
+  assert.equal((await f.post(edit('link-deleted-project', 'milk', 4, { projectId: 'breakfast' }))).body.error, 'project_not_found');
+  assert.equal((await f.post(edit('stale-project-edit', 'breakfast', 2, { outcome: 'Stale outcome' }, 'update', 'project'))).body.status, 'conflict');
+  const feed = (await f.request('changes?accountId=alice&after=0&limit=50')).body;
+  assert.ok(feed.entries.some(entry => entry.records.some(r => r.type === 'project')));
+});
+
+test("project boundaries reject foreign, missing and deleted relationships, missing outcomes and invalid calendar days", async t => {
+  const f = await fixture(t);
+  await f.post(capture);
+  const foreign = edit('bob-project', 'private', 0, { title: 'Private', outcome: 'Private outcome' }, 'create', 'project');
+  foreign.accountId = 'bob';
+  assert.equal((await f.post(foreign, { user: 'bob' })).status, 200);
+  assert.equal((await f.get('project', 'private')).status, 404);
+  for (const id of ['private', 'missing']) {
+    assert.equal((await f.post(edit('link-' + id, 'milk', 1, { projectId: id }))).body.error, 'project_not_found');
+  }
+  for (const [i, fields] of [{ title: 'No outcome' }, { title: 'Blank outcome', outcome: ' ' }, { title: 'Owned?', outcome: 'Done', accountId: 'bob' }].entries()) {
+    assert.equal((await f.post(edit('bad-project-' + i, 'bad', 0, fields, 'create', 'project'))).status, 400);
+  }
+  for (const [i, plannedDay] of ['2026-02-29', '2026-04-31', '0000-01-01', '2026-1-01', '2026-10-05T00:00:00Z', '', 123].entries()) {
+    assert.equal((await f.post(edit('bad-day-' + i, 'milk', 1, { plannedDay }))).status, 400);
+  }
+  assert.equal((await f.post(edit('leap-day', 'milk', 1, { plannedDay: '2028-02-29' }))).status, 200);
+  assert.equal((await f.get('item', 'milk')).body.record.plannedDay, '2028-02-29');
+  assert.equal((await f.post(projectCapture)).status, 409, 'stale action prevents partial project creation');
+  assert.equal((await f.get('project', 'breakfast')).status, 404);
+});
 
 test("v1 lost acknowledgements and concurrent duplicate deliveries commit one atomic groceries capture", async t => {
   const f = await fixture(t);
@@ -207,17 +262,20 @@ test("v1 a rejected multi-record edit preserves every proposed draft, even after
   assert.deepEqual((await f.request("receipts?accountId=alice&operationId=mixed-conflict")).body, conflict.body);
 });
 
-test("v1 concurrent list deletion and item capture cannot leave a dangling relationship", async t => {
+test("v1 concurrent parent deletion and item capture cannot leave dangling list or project relationships", async t => {
   const f = await fixture(t);
-  await f.post(edit("empty-list", "empty", 0, { title: "Empty" }, "create", "list"));
-  const results = await Promise.all([
-    f.post(edit("delete-empty", "empty", 1, undefined, "delete", "list")),
-    f.post(edit("capture-race", "new-item", 0, { title: "Arriving item", listId: "empty" }, "create"))
-  ]);
-  assert.equal(results.filter(r => r.status === 200).length, 1);
-  const list = (await f.get("list", "empty")).body.record;
-  const item = await f.get("item", "new-item");
-  assert.equal(list.deleted, item.status === 404);
+  for (const type of ['list', 'project']) {
+    const fields = { title: 'Empty', ...(type === 'project' ? { outcome: 'Ready' } : {}) };
+    await f.post(edit('empty-' + type, 'empty', 0, fields, 'create', type));
+    const results = await Promise.all([
+      f.post(edit('delete-empty-' + type, 'empty', 1, undefined, 'delete', type)),
+      f.post(edit('capture-race-' + type, 'new-' + type, 0, { title: 'Arriving item', [type + 'Id']: 'empty' }, 'create'))
+    ]);
+    assert.equal(results.filter(r => r.status === 200).length, 1);
+    const parent = (await f.get(type, 'empty')).body.record;
+    const item = await f.get('item', 'new-' + type);
+    assert.equal(parent.deleted, item.status === 404);
+  }
 });
 
 test("v1 byte-bounded pages resume without dropping a large entry; oversized resulting records are rejected", async t => {

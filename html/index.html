@@ -7,11 +7,11 @@
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=6"></script>
+  <script type="module" src="/inbox.js?v=7"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
-  <header class="app-header"><div><p class="eyebrow">Your workspace</p><h1>Your workspace</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
+  <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Your workspace</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
   <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
     <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
     <p class="muted">Saved for this browser.</p><button type="button" data-close-preferences>Close preferences</button></dialog>
@@ -50,7 +50,10 @@
       <p class="eyebrow" id="workEyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your Work</h2>
       <p id="workHelp" class="muted">Review items across your account, or narrow by list and status.</p>
       <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
+      <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">All statuses</option></select></label>
+      <button id="newProject" type="button">New project</button>
+      <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
     </section>
     </div>
@@ -60,6 +63,7 @@
       <form id="edit">
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
+        <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
         <label id="editListLabel">List <select name="listId"></select></label>
         <details id="editAdvanced"><summary>Task details</summary><div id="editFields"></div></details>
         <details><summary>Original capture</summary><pre id="original"></pre></details>

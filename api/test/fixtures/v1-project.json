@@ -1,0 +1,9 @@
+{
+  "apiVersion": 1,
+  "accountId": "alice",
+  "operationId": "project-link-1",
+  "mutations": [
+    { "type": "project", "id": "breakfast", "action": "create", "expectedVersion": 0, "fields": { "title": "Family breakfast", "outcome": "Everyone has breakfast ready for Monday." } },
+    { "type": "item", "id": "milk", "action": "update", "expectedVersion": 1, "fields": { "projectId": "breakfast", "plannedDay": "2026-10-05", "areas": ["Home"] } }
+  ]
+}
