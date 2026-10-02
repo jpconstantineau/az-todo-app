@@ -48,7 +48,9 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
     ] })
   });
   assert.equal(response.status, 200, await response.text());
-  await page.locator('#sync').click(); await confirmed(page);
+  await page.locator('#sync').click();
+  // An empty outbox is already "server-confirmed" before the change feed arrives.
+  await page.getByRole('button', { name: 'Complete Next task', exact: true }).waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   assert.equal(await page.locator('#items article').count(), 4);
   assert.equal(await page.getByRole('button', { name: 'Reopen Finished task', exact: true }).count(), 0);
