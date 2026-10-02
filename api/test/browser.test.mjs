@@ -53,6 +53,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await showView(page, 'work'); await page.locator('#statusFilter').selectOption('custom'); assert.equal(await page.locator('#items article').count(), 1);
   await showView(page, 'work'); await page.locator('#statusFilter').selectOption('');
   await context.setOffline(true);
+  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
   await showView(page, 'work'); await page.getByRole('button', { name: 'Complete ' + item.title, exact: true }).click();
   await showView(page, 'work'); await page.getByRole('button', { name: 'Reopen ' + item.title, exact: true }).click();
   await showView(page, 'work'); await page.getByRole('button', { name: 'Edit ' + item.title, exact: true }).click();

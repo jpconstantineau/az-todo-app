@@ -31,6 +31,81 @@ async function capture(page, title, list = '') {
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
 }
 
+test('navigation: incomplete defaults, completed recovery and all statuses work across views and offline reload', { timeout: 90000 }, async t => {
+  const { page, context, url, setUser } = await setup(t, '#work');
+  const response = await fetch(`${url}/api/v1/operations`, {
+    method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
+      { type: 'list', id: 'list', action: 'create', expectedVersion: 0, fields: { title: 'Errands' } },
+      { type: 'project', id: 'project', action: 'create', expectedVersion: 0, fields: { title: 'Launch', outcome: 'Ready to launch' } },
+      ...[
+        ['done', { title: 'Finished task', status: 'completed', listId: 'list', projectId: 'project', plannedDay: '2026-10-02' }],
+        ['next', { title: 'Next task', status: 'next', listId: 'list', projectId: 'project', plannedDay: '2026-10-02' }],
+        ['inbox', { title: 'Inbox task', status: 'inbox' }],
+        ['waiting', { title: 'Waiting task', status: 'waiting', waitingOn: 'Alex', reviewDate: '2026-10-05' }],
+        ['deferred', { title: 'Deferred task', status: 'deferred', startDate: '2026-10-05' }]
+      ].map(([id, fields]) => ({ type: 'item', id, action: 'create', expectedVersion: 0, fields }))
+    ] })
+  });
+  assert.equal(response.status, 200, await response.text());
+  await page.locator('#sync').click(); await confirmed(page);
+  assert.equal(await page.locator('#statusFilter').inputValue(), '');
+  assert.equal(await page.locator('#items article').count(), 4);
+  assert.equal(await page.getByRole('button', { name: 'Reopen Finished task', exact: true }).count(), 0);
+  for (const view of ['project:project', 'day', 'list']) {
+    await page.locator('#view').selectOption(view);
+    if (view === 'day') await page.locator('#day').fill('2026-10-02');
+    assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Next task']);
+    await page.locator('#statusFilter').selectOption('completed');
+    assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Finished task']);
+    await page.locator('#statusFilter').selectOption('@all');
+    assert.equal(await page.locator('#items article').count(), 2);
+    await page.locator('#statusFilter').selectOption('');
+  }
+  await page.locator('#view').selectOption('inbox');
+  assert.equal(await page.locator('#items article').count(), 3);
+  await page.locator('#statusFilter').selectOption('completed');
+  assert.equal(await page.locator('#items article').count(), 0, 'completed filter still respects the inbox');
+  await page.locator('#view').selectOption('project:project');
+  await context.setOffline(true);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('list');
+  assert.equal(await page.locator('#statusFilter').inputValue(), '', 'list view starts incomplete independently');
+  await page.getByRole('button', { name: 'Complete Next task', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await page.locator('#items article').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement.id === 'itemsHeading');
+  assert.match(await page.locator('#items').innerText(), /Choose Completed or All statuses/);
+  await showView(page, 'work');
+  assert.equal(await page.locator('#statusFilter').inputValue(), 'completed');
+  assert.equal(await page.locator('#items article').count(), 2);
+  await page.locator('#statusFilter').selectOption('@all');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.work.status === '@all');
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#statusFilter').inputValue(), '@all');
+  assert.equal(await page.locator('#items article').count(), 2);
+  await showView(page, 'lists');
+  assert.equal(await page.locator('#statusFilter').inputValue(), '');
+  assert.equal(await page.locator('#items article').count(), 0);
+  await page.locator('#statusFilter').selectOption('completed');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.lists.status === 'completed');
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#statusFilter').inputValue(), 'completed');
+  await page.getByRole('button', { name: 'Reopen Next task', exact: true }).click();
+  await page.getByRole('button', { name: 'Reopen Next task', exact: true }).waitFor({ state: 'detached' });
+  await page.locator('#statusFilter').selectOption('');
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Next task']);
+  await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  const records = documents.filter(doc => doc.record?.type === 'item').map(doc => doc.record);
+  assert.equal(records.length, 5, 'filtering and reopening never clone or delete tasks');
+  assert.equal(records.find(record => record.id === 'next').status, 'next');
+  assert.equal(records.find(record => record.id === 'done').status, 'completed');
+  setUser('bob'); await page.reload(); await page.locator('#workspace').waitFor();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await showView(page, 'work');
+  assert.equal(await page.locator('#statusFilter').inputValue(), '');
+  assert.equal(await page.locator('#items article').count(), 0);
+});
+
 test('navigation: new lists open only on request and resume the same draft after online and offline reloads', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t);
   assert.equal(await page.locator('#editor').isVisible(), false);
@@ -138,7 +213,7 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#items article').count(), 1);
-  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('');
+  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
   await showView(page, 'capture');
