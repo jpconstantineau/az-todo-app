@@ -1,7 +1,7 @@
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
-import { listsBlock } from "../shared/templates.mjs";
+import { listsBlock, destinationSelect, listView, defaultOptions } from "../shared/templates.mjs";
 import { customAlphabet } from "nanoid";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { checkCsrf } from "../shared/security.mjs";
@@ -22,6 +22,9 @@ app.http("lists-create", {
     const form = await req.formData();
     const rawTitle = form.get("title");
     const title = clip(rawTitle, 200);
+    if (String(rawTitle || "").trim().length > 200 || String(form.get("description") || "").trim().length > 4000) {
+      return new Response("Title must be at most 200 characters and description at most 4000 characters", { status: 400 });
+    }
     try {
       requireNonEmpty(title, "Title");
     } catch (resp) {
@@ -50,7 +53,7 @@ app.http("lists-create", {
       userId,
       listId,
       title,
-      description: "",
+      description: clip(form.get("description"), 4000),
       createdUtc: now,
       updatedUtc: now,
       areaTags: [],
@@ -75,7 +78,11 @@ app.http("lists-create", {
       )
       .fetchAll();
 
-    return new Response(listsBlock(lists), {
+    const list = lists.find(list => list.id === listId);
+    const html = listsBlock({ lists }) +
+      destinationSelect({ lists, selectedListId: listId, oob: true }) +
+      `<section id="itemsView" hx-swap-oob="innerHTML">${listView({ list: { ...list, description: clip(form.get("description"), 4000) } })}</section>` + defaultOptions(userDefaults);
+    return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }
     });
   }

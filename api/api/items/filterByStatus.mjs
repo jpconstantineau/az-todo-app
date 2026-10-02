@@ -1,18 +1,18 @@
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
-import { itemsList } from "../shared/templates.mjs";
+import { itemsList, esc } from "../shared/templates.mjs";
 
 function loadMoreButton(status, ct) {
   return `
-    <div class="center" style="margin: 12px 0;">
+    <div class="load-more center" style="margin: 12px 0;">
       <button
         class="button"
         hx-get="/api/items/filterByStatus?status=${encodeURIComponent(
           status
         )}&ct=${encodeURIComponent(ct)}"
-        hx-target="#items"
-        hx-swap="beforeend"
+        hx-target="closest .load-more"
+        hx-swap="outerHTML"
         aria-label="Load more items"
       >
         Load more
@@ -52,9 +52,8 @@ app.http("items-filterByStatus", {
 
     const { resources: items, continuationToken } = await iterator.fetchNext();
 
-    const html =
-      itemsList(items) +
-      (continuationToken ? loadMoreButton(status, continuationToken) : "");
+    const rows = itemsList({ items }) + (continuationToken ? loadMoreButton(status, continuationToken) : "");
+    const html = ct ? rows : `<h2>Status: ${esc(status)}</h2><div id="items" class="items-table">${rows}</div>`;
 
     return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }

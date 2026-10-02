@@ -24,7 +24,7 @@ app.http("lists-all", {
       )
       .fetchAll();
 
-    return new Response(listsBlock(lists), {
+    return new Response(listsBlock({ lists }), {
       headers: { "content-type": "text/html; charset=utf-8" }
     });
   }

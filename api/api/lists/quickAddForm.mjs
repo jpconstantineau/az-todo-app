@@ -29,7 +29,8 @@ app.http("lists-quickAddForm", {
 
     const selected = lists.find((l) => l.listId === listId);
 
-    let defaults = selected?.defaults;
+    if (!selected) return new Response("List not found", { status: 404 });
+    let defaults = selected.defaults;
     if (!defaults) {
       const { resources: settingsRes } = await container.items
         .query(

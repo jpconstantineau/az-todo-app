@@ -27,7 +27,7 @@ app.http("settings-edit", {
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const settings = await getSettings(userId);
-    const html = settingsForm(settings);
+    const html = settingsForm({ settings });
     return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }
     });

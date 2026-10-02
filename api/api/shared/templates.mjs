@@ -1,250 +1,106 @@
-// api/shared/templates.mjs
-export function esc(str = "") {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+import { defaultSettings } from "./defaults.mjs";
+
+export function esc(value = "") {
+  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
-
-export function layoutShell({ title = "GTD To‑Do", user, lists = [], selectedList = null, items = [] , content = '' } = {}) {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${title}</title>
-  <link rel="stylesheet" href="/styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
-</head>
-<body>
-  <div class="container">
-    <header class="app-header">
-      <div class="header-left">
-        <h1 class="app-title">${title}</h1>
-      </div>
-      <nav class="header-nav">
-        ${user ? `
-          <span class="nav-user">Signed in</span>
-          <form id="logoutForm" method="post" action="/logout" style="display:inline;">
-            <button class="button text logout" type="submit">Logout</button>
-          </form>
-        ` : `<a class="button text" href="/login">Login</a>`}
-      </nav>
-    </header>
-
-    <div class="app-grid">
-      <aside class="sidebar blade">
-        <div class="panel-title">
-          <span>Lists</span>
-          <button id="showAddListBtn" class="button text">Add</button>
-        </div>
-
-        <!-- HTMX will load the lists fragment here -->
-        <div id="listsContainer"
-             hx-get="/api/lists"
-             hx-trigger="load"
-             hx-swap="innerHTML">
-        </div>
-
-        <!-- Add list form (hidden, toggled client-side) -->
-        <div id="addListPanel" style="display:none; margin-top:8px;">
-          <form id="addListForm" hx-post="/api/lists" hx-target="#listsContainer" hx-swap="innerHTML">
-            <div class="row">
-              <input name="title" placeholder="New list title" required />
-              <button class="button primary" type="submit">Create</button>
-            </div>
-          </form>
-        </div>
-      </aside>
-
-      <main class="main">
-        <header class="row">
-          <h2 id="selectedListTitle" data-selected-id="${selectedList ? escapeHtml(selectedList.id) : ''}">
-            ${selectedList ? escapeHtml(selectedList.title) : 'No list selected'}
-          </h2>
-        </header>
-
-        <div style="margin:8px 0;">
-          <button id="toggleAddItem" class="add-item-toggle" aria-expanded="false">＋ Add New Item</button>
-        </div>
-
-        <!-- Quick add item form uses HTMX to post and replace the items region -->
-        <section id="addItemForm" class="add-item-form" aria-hidden="true">
-          ${quickAddItemForm({ listId: selectedList ? selectedList.id : '' })}
-        </section>
-
-        <!-- Items container: HTMX can load items for the selected list. If a server-selected list exists, trigger load. -->
-        <section id="itemsContainer" class="items-table"
-            ${selectedList ? `hx-get="/api/lists/${encodeURIComponent(selectedList.id)}/items" hx-trigger="load" hx-swap="innerHTML"` : ''}>
-          ${/* When server returns initial items directly it's fine; otherwise HTMX will replace this */ ''}
-          ${items && items.length ? itemsList({ items }) : ''}
-        </section>
-
-        ${content}
-      </main>
-    </div>
-  </div>
-
-  <script>
-  // Toggle add-item form and add-list form visibility
-  (function(){
-    var btn = document.getElementById('toggleAddItem');
-    var form = document.getElementById('addItemForm');
-    var showAddListBtn = document.getElementById('showAddListBtn');
-    var addListPanel = document.getElementById('addListPanel');
-
-    if (btn && form) {
-      btn.addEventListener('click', function(){
-        var open = form.classList.toggle('open');
-        form.setAttribute('aria-hidden', String(!open));
-        btn.setAttribute('aria-expanded', String(open));
-        btn.textContent = open ? '✕ Close' : '＋ Add New Item';
-      });
-    }
-
-    if (showAddListBtn && addListPanel) {
-      showAddListBtn.addEventListener('click', function(){
-        addListPanel.style.display = addListPanel.style.display === 'none' ? 'block' : 'none';
-      });
-    }
-  })();
-  </script>
-</body>
-</html>`;
+const fields = [
+  ["contexts", "Context", "context", "contextSelect"],
+  ["areas", "Area", "area", "areaSelect"],
+  ["energy", "Energy", "energy", "energySelect"],
+  ["timeRequired", "Time required", "timeRequired", "timeReqSelect"],
+  ["priority", "Priority", "priority", "prioritySelect"],
+  ["statuses", "Status", "status", "statusSelect"]
+];
+export function options(values = [], selected = "", optional = true) {
+  return (optional ? `<option value=""${selected === "" ? " selected" : ""}>None</option>` : "") + values.map(value =>
+    `<option value="${esc(value)}"${value === selected ? " selected" : ""}>${esc(value)}</option>`).join("");
 }
-
-// Helper: render lists block (keeps simple markup used by styles.css)
-// Each list item uses HTMX to request its items fragment and target the items container
-export function listsBlock({ lists = [], selectedList = null } = {}) {
-  return `
-  ${lists.map(list => `
-    <div class="list-item${selectedList && list.id === selectedList.id ? ' active' : ''}"
-         data-id="${list.id}"
-         hx-get="/api/lists/${encodeURIComponent(list.id)}/items"
-         hx-target="#itemsContainer"
-         hx-swap="innerHTML"
-         hx-trigger="click">
-      <div class="title">${escapeHtml(list.title)}</div>
-      <div class="muted nowrap">${list.count ?? ''}</div>
-    </div>
-  `).join('')}
-  `;
+function fieldOptions(defaults, key) {
+  return options(key === "statuses" ? [...new Set(["next", ...(defaults[key] || [])])] : defaults[key], key === "statuses" ? "next" : "", key !== "statuses");
 }
-
-// Helper: render items as rows (fragment returned by API endpoints)
+export function defaultOptions(defaults = {}) {
+  return fields.map(([key, , name, id]) => `<select id="${id}" name="${name}" hx-swap-oob="outerHTML">${fieldOptions(defaults, key)}</select>`).join("");
+}
+export function listOptions(lists = [], selectedListId = "") {
+  return '<option value="">Choose a list</option>' + lists.map(list =>
+    `<option value="${esc(list.id)}"${list.id === selectedListId ? " selected" : ""}>${esc(list.title)}</option>`).join("");
+}
+export function destinationSelect({ lists = [], selectedListId = "", oob = false } = {}) {
+  return `<select id="listSelect" name="listId" required hx-get="/api/items/byList" hx-trigger="change" hx-target="#itemsView"${oob ? ' hx-swap-oob="outerHTML"' : ""}>${listOptions(lists, selectedListId)}</select>`;
+}
+// Fragment only: html/index.html owns the document and #app target.
+export function layoutShell({ lists = [], defaults = defaultSettings } = {}) {
+  return `<header class="app-header row"><h1>To-Do</h1><nav class="row" aria-label="Account">
+    <button class="button" hx-get="/api/settings/edit" hx-target="#settingsPanel">Settings</button>
+    <a class="button" href="/.auth/logout">Sign out</a></nav></header>
+    <div class="app-grid"><aside class="sidebar blade"><h2>Lists</h2>
+      <form id="addListForm" hx-post="/api/lists/create" hx-target="#listsContainer" data-reset-fields="title description" hx-disabled-elt="find button">
+        <label>List title<input name="title" required maxlength="200"></label>
+        <label>Description<textarea name="description" maxlength="4000"></textarea></label>
+        <button class="button primary" type="submit">Create list</button>
+      </form><div id="listsContainer" class="lists">${listsBlock({ lists })}</div>
+    </aside><main class="main">
+      <section id="settingsPanel" aria-label="Settings"></section>
+      <section aria-labelledby="quickAddTitle"><h2 id="quickAddTitle">Add an item</h2>
+        <div id="quickAddContainer">${quickAddItemForm({ lists, defaults })}</div>
+      </section>${filterBar({ statuses: defaults.statuses })}
+      <section id="itemsView" aria-live="polite"><h2>Choose a list or a status</h2><p>Your saved items will appear here.</p></section>
+    </main></div>`;
+}
+export function listsBlock({ lists = [] } = {}) {
+  if (!lists.length) return '<p class="muted">No lists yet. Create your first list above.</p>';
+  return lists.map(list => `<button class="list-item button" data-list-id="${esc(list.id)}"
+    hx-get="/api/items/byList?listId=${esc(encodeURIComponent(list.id))}" hx-target="#itemsView">${esc(list.title)}</button>`).join("");
+}
+export function itemRow(item) {
+  const complete = item.status === "completed";
+  return `<article class="item" data-id="${esc(item.id)}">
+    <div class="item-content"><strong>${esc(item.title)}</strong><p class="description">${esc(item.description)}</p>
+      <div class="meta">${esc(item.status)}${item.dueDateUtc ? ` · Due <time datetime="${esc(item.dueDateUtc)}">${esc(item.dueDateUtc)}</time>` : ""}</div>
+      <div class="meta">${[...(item.contexts || []), ...(item.areas || []), item.energy, item.timeRequired, item.priority].filter(Boolean).map(esc).join(" · ")}</div>
+    </div><form hx-post="/api/items/toggleComplete" hx-target="closest article" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="id" value="${esc(item.id)}"><input type="hidden" name="listId" value="${esc(item.listId)}">
+      <button class="button ${complete ? "success" : ""}" type="submit" aria-label="${complete ? "Reopen" : "Complete"} ${esc(item.title)}">${complete ? "Reopen" : "Complete"}</button>
+    </form></article>`;
+}
 export function itemsList({ items = [] } = {}) {
-  if (!items || items.length === 0) {
-    return `<div class="card muted">No items</div>`;
-  }
-
-  return items.map(it => `
-    <article class="item" data-id="${it.id}">
-      <div class="meta">${it.due ? escapeHtml(it.due) : ''} ${it.tag ? '· ' + escapeHtml(it.tag) : ''}</div>
-      <div class="title">${escapeHtml(it.title)}</div>
-      <div class="actions">
-        <form method="post" action="/items/${it.id}/complete" hx-post="/items/${it.id}/complete" hx-target="#itemsContainer" hx-swap="innerHTML" style="display:inline;">
-          <button class="button text" type="submit">Done</button>
-        </form>
-        <form method="post" action="/items/${it.id}/delete" hx-post="/items/${it.id}/delete" hx-target="#itemsContainer" hx-swap="innerHTML" style="display:inline;">
-          <button class="button text" type="submit">Delete</button>
-        </form>
-      </div>
-    </article>
-  `).join('');
+  return items.length ? items.map(itemRow).join("") : '<p class="muted">No items in this view.</p>';
 }
-
-// Quick add item form uses HTMX to post and replace the items region with the updated fragment
-export function quickAddItemForm({ listId = '' } = {}) {
-  return `
-  <form id="quickAdd" class="row" method="post" action="/items"
-        hx-post="/api/items"
-        hx-include="#quickAdd"
-        hx-target="#itemsContainer"
-        hx-swap="innerHTML">
-    <input type="hidden" name="listId" value="${escapeHtml(listId)}" />
-    <div class="field">
-      <input name="title" placeholder="Item title" required />
-    </div>
-    <div class="field">
-      <input name="due" placeholder="Due (optional)" />
-    </div>
-    <div class="field">
-      <input name="tag" placeholder="Tag (optional)" />
-    </div>
-    <div>
-      <button class="button primary" type="submit">Add</button>
-    </div>
-  </form>
-  `;
+export function listView({ list, items = [] }) {
+  return `<h2 id="selectedListTitle" data-list-id="${esc(list.id)}">${esc(list.title)}</h2>
+    <p class="description">${esc(list.description)}</p>
+    <button class="button" hx-get="/api/lists/editDefaults?listId=${esc(encodeURIComponent(list.id))}" hx-target="#settingsPanel">List defaults</button>
+    <div id="items" class="items-table">${itemsList({ items })}</div>`;
 }
-
-// Add: filterBar helper (exported so callers expecting it will work)
-// Keep implementation minimal; adjust markup/styles as needed.
-export function filterBar({ filters = [] } = {}) {
-  if (!filters || filters.length === 0) {
-    return '';
-  }
-  return `
-    <div class="filter-bar row" role="toolbar" aria-label="Filters">
-      ${filters.map(f => `
-        <button class="button text chip" data-filter="${escapeHtml(f.name)}">${escapeHtml(f.label || f.name)}</button>
-      `).join('')}
-    </div>
-  `;
+export function quickAddItemForm({ lists = [], defaults = defaultSettings, selectedListId = "" } = {}) {
+  return `<form id="quickAdd" hx-post="/api/items/create" hx-target="#itemsView" data-reset-fields="title description dueLocal" hx-disabled-elt="#quickAdd button">
+    <div class="row"><label class="field">Destination list${destinationSelect({ lists, selectedListId })}</label>
+    <label class="field">Title<input name="title" required maxlength="200"></label></div>
+    <label>Description<textarea name="description" maxlength="4000"></textarea></label>
+    <div class="row"><label class="field">Due (your local time)<input type="datetime-local" name="dueLocal"></label>
+    ${fields.map(([key, label, name, id]) => `<label class="field">${label}<select id="${id}" name="${name}">${fieldOptions(defaults, key)}</select></label>`).join("")}</div>
+    <button class="button primary" type="submit">Add item</button>
+  </form>`;
 }
-
-// Minimal list settings form helper (exported to satisfy imports)
-// Adjust fields/route as your API expects.
-export function listSettingsForm({ list = {} } = {}) {
-  return `
-    <form id="listSettings" class="card" method="post"
-          action="/api/lists/${encodeURIComponent(list.id || '')}/settings"
-          hx-post="/api/lists/${encodeURIComponent(list.id || '')}/settings"
-          hx-swap="outerHTML"
-          >
-      <div class="row">
-        <div class="field">
-          <label>Title</label>
-          <input name="title" value="${escapeHtml(list.title || '')}" required />
-        </div>
-        <div class="field">
-          <label>Description</label>
-          <input name="description" value="${escapeHtml(list.description || '')}" />
-        </div>
-        <div>
-          <button class="button primary" type="submit">Save</button>
-        </div>
-      </div>
-    </form>
-  `;
+export function filterBar({ statuses = defaultSettings.statuses } = {}) {
+  return `<form class="row filter-bar" hx-get="/api/items/filterByStatus" hx-target="#itemsView"><label>Across all lists
+    <select id="statusFilterSelect" name="status">${options([...new Set(["next", ...statuses])], "next", false)}</select></label><button class="button" type="submit">Filter by status</button></form>`;
 }
-
-// Add: settingsForm helper (minimal implementation to satisfy imports)
-export function settingsForm({ settings = {} } = {}) {
-  return `
-    <form id="appSettings" class="card" method="post"
-          action="/api/settings"
-          hx-post="/api/settings"
-          hx-swap="outerHTML">
-      <div class="row">
-        <div class="field">
-          <label>Default List</label>
-          <input name="defaultList" value="${escapeHtml(settings.defaultList || '')}" />
-        </div>
-        <div class="field">
-          <label>Theme</label>
-          <select name="theme">
-            <option value="" ${!settings.theme ? 'selected' : ''}>Default</option>
-            <option value="light" ${settings.theme === 'light' ? 'selected' : ''}>Light</option>
-            <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
-          </select>
-        </div>
-        <div>
-          <button class="button primary" type="submit">Save</button>
-        </div>
-      </div>
-    </form>
-  `;
+function defaultsFields(defaults) {
+  return '<p>Enter one option per line. Empty fields remove all options for that field.</p>' + fields.map(([key, label]) =>
+    `<label>${label} options<textarea name="${key}[]" rows="3">${esc((defaults[key] || []).join("\n"))}</textarea></label>`).join("");
 }
-
+export function listSettingsForm({ list = {}, effectiveDefaults = defaultSettings } = {}) {
+  return `<section class="card"><h2>Defaults for ${esc(list.title)}</h2>
+    <form hx-post="/api/lists/updateDefaults" hx-target="#settingsPanel" hx-disabled-elt="find button"><input type="hidden" name="listId" value="${esc(list.id)}">
+      ${defaultsFields(effectiveDefaults)}<button class="button primary" type="submit">Save list defaults</button></form>
+    <form hx-post="/api/lists/resetDefaults" hx-target="#settingsPanel" hx-disabled-elt="find button"><input type="hidden" name="listId" value="${esc(list.id)}"><button class="button" type="submit">Copy user defaults</button></form>
+    <button class="button" type="button" data-close-settings>Close settings</button></section>`;
+}
+export function settingsForm({ settings } = {}) {
+  return `<section class="card"><h2>User defaults</h2>
+    <form hx-post="/api/settings/update" hx-target="#settingsPanel" hx-disabled-elt="find button">${defaultsFields(settings?.defaults || defaultSettings)}<button class="button primary" type="submit">Save user defaults</button></form>
+    <form hx-post="/api/settings/reset" hx-target="#settingsPanel" hx-disabled-elt="find button"><button class="button" type="submit">Reset user defaults</button></form>
+    <button class="button" type="button" data-close-settings>Close settings</button></section>`;
+}

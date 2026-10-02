@@ -1,0 +1,141 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
+import { documents, faults, startServer } from "./harness.mjs";
+
+test("browser: real HTMX swaps, drafts on errors, settings, dates and mobile width", { timeout: 120000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: true });
+  t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
+  console.log(`Launched browser ${browser.version()}`);
+  t.after(() => browser.close());
+  const context = await browser.newContext({ timezoneId: "America/Regina" });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("https://cdn.jsdelivr.net/npm/htmx.org@1.9.12", route => route.fulfill({
+    contentType: "text/javascript", path: fileURLToPath(new URL("../node_modules/htmx.org/dist/htmx.min.js", import.meta.url))
+  }));
+  async function settled() {
+    await page.waitForFunction(() => !document.querySelector(".htmx-request, .htmx-settling") && document.getElementById("requestStatus").textContent === "");
+  }
+  async function submit(button, path) {
+    const response = page.waitForResponse(r => new URL(r.url()).pathname === `/api/${path}`);
+    await button.click();
+    const result = await response;
+    console.log(`${path}: ${result.status()}`);
+    await settled();
+    return result.status();
+  }
+  await page.goto(server.url);
+  await page.locator("#quickAdd").waitFor();
+  await settled();
+  await page.locator('#addListForm [name="title"]').fill('Groceries <script>alert("x")</script>');
+  await page.locator('#addListForm [name="description"]').fill("For the weekend & guests");
+  assert.equal(await submit(page.getByRole("button", { name: "Create list", exact: true }), "lists/create"), 200);
+  await page.waitForFunction(() => document.getElementById("selectedListTitle")?.textContent.startsWith("Groceries"));
+  const listId = await page.locator("#listSelect").inputValue();
+  assert.ok(listId);
+  assert.equal(await page.locator("#statusSelect").inputValue(), "next");
+  for (const id of ["contextSelect", "areaSelect", "energySelect", "timeReqSelect", "prioritySelect"]) assert.equal(await page.locator(`#${id}`).inputValue(), "");
+  await page.locator('#addListForm [name="title"]').fill("Other list");
+  assert.equal(await submit(page.getByRole("button", { name: "Create list", exact: true }), "lists/create"), 200);
+  assert.notEqual(await page.locator("#listSelect").inputValue(), listId);
+  await page.locator('#quickAdd [name="title"]').fill("Draft while choosing destination");
+  const selectedList = page.waitForResponse(r => new URL(r.url()).pathname === "/api/items/byList");
+  await page.locator("#listSelect").selectOption(listId);
+  await selectedList;
+  await settled();
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Draft while choosing destination");
+  await page.locator('#quickAdd [name="title"]').fill('Milk <img src=x onerror="alert(1)">');
+  await page.locator('#quickAdd [name="description"]').fill("Bread & eggs\nSecond line");
+  await page.locator('[name="dueLocal"]').fill("2026-10-03T12:30");
+  await page.locator("#contextSelect").selectOption("@Errands");
+  await page.locator("#statusSelect").selectOption("waiting");
+  assert.equal(await submit(page.getByRole("button", { name: "Add item", exact: true }), "items/create"), 200);
+  await page.locator("article.item").waitFor();
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "");
+  assert.equal(await page.locator("article img").count(), 0);
+  assert.equal(await page.locator("time").getAttribute("datetime"), "2026-10-03T18:30:00.000Z");
+  assert.equal(documents.find(d => d.ObjectType === "item").contexts[0], "@Errands");
+  await page.reload();
+  await page.locator("#quickAdd").waitFor();
+  await settled();
+  assert.equal(await submit(page.locator(`#listsContainer [data-list-id="${listId}"]`), "items/byList"), 200);
+  assert.match(await page.locator("article").innerText(), /Bread & eggs/);
+  assert.equal(await page.locator("#listSelect").inputValue(), listId);
+  assert.equal(await submit(page.getByRole("button", { name: /^Complete / }), "items/toggleComplete"), 200);
+  assert.equal(await page.getByRole("button", { name: /^Reopen / }).count(), 1);
+  assert.equal(await submit(page.getByRole("button", { name: /^Reopen / }), "items/toggleComplete"), 200);
+  assert.match(await page.locator("article").innerText(), /waiting/);
+
+  // The form stays outside the swap targets through list selection and errors.
+  await page.locator('#quickAdd [name="title"]').fill("Keep my draft");
+  await page.locator('#quickAdd [name="description"]').fill("Do not lose this text");
+  assert.equal(await submit(page.locator(`#listsContainer [data-list-id="${listId}"]`), "items/byList"), 200);
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
+  faults.nextWrite = true;
+  assert.equal(await submit(page.getByRole("button", { name: "Add item", exact: true }), "items/create"), 500);
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
+  assert.match(await page.locator("#requestError").innerText(), /could not finish/);
+  await page.locator('#quickAdd [name="title"]').fill("   ");
+  assert.equal(await submit(page.getByRole("button", { name: "Add item", exact: true }), "items/create"), 400);
+  assert.equal(await page.locator('#quickAdd [name="description"]').inputValue(), "Do not lose this text");
+  assert.match(await page.locator("#requestError").innerText(), /required/);
+  await page.locator('#quickAdd [name="title"]').fill("Keep my draft");
+  await page.route("**/api/items/create", route => route.abort());
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
+  await page.waitForFunction(() => document.getElementById("requestError").textContent.includes("Could not reach"));
+  await settled();
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
+  await page.unroute("**/api/items/create");
+  await page.route("**/api/items/create", route => route.fulfill({ status: 401, body: "Unauthorized" }));
+  assert.equal(await submit(page.getByRole("button", { name: "Add item", exact: true }), "items/create"), 401);
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
+  await page.unroute("**/api/items/create");
+
+  assert.equal(await submit(page.getByRole("button", { name: "Settings", exact: true }), "settings/edit"), 200);
+  await page.locator('#settingsPanel [name="contexts[]"]').fill("@Shop\n@Kitchen");
+  assert.equal(await submit(page.getByRole("button", { name: "Save user defaults" }), "settings/update"), 200);
+  await page.getByRole("button", { name: "Close settings" }).click();
+  assert.equal(await submit(page.getByRole("button", { name: "List defaults", exact: true }), "lists/editDefaults"), 200);
+  assert.equal(await submit(page.getByRole("button", { name: "Copy user defaults" }), "lists/resetDefaults"), 200);
+  await page.waitForFunction(() => document.querySelector('#contextSelect option[value="@Kitchen"]'));
+  await page.locator('#settingsPanel [name="contexts[]"]').fill("@Only");
+  assert.equal(await submit(page.getByRole("button", { name: "Save list defaults" }), "lists/updateDefaults"), 200);
+  await page.waitForFunction(() => document.querySelector('#contextSelect option[value="@Only"]'));
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "Keep my draft");
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await page.locator("#statusFilterSelect").selectOption("waiting");
+  assert.equal(await submit(page.getByRole("button", { name: "Filter by status" }), "items/filterByStatus"), 200);
+  assert.equal(await page.locator("article").count(), 1);
+  // Text entered while a successful request is in flight belongs to the next draft.
+  let releaseSave;
+  const saveGate = new Promise(resolve => { releaseSave = resolve; });
+  await page.route("**/api/items/create", async route => { await saveGate; await route.continue(); });
+  const saving = page.waitForRequest("**/api/items/create");
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
+  await saving;
+  assert.equal(await page.getByRole("button", { name: "Add item", exact: true }).isDisabled(), true);
+  assert.equal(await page.locator("#requestStatus").innerText(), "Loading…");
+  await page.locator('#quickAdd [name="title"]').fill("My next draft");
+  const saved = page.waitForResponse("**/api/items/create");
+  releaseSave();
+  await saved;
+  await settled();
+  assert.equal(await page.locator('#quickAdd [name="title"]').inputValue(), "My next draft");
+  await page.unroute("**/api/items/create");
+  assert.equal(await page.locator("html").count(), 1);
+  const duplicateIds = await page.evaluate(() => {
+    const ids = [...document.querySelectorAll("[id]")].map(el => el.id);
+    return ids.filter((id, i) => ids.indexOf(id) !== i);
+  });
+  assert.deepEqual(duplicateIds, []);
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  if (process.env.TEST_SCREENSHOT) await page.screenshot({ path: process.env.TEST_SCREENSHOT, fullPage: true });
+  assert.deepEqual(errors, []);
+  console.log(`Verified browser: ${browser.version()}; timezone: America/Regina; desktop and 390px viewport`);
+});

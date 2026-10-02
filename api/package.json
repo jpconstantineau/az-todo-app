@@ -3,6 +3,10 @@
   "version": "0.1.1",
   "type": "module",
   "main": "api/index.mjs",
+  "scripts": {
+    "test": "node --experimental-test-module-mocks --test test/*.test.mjs",
+    "test:contracts": "node --experimental-test-module-mocks --test test/contracts.test.mjs"
+  },
   "engines": {
     "node": ">=18"
   },
@@ -10,5 +14,9 @@
     "@azure/cosmos": "^4.2.0",
     "@azure/functions": "^4.5.0",
     "nanoid": "^5.0.7"
+  },
+  "devDependencies": {
+    "htmx.org": "1.9.12",
+    "playwright": "^1.63.0"
   }
 }

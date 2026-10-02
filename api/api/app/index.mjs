@@ -1,13 +1,7 @@
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
-import {
-  layoutShell,
-  listsBlock,
-  filterBar,
-  itemsList,
-  quickAddItemForm
-} from "../shared/templates.mjs";
+import { layoutShell } from "../shared/templates.mjs";
 
 async function getSettings(userId) {
   const { resources } = await container.items
@@ -77,37 +71,7 @@ app.http("app-index", {
       )
       .fetchAll();
 
-    // Default items view: Next actions across lists, order by due
-    const { resources: items } = await container.items
-      .query(
-        {
-          query:
-            "SELECT * FROM c WHERE c.UserID=@u AND c.ObjectType='item' " +
-            "AND c.status='next' ORDER BY c.dueDateUtc ASC",
-          parameters: [{ name: "@u", value: userId }]
-        },
-        { enableCrossPartition: true }
-      )
-      .fetchAll();
-
-    const listsHtml = listsBlock(lists);
-    const filterBarHtml = `
-      ${filterBar({ statuses: settings.defaults.statuses })}
-      <div class="divider"></div>
-      ${quickAddItemForm({
-        lists,
-        defaults: settings.defaults,
-        selectedListId: lists[0]?.listId || ""
-      })}
-    `;
-    const itemsHtml = itemsList(items);
-
-    const html = layoutShell({
-      user: userId,
-      listsHtml,
-      filterBarHtml,
-      itemsHtml
-    });
+    const html = layoutShell({ lists, defaults: settings.defaults });
 
     return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }
