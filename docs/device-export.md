@@ -19,7 +19,9 @@ are retained. Additional metadata records `exportedAt`, `scope: "device"` and
 
 - `state.records` retains canonical IDs, account IDs, versions, exact originals,
   source/selection/link data, list/project relationships, outcomes, dates,
-  statuses, defaults and deletion markers. No field is projected away or trimmed.
+  statuses, defaults and deletion markers. Workflow calendar dates and the prior
+  transition/completion metadata used by undo are retained. No field is projected
+  away or trimmed.
 - `state.queue` retains exact operation IDs, expected versions, proposed fields,
   failures and conflict receipts, including competing server versions. A failed
   pending edit never replaces the confirmed record in the exported snapshot.
@@ -76,14 +78,14 @@ field reporting, overwrite refusal, two-account isolation, offline reload, lates
 cross-tab state, and storage-read failure with recovery of current form text.
 The existing responsive and shell-upgrade tests cover the added native selector
 and cached export module. No database or IndexedDB schema migration is needed.
-After integrating PR #32 from main, local verification on October 2, 2026 passed
-all 66 tests with Node 26.7.0 and Playwright Chromium on Windows (`npm test`).
-The combined PWA and export shell uses v8; upgrade checks cover v3 through v7.
+After integrating PRs #32 and #33 from main, local verification on October 2, 2026
+passed all 72 tests with Node 26.7.0 and Playwright Chromium on Windows (`npm test`).
+The combined workflow, PWA and export shell uses v9; upgrade checks cover v3–v8.
 Export tests use the shared asynchronous browser-state wait helper from main.
 Real-device download UX and deployed Azure data behavior are unverified.
 
-This delivers the independently implementable export portion of #13. Workflow
-progress and accepted brief revisions are not implemented yet; future fields are
+This delivers the independently implementable export portion of #13. Clarification
+and review progress and accepted brief revisions are not implemented yet; future fields are
 retained and reported, not certified as supported workflows. Full server export,
 undo/retention, live restore, account erasure and backup purge remain open under
 #13 and its dependencies. There is no new deletion or resurrection path here.

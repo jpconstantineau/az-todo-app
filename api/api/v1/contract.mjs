@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { ValidationError, text, cleanTag, utcDate } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
+import { calendarDate } from "./workflow.mjs";
 
 export const MAX_BODY_BYTES = 65536;
 export const MAX_RECORD_BYTES = 32768;
@@ -52,7 +53,7 @@ export function fieldsFor(type, action, input) {
   }
   const shared = ["title", "description"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText"];
-  const itemFields = ["listId", "projectId", "plannedDay", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
+  const itemFields = ["listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome"] : ["defaults"])];
   object(input, allowed, "fields");
   const result = {};
@@ -68,17 +69,12 @@ export function fieldsFor(type, action, input) {
       result[key] = exactText(value, ({ originalText: 16000, selectedText: 8000, sourceTitle: 2000 })[key] || 4000, key);
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
     else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
-    else if (key === "plannedDay") {
-      if (value !== null && (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-          value.startsWith("0000") || Number.isNaN(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value)) {
-        throw new ValidationError("plannedDay must be a valid YYYY-MM-DD calendar date or null.");
-      }
-      result[key] = value;
-    }
+    else if (key === "plannedDay") result[key] = calendarDate(value, key);
     else if (key === "status") {
       result[key] = cleanTag(exactText(value, 64, key), key);
       if (!result[key]) throw new ValidationError("status is required.");
-    } else if (key.endsWith("DateUtc")) {
+    } else if (["dueDate", "startDate", "reviewDate"].includes(key)) result[key] = calendarDate(value, key);
+    else if (key.endsWith("DateUtc")) {
       if (value !== null && (typeof value !== "string" || !value)) throw new ValidationError(`${key} must be a UTC date or null.`);
       result[key] = value === null ? null : utcDate(value);
     } else if (["contexts", "areas", "referenceLinks"].includes(key)) {

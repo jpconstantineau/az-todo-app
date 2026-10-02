@@ -50,7 +50,7 @@ hosting or prove deployed headers.
 
 ## Safe shell updates
 
-Shell v7 caches only the public root/index/bookmark shell, local scripts/styles,
+Shell v9 caches only the public root/index/bookmark shell, local scripts/styles,
 manifest and icons. It never caches API/auth responses, task data or arbitrary
 navigation URLs. Root/index navigation query parameters map to the public shell
 offline without storing query-bearing copies.
@@ -80,6 +80,8 @@ records. Revision: the implementation commit introducing this document's install
 flow, based on main `84f49c6`; the PR records the exact tested commit.
 PR #31 merged during implementation; its project/day views are retained, and the
 PWA shell advances from its v6 to v7 to avoid reusing cached module URLs.
+The workflow integration in PR #33 advances the combined shell to v8 and retains
+the installation flow and upgrade coverage through v7.
 This is software verification, not installed-device certification.
 
 From `api/`, run `npm ci`, `npx playwright install chromium`, then `npm test`.

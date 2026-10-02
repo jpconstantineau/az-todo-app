@@ -1,6 +1,6 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=8';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=8';
-import { deviceExport, readableExport } from './inbox-export.js?v=8';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=9';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=9';
+import { deviceExport, readableExport } from './inbox-export.js?v=9';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -91,8 +91,8 @@ function render() {
   options(edit.elements.projectId, projects, [['', 'No project']], true);
   options($('view'), [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))], [['all', 'All items'], ['inbox', 'Inbox (no list)'], ['day', 'Planned day']]);
   refreshOptions();
-  const statuses = [...new Set(['inbox', 'next', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
-  options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses']]);
+  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
+  options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses'], ['@review-ready', 'Ready for review']]);
   $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
   $('lists').replaceChildren(...lists.flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
   const view = $('view').value;
@@ -102,7 +102,7 @@ function render() {
   $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
   $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`)] : []));
   $('items').replaceChildren(...records.filter(record => {
-    if (record.type !== 'item' || ($('statusFilter').value && record.status !== $('statusFilter').value)) return false;
+    if (record.type !== 'item' || ($('statusFilter').value && ($('statusFilter').value === '@review-ready' ? !reviewReady(record) : record.status !== $('statusFilter').value))) return false;
     if (view === 'all') return true;
     if (view === 'inbox') return !record.listId;
     if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
@@ -117,12 +117,17 @@ function render() {
     if (record.projectId) metadata.append(` · Project: ${projects.find(project => project.id === record.projectId)?.title || 'Unavailable project'}`);
     if (record.plannedDay) metadata.append(` · Planned: ${record.plannedDay}`);
     if (record.dueDateUtc) { const time = document.createElement('time'); time.dateTime = record.dueDateUtc; time.textContent = ` Due ${new Date(record.dueDateUtc).toLocaleString()}`; metadata.append(time); }
+    for (const [name, label] of [['dueDate', 'Deadline'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on']]) {
+      if (record[name]) metadata.append(` · ${label}: ${name.endsWith('Utc') ? new Date(record[name]).toLocaleString() : record[name]}`);
+    }
+    if (reviewReady(record)) metadata.append(' · Ready for review — choose Next or set a new date');
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
     status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
     const actions = document.createElement('div'); actions.className = 'actions';
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`),
       button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`));
+    if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`));
     article.append(title, notes, metadata, status, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';
@@ -131,7 +136,7 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
@@ -172,6 +177,10 @@ async function updateRecord(record, fields, close = false) {
   if (fields.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Title must be 1–200 characters.');
   if ((fields.description?.length ?? 0) > 4000) throw new Error('Notes must be at most 4,000 characters.');
   if (fields.outcome !== undefined && (!fields.outcome.trim() || fields.outcome.length > 4000)) throw new Error('Describe the desired outcome in 1–4,000 characters.');
+  if (record.type === 'item') {
+    const old = projected(state)[key(record)];
+    validateWorkflow({ ...old, ...fields }, old, fields);
+  }
   try {
     const saved = await transact(owner, local => {
       const current = projected(local)[key(record)];
@@ -228,10 +237,10 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { listId: values.listId || null, ...taskFields(values) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
+      ...(editing.type === 'item' ? { listId: values.listId || null, ...taskFields(values, editing.initialFields) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.initialFields) {
-      const initial = { ...editing.initialFields, ...taskFields(editing.initialFields), listId: editing.initialFields.listId || null };
+      const initial = { ...editing.initialFields, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { saving = false; $('editor').close(); return; }
     }
@@ -477,7 +486,7 @@ async function sync() {
     if (continueSync) retryTimer = setTimeout(() => { void sync(); }, retryDelay);
   }
 }
-$('sync').onclick = () => { void sync(); };
+$('sync').onclick = () => { render(); void sync(); };
 $('resolve').onclick = guard(async () => {
   const owner = accountId, id = state.queue[0].operation.operationId;
   const reviewed = structuredClone(state.records);
@@ -527,9 +536,10 @@ channel.onmessage = guard(async () => {
 addEventListener('online', () => { void sync(); });
 addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; });
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) render();
   if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
 });
-addEventListener('focus', () => { if (navigator.onLine) void sync(); });
+addEventListener('focus', () => { render(); if (navigator.onLine) void sync(); });
 
 try {
   await session({ allowOffline: true });

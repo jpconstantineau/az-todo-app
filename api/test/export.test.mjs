@@ -12,7 +12,9 @@ function fixture() {
   const item = { ...base, type: 'item', id: 'milk', title: 'Milk', originalText: '  milk\n', description: 'Two cartons',
     sourceUrl: 'https://example.com/milk', selectedText: 'original selection', referenceLinks: ['https://example.com'],
     listId: 'groceries', projectId: 'dinner', plannedDay: '2026-10-03', dueDateUtc: '2026-10-04T03:00:00.000Z',
-    status: 'waiting', waitingOn: 'Sam', reviewDateUtc: '2026-10-03T03:00:00.000Z', areas: ['Home'] };
+    status: 'waiting', waitingOn: 'Sam', reviewDate: '2026-10-03', startDate: '2026-10-04', areas: ['Home'],
+    workflowBeforeTransition: { status: 'next', waitingOn: '', startDate: null, startDateUtc: null, reviewDate: null, reviewDateUtc: null },
+    completionBeforeTransition: 'next' };
   const records = [item, { ...base, type: 'list', id: 'groceries', title: 'Groceries' },
     { ...base, type: 'project', id: 'dinner', title: 'Dinner', outcome: 'Everyone fed' },
     { ...base, type: 'settings', id: 'settings', defaults: { contexts: ['Home'] } },
