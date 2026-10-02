@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { taskFields, reviewReady } from '../../html/inbox-fields.js';
@@ -53,6 +54,7 @@ test('workflow API: atomic validation, waiting/deferred, completion, undo and st
   stored.status = 'historic'; stored.startDateUtc = 'old date text';
   assert.equal((await save({ description: 'Keep legacy fields' })).status, 200);
   assert.equal(record.status, 'historic'); assert.equal(record.startDateUtc, 'old date text');
+  assert.equal((await save({ status: 'deferred' })).status, 400, 'a required inherited cue must be valid');
   await save({ status: 'completed' }); await save({ status: record.statusBeforeCompletion });
   assert.equal(record.status, 'historic'); assert.equal(record.nextAction, false);
 });
@@ -117,6 +119,16 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.locator('#edit [name=waitingOn]').fill('Alex');
   await page.locator('#edit [name=reviewDate]').fill('2020-01-01');
   await page.locator('#edit [name=dueDate]').fill('2026-11-01');
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.locator('#edit [name=status]').evaluate(input => input.parentElement.scrollIntoView({ block: 'start' }));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'workflow controls fit the viewport');
+    if (process.env.WORKFLOW_SCREENSHOTS) {
+      await mkdir(process.env.WORKFLOW_SCREENSHOTS, { recursive: true });
+      await page.screenshot({ path: `${process.env.WORKFLOW_SCREENSHOTS}/workflow-${width}.png` });
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Complete Get approval', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen Get approval', exact: true }).click();

@@ -6,6 +6,8 @@ export function validateWorkflow(record, old, fields = record) {
   if (!old || workflowFields.some(key => key in fields && (fields[key] ?? null) !== (old[key] ?? null))) {
     if (record.status === 'waiting' && (!record.waitingOn?.trim() || !(record.reviewDate || record.reviewDateUtc))) throw new Error('Waiting needs who/what you are waiting for and a review date.');
     if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) throw new Error('Deferred needs a start date; it becomes ready for review on that date.');
+    const prefix = record.status === 'waiting' ? 'review' : record.status === 'deferred' ? 'start' : null;
+    if (prefix) taskFields({ [`${prefix}Date`]: record[`${prefix}Date`], [`${prefix}DateUtc`]: record[`${prefix}DateUtc`] });
   }
   for (const name of ['due', 'start', 'review']) {
     if ((!old || `${name}Date` in fields || `${name}DateUtc` in fields) && record[`${name}Date`] && record[`${name}DateUtc`]) throw new Error(`Choose a calendar ${name} date or a timed ${name} date, not both.`);
@@ -86,6 +88,9 @@ export function addTaskControls(container) {
     if (['contexts', 'areas'].includes(name)) { input.multiple = true; input.size = 3; }
     label.append(input); container.append(label);
   }
+  const help = document.createElement('p'); help.className = 'muted';
+  help.textContent = 'Choose a calendar date or a timed value for each purpose. Waiting needs a dependency and review date. Deferred work appears in Ready for review from its start date on your next refresh; choose Next when ready. Neither changes your deadline or planned day.';
+  container.append(help);
 }
 export function refreshTaskOptions(form, defaults) {
   for (const name of ['status', ...Object.keys(optionFields).filter(name => name !== 'statuses')]) {

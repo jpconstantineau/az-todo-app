@@ -11,6 +11,11 @@ a prerequisite for this empty-database release.
 
 ## Partition decision (issue #27)
 
+The additive [workflow contract](workflow-states.md) defines waiting/deferred
+validation, calendar versus timed dates, and derived undo metadata. Existing
+receipts remain repeat-safe; unacknowledged incomplete workflow transitions are
+rejected with recoverable field feedback. Deploy that API before shell v7.
+
 **Decision: retain the working account transaction boundary.** The physical
 hierarchical paths remain `[/UserID, /ObjectType, /ObjectID]`; their v1 values are
 `[accountId, "sync", "v1"]`. The last two field names are inherited partition

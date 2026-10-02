@@ -1,10 +1,10 @@
-import { ValidationError } from '../shared/validate.mjs';
+import { ValidationError, utcDate } from '../shared/validate.mjs';
 
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
 export function calendarDate(value, field) {
   if (value === null) return null;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
+      value.startsWith('0000') || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
     throw new ValidationError(`${field} must be a valid YYYY-MM-DD calendar date or null.`);
   }
   return value;
@@ -21,6 +21,9 @@ export function applyWorkflow(record, old, fields = {}) {
     if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) {
       throw new ValidationError('Deferred needs a start date; it becomes ready for review on that date.');
     }
+    const prefix = record.status === 'waiting' ? 'review' : record.status === 'deferred' ? 'start' : null;
+    if (prefix && record[`${prefix}Date`]) calendarDate(record[`${prefix}Date`], `${prefix}Date`);
+    if (prefix && record[`${prefix}DateUtc`]) utcDate(record[`${prefix}DateUtc`]);
   }
   for (const name of ['due', 'start', 'review']) {
     if ((!old || `${name}Date` in fields || `${name}DateUtc` in fields) && record[`${name}Date`] && record[`${name}DateUtc`]) {

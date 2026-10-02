@@ -24,6 +24,8 @@ async function setup(t, options = {}) {
   await page.goto(`${server.url}/inbox.html`);
   await page.locator('#workspace').waitFor();
   await confirmed(page);
+  // Offline checks import uncached module URLs too; wait for shell activation/cache completion.
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   return { ...server, browser, context, page, setUser(value) { user = value; } };
 }
 async function confirmed(page) {

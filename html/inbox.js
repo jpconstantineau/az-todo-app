@@ -477,7 +477,7 @@ async function sync() {
     if (continueSync) retryTimer = setTimeout(() => { void sync(); }, retryDelay);
   }
 }
-$('sync').onclick = () => { void sync(); };
+$('sync').onclick = () => { render(); void sync(); };
 $('resolve').onclick = guard(async () => {
   const owner = accountId, id = state.queue[0].operation.operationId;
   const reviewed = structuredClone(state.records);
@@ -527,9 +527,10 @@ channel.onmessage = guard(async () => {
 addEventListener('online', () => { void sync(); });
 addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; });
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) render();
   if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
 });
-addEventListener('focus', () => { if (navigator.onLine) void sync(); });
+addEventListener('focus', () => { render(); if (navigator.onLine) void sync(); });
 
 try {
   await session({ allowOffline: true });
