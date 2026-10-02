@@ -1,8 +1,8 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=14';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=14';
-import { deviceExport, readableExport } from './inbox-export.js?v=14';
-import { clarificationUI } from './clarification.js?v=14';
-import { setupReviews } from './reviews.js?v=14';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=15';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=15';
+import { deviceExport, readableExport } from './inbox-export.js?v=15';
+import { clarificationUI } from './clarification.js?v=15';
+import { setupReviews } from './reviews.js?v=15';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -119,7 +119,8 @@ function restoreDraft() {
   Object.assign(navigation.lists, saved.navigation?.lists || {});
   $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
   workspace(false);
-  if (saved.edit) openEditor(saved.edit, false);
+  // Keep unfinished list creation available through New list without opening it on arrival.
+  if (saved.edit) openEditor(saved.edit, false, !(saved.edit.type === 'list' && saved.edit.version === 0));
   else $('editor').close();
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
   refreshOptions(); render();
@@ -209,9 +210,9 @@ function render() {
   reviews.render();
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
-function openEditor(record, focus = true) {
+function openEditor(record, focus = true, show = true) {
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
-    showDialog($('editor'));
+    if (show) showDialog($('editor'));
     if (focus) edit.elements.title.focus();
     return;
   }
@@ -232,7 +233,7 @@ function openEditor(record, focus = true) {
   $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
   $('editError').hidden = true;
-  showDialog($('editor'));
+  if (show) showDialog($('editor'));
   if (focus) { edit.elements.title.focus(); void journal(); }
 }
 
@@ -391,7 +392,8 @@ $('view').onchange = $('day').onchange = $('statusFilter').onchange = () => {
   navigation[destination === 'lists' ? 'lists' : 'work'] = { view: $('view').value, status: $('statusFilter').value };
   render(); void journal();
 };
-$('newList').onclick = () => openEditor({ type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
+$('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
+  ? editing : { type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
 $('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '' });
 function openDefaults(record, focus = true, show = true) {
   if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
