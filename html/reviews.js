@@ -1,12 +1,12 @@
-import { key, projected } from './inbox-store.js?v=12';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=12';
+import { key, projected } from './inbox-store.js?v=14';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=14';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
 const latest = (session, index) => [...session.decisions].reverse().find(entry => entry.index === index);
 const done = (session, index) => { const decision = latest(session, index); return decision && decision.choice !== 'undo'; };
 
-export function setupReviews({ current, save, journal }) {
+export function setupReviews({ current, save, journal, showDialog }) {
   let active = null, selected = null, displayed, busy = false;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
   const message = value => { $('reviewError').textContent = value; };
@@ -96,9 +96,8 @@ export function setupReviews({ current, save, journal }) {
     if (!current()) return;
     selected = choice === 'undo' ? index : null; $('reviewDefer').value = ''; render(); await journal();
   }
-  $('openReviews').onclick = () => { render(); $('reviews').showModal(); $('reviewSessions').focus(); };
+  $('openReviews').onclick = () => { render(); showDialog($('reviews')); $('reviewSessions').focus(); };
   $('closeReviews').onclick = () => $('reviews').close();
-  $('reviews').addEventListener('close', () => { if (current()) $('openReviews').focus(); });
   $('startDaily').onclick = () => void perform(() => start('daily'));
   $('startWeekly').onclick = () => void perform(() => start('weekly'));
   $('reviewSessions').onchange = () => { active = $('reviewSessions').value; selected = null; message(''); render(); void journal(); };

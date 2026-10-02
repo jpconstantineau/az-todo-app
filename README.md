@@ -24,6 +24,7 @@ flowchart LR
 - [Waiting, deferred work, dates and undo](docs/workflow-states.md)
 - [Resumable daily and weekly reviews](docs/reviews.md)
 - [Progressive clarification, saved proposals and explicit decisions](docs/clarification.md)
+- [Keyboard focus, announcements and accessibility verification](docs/accessibility.md)
 - [Multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
 - [Account partition decision and measurements](docs/data-api-v1.md#partition-decision-issue-27)
 - [PWA installation, safe updates and device verification](docs/pwa-installation.md)
