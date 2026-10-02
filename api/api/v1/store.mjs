@@ -62,6 +62,11 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const settings = records.find(record => record.type === "settings") ?? (await read(accountId, recordId("settings", "settings")))?.record;
     const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? await legacyDefaults(accountId)) };
     for (const [i, record] of records.entries()) {
+      if (record.type === "clarification" && !record.deleted) {
+        const item = records.find(r => r.type === "item" && r.id === record.id)
+          ?? (await read(accountId, recordId("item", record.id)))?.record;
+        if (!item || item.deleted) throw new ApiError(404, "item_not_found", "Clarification requires an existing item in this account.");
+      }
       let list;
       if (record.type === "item" && !record.deleted && record.listId) {
         const pending = records.find(r => r.type === "list" && r.id === record.listId);

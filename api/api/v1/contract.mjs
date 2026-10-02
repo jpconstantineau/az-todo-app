@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { ValidationError, text, cleanTag, utcDate } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { calendarDate } from "./workflow.mjs";
+import { clarificationFields } from "./clarification.mjs";
 
 export const MAX_BODY_BYTES = 65536;
 export const MAX_RECORD_BYTES = 32768;
@@ -29,7 +30,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["list", "item", "project", "settings"].includes(value)) throw new ValidationError("type must be list, item, project or settings.");
+  if (!["list", "item", "project", "settings", "clarification"].includes(value)) throw new ValidationError("type must be list, item, project, settings or clarification.");
   return value;
 }
 function exactText(value, max, field) {
@@ -47,6 +48,7 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (type === "clarification") return clarificationFields(input);
   if (type === "settings") {
     object(input, ["defaults"], "fields");
     return { defaults: validateDefaults(input.defaults) };
