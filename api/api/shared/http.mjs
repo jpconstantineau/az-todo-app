@@ -10,21 +10,24 @@ export const app = {
       ...config,
       handler: async (req, context) => {
         let response;
+        const failure = (message, status, error) => config.route.startsWith("v1/")
+          ? new Response(JSON.stringify({ apiVersion: 1, error, message }), { status, headers: { "content-type": "application/json; charset=utf-8" } })
+          : new Response(message, { status });
         try {
           const publicShell = config.route === "app" && req.method === "GET";
           if (!publicShell && !getUserId(req.headers)) {
-            response = new Response("Unauthorized", { status: 401 });
+            response = failure("Unauthorized", 401, "unauthorized");
           } else if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !checkCsrf(req)) {
-            response = new Response("Request origin could not be verified. Your entered text has been kept. Reload this site before retrying.", { status: 403 });
+            response = failure("Request origin could not be verified. Your entered text has been kept. Reload this site before retrying.", 403, "untrusted_origin");
           } else {
             response = await config.handler(req, context);
           }
         } catch (error) {
           if (error instanceof ValidationError) {
-            response = new Response(error.message, { status: 400 });
+            response = failure(error.message, 400, "invalid_request");
           } else {
             context?.error("API request failed", error);
-            response = new Response("The server could not finish this request.", { status: 500 });
+            response = failure("The server could not finish this request.", 500, "server_error");
           }
         }
         for (const [name, value] of Object.entries(apiHeaders)) response.headers.set(name, value);

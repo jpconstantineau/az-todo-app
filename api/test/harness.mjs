@@ -7,13 +7,39 @@ import { app, HttpRequest, HttpResponse } from "@azure/functions";
 // handlers, auth parsing, validation, templates and Azure HTTP types execute as-is.
 export const documents = [];
 export const routes = new Map();
-export const faults = { nextWrite: false };
+export const faults = { nextWrite: false, batchIndex: -1, loseBatchResponse: false };
+let etag = 0;
+process.env.V1_API_ENABLED = "true";
 const clone = value => structuredClone(value);
 function failWrite() {
   if (faults.nextWrite) { faults.nextWrite = false; throw new Error("Injected storage failure"); }
 }
 const container = {
   items: {
+    async batch(operations, partition) {
+      failWrite();
+      const staged = clone(documents);
+      const result = [];
+      for (const [i, operation] of operations.entries()) {
+        const doc = operation.resourceBody;
+        const index = staged.findIndex(d => d.id === (operation.id ?? doc.id) && [d.UserID, d.ObjectType, d.ObjectID].every((v, j) => v === partition[j]));
+        let code = i === faults.batchIndex ? 503 : 200;
+        if (operation.operationType === "Create" && index >= 0) code = 409;
+        if (operation.operationType === "Replace" && (index < 0 || staged[index]._etag !== operation.ifMatch)) code = 412;
+        if (!["Create", "Replace"].includes(operation.operationType)) throw new Error("Unsupported mock batch operation");
+        assertPartition(doc, partition);
+        if (code !== 200) {
+          faults.batchIndex = -1;
+          return { code, result: operations.map((_, j) => ({ statusCode: i === j ? code : 424 })) };
+        }
+        const saved = { ...clone(doc), _etag: String(++etag) };
+        if (index < 0) staged.push(saved); else staged[index] = saved;
+        result.push({ statusCode: operation.operationType === "Create" ? 201 : 200 });
+      }
+      documents.splice(0, documents.length, ...staged);
+      if (faults.loseBatchResponse) { faults.loseBatchResponse = false; throw new Error("Injected lost acknowledgement"); }
+      return { code: 200, result };
+    },
     async create(doc) {
       failWrite();
       if (documents.some(d => d.id === doc.id && d.UserID === doc.UserID && d.ObjectType === doc.ObjectType && d.ObjectID === doc.ObjectID)) throw new Error("Conflict");
@@ -22,9 +48,15 @@ const container = {
     },
     query({ query, parameters }, config = {}) {
       const params = Object.fromEntries(parameters.map(p => [p.name, p.value]));
-      let rows = documents.filter(doc => [...query.matchAll(/c\.(\w+)\s*=\s*(@\w+|'[^']*')/g)].every(([, key, value]) => doc[key] === (value.startsWith("@") ? params[value] : value.slice(1, -1))));
+      const property = (doc, key) => key.split(".").reduce((value, part) => value?.[part], doc);
+      let rows = documents.filter(doc => [...query.matchAll(/c\.([\w.]+)\s*(=|<=|>)\s*(@\w+|'[^']*'|false)/g)].every(([, key, op, literal]) => {
+        const actual = property(doc, key);
+        const value = literal.startsWith("@") ? params[literal] : literal === "false" ? false : literal.slice(1, -1);
+        return op === "=" ? actual === value : op === ">" ? actual > value : actual <= value;
+      }));
+      if (config.partitionKey) rows = rows.filter(d => [d.UserID, d.ObjectType, d.ObjectID].every((v, i) => v === config.partitionKey[i]));
       const order = query.match(/ORDER BY c\.(\w+) (ASC|DESC)/);
-      if (order) rows.sort((a, b) => String(a[order[1]] || "").localeCompare(String(b[order[1]] || "")) * (order[2] === "DESC" ? -1 : 1));
+      if (order) rows.sort((a, b) => (typeof a[order[1]] === "number" ? a[order[1]] - b[order[1]] : String(a[order[1]] || "").localeCompare(String(b[order[1]] || ""))) * (order[2] === "DESC" ? -1 : 1));
       if (query.includes("TOP 1")) rows = rows.slice(0, 1);
       const projection = query.match(/^SELECT (c\.[\w., ]+) FROM/);
       if (projection) rows = rows.map(doc => Object.fromEntries(projection[1].split(",").map(key => { key = key.trim().slice(2); return [key, doc[key]]; })));
@@ -39,7 +71,11 @@ const container = {
     }
   },
   item(id, partition) {
-    return { async replace(doc) {
+    return { async read() {
+      const doc = documents.find(d => d.id === id && [d.UserID, d.ObjectType, d.ObjectID].every((v, i) => v === partition[i]));
+      if (!doc) throw Object.assign(new Error("Not found"), { code: 404 });
+      return { resource: clone(doc) };
+    }, async replace(doc) {
       failWrite();
       const index = documents.findIndex(d => d.id === id && [d.UserID, d.ObjectType, d.ObjectID].every((v, i) => v === partition[i]));
       if (index < 0) throw Object.assign(new Error("Not found"), { code: 404 });
@@ -48,6 +84,9 @@ const container = {
     } };
   }
 };
+function assertPartition(doc, partition) {
+  if (![doc.UserID, doc.ObjectType, doc.ObjectID].every((value, i) => value === partition[i])) throw new Error("Wrong batch partition");
+}
 mock.module("../api/shared/db.mjs", { namedExports: { container } });
 app.http = (name, config) => {
   for (const method of config.methods) routes.set(`${method} /api/${config.route}`, config.handler);
