@@ -16,10 +16,11 @@ export async function legacyDefaults(accountId) {
 const create = resourceBody => ({ operationType: "Create", resourceBody });
 const replace = (resourceBody, ifMatch) => ({ operationType: "Replace", id: resourceBody.id, resourceBody, ifMatch });
 
-async function hasItems(accountId, listId) {
+async function hasItems(accountId, type, id) {
+  const field = type === "project" ? "projectId" : "listId";
   const { resources } = await container.items.query({
-    query: "SELECT TOP 1 c.id FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='record' AND c.record.type='item' AND c.record.deleted=false AND c.record.listId=@l",
-    parameters: [{ name: "@u", value: accountId }, { name: "@l", value: listId }]
+    query: `SELECT TOP 1 c.id FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='record' AND c.record.type='item' AND c.record.deleted=false AND c.record.${field}=@l`,
+    parameters: [{ name: "@u", value: accountId }, { name: "@l", value: id }]
   }, { partitionKey: partition(accountId), maxItemCount: 1 }).fetchAll();
   // TOP 1 bounds the result; fetchAll handles empty intermediate query pages.
   return resources.length > 0;
@@ -68,6 +69,11 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         if (!list || list.deleted) throw new ApiError(404, "list_not_found", "Destination list not found in this account.");
       }
       if (record.type === "item" && !record.deleted) {
+        if (record.projectId) {
+          const project = records.find(r => r.type === "project" && r.id === record.projectId)
+            ?? (await read(accountId, recordId("project", record.projectId)))?.record;
+          if (!project || project.deleted) throw new ApiError(404, "project_not_found", "Destination project not found in this account.");
+        }
         const mutation = input.mutations[i], old = current[i]?.record;
         const allowed = ["inbox", "next", "deferred", "completed", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
         // Historic values stay editable; unrelated edits and moves never erase them.
@@ -75,8 +81,8 @@ export async function commit(accountId, input, requestHash = digest(input)) {
           throw new ValidationError("status is not configured for this list or account.");
         }
       }
-      if (record.type === "list" && record.deleted && await hasItems(accountId, record.id)) {
-        throw new ApiError(409, "list_not_empty", "Move or delete this list's items before deleting the list.");
+      if (["list", "project"].includes(record.type) && record.deleted && await hasItems(accountId, record.type, record.id)) {
+        throw new ApiError(409, `${record.type}_not_empty`, `Move or delete this ${record.type}'s items before deleting the ${record.type}.`);
       }
     }
     const response = { apiVersion: 1, accountId, operationId: input.operationId, sequence,

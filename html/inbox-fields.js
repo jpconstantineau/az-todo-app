@@ -1,5 +1,5 @@
 export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Energy', timeRequired: 'Time required', priority: 'Priority', statuses: 'Statuses' };
-export const advancedFields = ['status', 'dueLocal', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
+export const advancedFields = ['status', 'dueLocal', 'projectId', 'plannedDay', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
 
 export function formValues(form) {
   // Read disabled controls too: recovery must retain a form during a pending save.
@@ -31,21 +31,23 @@ export function taskFields(values) {
   const date = values.dueLocal ? new Date(values.dueLocal) : null;
   if (date && (Number.isNaN(date.getTime()) || localDate(date.toISOString()) !== values.dueLocal)) throw new Error('Choose a valid local due date and time.');
   return { status: values.status || 'inbox', dueDateUtc: date?.toISOString() ?? null,
+    projectId: values.projectId || null, plannedDay: values.plannedDay || null,
     contexts: values.contexts || [], areas: values.areas || [], energy: values.energy || null,
     timeRequired: values.timeRequired || null, priority: values.priority || null };
 }
 export function addTaskControls(container) {
   container.classList.add('form-grid');
-  for (const [name, title] of [['dueLocal', 'Due (your local time)'], ['status', 'Status'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses')]) {
+  for (const [name, title] of [['projectId', 'Project (optional)'], ['plannedDay', 'Planned day (not a deadline)'], ['dueLocal', 'Due (your local time)'], ['status', 'Status'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses')]) {
     const label = document.createElement('label'); label.textContent = title;
-    const input = document.createElement(name === 'dueLocal' ? 'input' : 'select'); input.name = name;
+    const input = document.createElement(['dueLocal', 'plannedDay'].includes(name) ? 'input' : 'select'); input.name = name;
     if (name === 'dueLocal') input.type = 'datetime-local';
+    if (name === 'plannedDay') { input.type = 'date'; input.min = '0001-01-01'; input.max = '9999-12-31'; }
     if (['contexts', 'areas'].includes(name)) { input.multiple = true; input.size = 3; }
     label.append(input); container.append(label);
   }
 }
 export function refreshTaskOptions(form, defaults) {
-  for (const name of advancedFields.filter(name => name !== 'dueLocal')) {
+  for (const name of advancedFields.filter(name => !['dueLocal', 'projectId', 'plannedDay'].includes(name))) {
     const control = form.elements.namedItem(name);
     const selected = control.multiple ? [...control.selectedOptions].map(option => option.value) : [control.value];
     const values = name === 'status' ? ['inbox', 'next', 'deferred', 'completed', ...(defaults.statuses || [])] : defaults[name] || [];

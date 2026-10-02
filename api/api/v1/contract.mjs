@@ -28,7 +28,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["list", "item", "settings"].includes(value)) throw new ValidationError("type must be list, item or settings.");
+  if (!["list", "item", "project", "settings"].includes(value)) throw new ValidationError("type must be list, item, project or settings.");
   return value;
 }
 function exactText(value, max, field) {
@@ -52,8 +52,8 @@ export function fieldsFor(type, action, input) {
   }
   const shared = ["title", "description"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText"];
-  const itemFields = ["listId", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : ["defaults"])];
+  const itemFields = ["listId", "projectId", "plannedDay", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome"] : ["defaults"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
@@ -61,10 +61,20 @@ export function fieldsFor(type, action, input) {
     else if (key === "title") {
       result[key] = exactText(value, 200, key);
       if (!value.trim()) throw new ValidationError("title is required.");
+    } else if (key === "outcome") {
+      result[key] = exactText(value, 4000, key);
+      if (!value.trim()) throw new ValidationError("outcome is required for a project.");
     } else if (["description", "originalText", "sourceTitle", "selectedText", "waitingOn"].includes(key)) {
       result[key] = exactText(value, ({ originalText: 16000, selectedText: 8000, sourceTitle: 2000 })[key] || 4000, key);
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
-    else if (key === "listId") result[key] = value === null ? null : identifier(value, key);
+    else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
+    else if (key === "plannedDay") {
+      if (value !== null && (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+          value.startsWith("0000") || Number.isNaN(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value)) {
+        throw new ValidationError("plannedDay must be a valid YYYY-MM-DD calendar date or null.");
+      }
+      result[key] = value;
+    }
     else if (key === "status") {
       result[key] = cleanTag(exactText(value, 64, key), key);
       if (!result[key]) throw new ValidationError("status is required.");
@@ -78,10 +88,11 @@ export function fieldsFor(type, action, input) {
   }
   if (action === "create") {
     if (!result.title) throw new ValidationError("title is required.");
+    if (type === "project" && !result.outcome) throw new ValidationError("outcome is required for a project.");
     return {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
-      ...(type === "item" ? { listId: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
+      ...(type === "item" ? { listId: null, projectId: null, plannedDay: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,
         priority: null, referenceLinks: [] } : {}), ...result
     };
