@@ -3,6 +3,8 @@
 Capture remains a one-step save. In **Your Work** or **List Workspace**, choose
 **Clarify** on an existing task when you want to work through it. No AI API,
 model download, inference service or additional dependency is needed.
+[Optional local guidance](local-guidance.md) can suggest wording for the first
+three questions on supported desktops; all decisions still use this manual flow.
 
 The native dialog uses the existing theme, controls and responsive side-panel
 styles from `DESIGN.md`. It asks one question at a time:

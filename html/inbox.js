@@ -1,8 +1,8 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=15';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=15';
-import { deviceExport, readableExport } from './inbox-export.js?v=15';
-import { clarificationUI } from './clarification.js?v=15';
-import { setupReviews } from './reviews.js?v=15';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=16';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=16';
+import { deviceExport, readableExport } from './inbox-export.js?v=16';
+import { clarificationUI } from './clarification.js?v=16';
+import { setupReviews } from './reviews.js?v=16';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
