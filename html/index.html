@@ -7,7 +7,7 @@
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=6"></script>
+  <script type="module" src="/inbox.js?v=8"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#captureText">Skip to capture</a>
@@ -76,7 +76,8 @@
         <button type="submit">Save defaults on device</button><button id="resetDefaults" type="button">Reset to built-in defaults</button><button id="closeDefaults" type="button">Close defaults</button>
       </form>
     </dialog>
-    <div class="toolbar device-tools"><button id="sync">Sync now</button><button id="export">Export device copy</button></div>
+    <div class="toolbar device-tools"><button id="sync">Sync now</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button></div>
+    <p id="exportHelp" class="muted">Includes all work available on this device, pending saves and drafts. Newer server changes may be missing; sync first when online. JSON preserves the full recovery copy.</p>
     <p class="muted">Device copies belong to this browser profile. Unsynced work cannot be recovered after clearing site storage or losing this device. Export a copy before signing out or changing devices. Use a private browser profile on shared devices.</p>
   </main>
   <section class="card" id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>

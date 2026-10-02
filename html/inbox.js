@@ -1,5 +1,6 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=6';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=6';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=8';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=8';
+import { deviceExport, readableExport } from './inbox-export.js?v=8';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -315,11 +316,19 @@ $('defaultsForm').addEventListener('submit', event => {
 capture.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.repeat) { event.preventDefault(); capture.requestSubmit(); }
 });
-$('export').onclick = () => {
-  const blob = new Blob([JSON.stringify({ formatVersion: 1, accountId, state, draft: draft() }, null, 2)], { type: 'application/json' });
+$('export').onclick = guard(async () => {
+  if (!accountId || !state) return;
+  const owner = accountId, generation = accountGeneration, currentDraft = draft(), memory = structuredClone(state);
+  const readable = $('exportFormat').value === 'text';
+  let snapshot, source = 'indexeddb';
+  try { snapshot = await transact(owner); }
+  catch { snapshot = memory; source = 'memory-recovery'; }
+  if (owner !== accountId || generation !== accountGeneration) return;
+  const value = deviceExport(owner, snapshot, currentDraft, source);
+  const blob = new Blob([readable ? readableExport(value) : JSON.stringify(value, null, 2)], { type: readable ? 'text/plain;charset=utf-8' : 'application/json' });
   const url = URL.createObjectURL(blob), link = document.createElement('a');
-  link.href = url; link.download = 'todo-device-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
+  link.href = url; link.download = readable ? 'todo-tasks.txt' : 'todo-device-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 $('copyRecovery').onclick = guard(async () => {
   $('recoveryText').select(); await navigator.clipboard.writeText($('recoveryText').value);
 });
@@ -532,7 +541,7 @@ try {
         const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
         reply.port1.onmessage = event => {
           clearTimeout(timeout); reply.port1.close();
-          if (event.data === 'todo-inbox-shell-v6') resolve(); else reject(new Error('Old shell is still active'));
+          if (event.data === 'todo-inbox-shell-v8') resolve(); else reject(new Error('Old shell is still active'));
         };
         (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
       }))

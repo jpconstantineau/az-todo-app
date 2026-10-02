@@ -201,9 +201,9 @@ destroy unsynced work; the UI explains this and offers an export.
 The worker caches only the public root/index/bookmark shell, local CSS, theme
 script and native modules, never API/auth responses or task data. Wait for
 **Ready to reopen this inbox offline** before relying on offline reload. Both
-root and the inbox alias work offline once worker v6 is active.
+root and the inbox alias work offline once worker v8 is active.
 
-Module URLs carry `?v=6`; the v3 worker ignores query URLs and the v4/v5 workers'
+Module URLs carry `?v=8`; the v3 worker ignores query URLs and the v4–v7 workers'
 exact allowlists exclude these new URLs, preventing a new shell from importing
 old cached modules. A worker-version handshake reports
 readiness only when the matching worker is active. A waiting worker is not forcibly

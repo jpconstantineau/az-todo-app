@@ -19,6 +19,7 @@ flowchart LR
 - [Request security and deployed verification gates](docs/request-security.md)
 - [Versioned API, conflict handling and migration tooling](docs/data-api-v1.md)
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)
+- [Portable device exports and round-trip validation](docs/device-export.md)
 - [Multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
 - [Account partition decision and measurements](docs/data-api-v1.md#partition-decision-issue-27)
 - [Design reference](DESIGN.md)
