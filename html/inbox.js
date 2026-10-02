@@ -1,23 +1,41 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=4';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=4';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
+let defaultsEditing = null;
+addTaskControls($('captureFields')); addTaskControls($('editFields'));
+for (const [name, title] of Object.entries(optionFields)) {
+  const label = document.createElement('label'); label.textContent = title;
+  const input = document.createElement('textarea'); input.name = name; input.rows = 3;
+  label.append(input); $('defaultsFields').append(label);
+}
+function userDefaults() { return { ...state.defaultSettings, ...(projected(state)['settings:settings']?.defaults ?? state.legacyDefaults) }; }
+function effectiveDefaults(listId) { return { ...userDefaults(), ...projected(state)[`list:${listId}`]?.defaults }; }
+function refreshOptions() {
+  refreshTaskOptions(capture, effectiveDefaults(capture.elements.listId.value));
+  refreshTaskOptions(edit, effectiveDefaults(edit.elements.listId.value));
+}
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
 function error(message, kind = 'local') {
   $('error').hidden = false; $('error').textContent = message; $('error').dataset.kind = kind;
   if ($('editor').open) { $('editError').hidden = false; $('editError').textContent = message; }
+  if ($('defaultsEditor').open) { $('defaultsError').hidden = false; $('defaultsError').textContent = message; }
 }
 function clearError(kind) {
   if (!kind || $('error').dataset.kind === kind) { $('error').hidden = true; $('editError').hidden = true; }
 }
 function captureDraft() {
-  return { ...Object.fromEntries(new FormData(capture)), ...(originalInput === undefined ? {} : { original: originalInput }) };
+  return { ...formValues(capture), ...(originalInput === undefined ? {} : { original: originalInput }) };
 }
 function draft() {
-  return { capture: captureDraft(), edit: editing ? { ...editing, fields: Object.fromEntries(new FormData(edit)) } : null };
+  return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
+    defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
+    defaultsOpen: $('defaultsEditor').open,
+    view: $('view').value, status: $('statusFilter').value, lists: $('listWorkspace').getAttribute('aria-pressed') === 'true' };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -25,6 +43,7 @@ function storageFailure(failure) {
   $('recovery').hidden = false;
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), localCopy: state }, null, 2);
   $('editor').close(); // Make the recovery copy outside the modal reachable.
+  $('defaultsEditor').close();
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
@@ -45,13 +64,14 @@ function options(select, lists, first) {
 function restoreDraft() {
   capture.reset(); edit.reset(); editing = null; originalInput = undefined;
   const saved = state.draft;
-  for (const [name, value] of Object.entries(saved.capture || {})) {
-    if (capture.elements.namedItem(name)) capture.elements.namedItem(name).value = value;
-  }
+  fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
   $('previewHelp').hidden = originalInput === undefined;
   if (saved.edit) openEditor(saved.edit, false);
   else $('editor').close();
+  if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
+  fillValues({ elements: { namedItem: name => $(name) } }, { view: saved.view || 'all', statusFilter: saved.status || '' });
+  workspace(!!saved.lists, false); refreshOptions(); render();
 }
 function button(text, handler, label = text) {
   const element = document.createElement('button'); element.textContent = text;
@@ -65,21 +85,28 @@ function render() {
   options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
   options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
   options($('view'), lists, [['all', 'All items'], ['inbox', 'Inbox (no list)']]);
+  refreshOptions();
+  const statuses = [...new Set(['inbox', 'next', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
+  options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses']]);
   $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
-  $('lists').replaceChildren(...lists.map(list => button(`Edit list: ${list.title}`, () => openEditor(list))));
+  $('lists').replaceChildren(...lists.flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
   const view = $('view').value;
   $('items').replaceChildren(...records.filter(record => record.type === 'item' &&
-    (view === 'all' || (view === 'inbox' ? !record.listId : record.listId === view))).map(record => {
+    (view === 'all' || (view === 'inbox' ? !record.listId : record.listId === view)) &&
+    (!$('statusFilter').value || record.status === $('statusFilter').value)).map(record => {
     const article = document.createElement('article'); article.dataset.id = record.id;
     const title = document.createElement('h3'); title.textContent = record.title;
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
+    const metadata = document.createElement('p'); metadata.className = 'notes';
+    metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, record.priority].filter(Boolean).join(' · ');
+    if (record.dueDateUtc) { const time = document.createElement('time'); time.dateTime = record.dueDateUtc; time.textContent = ` Due ${new Date(record.dueDateUtc).toLocaleString()}`; metadata.append(time); }
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
     status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
     const actions = document.createElement('div'); actions.className = 'actions';
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`),
-      button(action, () => updateRecord(record, { status: record.status === 'completed' ? 'inbox' : 'completed' }), `${action} ${record.title}`));
-    article.append(title, notes, status, actions); return article;
+      button(action, () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`));
+    article.append(title, notes, metadata, status, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
@@ -87,8 +114,8 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['title', 'Title'], ['description', 'Notes'], ['status', 'Status'], ['listId', 'List']]
-        .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : record[field]}`).join('\n');
+      [['title', 'Title'], ['description', 'Notes'], ['status', 'Status'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+        .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
     $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
@@ -101,12 +128,18 @@ function openEditor(record, focus = true) {
     if (focus) edit.elements.title.focus();
     return;
   }
-  editing = { type: record.type, id: record.id, version: record.version };
-  const fields = record.fields || record;
+  editing = { type: record.type, id: record.id, version: record.version, initialFields: record.initialFields };
+  edit.reset();
+  const fields = record.fields ? projected(state)[key(record)] || record.fields : record;
   edit.elements.title.value = fields.title;
   edit.elements.description.value = fields.description || '';
   edit.elements.listId.value = fields.listId || '';
+  refreshOptions();
+  fillValues(edit, { ...fields, dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
+  editing.initialFields ??= formValues(edit);
+  if (record.fields) fillValues(edit, record.fields);
   $('editListLabel').hidden = record.type === 'list';
+  $('editAdvanced').hidden = record.type === 'list';
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
   $('editError').hidden = true;
   if (!$('editor').open) $('editor').showModal();
@@ -121,8 +154,8 @@ async function updateRecord(record, fields, close = false) {
   try {
     const saved = await transact(owner, local => {
       const current = projected(local)[key(record)];
-      if (!current || current.deleted || current.version !== record.version) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
-      enqueue(local, owner, [{ type: record.type, id: record.id, action: 'update', expectedVersion: current.version, fields }]);
+      if (record.version !== 0 && (!current || current.deleted || current.version !== record.version)) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
+      enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }]);
       if (close) local.draft.edit = null;
     });
     if (owner === accountId) state = saved;
@@ -136,6 +169,8 @@ async function updateRecord(record, fields, close = false) {
 
 capture.addEventListener('input', () => { void journal(); });
 edit.addEventListener('input', () => { void journal(); });
+capture.elements.listId.addEventListener('change', refreshOptions);
+edit.elements.listId.addEventListener('change', refreshOptions);
 capture.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || !accountId) return;
@@ -144,6 +179,11 @@ capture.addEventListener('submit', event => {
     const owner = accountId, submitted = captureDraft();
     try {
       const mutations = captureMutations(submitted);
+      const details = taskFields(submitted);
+      for (const mutation of mutations) {
+        if (mutation.type === 'item') Object.assign(mutation.fields, details);
+        else mutation.fields.defaults = structuredClone(userDefaults());
+      }
       const saved = await transact(owner, local => {
         enqueue(local, owner, mutations);
         if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) local.draft.capture = {};
@@ -163,8 +203,18 @@ edit.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || !editing) return;
   saving = true;
-  const fields = { title: edit.elements.title.value, description: edit.elements.description.value,
-    ...(editing.type === 'item' ? { listId: edit.elements.listId.value || null } : {}) };
+  let fields;
+  try {
+    const values = formValues(edit);
+    fields = { title: values.title, description: values.description,
+      ...(editing.type === 'item' ? { listId: values.listId || null, ...taskFields(values) } : {}) };
+    if (editing.version === 0) fields.defaults = structuredClone(userDefaults());
+    else if (editing.initialFields) {
+      const initial = { ...editing.initialFields, ...taskFields(editing.initialFields), listId: editing.initialFields.listId || null };
+      fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
+      if (!Object.keys(fields).length) { saving = false; $('editor').close(); return; }
+    }
+  } catch (failure) { saving = false; error(failure.message); return; }
   // Keep the submitted form stable until its local transaction commits.
   const controls = [...edit.elements]; controls.forEach(control => { control.disabled = true; });
   void updateRecord(editing, fields, true).catch(failure => error(failure.message)).finally(() => {
@@ -179,15 +229,68 @@ $('previewSplit').onclick = () => {
 $('cancelEdit').onclick = () => $('editor').close();
 $('editor').addEventListener('close', () => { if (editing) void journal(); });
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
-function workspace(lists) {
+function workspace(lists, focus = true) {
   document.querySelector('.capture-panel').hidden = lists;
   $('quickFocus').setAttribute('aria-pressed', String(!lists));
   $('listWorkspace').setAttribute('aria-pressed', String(lists));
-  (lists ? $('itemsHeading') : capture.elements.text).focus();
+  if (focus) { (lists ? $('itemsHeading') : capture.elements.text).focus(); void journal(); }
 }
 $('quickFocus').onclick = () => workspace(false);
 $('listWorkspace').onclick = () => workspace(true);
-$('view').onchange = render;
+$('view').onchange = $('statusFilter').onchange = () => { render(); void journal(); };
+$('newList').onclick = () => openEditor({ type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
+function openDefaults(record, focus = true, show = true) {
+  if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
+  if (defaultsEditing?.id !== record.id || defaultsEditing?.type !== record.type || defaultsEditing?.version !== record.version) {
+    defaultsEditing = { type: record.type, id: record.id, version: record.version };
+    const defaults = record.type === 'list' ? effectiveDefaults(record.id) : userDefaults();
+    const values = record.values || Object.fromEntries(Object.keys(optionFields).map(name => [name, (defaults[name] || []).join('\n')]));
+    fillValues($('defaultsForm'), values);
+  }
+  $('defaultsHeading').textContent = record.type === 'settings' ? 'User defaults' : 'List defaults';
+  $('resetDefaults').textContent = record.type === 'settings' ? 'Reset to built-in defaults' : 'Copy user defaults';
+  $('defaultsError').hidden = true;
+  if (show && !$('defaultsEditor').open) $('defaultsEditor').showModal();
+  if (focus) {
+    const control = $('defaultsForm').elements.contexts;
+    control.focus(); control.setSelectionRange(0, 0); control.scrollTop = 0;
+    void journal();
+  }
+}
+$('userDefaults').onclick = () => openDefaults(projected(state)['settings:settings'] || { type: 'settings', id: 'settings', version: 0 });
+$('closeDefaults').onclick = () => $('defaultsEditor').close();
+$('defaultsEditor').addEventListener('close', () => { if (defaultsEditing) void journal(); });
+$('defaultsEditor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+$('defaultsForm').addEventListener('input', () => { void journal(); });
+$('resetDefaults').onclick = () => {
+  const values = defaultsEditing.type === 'settings' ? state.defaultSettings : userDefaults();
+  fillValues($('defaultsForm'), Object.fromEntries(Object.keys(optionFields).map(name => [name, (values[name] || []).join('\n')])));
+  void journal();
+};
+$('defaultsForm').addEventListener('submit', event => {
+  event.preventDefault();
+  if (saving || !defaultsEditing || !accountId) return;
+  let defaults;
+  try { defaults = defaultsFrom($('defaultsForm')); } catch (failure) { error(failure.message); return; }
+  saving = true;
+  const owner = accountId, record = { ...defaultsEditing }, controls = [...$('defaultsForm').elements];
+  controls.forEach(control => { control.disabled = true; });
+  void (async () => {
+    try {
+      const saved = await transact(owner, local => {
+        const current = projected(local)[key(record)];
+        if ((current?.version || 0) !== record.version) throw new Error('Defaults changed while editing. Copy your options and reopen the latest defaults to compare.');
+        enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version ? 'update' : 'create', expectedVersion: record.version, fields: { defaults } }]);
+        local.draft.defaults = null;
+      });
+      if (owner !== accountId) return;
+      state = saved; defaultsEditing = null; $('defaultsEditor').close(); clearError(); render();
+      (record.type === 'settings' ? $('userDefaults') : $('itemsHeading')).focus();
+      broadcast(); void sync();
+    } catch (failure) { if (owner === accountId) storageFailure(failure); }
+    finally { saving = false; controls.forEach(control => { control.disabled = false; }); }
+  })();
+});
 capture.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.repeat) { event.preventDefault(); capture.requestSubmit(); }
 });
@@ -213,6 +316,7 @@ async function request(path, operation) {
 function hideAccount() {
   accountGeneration++;
   accountId = null; state = undefined; editing = null; originalInput = undefined;
+  defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
   $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
@@ -244,7 +348,9 @@ async function session({ allowOffline = false } = {}) {
     hideAccount();
     generation = accountGeneration;
     await transact(null, saved => { saved.accountId = identity.accountId; saved.paused = false; });
-    const saved = await transact(identity.accountId);
+    const saved = await transact(identity.accountId, local => {
+      if (identity.defaultSettings) { local.defaultSettings = identity.defaultSettings; local.legacyDefaults = identity.legacyDefaults; }
+    });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
     accountId = identity.accountId; state = saved;
     render(); restoreDraft(); broadcast();
@@ -356,7 +462,7 @@ $('discard').onclick = guard(async () => {
 $('signOut').onclick = guard(async () => {
   await journal();
   await pauseSession('Signed out locally. Pending work remains bound to its original account.');
-  location.href = '/.auth/logout?post_logout_redirect_uri=/inbox.html';
+  location.href = '/.auth/logout?post_logout_redirect_uri=/';
 });
 channel.onmessage = guard(async () => {
   const saved = await transact(null);
@@ -379,8 +485,17 @@ try {
   if ('serviceWorker' in navigator) {
     $('offlineStatus').textContent = 'Preparing offline reopening… Keep this page open until ready.';
     navigator.serviceWorker.register('/inbox-sw.js').then(() => navigator.serviceWorker.ready)
+      .then(registration => new Promise((resolve, reject) => {
+        const reply = new MessageChannel();
+        const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
+        reply.port1.onmessage = event => {
+          clearTimeout(timeout); reply.port1.close();
+          if (event.data === 'todo-inbox-shell-v4') resolve(); else reject(new Error('Old shell is still active'));
+        };
+        (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
+      }))
       .then(() => { $('offlineStatus').textContent = 'Ready to reopen this inbox offline.'; })
-      .catch(() => { $('offlineStatus').textContent = 'Offline reopening is not ready. Keep this page open and retry an online reload.'; });
+      .catch(() => { $('offlineStatus').textContent = 'Offline reopening is not ready. Save your work on device, close all app tabs, then reopen online to finish the update.'; });
   } else {
     $('offlineStatus').textContent = 'This browser cannot reopen the inbox offline. Keep this page open or reconnect to reopen it.';
   }

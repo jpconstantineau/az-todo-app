@@ -2,7 +2,8 @@ import { app } from "../shared/http.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { ValidationError } from "../shared/validate.mjs";
 import { identifier, recordType, recordId, digest, validateOperation, MAX_BODY_BYTES } from "./contract.mjs";
-import { ApiError, commit, read, changes } from "./store.mjs";
+import { ApiError, commit, read, changes, legacyDefaults } from "./store.mjs";
+import { defaultSettings } from "../shared/defaults.mjs";
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 function route(name, method, handler) {
@@ -31,7 +32,7 @@ function number(value, fallback, max) {
   }
   return Number(value);
 }
-route("session", "GET", async (req, accountId) => json({ apiVersion: 1, accountId }));
+route("session", "GET", async (req, accountId) => json({ apiVersion: 1, accountId, defaultSettings, legacyDefaults: await legacyDefaults(accountId) }));
 route("operations", "POST", async (req, accountId) => {
   if (req.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     throw new ApiError(415, "json_required", "Send application/json.");

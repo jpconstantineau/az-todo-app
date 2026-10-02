@@ -28,7 +28,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["list", "item"].includes(value)) throw new ValidationError("type must be list or item.");
+  if (!["list", "item", "settings"].includes(value)) throw new ValidationError("type must be list, item or settings.");
   return value;
 }
 function exactText(value, max, field) {
@@ -46,14 +46,19 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (type === "settings") {
+    object(input, ["defaults"], "fields");
+    return { defaults: validateDefaults(input.defaults) };
+  }
   const shared = ["title", "description"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText"];
   const itemFields = ["listId", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : [])];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : ["defaults"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
-    if (key === "title") {
+    if (key === "defaults") result[key] = validateDefaults(value);
+    else if (key === "title") {
       result[key] = exactText(value, 200, key);
       if (!value.trim()) throw new ValidationError("title is required.");
     } else if (["description", "originalText", "sourceTitle", "selectedText", "waitingOn"].includes(key)) {
@@ -61,8 +66,8 @@ export function fieldsFor(type, action, input) {
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
     else if (key === "listId") result[key] = value === null ? null : identifier(value, key);
     else if (key === "status") {
-      if (!["inbox", "deferred", ...defaultSettings.statuses].includes(value)) throw new ValidationError("status is not supported.");
-      result[key] = value;
+      result[key] = cleanTag(exactText(value, 64, key), key);
+      if (!result[key]) throw new ValidationError("status is required.");
     } else if (key.endsWith("DateUtc")) {
       if (value !== null && (typeof value !== "string" || !value)) throw new ValidationError(`${key} must be a UTC date or null.`);
       result[key] = value === null ? null : utcDate(value);
@@ -102,6 +107,9 @@ export function validateOperation(input) {
     seen.add(recordId(type, id));
     if (!["create", "update", "delete"].includes(mutation.action)) throw new ValidationError("action must be create, update or delete.");
     const { action, expectedVersion } = mutation;
+    if (type === "settings" && (id !== "settings" || action === "delete")) {
+      throw new ValidationError("Use the settings identity and create/update to save or reset defaults.");
+    }
     if (!Number.isSafeInteger(expectedVersion) || (action === "create" ? expectedVersion !== 0 : expectedVersion < 1)) {
       throw new ValidationError("expectedVersion must be 0 for create, or the last observed positive version for update/delete.");
     }
@@ -109,4 +117,12 @@ export function validateOperation(input) {
     return { type, id, action, expectedVersion, ...(action !== "delete" ? { fields: fieldsFor(type, action, mutation.fields) } : {}) };
   });
   return { ...input, mutations };
+}
+
+export function validateDefaults(input) {
+  object(input, Object.keys(defaultSettings), "defaults");
+  return Object.fromEntries(Object.keys(defaultSettings).map(key => {
+    if (!Array.isArray(input[key]) || input[key].length > 200) throw new ValidationError(`${key} must have at most 200 options.`);
+    return [key, [...new Set(input[key].map(value => cleanTag(exactText(value, 64, key), key)).filter(Boolean))]];
+  }));
 }

@@ -14,7 +14,6 @@
   }
   restore();
   document.addEventListener('DOMContentLoaded', () => apply(choice));
-  document.addEventListener('htmx:afterSwap', () => apply(choice));
   document.addEventListener('change', event => {
     if (!event.target.matches('[data-appearance]')) return;
     apply(event.target.value);

@@ -16,7 +16,6 @@
     "nanoid": "^5.0.7"
   },
   "devDependencies": {
-    "htmx.org": "1.9.12",
     "playwright": "^1.63.0"
   }
 }
