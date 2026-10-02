@@ -80,3 +80,14 @@ test("migration rejects owner mismatches, orphan references, duplicate identitie
   const badTarget = prepareMigration(backup); badTarget.targetDocuments[0].UserID = "mallory";
   assert.throws(() => verifyMigration(badTarget), /differ/);
 });
+
+test('migration preserves workflow/date fields and custom statuses without interpreting historic values', () => {
+  const source = structuredClone(backup);
+  const fields = { status: 'historic-status', nextAction: false, waitingOn: 'Alex', startDateUtc: 'legacy date text',
+    reviewDateUtc: '2026-11-01T06:30:00.000Z', dueDate: '2026-11-02', startDate: '2026-11-01', reviewDate: '2026-11-03' };
+  Object.assign(source.documents[1], fields);
+  const prepared = prepareMigration(source);
+  const item = prepared.targetDocuments.find(doc => doc.kind === 'record' && doc.UserID === 'alice' && doc.record.type === 'item').record;
+  for (const [name, value] of Object.entries(fields)) assert.equal(item[name], value);
+  assert.deepEqual(rollbackMigration(prepared), source);
+});
