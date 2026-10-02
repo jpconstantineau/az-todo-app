@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -112,7 +113,7 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await context.setOffline(true);
   await capture(page, 'Survive termination');
   await page.locator('#captureText').fill('Still thinking about this');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Still thinking about this');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Still thinking about this');
   await context.close();
   context = await chromium.launchPersistentContext(profile, { channel, offline: true });
   page = await context.newPage();
@@ -120,8 +121,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination' }).waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v6')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=6', '/inbox-store.js?v=6', '/inbox-fields.js?v=6'].sort());
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v7')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual(cached.sort(), ['/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=7', '/inbox-store.js?v=7', '/inbox-fields.js?v=7', '/pwa.js?v=7', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -148,10 +149,10 @@ test('inbox: switching accounts and expired login never display or upload anothe
   const { page, context, setUser } = await setup(t);
   await context.setOffline(true); await capture(page, 'Alice private');
   await page.locator('#captureText').fill('Alice unfinished');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished');
   setUser('bob'); await context.setOffline(false);
   await page.getByRole('button', { name: 'Sync now' }).click();
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   assert.doesNotMatch(await page.locator('body').innerText(), /Alice private|Alice unfinished/);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   await capture(page, 'Bob work'); await confirmed(page);
@@ -159,7 +160,7 @@ test('inbox: switching accounts and expired login never display or upload anothe
   assert.equal((await local(page)).queue.length, 1);
   setUser(null); await page.getByRole('button', { name: 'Sync now' }).click();
   await page.locator('#workspace').waitFor({ state: 'hidden' });
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact(null)).paused);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).paused);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true); await page.reload();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sign in online'));
@@ -205,7 +206,7 @@ test('inbox: failed local transaction keeps entered text and recovery copy; queu
   const { page, context } = await setup(t);
   await context.setOffline(true);
   await page.locator('#captureText').fill('Keep me after quota failure');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Keep me after quota failure');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Keep me after quota failure');
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function () { throw new DOMException('Storage quota exceeded', 'QuotaExceededError'); };
@@ -242,7 +243,7 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
   await page.locator('#captureText').fill('oat milk\nbread\neggs');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
   await page.reload();
   await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'oat milk\nbread\neggs');
@@ -266,7 +267,7 @@ test('inbox: editor storage failure closes the sheet and exposes a recovery copy
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Edit Original task', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Recover this sheet draft');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Recover this sheet draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Recover this sheet draft');
   await page.evaluate(() => {
     IDBObjectStore.prototype.put = function () { throw new DOMException('Storage quota exceeded', 'QuotaExceededError'); };
   });
@@ -300,7 +301,7 @@ test('inbox: aborted transaction never reports saved; keyboard double activation
   const { page, context } = await setup(t);
   await context.setOffline(true);
   await page.locator('#captureText').fill('Atomic save');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Atomic save');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Atomic save');
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (...args) {
@@ -344,7 +345,7 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-for (const oldVersion of [3, 4, 5]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
+for (const oldVersion of [3, 4, 5, 6]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
   documents.length = 0;
   let oldWorker = true, rejectUpgrade = false;
   const server = await startServer({ browserUser: () => 'alice', assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
@@ -369,19 +370,19 @@ for (const oldVersion of [3, 4, 5]) test(`shell upgrade from v${oldVersion} pres
   await page.evaluate(() => navigator.serviceWorker.ready);
   await capture(page, 'Old queued item');
   await page.locator('#captureText').fill('Old unsubmitted draft');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
-  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=6')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=7')).transact('alice'));
   oldWorker = false; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
-  await page.waitForFunction(async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
+  await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
   assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=6')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=7')).transact('alice'))).queue, before.queue);
   rejectUpgrade = false;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
-  await page.waitForFunction(async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
+  await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=6')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=7')).transact('alice'))).queue, before.queue);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
   await page.close(); page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
@@ -399,7 +400,7 @@ test('defaults draft survives reload and failed storage remains recoverable; dat
   const { page } = await setup(t, { timezoneId: 'America/New_York' });
   await page.getByRole('button', { name: 'User defaults', exact: true }).click();
   await page.locator('#defaultsForm [name=contexts]').fill('@Draft');
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.defaults?.values.contexts === '@Draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.defaults?.values.contexts === '@Draft');
   await page.reload(); await page.locator('#defaultsEditor').waitFor();
   assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Draft');
   await page.evaluate(() => {
@@ -444,6 +445,6 @@ test('independent clients page through all work and resolve defaults conflicts w
   const originalReceipt = documents.find(doc => doc.id === 'receipt:' + pending.operationId).response;
   assert.equal(originalReceipt.status, 'conflict'); assert.deepEqual(originalReceipt.proposed[0].fields.defaults.contexts, ['@Laptop']);
   await page.getByRole('button', { name: 'Sync now' }).click();
-  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).records['settings:settings'].version === 3);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).records['settings:settings'].version === 3);
   assert.equal(await page.locator('#items article').count(), 52);
 });

@@ -3,8 +3,9 @@
 `/` is the native v1 client; `/inbox.html` is a bookmark alias. It uses native JavaScript,
 IndexedDB, Web Locks and a small service worker; it has no build step or new
 dependency. It requires HTTPS (or localhost), a supported modern browser and a
-successful first sign-in while online. Installation as a PWA, update prompts and
-physical-device certification remain #14/#17 work.
+successful first sign-in while online. See [PWA installation and updates](pwa-installation.md)
+for installation help and safe shell updates. Physical-device certification remains
+#14/#17 work.
 
 ## Using the same account on phone and laptop
 
@@ -199,19 +200,21 @@ destroy unsynced work; the UI explains this and offers an export.
 ## Canonical shell and updates
 
 The worker caches only the public root/index/bookmark shell, local CSS, theme
-script and native modules, never API/auth responses or task data. Wait for
+script, native modules, manifest and icons, never API/auth responses or task data. Wait for
 **Ready to reopen this inbox offline** before relying on offline reload. Both
-root and the inbox alias work offline once worker v6 is active.
+root and the inbox alias work offline once worker v7 is active.
 
-Module URLs carry `?v=6`; the v3 worker ignores query URLs and the v4/v5 workers'
+Module URLs carry `?v=7`; the v3 worker ignores query URLs and the v4/v5/v6 workers'
 exact allowlists exclude these new URLs, preventing a new shell from importing
 old cached modules. A worker-version handshake reports
 readiness only when the matching worker is active. A waiting worker is not forcibly
 activated: save work locally, close every app tab/window, then reopen online. Old
 shell caches are retained so old clients keep their assets. Cache installation
 failure leaves the old worker/cache usable at its original inbox URL; it does not
-clear IndexedDB. Full update prompts, cache-retirement UX and PWA installation are
-still #14. Update the shell/module version together when changing cached modules.
+clear IndexedDB. A visible notice explains waiting updates and failed downloads;
+installation help is in Preferences. Old-cache retirement remains deferred until
+client compatibility can be established. Update the shell/module version together
+when changing cached modules. See [PWA verification](pwa-installation.md).
 
 ## Defaults and compatibility
 
