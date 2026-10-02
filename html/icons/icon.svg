@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>To-Do</title>
+  <rect width="512" height="512" fill="#000000"/>
+  <rect x="144" y="144" width="224" height="224" rx="32" fill="#15181e" stroke="#ffffff" stroke-width="16"/>
+  <path d="M192 256l44 44 84-88" fill="none" stroke="#2b89ff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
