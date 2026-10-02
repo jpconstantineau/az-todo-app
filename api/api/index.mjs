@@ -24,3 +24,6 @@ import "./settings/update.mjs";
 import "./settings/reset.mjs";
 
 import "./misc/health.mjs";
+
+// Opt-in versioned data contract; see docs/data-api-v1.md before enabling.
+import "./v1/routes.mjs";

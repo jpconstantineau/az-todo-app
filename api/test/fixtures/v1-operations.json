@@ -1,0 +1,11 @@
+{
+  "apiVersion": 1,
+  "accountId": "alice",
+  "operationId": "groceries-capture-1",
+  "mutations": [
+    { "type": "list", "id": "groceries", "action": "create", "expectedVersion": 0, "fields": { "title": "Groceries" } },
+    { "type": "item", "id": "milk", "action": "create", "expectedVersion": 0, "fields": { "title": "Milk", "listId": "groceries", "originalText": "  milk\n", "sourceUrl": "https://example.com/shopping?week=1" } },
+    { "type": "item", "id": "bread", "action": "create", "expectedVersion": 0, "fields": { "title": "Bread", "listId": "groceries" } },
+    { "type": "item", "id": "eggs", "action": "create", "expectedVersion": 0, "fields": { "title": "Eggs", "listId": "groceries" } }
+  ]
+}

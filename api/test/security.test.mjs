@@ -4,6 +4,8 @@ import { readFile, readdir } from "node:fs/promises";
 import { documents, faults, routes, startServer } from "./harness.mjs";
 import { defaultSettings } from "../api/shared/defaults.mjs";
 import { checkCsrf } from "../api/shared/security.mjs";
+import { document, recordId } from "../api/v1/contract.mjs";
+import capture from "./fixtures/v1-operations.json" with { type: "json" };
 
 const encode = value => Buffer.from(JSON.stringify(value)).toString("base64");
 const principal = userId => encode({ userId, userRoles: ["anonymous", "authenticated"] });
@@ -16,6 +18,10 @@ function seed() {
       { ...common, id: `${userId}-item`, listId: `${userId}-list`, ObjectID: `${userId}-list`, ObjectType: "item", title: `${userId}-private-item`, status: "next" },
       { ...common, id: "settings", ObjectID: "_meta", ObjectType: "userSettings", defaults: { ...structuredClone(defaultSettings), contexts: [`${userId}-private-context`] } }
     );
+    documents.push(
+      document(userId, recordId("item", `${userId}-item`), { kind: "record", record: { id: `${userId}-item`, title: `${userId}-private-item`, accountId: userId } }),
+      document(userId, "receipt:seed", { kind: "receipt", response: { accountId: userId, title: `${userId}-private-receipt` } })
+    );
   }
 }
 const mutationCases = {
@@ -26,7 +32,8 @@ const mutationCases = {
   "lists/resetDefaults": { listId: "alice-list" },
   "settings/update": { "contexts[]": "@Home" },
   "settings/reset": {},
-  "settings/ensure": {}
+  "settings/ensure": {},
+  "v1/operations": capture
 };
 function assertHeaders(response) {
   assert.equal(response.headers.get("cache-control"), "private, no-store");
@@ -43,8 +50,9 @@ async function fixture(t) {
     async request(path, { data, user = "alice", headers = {}, method = data ? "POST" : "GET", origin = server.url, body } = {}) {
       const requestHeaders = new Headers({ ...(user ? { "x-ms-client-principal": principal(user) } : {}), ...headers });
       if (origin !== null) requestHeaders.set("origin", origin);
+      if (path.startsWith("v1/") && data) requestHeaders.set("content-type", "application/json");
       const response = await fetch(`${server.url}/api/${path}`, {
-        method, headers: requestHeaders, body: body ?? (data ? new URLSearchParams(data) : undefined)
+        method, headers: requestHeaders, body: body ?? (data ? path.startsWith("v1/") ? JSON.stringify(data) : new URLSearchParams(data) : undefined)
       });
       assertHeaders(response);
       return { status: response.status, html: await response.text() };
@@ -136,7 +144,9 @@ test("two accounts cannot read or mutate foreign records; owner fields never cho
     "lists/defaultOptions": "lists/defaultOptions?listId=alice-list",
     "lists/editDefaults": "lists/editDefaults?listId=alice-list",
     "lists/quickAddForm": "lists/quickAddForm?listId=alice-list",
-    "items/filterByStatus": "items/filterByStatus?status=next", "settings/edit": "settings/edit", health: "health"
+    "items/filterByStatus": "items/filterByStatus?status=next", "settings/edit": "settings/edit", health: "health",
+    "v1/session": "v1/session", "v1/records": "v1/records?accountId=alice&type=item&id=alice-item",
+    "v1/receipts": "v1/receipts?accountId=alice&operationId=seed", "v1/changes": "v1/changes?accountId=alice"
   };
   assert.deepEqual([...routes.keys()].filter(key => key.startsWith("GET ")).sort(),
     Object.keys(reads).map(path => `GET /api/${path}`).sort(), "add isolation coverage for each new read route");
@@ -145,7 +155,7 @@ test("two accounts cannot read or mutate foreign records; owner fields never cho
     const response = await f.request(path);
     assert.equal(response.status, 200, path);
     assert.doesNotMatch(response.html, /bob-private/);
-    const bobResponse = await f.request(path.replace("alice-list", "bob-list"), { user: "bob" });
+    const bobResponse = await f.request(path.replaceAll("alice", "bob"), { user: "bob" });
     assert.equal(bobResponse.status, 200, path);
     assert.doesNotMatch(bobResponse.html, /alice-private/);
     if (path.includes("listId=")) {
@@ -164,9 +174,10 @@ test("two accounts cannot read or mutate foreign records; owner fields never cho
   for (const [path, data] of Object.entries(mutationCases)) {
     seed();
     const bob = structuredClone(documents.filter(doc => doc.UserID === "bob"));
-    assert.ok((await f.request(path, { data: { ...data, userId: "bob", UserID: "bob", ObjectID: "bob-list", ObjectType: "list" } })).status < 300, path);
+    const forged = await f.request(path, { data: { ...data, userId: "bob", UserID: "bob", ObjectID: "bob-list", ObjectType: "list" } });
+    assert.ok(path.startsWith("v1/") ? forged.status === 400 : forged.status < 300, path);
     assert.deepEqual(documents.filter(doc => doc.UserID === "bob"), bob, path);
-    assert.ok(documents.every(doc => doc.userId === doc.UserID));
+    assert.ok(documents.every(doc => doc.ObjectType === "sync" || doc.userId === doc.UserID));
   }
   documents.length = 0;
   assert.equal((await f.request("app")).status, 200);

@@ -1,0 +1,250 @@
+# Versioned data API (issue #4)
+
+The v1 API adds repeat-safe JSON writes alongside the existing HTML API. It is
+disabled unless `V1_API_ENABLED=true`. Use an isolated staging environment until
+the migration and Azure gates below pass. The existing HTML client still uses
+legacy storage; it does **not** read v1 captures or provide offline synchronization.
+Issue #5 owns the client/outbox conversion. Do not send a user's live edits to both
+namespaces or enable v1 for a pilot before that conversion and a controlled cutover.
+This PR does not move or modify existing production records.
+
+## Authentication and account binding
+
+All routes use the shared SWA authentication, exact browser-origin policy and
+private/no-store headers from [Request security](request-security.md). JSON errors,
+including 401/403, contain `apiVersion`, `error` and `message`. `HX-Request` is not
+authentication. There is no extension CORS exception or direct backend access.
+
+`GET /api/v1/session` returns `{apiVersion:1, accountId:"…"}`. Store that account ID
+with the local queue when capturing; never substitute a newly signed-in account
+when uploading old work. Every operation and every data read explicitly supplies
+its original `accountId`; the server compares it to the authenticated principal.
+A mismatch returns 409 `account_mismatch` without storage access. A missing or
+expired principal returns 401 without writing. Pause the queue, keep its drafts,
+and require the original account to sign in. A missing receipt is not permission
+to discard a queued operation or assign it to someone else.
+
+## Routes and payloads
+
+| Method and route | Request | Success |
+| --- | --- | --- |
+| GET `v1/session` | No parameters | API version and authenticated account ID |
+| POST `v1/operations` | JSON operation below | Durable committed receipt (200), or durable conflict receipt (409) |
+| GET `v1/records` | `accountId`, `type=list\|item`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
+| GET `v1/receipts` | `accountId`, `operationId` | Exact stored receipt (200), whose `status` may be `conflict`; absent receipts return 404 |
+| GET `v1/changes` | `accountId`, `after` (default 0), `limit` (default 10, max 50) | Ordered change entries, `nextAfter`, `highWater`, `hasMore` |
+
+Paths above are under `/api/`. See the reusable
+[groceries fixture](../api/test/fixtures/v1-operations.json) for a list with three
+items. Both web and future extension handoff clients can send that same contract.
+Use random UUIDs (without braces) for new record and operation IDs. IDs accept
+1–128 ASCII letters, digits, `_` or `-`. A record's `(accountId, type, id)` never
+changes, including when its `listId` changes or becomes `null` (inbox).
+
+```json
+{
+  "apiVersion": 1,
+  "accountId": "account-from-session",
+  "operationId": "one-uuid-per-intent",
+  "mutations": [{
+    "type": "item",
+    "id": "stable-item-uuid",
+    "action": "create",
+    "expectedVersion": 0,
+    "fields": {
+      "title": "Milk",
+      "originalText": "  milk\n",
+      "listId": null
+    }
+  }]
+}
+```
+
+Operations contain 1–20 distinct records and at most 64 KiB of UTF-8 JSON. Unknown
+fields, unknown versions, malformed dates, invalid references and oversized text
+are rejected rather than clipped. Lists support title (200 characters), description
+(4,000) and creation-only capture fields. Items additionally support nullable
+`listId`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
+`waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority` and HTTP(S)
+`referenceLinks`. Tags are at most 64 characters, arrays at most 20 entries, URLs
+at most 2,048 characters. Statuses are `inbox`, `next`, `waiting`, `deferred`,
+`scheduled`, `someday`, `active` and `completed`.
+
+Creation-only fields are `originalText` (16,000 characters), `selectedText` (8,000),
+`sourceTitle` (2,000) and nullable `sourceUrl`. Text retains its whitespace; omitted
+`originalText` defaults to the supplied title. Updates cannot rewrite those
+originals. Each resulting record must fit in 32 KiB. A complete Cosmos batch must
+fit in 1.5 MB; larger operations receive a validation error before writing. These
+limits also bound stored receipts and change entries.
+
+For an edit, send `action:"update"`, the observed positive `expectedVersion`, and
+only the fields to change. Completion is `{status:"completed"}`; reopening sets
+the desired status explicitly. Retrying cannot toggle twice. Even an edit that
+sets an already-present value requires the version precondition. Send a new
+operation ID for a new intent; preserve the existing ID and exact content for a
+retry. Object key order is immaterial to the request hash; array order, omitted
+fields, text and all supplied values are significant.
+
+For deletion, send `action:"delete"` with an expected version and no `fields`.
+The record remains as a versioned tombstone, including its text. Updates and
+creates using the deleted identity return conflicts, even when a client supplies
+the tombstone's latest version. Explicit recovery to a new ID is future client
+work; there is no undelete or purge endpoint in v1. A list must already be empty
+before deletion: first acknowledge moves/deletes of its items in a separate
+operation. This avoids accidental cascades and preserves account-owned references.
+
+## Receipts, conflicts and transactions
+
+All records in one operation, its receipt, its change entry and the account
+sequence commit in one Cosmos transactional batch. There is no successful partial
+list-plus-items operation. A list may be created with its items in the same request
+in any mutation order. For more than 20 records, acknowledge the list/first chunk
+before sending additional chunks, each with stable IDs and a distinct operation
+ID. A later chunk failure leaves earlier acknowledged chunks intact; retry only
+the pending chunk unchanged. There is no cross-operation transaction.
+
+The receipt has `apiVersion`, `accountId`, `operationId`, monotonically increasing
+`sequence`, `status:"committed"`, and `records` containing committed snapshots and
+versions. A lost response, 503, network interruption or uncertain timeout means
+**retain and retry the same operation**. The receipt is written atomically with
+the records; retries return the original acknowledgement, even if later edits
+have changed the records. Different content under a stored operation ID returns
+409 `operation_reused`. Do not interpret an old receipt as the current record.
+
+A version mismatch or deleted identity commits **no proposed record changes**.
+Instead it durably records `status:"conflict"`, an empty `records` array, the whole
+operation's `proposed` mutations, and `conflicts` pairing the conflicting mutations
+with current committed snapshots. Even non-conflicting edits in the rejected
+transaction remain recoverable from its receipt. The
+receipt/change history retains the two competing versions; earlier snapshots
+remain in prior change entries. Read the latest record, show the competing text,
+and submit the user's chosen resolution as a new operation with that latest
+version. Retrying the conflicted operation returns the same conflict. Ordinary
+validation, missing-reference and authentication errors have no durable receipt.
+
+The account state ETag serializes decisions, including reference checks and
+conflict receipts. The transaction also checks replaced record ETags. A failed
+precondition causes a bounded retry of the full decision (up to five attempts);
+then 503 `account_busy` tells the client to retry later with backoff. There are no
+unconditional upserts. This uses the existing SDK's
+[transactional batch semantics](https://learn.microsoft.com/en-us/azure/cosmos-db/transactional-batch)
+and [per-operation conditional requests](https://learn.microsoft.com/en-us/rest/api/cosmos-db/transactional-batch).
+
+## Bounded synchronization
+
+`after` is an account-specific committed sequence, not a wall-clock timestamp or
+row offset. Each transaction writes one contiguous change entry; conflicts also
+occupy a sequence. Change entries contain the durable receipt, including snapshots
+and tombstones. The client starts at 0, applies each page to its account cache,
+and atomically persists `nextAfter` with those changes. Repeat pages are harmless
+when applying snapshots by stable ID and version. Never advance the cursor merely
+because `highWater` is larger. Newly committed work appears on later requests.
+
+The server point-reads immutable `change:<sequence>` documents, returns at most the
+requested count and approximately 1 MB of entries (plus envelope overhead), and
+never advances past the last returned sequence. Reads are bounded by the requested
+limit plus the state read; at a byte boundary, one read entry is left for the next
+page. There are no database continuation tokens or empty query pages. Gaps return 503
+`history_gap` and a cursor ahead of visible history returns 409 `cursor_ahead`.
+Retain the cache/queue and investigate a restore or consistency/configuration
+problem; do not reset pending work automatically. There is no history compaction
+or expiration protocol yet, so change rows must not be deleted independently.
+
+## Immutable storage identity and rollout
+
+Keep the existing hierarchical Cosmos partition definition
+`[/UserID, /ObjectType, /ObjectID]`. Every v1 document uses the immutable values
+`[authenticatedAccountId, "sync", "v1"]`. Logical IDs live in `record.id`; storage
+IDs are `record:list:<id>` or `record:item:<id>`. The same partition contains
+`state`, `receipt:<operationId>`, and `change:<sequence>`. List membership is only a
+record field. All point reads and queries supply the full account partition.
+
+Use a single write region and at least Session consistency. Confirm the actual
+container partition definition and indexing of `kind` and the nested
+`record` fields in staging. State reads and subsequent validation queries share
+the SDK partition session token; ETags arbitrate simultaneous writers. Do not
+enable independent multi-region writers or writers that bypass this protocol.
+No settings are created automatically by GET requests.
+
+Receipts, change history and tombstones currently have no expiration; v1 documents
+set `ttl:-1` to prevent a container default TTL from expiring them. Retention and
+account erasure are issue #13. Account partitions serialize writes and accumulate
+history, so measure storage/RU usage before pilot expansion. Replace this bounded
+pilot design if account volume approaches Cosmos logical-partition limits or
+contention becomes significant; do not silently prune retry receipts/tombstones.
+
+## Migration and rollback rehearsal
+
+The offline tool never connects to Azure. Its inputs/outputs contain private data;
+keep them outside Git with the same access controls as a backup. It refuses to
+overwrite output files. It accepts `{formatVersion:1, documents:[...]}` containing
+the **complete, consistent** legacy export, including lists, items and settings.
+
+From `api/`:
+
+```text
+node scripts/migrate-v1.mjs prepare legacy-export.json prepared-v1.json
+node scripts/migrate-v1.mjs rollback prepared-v1.json restored-legacy.json
+node --experimental-test-module-mocks --test test/migration.test.mjs
+```
+
+`prepared-v1.json` contains the unmodified backup, canonical SHA-256 checksum,
+prepared `targetDocuments` and account/count report. Each migrated record begins
+at version 1 with an initial receipt and change entry. IDs, owners, custom status
+values, descriptions, links, dates, list defaults and other persisted fields are
+retained. Settings are archived in each account's `legacy-settings` document for
+the client conversion; this API does not yet expose settings. If original capture
+text never existed, the tool derives title/description text and marks it
+`originalTextProvenance:"persisted-legacy-title-description"`; it does not claim to
+recover keystrokes that were never stored. Existing original text stays exact.
+
+Owner/partition mismatches, duplicate identities, orphan references, unknown record
+types and records exceeding the limit stop preparation. Reconcile those from the
+backup explicitly; do not discard them. The rollback command verifies both backup
+and generated target against the checksum before reconstructing the legacy export.
+The checksum detects accidental changes; protect the manifest as well as the data.
+Cosmos service metadata/ETags will be regenerated on a real restore.
+
+Staging/production procedure:
+
+1. Keep v1 disabled. Confirm #3's trusted ingress and two-account security gates.
+   Freeze legacy writes for the export/cutover window and take an Azure backup plus
+   a complete JSON export. Record the environment, timestamp, commit, counts and
+   backup restore point. A live multi-page export without a write freeze is not a
+   consistent backup.
+2. Prepare the export and retain its checksum/report. Restore the legacy backup
+   into an isolated clone first, then load `targetDocuments` using create-only
+   writes into an empty target with the same hierarchical partition/index settings.
+   Keep the API disabled throughout import. Never upsert into an active v1 store.
+3. Read back and compare every prepared document (excluding regenerated Cosmos
+   metadata), owner counts, initial sequences, links and original text. If import
+   is interrupted, discard/recreate the isolated target and import again. Partial
+   imports must never serve requests. No live migration has been run by this PR.
+4. Enable v1 only in that isolated environment. Exercise the v1 fixture, lost
+   acknowledgements, concurrent edits/reference races, bounded pages and a stale
+   edit after deletion against **real Cosmos** with two authenticated accounts.
+   Inspect actual API headers and RU/latency. Finish the client conversion in #5
+   before choosing a production cutover; disable the old mutation paths at cutover.
+5. Rehearse rollback while writes remain frozen. Disable v1, reconstruct and
+   restore the verified legacy export/backup into another isolated target, and
+   compare application fields/owners/counts before repointing the old release.
+   After v1 has accepted new writes, an old backup alone loses that new work:
+   export and retain the v1 records/history/receipts and reconcile them before a
+   rollback. Do not claim an automatic lossless downgrade after cutover.
+
+## Evidence and remaining gates
+
+Local checks on October 1, 2026 use Node 26.7.0 and Edge 154.0.4258.48. All 21 tests
+pass, including registered production HTTP handlers with a transactional in-memory
+Cosmos substitute, rollback injection at every batch position, lost acknowledgements,
+simultaneous duplicate writes/edits and membership/deletion races, immutable moves,
+tombstones, paging bounded by both entry count and bytes,
+account switching/expiry, malformed input and the existing desktop/390px HTMX flow.
+The migration test runs both CLI commands, checks checksum/round-trip equality,
+loads the prepared fixture into the isolated test store, and edits/reads migrated
+records through the production service.
+
+These checks do not certify actual Cosmos transaction responses, consistency,
+partition/index configuration, Azure backup restoration, deployed authentication,
+or a production client cutover. Keep #4 open until the real staging migration,
+rollback and data API evidence is recorded, alongside #3/#17 deployment gates.
