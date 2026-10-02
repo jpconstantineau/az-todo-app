@@ -1,13 +1,15 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const knownTypes = ['item', 'list', 'project', 'settings', 'clarification', 'review'];
+import { readableBrief } from './briefs.js?v=16';
+const knownTypes = ['item', 'list', 'project', 'settings', 'clarification', 'review', 'brief'];
 const recordFields = ['id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText',
   'listId', 'projectId', 'plannedDay', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'decisions', 'step', 'answers', 'proposal'];
+  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'decisions', 'step', 'answers', 'proposal',
+  'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content'];
 
 export function validateDeviceExport(value) {
   const require = (condition, message) => { if (!condition) throw new Error(`Invalid device export: ${message}`); };
@@ -90,7 +92,7 @@ export function readableExport(value) {
     lines.push('', heading);
     const records = Object.values(value.state.records).filter(record => record.deleted === deleted);
     if (!records.length) lines.push('(none)');
-    for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`, fields(record));
+    for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`, record.type === 'brief' && record.content ? readableBrief(record) : fields(record));
   }
   lines.push('', 'PENDING SAVES (not server-confirmed)');
   if (!value.state.queue.length) lines.push('(none)');

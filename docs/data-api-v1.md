@@ -21,6 +21,11 @@ The additive [clarification contract](clarification.md#api-and-rollout) introduc
 accepted/unknown answers remain separate from the task; accepted task changes
 and session progress share an atomic operation. Deploy that API before shell v11.
 
+The additive [brief contract](briefs.md#api-and-recovery) introduces immutable
+content revisions with explicit acceptance/rejection. Draft creation and decisions
+use the existing account transaction, receipt and conflict protocol. Deploy that
+API before shell v16.
+
 **Decision: retain the working account transaction boundary.** The physical
 hierarchical paths remain `[/UserID, /ObjectType, /ObjectID]`; their v1 values are
 `[accountId, "sync", "v1"]`. The last two field names are inherited partition

@@ -131,6 +131,18 @@
       </details>
       <details><summary>Accepted answers and unknowns</summary><pre id="clarifyAnswers"></pre></details>
     </dialog>
+    <dialog class="side-panel" id="briefs" aria-labelledby="briefHeading">
+      <p class="eyebrow">Prepare a brief</p><h2 id="briefHeading" tabindex="-1">Brief</h2>
+      <p>Review the template and unknowns. Saving edited content creates a new draft revision; acceptance applies only to the selected revision. Nothing is sent automatically.</p>
+      <details><summary>Original capture and supplied sources</summary><pre id="briefOriginal"></pre></details>
+      <label>Saved revision<select id="briefRevisions"></select></label>
+      <p id="briefState" role="status"></p><p id="briefError" role="alert"></p>
+      <form id="briefForm"><div id="briefFields"></div>
+        <div class="actions"><button type="submit">Save new draft revision</button><button id="briefAccept" type="button">Accept this revision</button><button id="briefReject" type="button">Reject this revision</button></div>
+      </form>
+      <div class="actions"><button id="briefExport" type="button">Export selected revision</button><button id="closeBriefs" type="button">Stop and close brief</button></div>
+      <p class="muted">Typing keeps a device draft. Saved revisions and decisions sync with your account. Export labels drafts and pending decisions as unaccepted or unconfirmed; only a server-confirmed accepted revision is labeled accepted.</p>
+    </dialog>
     <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading">
       <h2 id="defaultsHeading">Defaults</h2><p>One option per line. Changing options keeps existing task values.</p>
       <p id="defaultsError" role="alert" hidden></p>
