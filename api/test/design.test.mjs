@@ -1,3 +1,4 @@
+import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -34,10 +35,10 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   if (!baseline) {
     await page.emulateMedia({ colorScheme: 'light' });
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
-    assert.equal(await page.locator('#quickFocus').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#quickFocus').getAttribute('aria-current'), 'page');
     assert.ok((await page.locator('#captureText').boundingBox()).height >= 200);
   }
-  await page.locator('#captureText').fill('Plan a walk by the river\nBook the bike tune-up\nPick up groceries for dinner');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Plan a walk by the river\nBook the bike tune-up\nPick up groceries for dinner');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '' && document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   for (const width of (baseline ? [320, 390, 768, 1440] : [320, 390, 393, 768, 1366, 1440, 2560])) {
@@ -46,36 +47,36 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     if (!baseline) await fits();
   }
   if (baseline) return;
-  await page.locator('#captureText').fill('Keep my capture while reviewing');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Keep my capture while reviewing');
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole('button', { name: 'List workspace', exact: true }).click();
+    await showView(page, 'lists');
     assert.equal(await page.locator('#captureText').isVisible(), false);
-    assert.equal(await page.locator('#listWorkspace').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#listWorkspace').getAttribute('aria-current'), 'page');
     await fits(); await shot(`lists-${width}`);
-    await page.getByRole('button', { name: 'Capture inbox', exact: true }).click();
+    await showView(page, 'capture');
     assert.equal(await page.locator('#captureText').inputValue(), 'Keep my capture while reviewing');
   }
-  await page.locator('#captureText').fill('');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('');
   await page.setViewportSize({ width: 390, height: 900 });
   await page.locator('#captureText').focus();
   await page.keyboard.press('Tab');
   assert.ok(await page.getByRole('button', { name: 'Save on device', exact: true }).evaluate(el => el.matches(':focus-visible')));
   assert.equal(await page.getByRole('button', { name: 'Save on device', exact: true }).evaluate(el => getComputedStyle(el).outlineWidth), '3px');
   await shot('inbox-keyboard-focus-390');
-  await page.locator('#captureText').fill('A'.repeat(200));
+  await showView(page, 'capture'); await page.locator('#captureText').fill('A'.repeat(200));
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.setViewportSize({ width: 320, height: 900 });
   await fits();
-  await page.getByRole('button', { name: 'Edit ' + 'A'.repeat(200), exact: true }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Edit ' + 'A'.repeat(200), exact: true }).click();
   assert.ok(await page.locator('#editor').evaluate(el => el.matches(':modal')));
   await fits();
   await page.locator('#edit [name=title]').fill('Preserved sheet draft');
   await shot('editor-sheet-320');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#editor').isVisible(), false);
-  await page.getByRole('button', { name: 'Edit ' + 'A'.repeat(200), exact: true }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Edit ' + 'A'.repeat(200), exact: true }).click();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), 'Preserved sheet draft');
   await page.setViewportSize({ width: 1440, height: 900 });
   const panel = await page.locator('#editor').boundingBox();
@@ -100,9 +101,9 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     assert.ok(await page.locator('#defaultsEditor').evaluate(el => el.matches(':modal')));
     await fits(); await shot('native-defaults-' + width);
     await page.getByRole('button', { name: 'Close defaults', exact: true }).click();
-    await page.locator('#captureOptions summary').click();
+    await showView(page, 'capture'); await page.locator('#captureOptions summary').click();
     await fits(); await shot('native-fields-' + width);
-    await page.locator('#captureOptions summary').click();
+    await showView(page, 'capture'); await page.locator('#captureOptions summary').click();
   }
   await page.setViewportSize({ width: 320, height: 900 });
 

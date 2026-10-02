@@ -1,3 +1,5 @@
+import { showView } from './navigation-helper.mjs';
+import { waitForBrowser } from './browser-wait.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -109,6 +111,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('#captureText').value); await confirmed();
   await context.setOffline(true);
+  await showView(page, 'work');
   await page.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
   await page.locator('#editAdvanced summary').click();
   await page.locator('#edit [name=status]').selectOption('waiting');
@@ -142,6 +145,13 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.locator('#edit [name=startDate]').fill('2020-01-02');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.locator('#statusFilter').selectOption('@review-ready');
+  await showView(page, 'capture'); await showView(page, 'lists');
+  assert.equal(await page.locator('#statusFilter').inputValue(), '');
+  await showView(page, 'work');
+  assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation?.work.status === '@review-ready');
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
   assert.equal(await page.locator('#items article').count(), 1);
   await page.getByRole('button', { name: 'Undo state change Get approval', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#items').textContent.includes('waiting ·'));
@@ -151,7 +161,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   assert.equal(saved.waitingOn, 'Alex'); assert.equal(saved.dueDate, '2026-11-01'); assert.equal(saved.startDate, null);
   for (const timezoneId of ['Pacific/Honolulu', 'Pacific/Auckland']) {
     const other = await browser.newContext({ timezoneId }); const tab = await other.newPage();
-    await tab.goto(server.url); await tab.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
+    await tab.goto(server.url); await tab.locator('#workspace').waitFor(); await showView(tab, 'work'); await tab.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
     assert.equal(await tab.locator('#edit [name=dueDate]').inputValue(), '2026-11-01');
     await other.close();
   }

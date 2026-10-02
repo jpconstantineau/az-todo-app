@@ -45,6 +45,6 @@ shell versions 3, 4 and 5. Layout checks cover 320/390/768/1440/2560 CSS pixels.
 Set `PROJECT_SCREENSHOTS=1` when running the suite to refresh the
 [390px day view](design/projects-day-390.png) and
 [1440px project view](design/projects-1440.png). The controls reuse the design
-reference's existing native form and card styling; navigation redesign remains
-#26. Physical phones, screen readers and real SWA/Cosmos verification remain
+reference's existing native form and card styling. Projects and planned-day
+filters now live in [Your Work](navigation.md). Physical phones, screen readers and real SWA/Cosmos verification remain
 unverified release gates, rather than claims made by these in-memory tests.

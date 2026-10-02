@@ -71,7 +71,7 @@ path is unchanged and covered by a workflow preservation test. Unrelated edits
 preserve those values; an explicit workflow change must supply valid required
 metadata. Derived `nextAction` is reconciled on the next live item write.
 
-Deploy the API before shell **v8** and keep its support while clients have pending
+Deploy the API before the workflow-capable shell (**v8** or later) and keep its support while clients have pending
 operations. v3–v7 shell upgrade checks retain exact queued operations, drafts and
 account caches. An old queued incomplete waiting/deferred transition can now be
 rejected: it stays recoverable at the queue head, and is never silently repaired

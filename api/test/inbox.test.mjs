@@ -1,3 +1,4 @@
+import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
@@ -36,7 +37,7 @@ async function local(page) {
   return page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
 }
 async function capture(page, text, newList) {
-  await page.locator('#captureText').fill(text);
+  await showView(page, 'capture'); await page.locator('#captureText').fill(text);
   if (newList) {
     if (!await page.locator('#captureOptions').getAttribute('open')) await page.locator('#captureOptions summary').click();
     await page.locator('[name=newList]').fill(newList);
@@ -63,22 +64,23 @@ test('inbox: groceries capture, offline editing/moving/completion, original inpu
   assert.equal(queued.queue[0].operation.mutations[1].fields.originalText, '  milk\n\n bread\neggs  ');
   assert.equal(records().length, 0);
   await page.reload();
-  await page.locator('#items article').first().waitFor();
-  await page.getByRole('button', { name: 'Edit milk', exact: true }).click();
+  await showView(page, 'work'); await page.locator('#items article').first().waitFor();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Edit milk', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Oat milk');
   await page.locator('#edit [name=description]').fill('Unsweetened\nTwo cartons');
   await page.locator('#edit [name=listId]').selectOption('');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Complete Oat milk' }).click();
-  await page.getByRole('button', { name: 'Reopen Oat milk' }).click();
-  await page.getByRole('button', { name: 'Edit list: Groceries' }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Complete Oat milk' }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Reopen Oat milk' }).click();
+  await showView(page, 'lists'); await page.locator('#view').selectOption({ label: "Groceries" }); await page.getByRole('button', { name: 'Edit list: Groceries' }).click();
   await page.locator('#edit [name=title]').fill('Weekend groceries');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   // A click only starts the save. The editor closes after the IDB transaction commits.
   await page.locator('#editor').waitFor({ state: 'hidden' });
-  await page.reload();
+  await page.reload(); await showView(page, 'work');
   await page.getByRole('button', { name: 'Complete Oat milk' }).waitFor();
+  await showView(page, 'work');
   assert.match(await page.locator('#items').innerText(), /Unsweetened/);
   assert.equal((await local(page)).queue.length, 5);
   await context.setOffline(false);
@@ -89,7 +91,7 @@ test('inbox: groceries capture, offline editing/moving/completion, original inpu
   assert.equal(milk.listId, null); assert.equal(milk.status, 'inbox'); assert.equal(milk.version, 4);
   assert.equal(milk.originalText, '  milk\n\n bread\neggs  ');
   assert.equal(records().find(record => record.type === 'list').title, 'Weekend groceries');
-  await page.locator('#captureText').fill('Phone draft');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Phone draft');
   await page.setViewportSize({ width: 390, height: 400 });
   await page.locator('#captureText').focus();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -114,17 +116,17 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await capture(page, 'Survive termination');
-  await page.locator('#captureText').fill('Still thinking about this');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Still thinking about this');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Still thinking about this');
   await context.close();
   context = await chromium.launchPersistentContext(profile, { channel, offline: true });
   page = await context.newPage();
   await page.goto(`${server.url}/inbox.html`);
-  await page.getByRole('button', { name: 'Edit Survive termination' }).waitFor();
+  await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v8')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=8', '/inbox-store.js?v=8', '/inbox-fields.js?v=8', '/pwa.js?v=8', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'].sort());
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v9')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual(cached.sort(), ['/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=9', '/inbox-store.js?v=9', '/inbox-fields.js?v=9', '/pwa.js?v=9', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -150,7 +152,7 @@ test('inbox: lost acknowledgement retains exact operation, foreground retry conf
 test('inbox: switching accounts and expired login never display or upload another account queue', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t);
   await context.setOffline(true); await capture(page, 'Alice private');
-  await page.locator('#captureText').fill('Alice unfinished');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Alice unfinished');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished');
   setUser('bob'); await context.setOffline(false);
   await page.getByRole('button', { name: 'Sync now' }).click();
@@ -168,8 +170,9 @@ test('inbox: switching accounts and expired login never display or upload anothe
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sign in online'));
   assert.equal(await page.locator('#workspace').isVisible(), false);
   setUser('alice'); await context.setOffline(false); await page.reload();
-  await page.getByRole('button', { name: 'Edit Alice private' }).waitFor(); await confirmed(page);
+  await page.getByRole('button', { name: 'Edit Alice private', includeHidden: true }).waitFor({ state: 'attached' }); await confirmed(page);
   assert.equal(await page.locator('#captureText').inputValue(), 'Alice unfinished');
+  await showView(page, 'work');
   assert.doesNotMatch(await page.locator('#items').innerText(), /Bob work/);
   assert.equal(records().filter(record => record.accountId === 'alice').length, 1);
 });
@@ -178,7 +181,7 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
   const { page, context, url } = await setup(t);
   await capture(page, 'Shared task'); await confirmed(page);
   await context.setOffline(true);
-  await page.getByRole('button', { name: 'Edit Shared task' }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Edit Shared task' }).click();
   await page.locator('#edit [name=title]').fill('Phone version');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
@@ -192,8 +195,8 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
   await page.locator('#resolve').click(); await confirmed(page);
   assert.equal(records()[0].title, 'Phone version');
   await context.setOffline(true);
-  await page.getByRole('button', { name: 'Complete Phone version' }).click();
-  await page.getByRole('button', { name: 'Reopen Phone version' }).waitFor();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Complete Phone version' }).click();
+  await page.getByRole('button', { name: 'Reopen Phone version', includeHidden: true }).waitFor({ state: 'attached' });
   await serverEdit(url, records()[0], null, 'delete');
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click();
   await page.locator('#failure').waitFor();
@@ -207,7 +210,7 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
 test('inbox: failed local transaction keeps entered text and recovery copy; queue is bounded', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t);
   await context.setOffline(true);
-  await page.locator('#captureText').fill('Keep me after quota failure');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Keep me after quota failure');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Keep me after quota failure');
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
@@ -221,14 +224,14 @@ test('inbox: failed local transaction keeps entered text and recovery copy; queu
   assert.equal((await local(page)).queue.length, 0);
   await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
-  await page.getByRole('button', { name: 'Edit Keep me after quota failure' }).waitFor();
+  await page.getByRole('button', { name: 'Edit Keep me after quota failure', includeHidden: true }).waitFor({ state: 'attached' });
   await page.evaluate(async () => {
     const { transact, enqueue, captureMutations } = await import('/inbox-store.js');
     await transact('alice', state => {
       for (let index = state.queue.length; index < 100; index++) enqueue(state, 'alice', captureMutations({ text: `Bounded ${index}` }));
     });
   });
-  await page.locator('#captureText').fill('Over the queue limit');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Over the queue limit');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('queue is full'));
   assert.equal((await local(page)).queue.length, 100);
@@ -239,18 +242,18 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   const { page, context, url } = await setup(t);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
-  await page.locator('#captureText').fill('milk, bread; eggs');
-  await page.locator('#captureOptions summary').click();
+  await showView(page, 'capture'); await page.locator('#captureText').fill('milk, bread; eggs');
+  await showView(page, 'capture'); await page.locator('#captureOptions summary').click();
   await page.locator('#previewSplit').click();
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
-  await page.locator('#captureText').fill('oat milk\nbread\neggs');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('oat milk\nbread\neggs');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
   await page.reload();
   await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'oat milk\nbread\neggs');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
-  await page.getByRole('button', { name: 'Edit oat milk' }).waitFor();
+  await page.getByRole('button', { name: 'Edit oat milk', includeHidden: true }).waitFor({ state: 'attached' });
   assert.ok((await local(page)).queue[0].operation.mutations.every(mutation => mutation.fields.originalText === 'milk, bread; eggs'));
   const second = await context.newPage(); await second.goto(`${url}/inbox.html`);
   await second.locator('#workspace').waitFor();
@@ -267,7 +270,7 @@ test('inbox: editor storage failure closes the sheet and exposes a recovery copy
   const { page, context } = await setup(t);
   await capture(page, 'Original task'); await confirmed(page);
   await context.setOffline(true);
-  await page.getByRole('button', { name: 'Edit Original task', exact: true }).click();
+  await showView(page, 'work'); await page.getByRole('button', { name: 'Edit Original task', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Recover this sheet draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Recover this sheet draft');
   await page.evaluate(() => {
@@ -302,7 +305,7 @@ test('retired shell explains recovery and every legacy mutation stays read-only'
 test('inbox: aborted transaction never reports saved; keyboard double activation creates only one intent', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t);
   await context.setOffline(true);
-  await page.locator('#captureText').fill('Atomic save');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Atomic save');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Atomic save');
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
@@ -321,11 +324,11 @@ test('inbox: aborted transaction never reports saved; keyboard double activation
     IDBObjectStore.prototype.put = window.originalPut;
     const form = document.querySelector('#capture'); form.requestSubmit(); form.requestSubmit();
   });
-  await page.getByRole('button', { name: 'Edit Atomic save' }).waitFor();
+  await page.getByRole('button', { name: 'Edit Atomic save', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal((await local(page)).queue.length, 1);
-  await page.locator('#captureText').fill('Keyboard save');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Keyboard save');
   await page.locator('#captureText').press('Control+Enter');
-  await page.getByRole('button', { name: 'Edit Keyboard save' }).waitFor();
+  await page.getByRole('button', { name: 'Edit Keyboard save', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal((await local(page)).queue.length, 2);
   assert.equal(await page.locator('#captureText').evaluate(element => element === document.activeElement), true);
 });
@@ -336,6 +339,7 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
     body: JSON.stringify({ apiVersion: 1, error: 'invalid_request', message: 'The destination needs correction.' }) }));
   await capture(page, 'Recover rejected text');
   await page.locator('#failure').waitFor();
+  await showView(page, 'work');
   assert.match(await page.locator('#items').innerText(), /Failed/);
   assert.equal((await local(page)).queue.length, 1);
   await page.reload();
@@ -347,7 +351,7 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-for (const oldVersion of [3, 4, 5, 6, 7]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
+for (const oldVersion of [3, 4, 5, 6, 7, 8]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
   documents.length = 0;
   let oldWorker = true, rejectUpgrade = false;
   const server = await startServer({ browserUser: () => 'alice', assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
@@ -371,26 +375,26 @@ for (const oldVersion of [3, 4, 5, 6, 7]) test(`shell upgrade from v${oldVersion
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await capture(page, 'Old queued item');
-  await page.locator('#captureText').fill('Old unsubmitted draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
-  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Old unsubmitted draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
   oldWorker = false; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
   assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, before.queue);
   rejectUpgrade = false;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, before.queue);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
   await page.close(); page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
-  await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Old queued item' }).waitFor();
+  await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Old queued item', includeHidden: true }).waitFor({ state: 'attached' });
   assert.deepEqual((await local(page)).queue, before.queue);
   await context.unroute('**/api/v1/operations'); await context.setOffline(false);
   await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
