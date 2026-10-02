@@ -1,7 +1,7 @@
-import { app } from "@azure/functions";
+import { readForm, text } from "../shared/validate.mjs";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
-import { checkCsrf } from "../shared/security.mjs";
 import { itemRow } from "../shared/templates.mjs";
 
 app.http("items-toggleComplete", {
@@ -9,14 +9,12 @@ app.http("items-toggleComplete", {
   methods: ["POST"],
   authLevel: "anonymous",
   handler: async (req) => {
-    if (!checkCsrf(req)) return new Response("Forbidden", { status: 403 });
-
     const userId = getUserId(req.headers);
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
-    const form = await req.formData();
-    const id = (form.get("id") || "").toString();
-    const listId = (form.get("listId") || "").toString();
+    const form = await readForm(req);
+    const id = text(form.get("id"), 200, "id");
+    const listId = text(form.get("listId"), 200, "listId");
     if (!id || !listId) return new Response("Bad request", { status: 400 });
 
     // Query (could be point-read if we had ObjectType handy; we do)

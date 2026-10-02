@@ -1,4 +1,5 @@
-import { app } from "@azure/functions";
+import { text } from "../shared/validate.mjs";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { listView, destinationSelect, defaultOptions } from "../shared/templates.mjs";
@@ -12,7 +13,7 @@ app.http("items-byList", {
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const url = new URL(req.url);
-    const listId = url.searchParams.get("listId");
+    const listId = text(url.searchParams.get("listId"), 200, "listId");
     if (!listId) return new Response("listId required", { status: 400 });
 
     // All items in the list partition

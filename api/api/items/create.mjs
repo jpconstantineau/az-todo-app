@@ -1,10 +1,10 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { listView } from "../shared/templates.mjs";
 import { customAlphabet } from "nanoid";
-import { checkCsrf } from "../shared/security.mjs";
-import { clip, cleanTag } from "../shared/validate.mjs";
+import { text, cleanTag, readForm, utcDate } from "../shared/validate.mjs";
+import { defaultSettings } from "../shared/defaults.mjs";
 
 const nano = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 16);
 
@@ -13,28 +13,23 @@ app.http("items-create", {
   methods: ["POST"],
   authLevel: "anonymous",
   handler: async (req) => {
-    if (!checkCsrf(req)) return new Response("Forbidden", { status: 403 });
-
     const userId = getUserId(req.headers);
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
-    const form = await req.formData();
-    const title = clip(form.get("title"), 200);
-    const description = clip(form.get("description"), 4000);
-    const listId = clip(form.get("listId"), 200);
-    const status = clip(form.get("status") || "next", 32);
-    const dueDateUtc = String(form.get("dueDateUtc") || "");
-    const context = cleanTag(form.get("context"));
-    const area = cleanTag(form.get("area"));
-    const energy = cleanTag(form.get("energy"));
-    const timeRequired = cleanTag(form.get("timeRequired"));
-    const priority = cleanTag(form.get("priority"));
+    const form = await readForm(req);
+    const title = text(form.get("title"), 200, "Title");
+    const description = text(form.get("description"), 4000, "Description");
+    const listId = text(form.get("listId"), 200, "listId");
+    const status = cleanTag(form.get("status") || "next", "Status");
+    const dueDateUtc = utcDate(form.get("dueDateUtc"));
+    const context = cleanTag(form.get("context"), "Context");
+    const area = cleanTag(form.get("area"), "Area");
+    const energy = cleanTag(form.get("energy"), "Energy");
+    const timeRequired = cleanTag(form.get("timeRequired"), "Time required");
+    const priority = cleanTag(form.get("priority"), "Priority");
 
     if (!title || !listId) return new Response("Title and destination list are required", { status: 400 });
-    if (String(form.get("title")).trim().length > 200 || String(form.get("description") || "").trim().length > 4000) {
-      return new Response("Title must be at most 200 characters and description at most 4000 characters", { status: 400 });
-    }
-    if ((form.get("dueLocal") && !dueDateUtc) || (dueDateUtc && (!/Z$/.test(dueDateUtc) || Number.isNaN(Date.parse(dueDateUtc))))) {
+    if (form.get("dueLocal") && !dueDateUtc) {
       return new Response("Choose a valid due date and time", { status: 400 });
     }
     const { resources: lists } = await container.items.query({
@@ -43,6 +38,18 @@ app.http("items-create", {
     }, { enableCrossPartition: true }).fetchAll();
     const list = lists[0];
     if (!list) return new Response("Destination list not found", { status: 404 });
+
+    let defaults = list.defaults;
+    if (!defaults) {
+      const { resources } = await container.items.query({
+        query: "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='userSettings' AND c.ObjectID='_meta'",
+        parameters: [{ name: "@u", value: userId }]
+      }, { enableCrossPartition: true }).fetchAll();
+      defaults = resources[0]?.defaults || defaultSettings;
+    }
+    if (!["next", ...(defaults.statuses || [])].includes(status)) {
+      return new Response("Status must be one of the destination list's status options.", { status: 400 });
+    }
 
     const now = new Date().toISOString();
     const id = nano();

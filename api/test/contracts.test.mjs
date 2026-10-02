@@ -9,7 +9,7 @@ test("registered HTTP handlers: list, add, reload, complete/reopen, settings and
   const server = await startServer();
   t.after(server.close);
   async function request(path, data, signedIn = true) {
-    const headers = signedIn ? { "x-ms-client-principal": principal, "HX-Request": "true" } : {};
+    const headers = signedIn ? { "x-ms-client-principal": principal, "HX-Request": "true", Origin: server.url } : {};
     const response = await fetch(server.url + "/api/" + path, { method: data ? "POST" : "GET", headers, body: data ? new URLSearchParams(data) : undefined });
     return { status: response.status, html: await response.text() };
   }

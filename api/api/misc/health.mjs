@@ -1,4 +1,4 @@
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 
 app.http("misc-health", {
   route: "health",

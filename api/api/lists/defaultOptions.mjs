@@ -1,5 +1,6 @@
+import { text } from "../shared/validate.mjs";
 // api/lists/defaultOptions.mjs
-import { app } from "@azure/functions";
+import { app } from "../shared/http.mjs";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 
@@ -52,7 +53,7 @@ app.http("lists-defaultOptions", {
     if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const url = new URL(req.url);
-    const listId = url.searchParams.get("listId") || url.searchParams.get("listid");
+    const listId = text(url.searchParams.get("listId") || url.searchParams.get("listid"), 200, "listId");
     if (!listId) return new Response("listId required", { status: 400 });
 
     const list = await getList(userId, listId);
