@@ -1,4 +1,4 @@
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=14';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=15';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;

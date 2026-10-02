@@ -205,9 +205,9 @@ destroy unsynced work; the UI explains this and offers an export.
 The worker caches only the public root/index/bookmark shell, local CSS, theme
 script, native modules, manifest and icons, never API/auth responses or task data. Wait for
 **Ready to reopen this inbox offline** before relying on offline reload. Both
-root and the inbox alias work offline once worker v14 is active.
+root and the inbox alias work offline once worker v15 is active.
 
-Module URLs carry `?v=14`; the v3 worker ignores query URLs and the v4–v13 workers'
+Module URLs carry `?v=15`; the v3 worker ignores query URLs and the v4–v14 workers'
 exact allowlists exclude these new URLs, preventing a new shell from importing
 old cached modules. A worker-version handshake reports
 readiness only when the matching worker is active. A waiting worker is not forcibly
@@ -220,6 +220,11 @@ client compatibility can be established. Update the shell/module version togethe
 when changing cached modules. See [PWA verification](pwa-installation.md).
 
 ## Defaults and compatibility
+
+An unfinished **New list** draft stays on device without opening the editor on
+page load, including offline reloads. Choose **New list** in List Workspace to
+resume its title and notes. Saving it creates that list once; the next **New list**
+starts a blank draft. Existing item and project editor drafts still reopen on reload.
 
 User/list defaults are versioned records in the same outbox as tasks. Reset/copy
 loads a snapshot into the defaults editor and Save explicitly commits that snapshot

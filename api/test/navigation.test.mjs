@@ -31,6 +31,56 @@ async function capture(page, title, list = '') {
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
 }
 
+test('navigation: new lists open only on request and resume the same draft after online and offline reloads', { timeout: 90000 }, async t => {
+  const { page, context, setUser } = await setup(t);
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  await showView(page, 'lists');
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  await page.locator('#newList').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.type === 'list');
+  const id = (await local(page)).draft.edit.id;
+  await page.locator('#cancelEdit').click();
+  await page.reload(); await confirmed(page);
+  assert.equal(await page.locator('#editor').isVisible(), false, 'a blank list draft must not open on load');
+  await page.locator('#newList').click();
+  await page.locator('#edit [name=title]').fill('Weekend groceries');
+  await page.locator('#edit [name=description]').fill('Keep these unsaved notes');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.description === 'Keep these unsaved notes');
+  assert.equal((await local(page)).draft.edit.id, id);
+  await context.setOffline(true);
+  // Even an interrupted open panel stays closed on the next visit.
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  await showView(page, 'capture');
+  await page.locator('#captureText').fill('Separate capture draft');
+  await showView(page, 'lists');
+  await page.locator('#newList').click();
+  assert.equal(await page.locator('#edit [name=title]').inputValue(), 'Weekend groceries');
+  assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Keep these unsaved notes');
+  assert.ok(await page.locator('#edit [name=title]').evaluate(el => el === document.activeElement));
+  await page.keyboard.press('Escape');
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  assert.equal((await local(page)).draft.edit.id, id);
+  assert.deepEqual((await local(page)).queue, []);
+  await page.locator('#newList').click();
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  assert.equal((await local(page)).queue[0].operation.mutations[0].id, id);
+  await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  assert.equal(documents.filter(doc => doc.record?.type === 'list').length, 1);
+  await page.locator('#newList').click();
+  assert.equal(await page.locator('#edit [name=title]').inputValue(), '');
+  await page.locator('#edit [name=title]').fill('Alice private list draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Alice private list draft');
+  await page.locator('#cancelEdit').click();
+  setUser('bob'); await page.locator('#sync').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await showView(page, 'lists'); await page.locator('#newList').click();
+  assert.equal(await page.locator('#edit [name=title]').inputValue(), '');
+});
+
 test('navigation: distinct views preserve offline capture, filters, editor drafts and exact intents through history and reload', { timeout: 90000 }, async t => {
   const { page, context, url } = await setup(t);
   assert.equal(await page.locator('#quickFocus').getAttribute('aria-current'), 'page');
