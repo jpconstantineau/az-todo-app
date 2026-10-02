@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=11" defer></script>
+  <script src="/pwa.js?v=12" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=11"></script>
+  <script type="module" src="/inbox.js?v=12"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -70,6 +70,27 @@
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
     </section>
     </div>
+    <dialog class="side-panel" id="reviews" aria-labelledby="reviewsHeading">
+      <p class="eyebrow">Reflect</p><h2 id="reviewsHeading">Daily and weekly reviews</h2>
+      <p>Daily: next actions, today's plan and due cues. Weekly: active items and projects, including inbox, waiting and deferred work. Reviews use the work available on this device; sync first for newer changes.</p>
+      <label>Saved reviews<select id="reviewSessions"></select></label>
+      <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button></div>
+      <p id="reviewError" role="alert"></p>
+      <section id="reviewBody" hidden>
+        <p id="reviewProgress" role="status"></p>
+        <label>Review record<select id="reviewRecord"></select></label>
+        <h3 id="reviewTitle"></h3><pre id="reviewDetails"></pre>
+        <details><summary>Original capture</summary><pre id="reviewOriginal"></pre></details>
+        <p>Retain keeps the current state without adding a date. Drop marks an item as dropped and keeps its text. Defer sets a review start date, not a deadline.</p>
+        <div class="actions"><button id="reviewRetain" type="button">Retain</button><button id="reviewDrop" type="button">Drop item</button></div>
+        <label>Defer until<input id="reviewDefer" type="date" min="0001-01-01" max="9999-12-31"></label>
+        <button id="reviewDeferSave" type="button">Defer item</button><button id="reviewUnavailable" type="button" hidden>Acknowledge unavailable record</button>
+        <button id="reviewUndo" type="button">Undo selected decision</button>
+        <p class="muted">Select a reviewed record to undo its decision, then choose again. Undo is available until that record changes again. History is retained with the session; there is no timer.</p>
+        <details><summary>Decision history</summary><pre id="reviewHistory"></pre></details>
+      </section>
+      <button id="closeReviews" type="button">Stop and close review</button>
+    </dialog>
     <dialog class="side-panel" id="editor" aria-labelledby="editHeading">
       <p class="eyebrow">Update</p><h2 id="editHeading">Edit</h2>
       <p id="editError" role="alert" hidden></p>
@@ -109,7 +130,7 @@
         <button type="submit">Save defaults on device</button><button id="resetDefaults" type="button">Reset to built-in defaults</button><button id="closeDefaults" type="button">Close defaults</button>
       </form>
     </dialog>
-    <div class="toolbar device-tools"><button id="sync">Sync now</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="userDefaults">User defaults</button></div>
+    <div class="toolbar device-tools"><button id="sync">Sync now</button><button id="openReviews" type="button">Daily / weekly review</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="userDefaults">User defaults</button></div>
     <p id="exportHelp" class="muted">Includes all work available on this device, pending saves and drafts. Newer server changes may be missing; sync first when online. JSON preserves the full recovery copy.</p>
     <p class="muted">Device copies belong to this browser profile. Unsynced work cannot be recovered after clearing site storage or losing this device. Export a copy before signing out or changing devices. Use a private browser profile on shared devices.</p>
   </main>

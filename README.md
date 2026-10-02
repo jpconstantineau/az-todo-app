@@ -22,6 +22,7 @@ flowchart LR
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)
 - [Portable device exports and round-trip validation](docs/device-export.md)
 - [Waiting, deferred work, dates and undo](docs/workflow-states.md)
+- [Resumable daily and weekly reviews](docs/reviews.md)
 - [Progressive clarification, saved proposals and explicit decisions](docs/clarification.md)
 - [Multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
 - [Account partition decision and measurements](docs/data-api-v1.md#partition-decision-issue-27)

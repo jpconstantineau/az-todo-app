@@ -93,10 +93,17 @@ app.http = (name, config) => {
 };
 await import("../api/index.mjs");
 
-export async function startServer({ browserUser = false, assetContents = () => undefined } = {}) {
+export async function startServer({ browserUser = false, assetContents = () => undefined, rejectOperations = () => false } = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     try {
+      // Server-side faults also cover requests made through an active service worker.
+      if (req.method === 'POST' && url.pathname === '/api/v1/operations' && rejectOperations()) {
+        req.resume();
+        res.writeHead(503, { 'content-type': 'application/json', 'cache-control': 'private, no-store' });
+        res.end(JSON.stringify({ apiVersion: 1, error: 'storage_unavailable', message: 'Injected operations outage.' }));
+        return;
+      }
       const handler = routes.get(`${req.method} ${url.pathname}`);
       if (handler) {
         const chunks = [];
@@ -114,7 +121,7 @@ export async function startServer({ browserUser = false, assetContents = () => u
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"] };
-        for (const name of ['theme.js', 'pwa.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'clarification.js', 'inbox-sw.js']) {
+        for (const name of ['theme.js', 'pwa.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
         assets["/manifest.json"] = ["manifest.json", "application/json"];

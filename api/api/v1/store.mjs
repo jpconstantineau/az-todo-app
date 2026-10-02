@@ -3,6 +3,7 @@ import { bytes, digest, document, partition, recordId, MAX_RECORD_BYTES } from "
 import { ValidationError } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { applyWorkflow } from "./workflow.mjs";
+import { validateReview } from "./reviews.mjs";
 
 export class ApiError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -62,6 +63,8 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const settings = records.find(record => record.type === "settings") ?? (await read(accountId, recordId("settings", "settings")))?.record;
     const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? await legacyDefaults(accountId)) };
     for (const [i, record] of records.entries()) {
+      if (record.type === 'review') await validateReview(record, current[i]?.record, input.mutations, records,
+        async ref => (await read(accountId, recordId(ref.type, ref.id)))?.record);
       if (record.type === "clarification" && !record.deleted) {
         const item = records.find(r => r.type === "item" && r.id === record.id)
           ?? (await read(accountId, recordId("item", record.id)))?.record;
@@ -80,7 +83,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
           if (!project || project.deleted) throw new ApiError(404, "project_not_found", "Destination project not found in this account.");
         }
         const mutation = input.mutations[i], old = current[i]?.record;
-        const allowed = ["inbox", "next", "waiting", "deferred", "completed", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
+        const allowed = ["inbox", "next", "waiting", "deferred", "completed", "dropped", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
         // Historic values stay editable; unrelated edits and moves never erase them.
         if (mutation.fields?.status !== undefined && ![...allowed, old?.status, old?.statusBeforeCompletion, old?.workflowBeforeTransition?.status].includes(record.status)) {
           throw new ValidationError("status is not configured for this list or account.");

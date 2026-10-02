@@ -426,3 +426,12 @@ No IndexedDB schema change or record rewrite is required. The session's built-in
 options and archived defaults are cached inside the existing account document for
 offline editing. The first settings save becomes an ordinary change-feed record.
 Existing pending operation IDs/content and migration checksums remain unchanged.
+
+## Review sessions
+
+`review` records reference canonical item/project IDs and hold a daily/weekly
+scope plus append-only decisions. A decision and its canonical task edit share
+one version-checked operation; retries do not duplicate decisions, and conflicts
+apply neither edit. The server validates exact prior/next states and guards undo
+against subsequent edits. `dropped` is a retained, editable item status, not a
+tombstone. See [review behavior, contract and recovery limits](reviews.md).
