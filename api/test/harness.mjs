@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { app, HttpRequest, HttpResponse } from "@azure/functions";
 
 // Only storage and function registration are replaced. The production entry point,
-// handlers, auth parsing, validation, templates and Azure HTTP types execute as-is.
+// handlers, auth parsing, validation and Azure HTTP types execute as-is.
 export const documents = [];
 export const routes = new Map();
 export const faults = { nextWrite: false, batchIndex: -1, loseBatchResponse: false };
@@ -93,7 +93,7 @@ app.http = (name, config) => {
 };
 await import("../api/index.mjs");
 
-export async function startServer({ browserUser = false } = {}) {
+export async function startServer({ browserUser = false, assetContents = () => undefined } = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     try {
@@ -113,14 +113,14 @@ export async function startServer({ browserUser = false } = {}) {
         res.writeHead(result.status, Object.fromEntries(result.headers));
         res.end(await result.text());
       } else {
-        const assets = { "/": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"], "/app.js": ["app.js", "text/javascript"] };
-        for (const name of ['theme.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-sw.js']) {
+        const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"] };
+        for (const name of ['theme.js', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
         const asset = assets[url.pathname];
         if (!asset) { res.writeHead(404); res.end("Not found"); return; }
         res.writeHead(200, { "content-type": asset[1] });
-        res.end(await readFile(new URL(`../../html/${asset[0]}`, import.meta.url)));
+        res.end(assetContents(url.pathname) ?? await readFile(new URL(`../../html/${asset[0]}`, import.meta.url)));
       }
     } catch {
       res.writeHead(500, { "content-type": "text/plain" });

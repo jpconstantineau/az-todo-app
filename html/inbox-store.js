@@ -38,7 +38,10 @@ export function projected(state) {
   for (const entry of state.queue) {
     for (const mutation of entry.operation.mutations) {
       const id = key(mutation);
+      const previous = records[id];
       records[id] = { ...records[id], ...mutation.fields, type: mutation.type, id: mutation.id,
+        ...(mutation.type === 'item' && mutation.fields?.status === 'completed' && previous?.status !== 'completed'
+          ? { statusBeforeCompletion: previous?.status || 'inbox' } : {}),
         version: mutation.expectedVersion + 1, deleted: false,
         localState: entry.failure ? 'Failed — needs attention' : 'Saved on device — pending' };
     }

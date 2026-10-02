@@ -1,4 +1,13 @@
-# Versioned data API (issue #4)
+# Versioned data API (issues #4 and #25)
+
+The native client at `/` (also reachable via `/inbox.html`) exclusively uses this
+JSON API. It is disabled unless `V1_API_ENABLED=true`; a disabled API shows a clear
+error without choosing another store. Legacy routes are permanently read-only
+retirement responses. `V1_CLIENT_ENABLED` no longer changes behavior. Existing
+v1 records, outboxes and receipts remain compatible; no partition or database
+version changes are made. The owner reset legacy production data before cutover,
+so the migration tool below remains available for archived data rather than being
+a prerequisite for this empty-database release.
 
 ## Partition decision (issue #27)
 
@@ -12,6 +21,7 @@ are separate:
 | --- | --- | --- |
 | `record:item:milk` | `record` | `record.type=item`, `record.id=milk` |
 | `record:list:groceries` | `record` | `record.type=list`, `record.id=groceries` |
+| `record:settings:settings` | `record` | `record.type=settings`, versioned user defaults |
 | `receipt:<operationId>` | `receipt` | One immutable operation result |
 | `change:<sequence>` | `change` | One ordered application history entry |
 | `state` | `state` | Account sequence and ETag concurrency coordinator |
@@ -126,15 +136,6 @@ old clients, device queues/cursors, cutover and rollback before deployment.
    an older application/database alone can lose work. Verify two-account isolation,
    cursor continuity and lost-response retry in the rehearsal before cutover.
 
-The v1 API adds repeat-safe JSON writes alongside the existing HTML API. It is
-disabled unless `V1_API_ENABLED=true`. Use an isolated staging environment until
-the migration and Azure gates below pass. The legacy HTML client uses legacy
-storage; the [durable inbox](durable-inbox.md) at `/inbox.html` uses v1 and provides
-offline capture/editing. `V1_CLIENT_ENABLED=true` redirects the authenticated shell
-to that inbox and rejects legacy mutations. Do not send a user's live edits to both
-namespaces or enable v1 for a pilot before the controlled migration and cutover.
-These source changes do not move or modify existing production records.
-
 ## Authentication and account binding
 
 All routes use the shared SWA authentication, exact browser-origin policy and
@@ -142,7 +143,8 @@ private/no-store headers from [Request security](request-security.md). JSON erro
 including 401/403, contain `apiVersion`, `error` and `message`. `HX-Request` is not
 authentication. There is no extension CORS exception or direct backend access.
 
-`GET /api/v1/session` returns `{apiVersion:1, accountId:"…"}`. Store that account ID
+`GET /api/v1/session` returns `apiVersion`, `accountId`, built-in `defaultSettings`
+and any archived `legacyDefaults`. Store that account ID
 with the local queue when capturing; never substitute a newly signed-in account
 when uploading old work. Every operation and every data read explicitly supplies
 its original `accountId`; the server compares it to the authenticated principal.
@@ -155,9 +157,9 @@ to discard a queued operation or assign it to someone else.
 
 | Method and route | Request | Success |
 | --- | --- | --- |
-| GET `v1/session` | No parameters | API version and authenticated account ID |
+| GET `v1/session` | No parameters | API version, authenticated account ID, `defaultSettings` and nullable archived `legacyDefaults` (read-only) |
 | POST `v1/operations` | JSON operation below | Durable committed receipt (200), or durable conflict receipt (409) |
-| GET `v1/records` | `accountId`, `type=list\|item`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
+| GET `v1/records` | `accountId`, `type=list\|item\|settings`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
 | GET `v1/receipts` | `accountId`, `operationId` | Exact stored receipt (200), whose `status` may be `conflict`; absent receipts return 404 |
 | GET `v1/changes` | `accountId`, `after` (default 0), `limit` (default 10, max 50) | Ordered change entries, `nextAfter`, `highWater`, `hasMore` |
 
@@ -194,8 +196,7 @@ are rejected rather than clipped. Lists support title (200 characters), descript
 `listId`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
 `waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority` and HTTP(S)
 `referenceLinks`. Tags are at most 64 characters, arrays at most 20 entries, URLs
-at most 2,048 characters. Statuses are `inbox`, `next`, `waiting`, `deferred`,
-`scheduled`, `someday`, `active` and `completed`.
+at most 2,048 characters. Statuses allow `inbox`, `next`, `deferred`, `completed` and the destination list/account configured values. Existing status and prior-completion values remain usable even after an option is removed.
 
 Creation-only fields are `originalText` (16,000 characters), `selectedText` (8,000),
 `sourceTitle` (2,000) and nullable `sourceUrl`. Text retains its whitespace; omitted
@@ -205,8 +206,7 @@ fit in 1.5 MB; larger operations receive a validation error before writing. Thes
 limits also bound stored receipts and change entries.
 
 For an edit, send `action:"update"`, the observed positive `expectedVersion`, and
-only the fields to change. Completion is `{status:"completed"}`; reopening sets
-the desired status explicitly. Retrying cannot toggle twice. Even an edit that
+only the fields to change. Completion is `{status:"completed"}` and records server-managed `statusBeforeCompletion`; reopening explicitly submits that previous status (`next` for historical records without it). Retrying cannot toggle twice. Even an edit that
 sets an already-present value requires the version precondition. Send a new
 operation ID for a new intent; preserve the existing ID and exact content for a
 retry. Object key order is immaterial to the request hash; array order, omitted
@@ -319,8 +319,7 @@ node --experimental-test-module-mocks --test test/migration.test.mjs
 prepared `targetDocuments` and account/count report. Each migrated record begins
 at version 1 with an initial receipt and change entry. IDs, owners, custom status
 values, descriptions, links, dates, list defaults and other persisted fields are
-retained. Settings are archived in each account's `legacy-settings` document for
-the client conversion; this API does not yet expose settings. If original capture
+retained. Settings stay archived in each account's `legacy-settings` document. The session response exposes their defaults as the read-only fallback until the first versioned settings save. If original capture
 text never existed, the tool derives title/description text and marks it
 `originalTextProvenance:"persisted-legacy-title-description"`; it does not claim to
 recover keystrokes that were never stored. Existing original text stays exact.
@@ -351,8 +350,7 @@ Staging/production procedure:
    acknowledgements, concurrent edits/reference races, bounded pages and a stale
    edit after deletion against **real Cosmos** with two authenticated accounts.
    Inspect actual API headers and RU/latency. Verify the durable inbox from #5
-   before choosing a production cutover; enable its client flag to disable the
-   old mutation paths at cutover.
+   before choosing a production cutover; verify that all old mutation paths remain blocked regardless of the obsolete client flag.
 5. Rehearse rollback while writes remain frozen. Disable v1, reconstruct and
    restore the verified legacy export/backup into another isolated target, and
    compare application fields/owners/counts before repointing the old release.
@@ -376,3 +374,25 @@ These checks do not certify actual Cosmos transaction responses, consistency,
 partition/index configuration, Azure backup restoration, deployed authentication,
 or a production client cutover. Keep #4 open until the real staging migration,
 rollback and data API evidence is recorded, alongside #3/#17 deployment gates.
+
+## Additive defaults contract (issue #25)
+
+A singleton record has type `settings`, id `settings`, and fields
+`{defaults:{contexts:[],areas:[],energy:[],timeRequired:[],priority:[],statuses:[]}}`.
+Create at expectedVersion 0; subsequently update at the observed version. Deletion
+is rejected; reset is a normal update containing the chosen built-in snapshot.
+Every array is required, bounded to 200 options, deduplicated, and each value is
+validated as a single line of at most 64 characters. Lists accept the same optional
+`defaults` field. Copy/reset is resolved on the client when selected, reviewed in
+the form and saved explicitly; retries cannot recalculate against newer defaults.
+
+Settings use the same account partition, receipts, change entries, expected versions
+and conflicts as items. Older inbox clients ignore unfamiliar settings records and
+continue to handle task records; do not downgrade the server after settings writes.
+The existing `legacy-settings` archive is never overwritten by GETs or settings
+saves. Missing fields in historical defaults inherit built-ins in the client.
+
+No IndexedDB schema change or record rewrite is required. The session's built-in
+options and archived defaults are cached inside the existing account document for
+offline editing. The first settings save becomes an ordinary change-feed record.
+Existing pending operation IDs/content and migration checksums remain unchanged.

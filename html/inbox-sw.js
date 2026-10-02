@@ -1,11 +1,16 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v4';
-const ASSETS = ['/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js?v=4', '/inbox-store.js'];
+const CACHE = 'todo-inbox-shell-v5';
+const ASSETS = ['/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js'];
+// Fresh module URLs bypass older workers' exact asset allowlists.
+ASSETS.push('/inbox.js?v=5', '/inbox-store.js?v=5', '/inbox-fields.js?v=5');
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(self.clients.claim());
+});
+self.addEventListener('message', event => {
+  if (event.data === 'shell-version') event.ports[0]?.postMessage(CACHE);
 });
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);

@@ -120,8 +120,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination' }).waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v4')).keys()).map(request => new URL(request.url).pathname));
-  assert.deepEqual(cached.sort(), ['/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/styles.css', '/theme.js'].sort());
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v5')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual(cached.sort(), ['/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=5', '/inbox-store.js?v=5', '/inbox-fields.js?v=5'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -279,12 +279,13 @@ test('inbox: editor storage failure closes the sheet and exposes a recovery copy
   assert.equal(records()[0].title, 'Original task');
 });
 
-test('client cutover redirects the shell and makes every legacy mutation read-only', async t => {
+test('retired shell explains recovery and every legacy mutation stays read-only', async t => {
   const server = await startServer({ browserUser: true }); t.after(server.close);
   process.env.V1_CLIENT_ENABLED = 'true';
   try {
     const response = await fetch(`${server.url}/api/app`);
-    assert.equal(response.headers.get('HX-Redirect'), '/inbox.html');
+    assert.equal(response.status, 410);
+    assert.match(await response.text(), /durable inbox/);
     const { routes } = await import('./harness.mjs');
     for (const route of routes.keys()) {
       if (!route.startsWith('POST ') || route.includes('/v1/')) continue;
@@ -341,4 +342,108 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   page.on('dialog', dialog => dialog.accept());
   await page.locator('#discard').click(); await confirmed(page);
   assert.equal((await local(page)).queue.length, 0);
+});
+
+for (const oldVersion of [3, 4]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
+  documents.length = 0;
+  let oldWorker = true, rejectUpgrade = false;
+  const server = await startServer({ browserUser: () => 'alice', assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
+    const paths = ['/inbox.js', '/inbox-store.js', '/inbox-fields.js',
+      ...(${oldVersion} === 4 ? ['/inbox.js?v=4', '/inbox-store.js?v=4', '/inbox-fields.js?v=4'] : [])];
+    self.addEventListener('install', event => event.waitUntil(caches.open('todo-inbox-shell-v${oldVersion}').then(async cache => {
+      for (const path of paths) await cache.put(path, new Response('throw new Error("mixed old module")', { headers: { 'content-type': 'text/javascript' } }));
+    })));
+    self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+    self.addEventListener('message', event => { if (event.data === 'shell-version') event.ports[0]?.postMessage('todo-inbox-shell-v${oldVersion}'); });
+    self.addEventListener('fetch', event => { const url = new URL(event.request.url);
+      if (paths.includes(url.pathname + url.search)) event.respondWith(caches.match(event.request));
+    });
+  ` : rejectUpgrade && path === '/inbox-sw.js' ? "self.addEventListener('install', event => event.waitUntil(Promise.reject(new Error('Injected install failure'))));" : undefined }); t.after(server.close);
+  const browser = await chromium.launch({ channel }); t.after(() => browser.close());
+  const context = await browser.newContext();
+  // Keep one intent unacknowledged across the upgrade.
+  await context.route('**/api/v1/operations', route => route.abort());
+  let page = await context.newPage(); const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await capture(page, 'Old queued item');
+  await page.locator('#captureText').fill('Old unsubmitted draft');
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'));
+  oldWorker = false; rejectUpgrade = true;
+  await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
+  await page.waitForFunction(async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
+  assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'))).queue, before.queue);
+  rejectUpgrade = false;
+  await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
+  await page.waitForFunction(async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'))).queue, before.queue);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
+  await page.close(); page = await context.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
+  await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Old queued item' }).waitFor();
+  assert.deepEqual((await local(page)).queue, before.queue);
+  await context.unroute('**/api/v1/operations'); await context.setOffline(false);
+  await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
+  assert.equal(records().filter(record => record.type === 'item').length, 1);
+  assert.deepEqual(errors, []);
+});
+
+test('defaults draft survives reload and failed storage remains recoverable; date conversion rejects DST gaps', { timeout: 90000 }, async t => {
+  const { page } = await setup(t, { timezoneId: 'America/New_York' });
+  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await page.locator('#defaultsForm [name=contexts]').fill('@Draft');
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).draft.defaults?.values.contexts === '@Draft');
+  await page.reload(); await page.locator('#defaultsEditor').waitFor();
+  assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Draft');
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function () { if (this.name === 'accounts') throw new DOMException('Full', 'QuotaExceededError'); return original.apply(this, arguments); };
+  });
+  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await page.locator('#recovery').waitFor();
+  assert.match(await page.locator('#recoveryText').inputValue(), /@Draft/);
+  assert.equal(records().length, 0);
+  const dates = await page.evaluate(async () => {
+    const { taskFields } = await import('/inbox-fields.js');
+    const valid = taskFields({ dueLocal: '2026-07-01T12:00' }).dueDateUtc;
+    let gap; try { taskFields({ dueLocal: '2026-03-08T02:30' }); } catch (error) { gap = error.message; }
+    return { valid, gap };
+  });
+  assert.equal(dates.valid, '2026-07-01T16:00:00.000Z'); assert.match(dates.gap, /valid local/);
+});
+
+test('independent clients page through all work and resolve defaults conflicts without losing either proposal', { timeout: 90000 }, async t => {
+  const { page, browser, url } = await setup(t);
+  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
+  // More than one 50-entry change page, using real handlers and independent intents.
+  for (let i = 0; i < 52; i++) await serverEdit(url, { type: 'item', id: 'paged-' + i, version: 0 }, { title: 'Page ' + i }, 'create');
+  const otherContext = await browser.newContext(); t.after(() => otherContext.close());
+  const other = await otherContext.newPage(); await other.goto(url); await other.locator('#workspace').waitFor();
+  await other.waitForFunction(() => document.querySelectorAll('#items article').length === 52);
+  await other.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await other.locator('#defaultsForm [name=contexts]').fill('@Laptop');
+  await otherContext.setOffline(true);
+  await other.getByRole('button', { name: 'Save defaults on device' }).click(); await other.locator('#defaultsEditor').waitFor({ state: 'hidden' });
+  const pending = (await local(other)).queue[0].operation;
+  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await page.locator('#defaultsForm [name=contexts]').fill('@Phone');
+  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
+  await otherContext.setOffline(false); await other.getByRole('button', { name: 'Sync now' }).click(); await other.locator('#failure').waitFor();
+  assert.match(await other.locator('#comparison').textContent(), /@Phone/); assert.match(await other.locator('#comparison').textContent(), /@Laptop/);
+  other.once('dialog', dialog => dialog.accept()); await other.locator('#resolve').click(); await confirmed(other);
+  const settings = records().find(record => record.type === 'settings'); assert.deepEqual(settings.defaults.contexts, ['@Laptop']);
+  assert.equal(settings.version, 3);
+  const originalReceipt = documents.find(doc => doc.id === 'receipt:' + pending.operationId).response;
+  assert.equal(originalReceipt.status, 'conflict'); assert.deepEqual(originalReceipt.proposed[0].fields.defaults.contexts, ['@Laptop']);
+  await page.getByRole('button', { name: 'Sync now' }).click();
+  await page.waitForFunction(async () => (await (await import('/inbox-store.js')).transact('alice')).records['settings:settings'].version === 3);
+  assert.equal(await page.locator('#items article').count(), 52);
 });

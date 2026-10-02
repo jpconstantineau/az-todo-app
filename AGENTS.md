@@ -6,7 +6,7 @@ correct change that satisfies the request. Explicit user requirements take prior
 
 ## Repository and design
 
-- The client lives in `html/` and uses HTML, CSS, and HTMX. The API lives in
+- The client lives in `html/` and uses HTML, CSS, and native JavaScript ES modules. The API lives in
   `api/api/` and uses JavaScript ES modules, Azure Functions, and Cosmos DB.
 - Before writing or changing UI, read [DESIGN.md](DESIGN.md) and use its colors,
   typography, spacing, and component guidance as the design reference. Apply it

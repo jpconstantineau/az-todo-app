@@ -170,6 +170,8 @@ test("v1 validates its versioned contract and size bounds without mutating stora
     { ...capture, mutations: [] }, { ...capture, mutations: Array(21).fill(capture.mutations[0]) },
     edit("bad", "milk", -1, { title: "bad" }), edit("bad", "milk", 0, { title: "x".repeat(201) }, "create"),
     edit("bad", "milk", 0, { title: "valid", status: "bogus" }, "create"),
+    ...['description', 'status', 'energy', 'timeRequired', 'priority'].map(field => edit('bad', 'milk', 0, { title: 'valid', [field]: 'x'.repeat(field === 'description' ? 4001 : 65) }, 'create')),
+    ...[['@Home\u0000'], ['@Home\n@Work'], ['x'.repeat(65)], Array(21).fill('@Home')].map(contexts => edit('bad', 'milk', 0, { title: 'valid', contexts }, 'create')),
     edit("bad", "milk", 0, { title: "valid", dueDateUtc: "2026-02-30T00:00:00Z" }, "create"),
     edit("bad", "milk", 0, { title: "valid", sourceUrl: "javascript:alert(1)" }, "create"),
     edit("bad", "milk", 0, { title: "valid", UserID: "bob" }, "create"),
@@ -235,4 +237,51 @@ test("v1 byte-bounded pages resume without dropping a large entry; oversized res
   assert.equal(second.hasMore, false);
   assert.deepEqual([...first.entries, ...second.entries].map(e => e.sequence), Array.from({ length: 41 }, (_, i) => i + 1));
   assert.ok(documents.every(d => d.ttl === -1), "container TTL cannot silently expire receipts/history/tombstones");
+});
+
+test('v1 defaults are account-bound, repeat-safe, versioned and validated; custom statuses reopen safely', async t => {
+  const f = await fixture(t);
+  const { defaultSettings } = await import('../api/shared/defaults.mjs');
+  const defaults = { ...defaultSettings, statuses: ['next', 'custom'], contexts: ['@Kitchen'] };
+  const createSettings = edit('settings-create', 'settings', 0, { defaults }, 'create', 'settings');
+  faults.loseBatchResponse = true;
+  assert.equal((await f.post(createSettings)).status, 503);
+  assert.equal((await f.post(createSettings)).status, 200);
+  assert.equal(records().filter(r => r.type === 'settings').length, 1);
+  assert.equal((await f.post(edit('item-custom', 'custom-item', 0, { title: 'Milk', status: 'custom' }, 'create'))).status, 200);
+  assert.equal((await f.post(edit('complete-custom', 'custom-item', 1, { status: 'completed' }))).status, 200);
+  assert.equal((await f.get('item', 'custom-item')).body.record.statusBeforeCompletion, 'custom');
+  const races = await Promise.all(['A', 'B'].map(value => f.post(edit('settings-' + value, 'settings', 1, { defaults: { ...defaults, contexts: [value] } }, 'update', 'settings'))));
+  assert.deepEqual(races.map(r => r.status).sort(), [200, 409]);
+  const conflict = races.find(r => r.status === 409).body;
+  assert.ok(conflict.proposed[0].fields.defaults.contexts.length);
+  assert.equal((await f.post(edit('remove-custom-option', 'settings', 2, { defaults: defaultSettings }, 'update', 'settings'))).status, 200);
+  assert.equal((await f.post(edit('reopen-historic', 'custom-item', 2, { status: 'custom' }))).status, 200);
+  assert.equal((await f.post(edit('new-invalid-status', 'other', 0, { title: 'Other', status: 'custom' }, 'create'))).status, 400);
+  for (const fields of [
+    { defaults: { ...defaults, contexts: Array(201).fill('x') } },
+    { defaults: { ...defaults, contexts: ['x'.repeat(65)] } },
+    { defaults: { ...defaults, contexts: ['line\nbreak'] } },
+    { defaults: { ...defaults, contexts: [42] } },
+    { defaults: { ...defaults, owner: 'bob' } }, { defaults: {} }
+  ]) assert.equal((await f.post(edit('bad-defaults', 'settings', 3, fields, 'update', 'settings'))).status, 400);
+  assert.equal((await f.post(edit('delete-settings', 'settings', 3, null, 'delete', 'settings'))).status, 400);
+  assert.equal((await f.post(createSettings, { user: 'bob' })).status, 409);
+  assert.equal((await f.request('records?accountId=alice&type=settings&id=settings', { user: 'bob' })).status, 409);
+  assert.equal((await f.post(edit('bogus-singleton', 'other', 0, { defaults }, 'create', 'settings'))).status, 400);
+});
+
+test('v1 archived and partial list defaults inherit without changing the archive', async t => {
+  const f = await fixture(t);
+  const { document } = await import('../api/v1/contract.mjs');
+  const archive = document('alice', 'legacy-settings', { kind: 'legacy-settings', settings: { defaults: { statuses: ['archived-custom'] } } });
+  documents.push(structuredClone(archive));
+  const session = (await f.request('session')).body;
+  assert.deepEqual(session.legacyDefaults, archive.settings.defaults);
+  assert.equal((await f.request('session', { user: 'bob' })).body.legacyDefaults, null);
+  assert.deepEqual(documents, [archive], 'session lookup is read-only');
+  await f.post(edit('legacy-list', 'partial', 0, { title: 'Imported list' }, 'create', 'list'));
+  documents.find(d => d.record?.id === 'partial').record.defaults = { priority: ['Historic'] };
+  assert.equal((await f.post(edit('legacy-item', 'legacy', 0, { title: 'Imported choice', listId: 'partial', status: 'archived-custom' }, 'create'))).status, 200);
+  assert.deepEqual(documents.find(d => d.id === 'legacy-settings'), archive);
 });
