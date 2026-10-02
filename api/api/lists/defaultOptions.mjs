@@ -3,19 +3,7 @@ import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 
-function esc(s = "") {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function opts(arr) {
-  return (arr || [])
-    .map((v) => `<option value="${esc(v)}">${esc(v)}</option>`)
-    .join("");
-}
+import { defaultOptions } from "../shared/templates.mjs";
 
 async function getUserDefaults(userId) {
   const { resources } = await container.items
@@ -61,25 +49,18 @@ app.http("lists-defaultOptions", {
   authLevel: "anonymous",
   handler: async (req) => {
     const userId = getUserId(req.headers);
-    if (!userId) return new Response("", { status: 204 });
+    if (!userId) return new Response("Unauthorized", { status: 401 });
 
     const url = new URL(req.url);
     const listId = url.searchParams.get("listId") || url.searchParams.get("listid");
-    if (!listId) return new Response("", { status: 204 });
+    if (!listId) return new Response("listId required", { status: 400 });
 
     const list = await getList(userId, listId);
+    if (!list) return new Response("List not found", { status: 404 });
     const userDefaults = await getUserDefaults(userId);
     const d = list?.defaults || userDefaults;
 
-    // Return OOB swaps for each select to replace innerHTML only
-    const html = `
-      <select id="statusSelect" hx-swap-oob="innerHTML">${opts(d.statuses)}</select>
-      <select id="contextSelect" hx-swap-oob="innerHTML">${opts(d.contexts)}</select>
-      <select id="areaSelect" hx-swap-oob="innerHTML">${opts(d.areas)}</select>
-      <select id="energySelect" hx-swap-oob="innerHTML">${opts(d.energy)}</select>
-      <select id="timeReqSelect" hx-swap-oob="innerHTML">${opts(d.timeRequired)}</select>
-      <select id="prioritySelect" hx-swap-oob="innerHTML">${opts(d.priority)}</select>
-    `;
+    const html = defaultOptions(d);
 
     return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }

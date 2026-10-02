@@ -1,7 +1,7 @@
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
-import { itemsList, quickAddItemForm } from "../shared/templates.mjs";
+import { listView, destinationSelect, defaultOptions } from "../shared/templates.mjs";
 
 app.http("items-byList", {
   route: "items/byList",
@@ -36,7 +36,7 @@ app.http("items-byList", {
       .query(
         {
           query:
-            "SELECT c.id, c.title, c.listId, c.defaults FROM c " +
+            "SELECT c.id, c.title, c.listId, c.description, c.defaults FROM c " +
             "WHERE c.UserID=@u AND c.ObjectType='list' ORDER BY c.updatedUtc DESC",
           parameters: [{ name: "@u", value: userId }]
         },
@@ -46,7 +46,8 @@ app.http("items-byList", {
 
     const selected = lists.find((l) => l.listId === listId);
 
-    let defaults = selected?.defaults;
+    if (!selected) return new Response("List not found", { status: 404 });
+    let defaults = selected.defaults;
     if (!defaults) {
       const { resources: settingsRes } = await container.items
         .query(
@@ -69,12 +70,8 @@ app.http("items-byList", {
       };
     }
 
-    const formHtml = quickAddItemForm({
-      lists,
-      defaults,
-      selectedListId: listId
-    });
-    const html = formHtml + '<div class="divider"></div>' + itemsList(items);
+    const html = listView({ list: selected, items }) +
+      destinationSelect({ lists, selectedListId: listId, oob: true }) + defaultOptions(defaults);
 
     return new Response(html, {
       headers: { "content-type": "text/html; charset=utf-8" }

@@ -2,6 +2,9 @@
 
 See the demo [here](https://todo.jpto.dev/)
 
+The current HTML/HTMX route contracts, local test commands, and verification
+limits are documented in [Task flow verification](docs/task-flow.md).
+
 [![Azure Static Web Apps CI/CD](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml/badge.svg)](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml)
 
 

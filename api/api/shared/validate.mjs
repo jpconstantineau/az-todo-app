@@ -15,6 +15,7 @@ export function cleanTag(s) {
 export function toArrayClean(form, key, maxItems = 200) {
   const vals = form.getAll(key) || [];
   const cleaned = vals
+    .flatMap(value => String(value).split(/\r?\n/))
     .map((v) => cleanTag(v))
     .filter((v) => v.length > 0)
     .filter((v, i, a) => a.indexOf(v) === i);

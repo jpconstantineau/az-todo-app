@@ -1,60 +1,21 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>To‑Do</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12"></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>To-Do</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12" defer></script>
+    <script src="/app.js" defer></script>
   </head>
   <body>
     <div class="container">
-      <header class="app-header">
-        <div class="header-left">
-          <h1 class="app-title">To‑Do</h1>
-        </div>
-        <nav class="header-nav">
-          <a class="button text" href="/.auth/login/github">Sign in</a>
-          <a class="button text" href="/.auth/logout">Sign out</a>
-        </nav>
-      </header>
-
-      <div class="app-grid">
-        <!-- Left blade: lists + add list (kept intact) -->
-        <aside class="sidebar blade">
-          <div class="panel-title">
-            <span>Lists</span>
-            <button id="addListBtn" class="button text">Add</button>
-          </div>
-
-          <!-- Blade list items: load fragment for lists only -->
-          <div class="lists" id="listsList"
-               hx-get="/api/lists"
-               hx-trigger="load"
-               hx-swap="innerHTML">
-            <div class="card">Loading lists…</div>
-            <noscript>
-              <div class="card">Enable JavaScript or open <a href="/api/lists">/api/lists</a></div>
-            </noscript>
-          </div>
-        </aside>
-
-        <!-- Main area: HTMX will load the main app fragment into #listsContainer -->
-        <main class="main">
-          <div id="listsContainer"
-               hx-get="/api/app"
-               hx-trigger="load"
-               hx-swap="innerHTML"
-               class="items-shell">
-            <div class="card">Loading app…</div>
-            <noscript>
-              <div class="card">Enable JavaScript or open <a href="/api/app">/api/app</a></div>
-            </noscript>
-          </div>
-        </main>
+      <p id="requestStatus" role="status" aria-live="polite"></p>
+      <div id="requestError" role="alert" hidden></div>
+      <div id="app" hx-get="/api/app" hx-trigger="load" hx-swap="innerHTML">
+        <p>Loading app…</p>
+        <button class="button" hx-get="/api/app" hx-target="#app">Retry loading</button>
+        <noscript>Enable JavaScript to use this app.</noscript>
       </div>
     </div>
   </body>

@@ -62,7 +62,7 @@ app.http("lists-updateDefaults", {
     });
 
     return new Response(html, {
-      headers: { "content-type": "text/html; charset=utf-8" }
+      headers: { "content-type": "text/html; charset=utf-8", "HX-Trigger": JSON.stringify({ defaultsUpdated: { listId } }) }
     });
   }
 });

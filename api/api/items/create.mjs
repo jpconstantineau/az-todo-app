@@ -1,19 +1,12 @@
 import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
-import { itemsList } from "../shared/templates.mjs";
+import { listView } from "../shared/templates.mjs";
 import { customAlphabet } from "nanoid";
 import { checkCsrf } from "../shared/security.mjs";
 import { clip, cleanTag } from "../shared/validate.mjs";
 
 const nano = customAlphabet("1234567890abcdefghijklmnopqrstuvwxyz", 16);
-
-function toUtcFromLocal(localStr) {
-  if (!localStr) return null;
-  const dt = new Date(localStr);
-  if (isNaN(dt.getTime())) return null;
-  return dt.toISOString();
-}
 
 app.http("items-create", {
   route: "items/create",
@@ -30,14 +23,26 @@ app.http("items-create", {
     const description = clip(form.get("description"), 4000);
     const listId = clip(form.get("listId"), 200);
     const status = clip(form.get("status") || "next", 32);
-    const dueLocal = clip(form.get("dueLocal"), 32);
+    const dueDateUtc = String(form.get("dueDateUtc") || "");
     const context = cleanTag(form.get("context"));
     const area = cleanTag(form.get("area"));
     const energy = cleanTag(form.get("energy"));
     const timeRequired = cleanTag(form.get("timeRequired"));
     const priority = cleanTag(form.get("priority"));
 
-    if (!title || !listId) return new Response("Bad request", { status: 400 });
+    if (!title || !listId) return new Response("Title and destination list are required", { status: 400 });
+    if (String(form.get("title")).trim().length > 200 || String(form.get("description") || "").trim().length > 4000) {
+      return new Response("Title must be at most 200 characters and description at most 4000 characters", { status: 400 });
+    }
+    if ((form.get("dueLocal") && !dueDateUtc) || (dueDateUtc && (!/Z$/.test(dueDateUtc) || Number.isNaN(Date.parse(dueDateUtc))))) {
+      return new Response("Choose a valid due date and time", { status: 400 });
+    }
+    const { resources: lists } = await container.items.query({
+      query: "SELECT TOP 1 * FROM c WHERE c.UserID=@u AND c.ObjectType='list' AND c.ObjectID=@l",
+      parameters: [{ name: "@u", value: userId }, { name: "@l", value: listId }]
+    }, { enableCrossPartition: true }).fetchAll();
+    const list = lists[0];
+    if (!list) return new Response("Destination list not found", { status: 404 });
 
     const now = new Date().toISOString();
     const id = nano();
@@ -52,8 +57,8 @@ app.http("items-create", {
       status,
       createdUtc: now,
       updatedUtc: now,
-      dueDateUtc: toUtcFromLocal(dueLocal),
-      completedUtc: null,
+      dueDateUtc: dueDateUtc ? new Date(dueDateUtc).toISOString() : null,
+      completedUtc: status === "completed" ? now : null,
       nextAction: status === "next",
       waitingOn: "",
       startDateUtc: null,
@@ -88,7 +93,7 @@ app.http("items-create", {
       )
       .fetchAll();
 
-    return new Response(itemsList(items), {
+    return new Response(listView({ list, items }), {
       headers: { "content-type": "text/html; charset=utf-8" }
     });
   }

@@ -1,5 +1,10 @@
 # GTD To‑Do (Azure Static Web Apps + Functions + Cosmos DB + htmx)
 
+> Historical architecture notes: some paths, styling, security claims and configuration
+> below are out of date. See [Task flow verification](docs/task-flow.md) for the current
+> shell/fragment contracts and tested behavior. Request protection and deployed ingress
+> verification remain tracked in issue #3.
+
 A simple, extensible GTD-style to‑do list manager built for Azure Static Web Apps with an Azure Functions (Node.js v4, ESM) backend, htmx for dynamic UX (server-rendered partials), BeerCSS for styling, and Cosmos DB (SQL API) for storage.
 
 This document summarizes scope, design philosophy, architecture, deployment, configuration, and operational guidance. It is intended to help GitHub Copilot Agent Mode and contributors understand and work within the project.

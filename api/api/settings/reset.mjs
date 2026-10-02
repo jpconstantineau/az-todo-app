@@ -2,7 +2,7 @@ import { app } from "@azure/functions";
 import { container } from "../shared/db.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
-import { settingsForm } from "../shared/templates.mjs";
+import { settingsForm, options } from "../shared/templates.mjs";
 import { checkCsrf } from "../shared/security.mjs";
 
 app.http("settings-reset", {
@@ -37,8 +37,8 @@ app.http("settings-reset", {
       await container.items.create(doc);
     }
 
-    return new Response(settingsForm(doc), {
-      headers: { "content-type": "text/html; charset=utf-8" }
+    return new Response(settingsForm({ settings: doc }) + `<select id="statusFilterSelect" name="status" hx-swap-oob="outerHTML">${options([...new Set(["next", ...doc.defaults.statuses])], "next", false)}</select>`, {
+      headers: { "content-type": "text/html; charset=utf-8", "HX-Trigger": "defaultsUpdated" }
     });
   }
 });
