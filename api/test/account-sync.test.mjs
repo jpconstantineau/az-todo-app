@@ -36,8 +36,10 @@ async function edit(page, title, replacement) {
 async function sync(page) {
   const response = page.waitForResponse(response => response.url().includes('/api/v1/changes?'));
   await page.getByRole('button', { name: 'Sync now' }).click();
-  // Wait for this pass, even when the previous status already said confirmed.
-  await response;
+  // Response headers and the previous "confirmed" label can precede local persistence.
+  const { highWater, accountId } = await (await response).json();
+  await page.waitForFunction(async expected =>
+    (await (await import('/inbox-store.js')).transact(expected.accountId)).after >= expected.highWater, { highWater, accountId });
   await confirmed(page);
 }
 
@@ -146,7 +148,9 @@ test('independent browser profiles sync records, preserve offline conflicts and 
   await open(phone, url); await open(laptop, url);
   await capture(phone, 'Milk\nBread'); await confirmed(phone);
   assert.equal((await local(laptop)).after, 0, 'independent IndexedDB and no cross-device broadcast');
-  await sync(laptop); assert.equal(await laptop.locator('#items article').count(), 2);
+  await sync(laptop);
+  await laptop.waitForFunction(() => document.querySelectorAll('#items article').length === 2);
+  assert.equal(await laptop.locator('#items article').count(), 2);
   await phoneContext.setOffline(true); await laptopContext.setOffline(true);
   await edit(phone, 'Milk', 'Oat milk'); await edit(laptop, 'Bread', 'Rye bread');
   await phoneContext.setOffline(false); await sync(phone);

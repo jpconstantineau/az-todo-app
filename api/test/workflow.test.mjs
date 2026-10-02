@@ -132,6 +132,8 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Complete Get approval', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen Get approval', exact: true }).click();
+  // Reopen returns from the click before the IndexedDB transaction completes.
+  await page.getByRole('button', { name: 'Complete Get approval', exact: true }).waitFor();
   await page.reload(); await page.getByRole('button', { name: 'Complete Get approval', exact: true }).waitFor();
   assert.match(await page.locator('#items').innerText(), /Waiting for: Alex/);
   await page.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
