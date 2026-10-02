@@ -30,7 +30,7 @@ export function decision(session, proposal, choice) {
   return { session: { step: session.step + 1, answers: { ...session.answers, [name]: { decision: choice, value } }, proposal: emptyProposal() }, fields };
 }
 
-export function clarificationUI({ records, save, journal }) {
+export function clarificationUI({ records, save, journal, focus }) {
   const $ = id => document.getElementById(id);
   const dialog = $('clarifier'), form = $('clarifyForm');
   let active = null, busy = false;
@@ -84,10 +84,16 @@ export function clarificationUI({ records, save, journal }) {
   $('clarifySave').onclick = () => { void commit(); };
   $('clarifyStop').onclick = () => dialog.close();
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
-  dialog.addEventListener('close', () => { if (active) { void journal(); $('itemsHeading').focus(); } });
+  dialog.addEventListener('close', () => { if (active) { void journal(); focus(); } });
   return {
     snapshot,
     open(item) {
+      // ponytail: one active form, like the editor; keep it until saved before switching tasks.
+      if (active && active.item.id !== item.id && JSON.stringify(values()) !== JSON.stringify(active.session.proposal)) {
+        if (!dialog.open) dialog.showModal();
+        $('clarifyError').textContent = 'Save this proposal before clarifying another task. Your answer is still here.';
+        $('clarifyError').hidden = false; $('clarifyQuestion').focus(); return;
+      }
       const session = records()[`clarification:${item.id}`];
       if (active?.item.id !== item.id || active.session.version !== (session?.version || 0)) {
         active = { item: structuredClone(item), session: session || { version: 0, step: 0, answers: {}, proposal: emptyProposal() }, proposal: session?.proposal || emptyProposal() };

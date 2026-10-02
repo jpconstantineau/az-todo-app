@@ -1,13 +1,14 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=9';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=9';
-import { clarificationUI } from './clarification.js?v=9';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=11';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=11';
+import { deviceExport, readableExport } from './inbox-export.js?v=11';
+import { clarificationUI } from './clarification.js?v=11';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
-const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification });
+const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, focus: focusDestination });
 async function saveClarification(mutations, next) {
   const owner = accountId;
   if (!owner) return false;
@@ -24,6 +25,9 @@ async function saveClarification(mutations, next) {
   if (owner !== accountId) return false;
   state = saved; render(); broadcast(); void sync(); return true;
 }
+let destination = 'capture';
+const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
+let navigation = emptyNavigation();
 addTaskControls($('captureFields')); addTaskControls($('editFields'));
 for (const [name, title] of Object.entries(optionFields)) {
   const label = document.createElement('label'); label.textContent = title;
@@ -53,7 +57,7 @@ function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(),
-    view: $('view').value, day: $('day').value, status: $('statusFilter').value, lists: $('listWorkspace').getAttribute('aria-pressed') === 'true' };
+    day: $('day').value, navigation: structuredClone(navigation) };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -87,11 +91,16 @@ function restoreDraft() {
   fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
   $('previewHelp').hidden = originalInput === undefined;
+  navigation = emptyNavigation();
+  // Preserve the former review filter when upgrading an existing device draft.
+  Object.assign(navigation.work, saved.navigation?.work || { view: saved.view || 'all', status: saved.status || '' });
+  Object.assign(navigation.lists, saved.navigation?.lists || {});
+  $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
+  workspace(false);
   if (saved.edit) openEditor(saved.edit, false);
   else $('editor').close();
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
-  fillValues({ elements: { namedItem: name => $(name) } }, { view: saved.view || 'all', day: saved.day || localDate(new Date().toISOString()).slice(0, 10), statusFilter: saved.status || '' });
-  workspace(!!saved.lists, false); refreshOptions(); render();
+  refreshOptions(); render();
   clarification.restore(saved.clarification);
 }
 function button(text, handler, label = text) {
@@ -101,6 +110,7 @@ function button(text, handler, label = text) {
 }
 function render() {
   if (!accountId || !state) return;
+  const focused = document.activeElement;
   const records = Object.values(projected(state)).filter(record => !record.deleted);
   const lists = records.filter(record => record.type === 'list');
   const projects = records.filter(record => record.type === 'project');
@@ -108,12 +118,19 @@ function render() {
   options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
   options(capture.elements.projectId, projects, [['', 'No project']], true);
   options(edit.elements.projectId, projects, [['', 'No project']], true);
-  options($('view'), [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))], [['all', 'All items'], ['inbox', 'Inbox (no list)'], ['day', 'Planned day']]);
+  const listMode = destination === 'lists';
+  const filters = navigation[listMode ? 'lists' : 'work'];
+  options($('view'), listMode ? lists : [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))],
+    listMode ? [['', 'Choose a list']] : [['all', 'All items'], ['inbox', 'Inbox (no list)'], ['day', 'Planned day']]);
+  $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'all';
+  filters.view = $('view').value;
   refreshOptions();
   const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses'], ['@review-ready', 'Ready for review']]);
+  $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
+  filters.status = $('statusFilter').value;
   $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
-  $('lists').replaceChildren(...lists.flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
+  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
   const view = $('view').value;
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
@@ -150,7 +167,9 @@ function render() {
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`));
     article.append(title, notes, metadata, status, actions); return article;
   }));
-  if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';
+  if (!$('items').childElementCount) $('items').textContent = listMode && !view
+    ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
+    : 'No items match this view. Change the filters or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   $('failure').hidden = !failed;
   if (failed) {
@@ -163,6 +182,7 @@ function render() {
     $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
+  if (!focused.isConnected) focusDestination();
 }
 function openEditor(record, focus = true) {
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
@@ -213,7 +233,7 @@ async function updateRecord(record, fields, close = false) {
   if (owner !== accountId) return;
   if (close) { editing = null; $('editor').close(); }
   clearError(); render();
-  if (close) $('itemsHeading').focus();
+  if (close) focusDestination();
   broadcast(); void sync();
 }
 
@@ -279,15 +299,53 @@ $('previewSplit').onclick = () => {
 $('cancelEdit').onclick = () => $('editor').close();
 $('editor').addEventListener('close', () => { if (editing) void journal(); });
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
-function workspace(lists, focus = true) {
-  document.querySelector('.capture-panel').hidden = lists;
-  $('quickFocus').setAttribute('aria-pressed', String(!lists));
-  $('listWorkspace').setAttribute('aria-pressed', String(lists));
-  if (focus) { (lists ? $('itemsHeading') : capture.elements.text).focus(); void journal(); }
+function focusDestination() {
+  if (!accountId || $('workspace').hidden) return;
+  const modal = document.querySelector('dialog[open]');
+  if (modal) {
+    if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
+    return;
+  }
+  (destination === 'capture' ? capture.elements.text : $('itemsHeading')).focus();
 }
-$('quickFocus').onclick = () => workspace(false);
-$('listWorkspace').onclick = () => workspace(true);
-$('view').onchange = $('day').onchange = $('statusFilter').onchange = () => { render(); void journal(); };
+function workspace(focus = true) {
+  destination = ['work', 'lists'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
+  const listMode = destination === 'lists';
+  document.querySelector('.capture-panel').hidden = destination !== 'capture';
+  document.querySelector('.work-panel').hidden = destination === 'capture';
+  $('listTools').hidden = !listMode;
+  $('newProject').hidden = listMode;
+  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Your Work';
+  $('workEyebrow').textContent = listMode ? 'Organize' : 'Review';
+  $('workHelp').textContent = listMode ? 'Choose a list to manage its details, defaults and items.' : 'Review items across your account, or narrow by list and status.';
+  $('viewLabel').textContent = listMode ? 'List' : 'View';
+  for (const link of document.querySelectorAll('.workspace-nav a')) {
+    if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  document.title = (destination === 'capture' ? 'Capture' : listMode ? 'List Workspace' : 'Your Work') + ' · To-Do';
+  render();
+  if (focus) { focusDestination(); void journal(); }
+}
+addEventListener('hashchange', () => workspace());
+for (const link of document.querySelectorAll('.workspace-nav a')) {
+  link.addEventListener('click', event => {
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && link.hash === location.hash) focusDestination();
+  });
+}
+document.querySelector('.skip-link').onclick = event => {
+  event.preventDefault();
+  if (accountId) focusDestination(); else $('signIn').focus();
+};
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences')]) {
+  dialog.addEventListener('close', () => {
+    if (document.activeElement === document.body || !document.activeElement.getClientRects().length) focusDestination();
+  });
+}
+$('view').onchange = $('day').onchange = $('statusFilter').onchange = () => {
+  navigation[destination === 'lists' ? 'lists' : 'work'] = { view: $('view').value, status: $('statusFilter').value };
+  render(); void journal();
+};
 $('newList').onclick = () => openEditor({ type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
 $('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '' });
 function openDefaults(record, focus = true, show = true) {
@@ -336,7 +394,7 @@ $('defaultsForm').addEventListener('submit', event => {
       });
       if (owner !== accountId) return;
       state = saved; defaultsEditing = null; $('defaultsEditor').close(); clearError(); render();
-      (record.type === 'settings' ? $('userDefaults') : $('itemsHeading')).focus();
+      if (record.type === 'settings') $('userDefaults').focus(); else focusDestination();
       broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
     finally { saving = false; controls.forEach(control => { control.disabled = false; }); }
@@ -345,11 +403,19 @@ $('defaultsForm').addEventListener('submit', event => {
 capture.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.repeat) { event.preventDefault(); capture.requestSubmit(); }
 });
-$('export').onclick = () => {
-  const blob = new Blob([JSON.stringify({ formatVersion: 1, accountId, state, draft: draft() }, null, 2)], { type: 'application/json' });
+$('export').onclick = guard(async () => {
+  if (!accountId || !state) return;
+  const owner = accountId, generation = accountGeneration, currentDraft = draft(), memory = structuredClone(state);
+  const readable = $('exportFormat').value === 'text';
+  let snapshot, source = 'indexeddb';
+  try { snapshot = await transact(owner); }
+  catch { snapshot = memory; source = 'memory-recovery'; }
+  if (owner !== accountId || generation !== accountGeneration) return;
+  const value = deviceExport(owner, snapshot, currentDraft, source);
+  const blob = new Blob([readable ? readableExport(value) : JSON.stringify(value, null, 2)], { type: readable ? 'text/plain;charset=utf-8' : 'application/json' });
   const url = URL.createObjectURL(blob), link = document.createElement('a');
-  link.href = url; link.download = 'todo-device-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
+  link.href = url; link.download = readable ? 'todo-tasks.txt' : 'todo-device-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 $('copyRecovery').onclick = guard(async () => {
   $('recoveryText').select(); await navigator.clipboard.writeText($('recoveryText').value);
 });
@@ -382,6 +448,12 @@ async function showAccountName(owner, generation, verified) {
   } catch { /* Display metadata must never block capture or synchronization. */ }
 }
 function hideAccount() {
+  if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
+  navigation = emptyNavigation();
+  $('view').replaceChildren(new Option('All items', 'all'));
+  $('statusFilter').replaceChildren(new Option('All statuses', ''));
+  $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
+  $('syncStatus').textContent = ''; clearError();
   accountGeneration++;
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
@@ -418,7 +490,9 @@ async function session({ allowOffline = false } = {}) {
   }
   if (generation !== accountGeneration) throw new Error('Account changed while checking the session. Retry after signing in.');
   if (accountId !== identity.accountId) {
+    const previous = (await transact(null)).accountId;
     hideAccount();
+    if (previous && previous !== identity.accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
     generation = accountGeneration;
     await transact(null, saved => { saved.accountId = identity.accountId; saved.paused = false; });
     const saved = await transact(identity.accountId, local => {
@@ -426,7 +500,7 @@ async function session({ allowOffline = false } = {}) {
     });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
     accountId = identity.accountId; state = saved;
-    render(); restoreDraft(); broadcast();
+    render(); $('workspace').hidden = false; restoreDraft(); broadcast();
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
   void showAccountName(accountId, generation, verified);

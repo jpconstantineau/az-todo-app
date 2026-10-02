@@ -6,6 +6,7 @@ import { documents, faults, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { decision, emptyProposal } from '../../html/clarification.js';
 import { clarificationFields } from '../api/v1/clarification.mjs';
+import { deviceExport, readableExport, validateDeviceExport } from '../../html/inbox-export.js';
 
 const initial = () => ({ step: 0, answers: {}, proposal: emptyProposal() });
 const mutation = (type, version, fields, action = version ? 'update' : 'create') => ({ type, id: 'insurance', expectedVersion: version, action, ...(fields ? { fields } : {}) });
@@ -81,7 +82,7 @@ async function browserSetup(t) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.addInitScript(() => { Object.defineProperty(globalThis, 'LanguageModel', { value: undefined, configurable: true }); });
   const page = await context.newPage();
-  await page.goto(server.url); await page.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).waitFor(); await confirmed(page);
+  await page.goto(server.url + '/#work'); await page.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).waitFor(); await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   return { page, context, browser, url: server.url, setUser: value => { user = value; } };
 }
@@ -134,8 +135,13 @@ test('clarification browser: no AI, offline stop/reload/resume, editable proposa
   assert.equal(record('item').originalText, 'sort out insurance'); assert.equal(record('item').waitingOn, 'Broker');
   assert.equal(record('clarification').step, 4);
   assert.equal(documents.filter(doc => doc.kind === 'record').length, 2);
+  const state = await local(page), exported = deviceExport('alice', state, state.draft);
+  assert.deepEqual(validateDeviceExport(exported).warnings, []);
+  assert.deepEqual(JSON.parse(JSON.stringify(exported)).state.records['clarification:insurance'].answers, record('clarification').answers);
+  assert.match(readableExport(exported), /Coverage in place/);
+  assert.match(readableExport(exported), /skipped/);
   const second = await browser.newContext(); const tab = await second.newPage();
-  await tab.goto(url); await tab.getByRole('button', { name: 'Clarify Call the insurer', exact: true }).click(); await question(tab, 4);
+  await tab.goto(url + '/#work'); await tab.getByRole('button', { name: 'Clarify Call the insurer', exact: true }).click(); await question(tab, 4);
   assert.match(await tab.locator('#clarifyAnswers').textContent(), /Coverage in place/);
   assert.deepEqual(errors, []);
 });
@@ -146,7 +152,7 @@ test('clarification browser: independent session conflicts preserve both proposa
   await page.locator('#clarifySave').click();
   await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js')).transact('alice')).records['clarification:insurance']);
   const second = await browser.newContext(); const tab = await second.newPage();
-  await tab.goto(url); await tab.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).click();
+  await tab.goto(url + '/#work'); await tab.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).click();
   await second.setOffline(true);
   await tab.locator('#clarifyForm [name=text]').fill('Laptop outcome');
   await tab.locator('#clarifyAccept').click(); await question(tab, 1); await tab.locator('#clarifyStop').click();
@@ -163,10 +169,19 @@ test('clarification browser: independent session conflicts preserve both proposa
 
 test('clarification browser: storage failure exposes draft recovery and account switch clears private session content', { timeout: 60000 }, async t => {
   const { page, context, setUser } = await browserSetup(t);
+  await page.evaluate(async () => {
+    const { transact, enqueue } = await import('/inbox-store.js');
+    await transact('alice', local => enqueue(local, 'alice', [{ type: 'item', id: 'other', action: 'create', expectedVersion: 0, fields: { title: 'Another task' } }]));
+  });
+  await page.locator('#sync').click(); await page.getByRole('button', { name: 'Clarify Another task', exact: true }).waitFor(); await confirmed(page);
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).click();
   await page.locator('#clarifyForm [name=text]').fill('Private outcome');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.proposal.text === 'Private outcome');
+  await page.locator('#clarifyStop').click();
+  await page.getByRole('button', { name: 'Clarify Another task', exact: true }).click();
+  assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Private outcome');
+  assert.match(await page.locator('#clarifyError').textContent(), /Save this proposal/);
   await page.evaluate(() => { window.originalPut = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function () { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }; });
   await page.locator('#clarifyAccept').click(); await page.locator('#recovery').waitFor();
   assert.equal(await page.locator('#clarifier').isVisible(), false);

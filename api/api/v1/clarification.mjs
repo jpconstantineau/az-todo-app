@@ -1,4 +1,5 @@
-import { ValidationError } from '../shared/validate.mjs';
+import { ValidationError, text as validateText } from '../shared/validate.mjs';
+import { calendarDate } from './workflow.mjs';
 
 const steps = ['outcome', 'nextAction', 'missingFacts', 'disposition'];
 const fail = message => { throw new ValidationError(message); };
@@ -6,7 +7,8 @@ function shape(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) fail('Invalid clarification fields.');
 }
 function text(value, max = 4000) {
-  if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) fail(`Clarification text must be at most ${max} characters.`);
+  if (typeof value !== 'string') fail('Clarification answers must be text.');
+  validateText(value, max, 'Clarification answer'); // Validate without trimming the supplied wording.
 }
 export function clarificationFields(input) {
   shape(input, ['step', 'answers', 'proposal']);
@@ -37,7 +39,8 @@ function disposition(value, draft = false) {
   text(value.waitingOn);
   for (const name of ['reviewDate', 'startDate']) {
     const date = value[name];
-    if (typeof date !== 'string' || date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.startsWith('0000') || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) fail('Choose a valid clarification calendar date.');
+    if (typeof date !== 'string') fail('Choose a valid clarification calendar date.');
+    if (date) calendarDate(date, name);
   }
   if (!draft && value.status === 'waiting' && (!value.waitingOn.trim() || !value.reviewDate)) fail('Waiting needs a dependency and review date.');
   if (!draft && value.status === 'deferred' && !value.startDate) fail('Deferred needs a start date.');

@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Inbox · To-Do</title>
+  <title>Capture · To-Do</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=9" defer></script>
+  <script src="/pwa.js?v=11" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=9"></script>
+  <script type="module" src="/inbox.js?v=11"></script>
 </head>
 <body class="container inbox-page">
-  <a class="skip-link" href="#captureText">Skip to capture</a>
-  <header class="app-header"><div><p class="eyebrow">Your workspace</p><h1>Inbox</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
+  <a class="skip-link" href="#workspace">Skip to current view</a>
+  <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Your workspace</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
   <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
     <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
     <p class="muted">Saved for this browser.</p>
@@ -33,7 +33,7 @@
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>
-    <nav class="toolbar" aria-label="Workspace"><button id="quickFocus" aria-pressed="true">Capture inbox</button><button id="listWorkspace" aria-pressed="false">List workspace</button><button id="userDefaults">User defaults</button><button id="newList">New list</button></nav>
+    <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists">List Workspace</a></nav>
     <p id="syncStatus" role="status"></p>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
@@ -59,14 +59,15 @@
       <button id="resolve">Apply my pending edit to the latest version</button>
       <button id="discard">Use server version for this save</button>
     </section>
-    <section class="card work-panel" aria-labelledby="itemsHeading">
-      <p class="eyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your work</h2>
-      <label>View <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
+    <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
+      <p class="eyebrow" id="workEyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your Work</h2>
+      <p id="workHelp" class="muted">Review items across your account, or narrow by list and status.</p>
+      <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">All statuses</option></select></label>
       <button id="newProject" type="button">New project</button>
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
-      <div id="lists"></div><div id="items"></div>
+      <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
     </section>
     </div>
     <dialog class="side-panel" id="editor" aria-labelledby="editHeading">
@@ -108,7 +109,8 @@
         <button type="submit">Save defaults on device</button><button id="resetDefaults" type="button">Reset to built-in defaults</button><button id="closeDefaults" type="button">Close defaults</button>
       </form>
     </dialog>
-    <div class="toolbar device-tools"><button id="sync">Sync now</button><button id="export">Export device copy</button></div>
+    <div class="toolbar device-tools"><button id="sync">Sync now</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="userDefaults">User defaults</button></div>
+    <p id="exportHelp" class="muted">Includes all work available on this device, pending saves and drafts. Newer server changes may be missing; sync first when online. JSON preserves the full recovery copy.</p>
     <p class="muted">Device copies belong to this browser profile. Unsynced work cannot be recovered after clearing site storage or losing this device. Export a copy before signing out or changing devices. Use a private browser profile on shared devices.</p>
   </main>
   <section class="card" id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>

@@ -50,7 +50,7 @@ hosting or prove deployed headers.
 
 ## Safe shell updates
 
-Shell v8 caches only the public root/index/bookmark shell, local scripts/styles,
+Shell v10 caches only the public root/index/bookmark shell, local scripts/styles,
 manifest and icons. It never caches API/auth responses, task data or arbitrary
 navigation URLs. Root/index navigation query parameters map to the public shell
 offline without storing query-bearing copies.

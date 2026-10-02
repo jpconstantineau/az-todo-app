@@ -1,3 +1,4 @@
+import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
@@ -21,7 +22,8 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.locator('#captureText').fill('Milk');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
-  await page.getByRole('button', { name: 'Edit Milk', exact: true }).waitFor(); await confirmed(page);
+  await page.getByRole('button', { name: 'Edit Milk', exact: true, includeHidden: true }).waitFor({ state: 'attached' }); await confirmed(page);
+  await showView(page, 'work');
   const itemId = records().find(r => r.type === 'item').id;
   await context.setOffline(true);
   await page.getByRole('button', { name: 'New project', exact: true }).click();
@@ -57,7 +59,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
   await page.locator('#view').selectOption('day'); await page.locator('#day').fill('2026-10-05');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.view === 'day');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation?.work.view === 'day');
   const queued = (await local(page)).queue;
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), 'day');
@@ -72,8 +74,8 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   assert.deepEqual(item.areas, ['Personal']); assert.equal(records().filter(r => r.type === 'item').length, 1);
   const otherContext = await browser.newContext({ timezoneId: 'Pacific/Auckland', viewport: { width: 1440, height: 1000 } });
   const other = await otherContext.newPage(); await other.goto(server.url); await other.locator('#workspace').waitFor();
-  await other.getByRole('button', { name: 'Edit Milk', exact: true }).waitFor(); await confirmed(other);
-  await other.locator('#view').selectOption('day'); await other.locator('#day').fill('2026-10-05');
+  await other.getByRole('button', { name: 'Edit Milk', exact: true, includeHidden: true }).waitFor({ state: 'attached' }); await confirmed(other);
+  await showView(other, 'work'); await other.locator('#view').selectOption('day'); await other.locator('#day').fill('2026-10-05');
   assert.equal(await other.locator('#items article').getAttribute('data-id'), itemId);
   await other.getByRole('button', { name: 'Edit Milk', exact: true }).click();
   assert.equal(await other.locator('#edit [name=plannedDay]').inputValue(), '2026-10-05');
