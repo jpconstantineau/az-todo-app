@@ -1,28 +1,27 @@
-:root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #fff; background: #000; font-size: 16px; line-height: 1.5; }
-* { box-sizing: border-box; }
-body { max-width: 960px; margin: auto; padding: 24px; }
-[hidden] { display: none !important; }
-header, .toolbar, .save-bar, .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-header { justify-content: space-between; }
-h1 { font-size: 28px; line-height: 1.21; letter-spacing: -.6px; }
-h2 { font-size: 22px; line-height: 1.18; }
-section, article { background: #15181e; border: 1px solid #3b3d45; border-radius: 12px; padding: 24px; margin: 16px 0; overflow-wrap: anywhere; }
-article { padding: 16px; background: #1f232b; }
-article h3 { margin: 0; }
-button, input, textarea, select { font: inherit; border-radius: 8px; padding: 10px 14px; }
-input, textarea, select { display: block; width: 100%; background: #15181e; color: #fff; border: 1px solid #656a76; }
-textarea { resize: vertical; }
-label { display: block; margin: 12px 0 8px; }
-button { min-height: 44px; cursor: pointer; background: #fff; color: #000; border: 1px solid #fff; font-size: 14px; font-weight: 600; }
-.actions button, .toolbar button, #previewSplit, #cancelEdit { background: #1f232b; color: #fff; border-color: #656a76; }
-button:disabled { opacity: .6; cursor: wait; }
-:focus-visible { outline: 3px solid #2b89ff; outline-offset: 3px; }
-a { color: #2b89ff; }
-summary { cursor: pointer; padding: 12px 0; }
-p, pre { overflow-wrap: anywhere; }
-pre, .notes { white-space: pre-wrap; font: inherit; }
-.muted, #captureHelp, #draftStatus, .record-state { color: #b2b6bd; font-size: 14px; }
-.record-state[data-pending="true"] { color: #ffcf25; }
-#error, #failure { border: 1px solid #f24c53; padding: 16px; }
-.save-bar { background: #15181e; padding: 12px 0; }
-@media (max-width: 600px) { body { padding: 12px; } section { padding: 16px; } .save-bar button { flex: 1; } }
+/* Inbox layout; visual tokens and native controls come from styles.css. */
+.toolbar, .save-bar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.toolbar { margin-bottom: var(--space-3); }
+.inbox-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-6); align-items: start; margin: var(--space-6) 0; }
+.inbox-grid > * { min-width: 0; }
+.capture-panel { grid-column: 1; grid-row: 1; }
+.work-panel { grid-column: 2; grid-row: 1 / span 3; }
+#editor, #failure { grid-column: 1; }
+.inbox-page article { background: var(--surface-raised); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); padding: var(--space-4); margin-top: var(--space-3); overflow-wrap: anywhere; }
+.inbox-page article .notes { font-size: var(--text-sm); color: var(--muted); }
+#lists { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+#lists:empty { display: none; }
+#lists button { text-align: left; }
+#captureHelp, #draftStatus, .record-state, #sessionStatus, #offlineStatus, #syncStatus { color: var(--muted); font-size: var(--text-sm); }
+.record-state[data-pending="true"] { color: var(--warning); }
+#offlineStatus:empty { display: none; }
+.save-bar { padding: var(--space-3) 0; }
+#captureOptions { border-top: var(--border-width) solid var(--border); }
+#editor button { margin-top: var(--space-3); }
+@media (max-width: 1023px) {
+  .inbox-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); margin: var(--space-4) 0; }
+  .inbox-grid > * { grid-column: auto; grid-row: auto; }
+}
+@media (max-width: 479px) {
+  .toolbar { gap: var(--space-2); }
+  .toolbar button { flex: 1 1 auto; }
+}

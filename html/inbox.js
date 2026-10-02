@@ -47,8 +47,9 @@ function restoreDraft() {
   if (saved.edit) openEditor(saved.edit, false);
   else $('editor').hidden = true;
 }
-function button(text, handler) {
+function button(text, handler, label = text) {
   const element = document.createElement('button'); element.textContent = text;
+  element.setAttribute('aria-label', label);
   element.addEventListener('click', guard(handler)); return element;
 }
 function render() {
@@ -69,8 +70,9 @@ function render() {
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
     status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
     const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(button(`Edit ${record.title}`, () => openEditor(record)),
-      button(`${record.status === 'completed' ? 'Reopen' : 'Complete'} ${record.title}`, () => updateRecord(record, { status: record.status === 'completed' ? 'inbox' : 'completed' })));
+    const action = record.status === 'completed' ? 'Reopen' : 'Complete';
+    actions.append(button('Edit', () => openEditor(record), `Edit ${record.title}`),
+      button(action, () => updateRecord(record, { status: record.status === 'completed' ? 'inbox' : 'completed' }), `${action} ${record.title}`));
     article.append(title, notes, status, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = 'No items here yet. Capture something above.';

@@ -120,8 +120,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination' }).waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v1')).keys()).map(request => new URL(request.url).pathname));
-  assert.deepEqual(cached.sort(), ['/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js'].sort());
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v2')).keys()).map(request => new URL(request.url).pathname));
+  assert.deepEqual(cached.sort(), ['/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/styles.css', '/theme.js'].sort());
   await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
   assert.equal(records().length, 1);
 });

@@ -4,11 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>To-Do</title>
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.12" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
     <div class="container">
       <p id="requestStatus" role="status" aria-live="polite"></p>
       <div id="requestError" role="alert" hidden></div>

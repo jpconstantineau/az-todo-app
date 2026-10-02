@@ -42,6 +42,11 @@ document.addEventListener("htmx:afterRequest", event => {
   if (form.id === "quickAdd") form.elements.title.focus();
 });
 document.addEventListener("htmx:afterSwap", () => {
+  const navigation = document.getElementById("listNavigation");
+  if (navigation && !navigation.dataset.initialized) {
+    navigation.open = matchMedia('(min-width: 768px)').matches;
+    navigation.dataset.initialized = 'true';
+  }
   const selected = document.getElementById("selectedListTitle")?.dataset.listId;
   document.querySelectorAll("#listsContainer [data-list-id]").forEach(button => {
     button.classList.toggle("active", button.dataset.listId === selected);
