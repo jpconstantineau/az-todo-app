@@ -8,6 +8,8 @@ Browser request protection, origin configuration, account isolation tests, and
 Azure verification gates are documented in [Request security](docs/request-security.md).
 The opt-in JSON contract, retry/conflict protocol and migration rehearsal are
 documented in [Versioned data API](docs/data-api-v1.md).
+Durable offline capture, editing, account-bound retry and controlled client cutover
+are documented in [Durable inbox](docs/durable-inbox.md).
 
 [![Azure Static Web Apps CI/CD](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml/badge.svg)](https://github.com/jpconstantineau/az-todo-app/actions/workflows/azure-static-web-apps-ambitious-smoke-020a5481e.yml)
 

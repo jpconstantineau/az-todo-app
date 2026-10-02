@@ -19,6 +19,8 @@ export const app = {
             response = failure("Unauthorized", 401, "unauthorized");
           } else if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !checkCsrf(req)) {
             response = failure("Request origin could not be verified. Your entered text has been kept. Reload this site before retrying.", 403, "untrusted_origin");
+          } else if (process.env.V1_CLIENT_ENABLED === "true" && !config.route.startsWith("v1/") && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+            response = failure("This workspace has moved to the durable inbox. Keep a copy of your entered text and open /inbox.html.", 409, "legacy_read_only");
           } else {
             response = await config.handler(req, context);
           }

@@ -102,7 +102,11 @@ export async function startServer({ browserUser = false } = {}) {
         const chunks = [];
         for await (const chunk of req) chunks.push(chunk);
         const headers = { ...req.headers };
-        if (browserUser) headers["x-ms-client-principal"] = principal;
+        if (browserUser) {
+          const user = typeof browserUser === 'function' ? browserUser() : 'disposable-test-user';
+          delete headers['x-ms-client-principal'];
+          if (user) headers['x-ms-client-principal'] = Buffer.from(JSON.stringify({ userId: user, userRoles: ['authenticated'] })).toString('base64');
+        }
         const request = new HttpRequest({ method: req.method, url: `http://${req.headers.host}${req.url}`, headers,
           body: chunks.length ? { bytes: Buffer.concat(chunks) } : undefined });
         const result = new HttpResponse(await handler(request));
@@ -110,6 +114,9 @@ export async function startServer({ browserUser = false } = {}) {
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"], "/app.js": ["app.js", "text/javascript"] };
+        for (const name of ['inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-sw.js']) {
+          assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
+        }
         const asset = assets[url.pathname];
         if (!asset) { res.writeHead(404); res.end("Not found"); return; }
         res.writeHead(200, { "content-type": asset[1] });

@@ -32,6 +32,12 @@ app.http("app-index", {
       );
     }
 
+    if (process.env.V1_CLIENT_ENABLED === "true") {
+      return new Response('<p><a href="/inbox.html">Open your inbox</a></p>', {
+        headers: { "content-type": "text/html; charset=utf-8", "HX-Redirect": "/inbox.html" }
+      });
+    }
+
     const settings = await getSettings(userId);
 
     // Lists for user

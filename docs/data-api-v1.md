@@ -2,11 +2,12 @@
 
 The v1 API adds repeat-safe JSON writes alongside the existing HTML API. It is
 disabled unless `V1_API_ENABLED=true`. Use an isolated staging environment until
-the migration and Azure gates below pass. The existing HTML client still uses
-legacy storage; it does **not** read v1 captures or provide offline synchronization.
-Issue #5 owns the client/outbox conversion. Do not send a user's live edits to both
-namespaces or enable v1 for a pilot before that conversion and a controlled cutover.
-This PR does not move or modify existing production records.
+the migration and Azure gates below pass. The legacy HTML client uses legacy
+storage; the [durable inbox](durable-inbox.md) at `/inbox.html` uses v1 and provides
+offline capture/editing. `V1_CLIENT_ENABLED=true` redirects the authenticated shell
+to that inbox and rejects legacy mutations. Do not send a user's live edits to both
+namespaces or enable v1 for a pilot before the controlled migration and cutover.
+These source changes do not move or modify existing production records.
 
 ## Authentication and account binding
 
@@ -223,8 +224,9 @@ Staging/production procedure:
 4. Enable v1 only in that isolated environment. Exercise the v1 fixture, lost
    acknowledgements, concurrent edits/reference races, bounded pages and a stale
    edit after deletion against **real Cosmos** with two authenticated accounts.
-   Inspect actual API headers and RU/latency. Finish the client conversion in #5
-   before choosing a production cutover; disable the old mutation paths at cutover.
+   Inspect actual API headers and RU/latency. Verify the durable inbox from #5
+   before choosing a production cutover; enable its client flag to disable the
+   old mutation paths at cutover.
 5. Rehearse rollback while writes remain frozen. Disable v1, reconstruct and
    restore the verified legacy export/backup into another isolated target, and
    compare application fields/owners/counts before repointing the old release.
