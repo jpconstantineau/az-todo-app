@@ -159,7 +159,7 @@ to discard a queued operation or assign it to someone else.
 | --- | --- | --- |
 | GET `v1/session` | No parameters | API version, authenticated account ID, `defaultSettings` and nullable archived `legacyDefaults` (read-only) |
 | POST `v1/operations` | JSON operation below | Durable committed receipt (200), or durable conflict receipt (409) |
-| GET `v1/records` | `accountId`, `type=list\|item\|settings`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
+| GET `v1/records` | `accountId`, `type=list\|item\|project\|settings`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
 | GET `v1/receipts` | `accountId`, `operationId` | Exact stored receipt (200), whose `status` may be `conflict`; absent receipts return 404 |
 | GET `v1/changes` | `accountId`, `after` (default 0), `limit` (default 10, max 50) | Ordered change entries, `nextAfter`, `highWater`, `hasMore` |
 
@@ -193,7 +193,7 @@ Operations contain 1–20 distinct records and at most 64 KiB of UTF-8 JSON. Unk
 fields, unknown versions, malformed dates, invalid references and oversized text
 are rejected rather than clipped. Lists support title (200 characters), description
 (4,000) and creation-only capture fields. Items additionally support nullable
-`listId`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
+`listId`, `projectId`, calendar-date `plannedDay`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
 `waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority` and HTTP(S)
 `referenceLinks`. Tags are at most 64 characters, arrays at most 20 entries, URLs
 at most 2,048 characters. Statuses allow `inbox`, `next`, `deferred`, `completed` and the destination list/account configured values. Existing status and prior-completion values remain usable even after an option is removed.
@@ -204,6 +204,26 @@ Creation-only fields are `originalText` (16,000 characters), `selectedText` (8,0
 originals. Each resulting record must fit in 32 KiB. A complete Cosmos batch must
 fit in 1.5 MB; larger operations receive a validation error before writing. These
 limits also bound stored receipts and change entries.
+
+Projects support title, description, creation-only capture fields and a required,
+nonblank `outcome` (at most 4,000 characters). `projectId` is an optional link to
+an owned, live project; foreign, missing or deleted projects return
+`404 project_not_found`. A project and its action links can commit atomically in
+one operation, in either mutation order. The
+[project fixture](../api/test/fixtures/v1-project.json) links the groceries fixture's
+existing milk action without changing its identity, original capture, source or list.
+Project deletion requires an already empty membership, just like list deletion;
+otherwise it returns `409 project_not_empty`.
+
+`plannedDay` is `null` or a real `YYYY-MM-DD` calendar date (years 0001–9999),
+stored and displayed without time-zone conversion. It describes a day to work on
+the action, not a deadline, start date or review cue. Assigning it never changes
+`dueDateUtc`. Missing project/day fields on existing records mean unassigned;
+no backfill, partition change or data reset is required. Existing action `areas`
+remain optional tags and survive relationship changes. Older clients can still
+edit known fields without erasing these additions. Deploy the additive API before
+the new shell; do not roll back the API while project operations are pending.
+See [Projects and planned days](projects.md) for the manual flow and verification.
 
 For an edit, send `action:"update"`, the observed positive `expectedVersion`, and
 only the fields to change. Completion is `{status:"completed"}` and records server-managed `statusBeforeCompletion`; reopening explicitly submits that previous status (`next` for historical records without it). Retrying cannot toggle twice. Even an edit that

@@ -37,6 +37,18 @@ test("migration rehearsal preserves owner, stable IDs, all persisted fields and 
   assert.equal(moved.records[0].id, "milk");
   assert.equal(moved.records[0].originalText, source.originalText);
   assert.deepEqual(moved.records[0].referenceLinks, source.referenceLinks);
+  const linked = await commit("alice", validateOperation({ apiVersion: 1, accountId: "alice", operationId: "post-migration-project",
+    mutations: [
+      { type: "project", id: "home", action: "create", expectedVersion: 0, fields: { title: "Home", outcome: "Supplies ready" } },
+      { type: "item", id: "milk", action: "update", expectedVersion: 2, fields: { projectId: "home", plannedDay: "2026-10-05" } }
+    ] }));
+  const linkedItem = linked.records.find(record => record.type === "item");
+  assert.equal(linkedItem.id, source.id);
+  assert.deepEqual(linkedItem.areas, source.areas);
+  assert.equal(linkedItem.originalText, source.originalText);
+  assert.equal(linkedItem.dueDateUtc, source.dueDateUtc);
+  assert.equal(linkedItem.status, source.status);
+  assert.equal(linkedItem.listId, null);
   assert.deepEqual(rollbackMigration(prepared), backup, "backup is unchanged by target edits; post-cutover edits require separate recovery");
 
   const folder = await mkdtemp(join(tmpdir(), "az-todo-migration-"));

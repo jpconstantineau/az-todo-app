@@ -1,5 +1,5 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=5';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=5';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=6';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom } from './inbox-fields.js?v=6';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -35,7 +35,7 @@ function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open,
-    view: $('view').value, status: $('statusFilter').value, lists: $('listWorkspace').getAttribute('aria-pressed') === 'true' };
+    view: $('view').value, day: $('day').value, status: $('statusFilter').value, lists: $('listWorkspace').getAttribute('aria-pressed') === 'true' };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -56,9 +56,10 @@ async function journal() {
     if (owner === accountId) { state = saved; $('draftStatus').textContent = 'Draft saved on device'; }
   } catch (failure) { if (owner === accountId) storageFailure(failure); }
 }
-function options(select, lists, first) {
+function options(select, lists, first, keepMissing = false) {
   const selected = select.value;
   select.replaceChildren(...first.map(([value, text]) => new Option(text, value)), ...lists.map(list => new Option(list.title, list.id)));
+  if (keepMissing && selected && ![...select.options].some(option => option.value === selected)) select.add(new Option('Unavailable project — choose another or clear', selected));
   if ([...select.options].some(option => option.value === selected)) select.value = selected;
 }
 function restoreDraft() {
@@ -70,7 +71,7 @@ function restoreDraft() {
   if (saved.edit) openEditor(saved.edit, false);
   else $('editor').close();
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
-  fillValues({ elements: { namedItem: name => $(name) } }, { view: saved.view || 'all', statusFilter: saved.status || '' });
+  fillValues({ elements: { namedItem: name => $(name) } }, { view: saved.view || 'all', day: saved.day || localDate(new Date().toISOString()).slice(0, 10), statusFilter: saved.status || '' });
   workspace(!!saved.lists, false); refreshOptions(); render();
 }
 function button(text, handler, label = text) {
@@ -82,23 +83,38 @@ function render() {
   if (!accountId || !state) return;
   const records = Object.values(projected(state)).filter(record => !record.deleted);
   const lists = records.filter(record => record.type === 'list');
+  const projects = records.filter(record => record.type === 'project');
   options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
   options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
-  options($('view'), lists, [['all', 'All items'], ['inbox', 'Inbox (no list)']]);
+  options(capture.elements.projectId, projects, [['', 'No project']], true);
+  options(edit.elements.projectId, projects, [['', 'No project']], true);
+  options($('view'), [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))], [['all', 'All items'], ['inbox', 'Inbox (no list)'], ['day', 'Planned day']]);
   refreshOptions();
   const statuses = [...new Set(['inbox', 'next', 'completed', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status })), [['', 'All statuses']]);
   $('syncStatus').textContent = state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.';
   $('lists').replaceChildren(...lists.flatMap(list => [button(`Edit list: ${list.title}`, () => openEditor(list)), button(`Defaults: ${list.title}`, () => openDefaults(list))]));
   const view = $('view').value;
-  $('items').replaceChildren(...records.filter(record => record.type === 'item' &&
-    (view === 'all' || (view === 'inbox' ? !record.listId : record.listId === view)) &&
-    (!$('statusFilter').value || record.status === $('statusFilter').value)).map(record => {
+  $('dayLabel').hidden = view !== 'day';
+  const project = projects.find(project => view === `project:${project.id}`);
+  $('projectOutcome').hidden = !project;
+  $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
+  $('projectActions').replaceChildren(...(project ? [button('Edit project', () => openEditor(project), `Edit project: ${project.title}`)] : []));
+  $('items').replaceChildren(...records.filter(record => {
+    if (record.type !== 'item' || ($('statusFilter').value && record.status !== $('statusFilter').value)) return false;
+    if (view === 'all') return true;
+    if (view === 'inbox') return !record.listId;
+    if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
+    if (view.startsWith('project:')) return record.projectId === project?.id;
+    return record.listId === view;
+  }).map(record => {
     const article = document.createElement('article'); article.dataset.id = record.id;
     const title = document.createElement('h3'); title.textContent = record.title;
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
     const metadata = document.createElement('p'); metadata.className = 'notes';
     metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, record.priority].filter(Boolean).join(' · ');
+    if (record.projectId) metadata.append(` · Project: ${projects.find(project => project.id === record.projectId)?.title || 'Unavailable project'}`);
+    if (record.plannedDay) metadata.append(` · Planned: ${record.plannedDay}`);
     if (record.dueDateUtc) { const time = document.createElement('time'); time.dateTime = record.dueDateUtc; time.textContent = ` Due ${new Date(record.dueDateUtc).toLocaleString()}`; metadata.append(time); }
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
     status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
@@ -114,7 +130,7 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['title', 'Title'], ['description', 'Notes'], ['status', 'Status'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
@@ -138,8 +154,11 @@ function openEditor(record, focus = true) {
   fillValues(edit, { ...fields, dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
   editing.initialFields ??= formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
-  $('editListLabel').hidden = record.type === 'list';
-  $('editAdvanced').hidden = record.type === 'list';
+  $('editListLabel').hidden = record.type !== 'item';
+  $('editAdvanced').hidden = record.type !== 'item';
+  $('editOutcomeLabel').hidden = record.type !== 'project';
+  edit.elements.outcome.required = record.type === 'project';
+  $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
   $('editError').hidden = true;
   if (!$('editor').open) $('editor').showModal();
@@ -151,6 +170,7 @@ async function updateRecord(record, fields, close = false) {
   if (!owner) return;
   if (fields.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Title must be 1–200 characters.');
   if ((fields.description?.length ?? 0) > 4000) throw new Error('Notes must be at most 4,000 characters.');
+  if (fields.outcome !== undefined && (!fields.outcome.trim() || fields.outcome.length > 4000)) throw new Error('Describe the desired outcome in 1–4,000 characters.');
   try {
     const saved = await transact(owner, local => {
       const current = projected(local)[key(record)];
@@ -207,8 +227,8 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { listId: values.listId || null, ...taskFields(values) } : {}) };
-    if (editing.version === 0) fields.defaults = structuredClone(userDefaults());
+      ...(editing.type === 'item' ? { listId: values.listId || null, ...taskFields(values) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
+    if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.initialFields) {
       const initial = { ...editing.initialFields, ...taskFields(editing.initialFields), listId: editing.initialFields.listId || null };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
@@ -237,8 +257,9 @@ function workspace(lists, focus = true) {
 }
 $('quickFocus').onclick = () => workspace(false);
 $('listWorkspace').onclick = () => workspace(true);
-$('view').onchange = $('statusFilter').onchange = () => { render(); void journal(); };
+$('view').onchange = $('day').onchange = $('statusFilter').onchange = () => { render(); void journal(); };
 $('newList').onclick = () => openEditor({ type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
+$('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '' });
 function openDefaults(record, focus = true, show = true) {
   if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
   if (defaultsEditing?.id !== record.id || defaultsEditing?.type !== record.type || defaultsEditing?.version !== record.version) {
@@ -338,6 +359,7 @@ function hideAccount() {
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
+  $('projectOutcome').textContent = ''; $('projectActions').replaceChildren(); $('day').value = '';
   $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
 }
 async function pauseSession(message) {
@@ -510,7 +532,7 @@ try {
         const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
         reply.port1.onmessage = event => {
           clearTimeout(timeout); reply.port1.close();
-          if (event.data === 'todo-inbox-shell-v5') resolve(); else reject(new Error('Old shell is still active'));
+          if (event.data === 'todo-inbox-shell-v6') resolve(); else reject(new Error('Old shell is still active'));
         };
         (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
       }))

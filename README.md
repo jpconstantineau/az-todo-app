@@ -15,6 +15,7 @@ flowchart LR
 ```
 
 - [Task flow and parity verification](docs/task-flow.md)
+- [Optional projects and planned-day views](docs/projects.md)
 - [Request security and deployed verification gates](docs/request-security.md)
 - [Versioned API, conflict handling and migration tooling](docs/data-api-v1.md)
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)

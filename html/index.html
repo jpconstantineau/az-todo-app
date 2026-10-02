@@ -7,7 +7,7 @@
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=5"></script>
+  <script type="module" src="/inbox.js?v=6"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#captureText">Skip to capture</a>
@@ -49,7 +49,10 @@
     <section class="card work-panel" aria-labelledby="itemsHeading">
       <p class="eyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your work</h2>
       <label>View <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
+      <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">All statuses</option></select></label>
+      <button id="newProject" type="button">New project</button>
+      <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
       <div id="lists"></div><div id="items"></div>
     </section>
     </div>
@@ -59,6 +62,7 @@
       <form id="edit">
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
+        <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
         <label id="editListLabel">List <select name="listId"></select></label>
         <details id="editAdvanced"><summary>Task details</summary><div id="editFields"></div></details>
         <details><summary>Original capture</summary><pre id="original"></pre></details>
