@@ -199,3 +199,111 @@ test('failed persistence never passes capture to inference or loses its recovery
   assert.match(await page.locator('#recoveryText').inputValue(), /Call Sam tomorrow/);
   assert.equal(records().length, 0);
 });
+
+test('manual batch review works without AI, retains offline corrections and accepts once', { timeout: 60000 }, async t => {
+  const { page, context } = await setup(t, { absent: true });
+  const paragraph = 'One long thought '.repeat(30);
+  await page.locator('#captureText').fill(paragraph);
+  await page.locator('#captureOptions summary').click();
+  await page.locator('#capture [name=body]').fill('Keep these original notes.');
+  await context.setOffline(true);
+  await page.locator('#extractManual').click();
+  await page.locator('#extractionReview').waitFor();
+  assert.match(await page.locator('#extractionHelp').textContent(), /No AI was used/);
+  await page.locator('#extractionItems [name=title]').fill('My first task');
+  assert.equal(await page.locator('#extractionItems [name=description]').inputValue(), 'Keep these original notes.');
+  await page.locator('#extractAdd').click();
+  await page.locator('#extractionItems [name=title]').last().fill('My second task');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.extraction.draft.items[1].title === 'My second task');
+  const draft = (await local(page)).draft.extraction.draft;
+  await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#extractReview'));
+  assert.equal(await page.locator('#extractionItems [name=title]').last().inputValue(), 'My second task');
+  assert.equal((await local(page)).draft.extraction.draft.clock.capturedAt, draft.clock.capturedAt);
+  assert.equal(await page.evaluate(() => aiCalls.creates), 0);
+  await page.locator('#extractAccept').click(); await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  const saved = await local(page);
+  assert.equal(saved.queue.length, 1); assert.equal(saved.queue[0].operation.mutations.length, 2);
+  assert.equal(saved.queue[0].operation.mutations[0].fields.originalText, paragraph);
+  assert.equal(saved.queue[0].operation.mutations[0].fields.captureId, draft.id);
+  faults.loseBatchResponse = true; await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+  assert.equal(records().filter(record => record.type === 'item').length, 2);
+});
+
+test('list-name permission is opt-in, persists per account and cancellation stops stale inference', async t => {
+  const { page, setUser } = await setup(t);
+  await page.evaluate(async () => {
+    await (await import('/inbox-store.js')).transact('alice', local => {
+      local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', version: 1, accountId: 'alice', deleted: false };
+    });
+    document.querySelector('#sync').click();
+  });
+  await page.waitForFunction(() => [...document.querySelector('#capture [name=listId]').options].some(option => option.value === 'private'));
+  await page.locator('#captureText').fill(source); await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
+  assert.ok(!(await page.evaluate(() => aiCalls.prompts[0].text)).includes('Private list name'));
+  await page.locator('#extractOriginal').click();
+  await page.locator('#extractLists').check();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.extraction.includeLists);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#extractLists').isChecked(), true);
+  await clickControl(page.locator('#extractStart')); await page.locator('#extractionReview').waitFor();
+  assert.match(await page.evaluate(() => aiCalls.prompts[0].text), /Private list name/);
+  await page.locator('#extractOriginal').click();
+  await page.evaluate(() => { aiMode.delay = true; });
+  await clickControl(page.locator('#extractStart')); await page.waitForFunction(() => !!window.finishAI);
+  await page.locator('#extractLists').uncheck(); await page.evaluate(raw => finishAI(raw), output());
+  assert.equal(await page.locator('#extractReview').isHidden(), true);
+  await page.locator('#extractLists').check();
+  await page.locator('#captureText').fill('Ordinary manual save');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === '');
+  await confirmed(page); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#extractLists').isChecked(), true);
+  setUser('bob'); await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  assert.equal(await page.locator('#extractLists').isChecked(), false);
+});
+
+test('merge review tasks preserves notes and attributes, journals the result and refuses overflow', async t => {
+  const { page, context } = await setup(t);
+  await page.locator('#captureText').fill(source); await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
+  const second = page.locator('#extractionItems fieldset').last();
+  await second.locator('[name=description]').fill('a'.repeat(4000));
+  await page.getByRole('button', { name: 'Merge into previous task' }).click();
+  assert.match(await page.locator('#extractionError').textContent(), /exceed/);
+  assert.equal(await page.locator('#extractionItems fieldset').count(), 2);
+  await second.locator('[name=description]').fill('Get oat milk');
+  await page.getByRole('button', { name: 'Merge into previous task' }).click();
+  assert.equal(await page.locator('#extractionItems fieldset').count(), 1);
+  const notes = await page.locator('#extractionItems [name=description]').inputValue();
+  assert.match(notes, /Buy milk/); assert.match(notes, /Get oat milk/); assert.match(notes, /Priority: urgent/);
+  assert.equal(await page.locator('#extractionItems [name=description]').evaluate(el => document.activeElement === el), true);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.extraction.draft.items.length === 1);
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#extractReview'));
+  assert.equal(await page.locator('#extractionItems [name=description]').inputValue(), notes);
+  assert.equal((await local(page)).queue.length, 0);
+});
+
+test('manual review storage failures retain source and corrections without queuing tasks', async t => {
+  const { page } = await setup(t, { absent: true });
+  await page.locator('#captureText').fill(source);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text.startsWith('Call Sam tomorrow'));
+  await page.evaluate(() => {
+    window.originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); };
+  });
+  await page.locator('#extractManual').click(); await page.locator('#recovery').waitFor();
+  assert.match(await page.locator('#recoveryText').inputValue(), /Call Sam tomorrow/);
+  assert.equal((await local(page)).queue.length, 0);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = originalPut; });
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  await page.locator('#extractionItems [name=title]').fill('Keep this correction');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.extraction?.draft?.items[0].title === 'Keep this correction');
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.locator('#extractAccept').click();
+  // Recovery is already visible from the first failure; wait for this save to fail.
+  await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  assert.match(await page.locator('#extractionError').textContent(), /Full/);
+  assert.match(await page.locator('#recoveryText').inputValue(), /Keep this correction/);
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal(await page.evaluate(() => aiCalls.creates), 0);
+});

@@ -1,25 +1,37 @@
 # Automatic local AI capture (#24)
 
-In Capture, enable **Automatic local AI suggestions**. A ready local model
+In Capture, open **Free-form task review and local AI** and enable **Automatically suggest with local AI**. A ready local model
 proposes tasks after a 1.2-second typing pause. **Review saved suggestions**
 appears without moving keyboard focus. Only **Accept all tasks on device**
 commits the reviewed batch. **Suggest tasks now** starts an explicit attempt,
 including a browser model download if necessary; typing never initiates downloads.
 
+**Review tasks manually** opens the same durable batch review without a model,
+including for paragraphs longer than a manual one-line title. Add titles and
+notes using the exact original; nothing runs through AI. Original notes and the
+selected existing list carry into the first task. Stop/reload and resume this
+review offline, then accept through the same repeat-safe outbox.
+
 Edit titles, notes, existing-list destinations, priority, context, area and
-deadlines. Add/edit/remove rows to split or merge tasks. Stop and keep the review,
+deadlines. Add/edit/remove rows to split tasks. **Merge into previous task** keeps
+the previous title and appends the removed task's title, notes, attributes and
+warnings to its notes. A merge over 4,000 characters changes neither task. Stop and keep the review,
 reload offline, and resume corrections. Existing corrections are never replaced
 by another inference. If Capture changes, acceptance is blocked until that review
 is discarded and the new text processed. Manual one-item-per-line capture and
 split preview remain available when AI is disabled, missing, cancelled or failing.
 
-The automatic preference belongs to this account's device draft. Reload and
+The automatic preference belongs to this workspace's draft in the account's device copy. Reload and
 reconnect do not themselves run inference; the next edit triggers it when enabled.
 Account changes cancel generation and hide its content. Suggestions are English
 only, using matching language/modality options and session cleanup shared with
 clarification guidance. See the [Chrome Prompt API](https://developer.chrome.com/docs/ai/prompt-api).
 No external inference service, API key or task-text logging is introduced. The
-prompt contains this capture, its notes and this account's live list names/IDs.
+prompt contains this capture, its notes and the captured clock. Existing list
+names/IDs are included only after enabling **Include my existing list names in
+local AI suggestions**. This preference persists per workspace and account on this device;
+changing it cancels an in-flight attempt. An explicitly selected destination is
+still applied locally even without sending list names to the model.
 Accepted tasks still use ordinary cloud synchronization.
 
 ## Sources and dates
@@ -89,3 +101,19 @@ all source facts retained, no invented tasks/dates in the fixture set, zero
 automatic commits/duplicate writes, and ready-model suggestions within 10 seconds
 for ordinary captures. Measure and agree these thresholds with the owner; mocks
 do not establish model quality or latency.
+
+The [representative quality fixtures](../api/test/fixtures/capture-quality.json)
+are manual real-model checks, not claims that mocked output establishes model
+quality. The follow-up to PR #64 keeps its API/provenance/draft format and adds
+manual batch review, list-context permission and the merge control to the same
+flow. No parallel capture UI or second capture metadata format is shipped.
+
+Integration verification on October 3, 2026: integrated main at `897e91c`
+(including PR #66 workspaces), retained its capture and PWA update behavior, and
+advanced the shell to v29. All **220 Node/Playwright checks passed** on Windows
+with Node 26.7.0 and Playwright Chromium, including shell upgrades through v28
+and offline manual review across workspace switches. The CI storage-recovery
+test race was reproduced in Chromium and fixed by waiting for the corrected
+draft to persist and the current failed save to close its dialog before reading
+recovery text. Phone/desktop screenshots cover the capture controls;
+`git diff --check` passed.
