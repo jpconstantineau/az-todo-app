@@ -54,6 +54,15 @@ Use three native links, /#capture, /#work and /#lists. Links provide ordinary ke
 
 Capture is the fresh-entry default and shows only the capture form. Your Work reviews all canonical actions with list/status filters. List Workspace requires a selected list and exposes its items, title/notes and defaults, plus New list. A missing/deleted list returns to Choose a list, never silently shows all work. Review and list selections/status filters are independent, account-bound draft metadata. URLs contain only the destination, never IDs or task text.
 
+**Inbox (unprocessed)** shows items whose status is `inbox` across all lists in
+the selected workspace. Choosing a processed status through editing or
+clarification removes the item from Inbox, even when it has no list. Filing an
+unprocessed capture in a list or project keeps it in Inbox. **No list** is a
+separate view of unfiled items, including processed work; list pickers use the
+same label. Status and context/time/energy filters still narrow either view.
+Existing saved Inbox selections now show unprocessed captures; choose No list
+to recover the former filing-based view. No task data or relationships change.
+
 The [phone/desktop HTML mockup](design/navigation-mockup.html) shows the three proposed destinations together for review; the implementation displays only one. Shared account, sync, errors, conflicts and recovery tools remain outside the changing panels. Navigation is in normal document flow so it cannot cover capture controls or a phone keyboard.
 
 Reload and back/forward follow the URL; absent or unknown destinations use Capture. Saved legacy workspace mode does not override the URL. Views cannot reveal records until session verification opens the account cache. Account changes clear displayed filters and return to Capture. Navigation never submits or resets forms; capture/editor/default drafts and the outbox continue to use the existing journal.

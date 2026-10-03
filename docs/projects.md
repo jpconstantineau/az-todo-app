@@ -6,12 +6,13 @@ and optionally a planned day. These controls also appear in capture options.
 Projects, days and areas are optional; groceries and quick captures need none.
 Areas remain the existing optional action tags, with no new taxonomy to set up.
 
-The **View** selector provides Inbox (actions without a list), each project, and
-Planned day with a calendar picker. Project views show the outcome and an edit
-button. Status filtering still applies. An action without a list can appear in
-inbox, its project and its planned day. All views edit the same action, so notes,
-completion, reopening and list moves stay consistent. Assigning a project does
-not remove list membership or change original capture/source data. The device
+The **View** selector provides Inbox (unprocessed captures across lists), No list,
+each project, and Planned day with a calendar picker. Project views show the
+outcome and an edit button. Status filtering still applies. An action without a list can appear in
+No list, its project and its planned day. Unprocessed actions also appear in Inbox.
+All views edit the same action, so notes, completion, reopening and list moves
+stay consistent. Assigning a project does not remove list membership or change
+original capture/source data. The device
 export contains one current record per action plus its separate project record;
 outbox/history entries are operations, not additional actions.
 

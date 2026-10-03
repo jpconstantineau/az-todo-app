@@ -57,7 +57,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
-  await page.locator('#view').selectOption('inbox');
+  await page.locator('#view').selectOption('unfiled');
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
   await page.locator('#view').selectOption('day'); await page.locator('#day').fill('2026-10-05');
