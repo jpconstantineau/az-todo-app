@@ -129,6 +129,7 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   assert.match(await download(page), /DRAFT — NOT ACCEPTED/);
   await page.locator('#briefReject').click(); await confirmedRevision(page, 'rejected');
   await page.waitForFunction(() => document.querySelector('#briefState').textContent.startsWith('rejected'));
+  await page.waitForFunction(() => document.activeElement.id === 'briefState');
   assert.equal(await page.locator('#briefAccept').isDisabled(), true);
   await page.locator('#briefRevisions').selectOption(first);
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Coverage in place');
