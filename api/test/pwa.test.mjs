@@ -142,7 +142,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v40', 'shell-next');
+    const next = worker.replaceAll('shell-v41', 'shell-next');
     return version === 'failure' ? next.replace('ASSETS.push(', "ASSETS.push('/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -150,8 +150,8 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Draft across update');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=40')).transact('alice')).draft.capture.text === 'Draft across update');
-  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=40')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=41')).transact('alice')).draft.capture.text === 'Draft across update');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=41')).transact('alice'));
   const before = await local();
   assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
@@ -175,7 +175,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v40')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v41')));
 });
 
 test('PWA: update checks report current/offline, prevent duplicate checks, and recover from failure and timeout', async t => {

@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=40';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=40';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=40';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=40';
-import { clarificationUI } from './clarification.js?v=40';
-import { setupReviews } from './reviews.js?v=40';
-import { setupBriefs } from './briefs.js?v=40';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=40';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=41';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=41';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=41';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=41';
+import { clarificationUI } from './clarification.js?v=41';
+import { setupReviews } from './reviews.js?v=41';
+import { setupBriefs } from './briefs.js?v=41';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=41';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -581,15 +581,23 @@ function renderEditorDraft() {
   const retained = hasEditDraft() && !$('editor').open;
   $('savedEdit').hidden = !retained;
   statusText('savedEditStatus', retained ? `Unfinished ${editing.type} edit: ${edit.elements.title.value || 'Untitled'}.` : '');
-  $('resumeEdit').disabled = workspaceReadOnly();
+  $('resumeEdit').disabled = saving || workspaceReadOnly();
+  $('discardEdit').disabled = saving;
 }
 async function discardEdit() {
   const owner = accountId, generation = accountGeneration, pending = editing;
   if (!owner || !pending) return;
-  const saved = await transact(owner, local => { currentDraft(local).edit = null; currentDraft(local).editOpen = false; })
-    .catch(failure => { if (owner === accountId) storageFailure(failure); });
-  if (!saved || owner !== accountId || generation !== accountGeneration || editing !== pending) return;
-  state = saved; editing = null; edit.reset(); $('editor').close(); clearError(); render();
+  const controls = [...edit.elements];
+  saving = true; controls.forEach(control => { control.disabled = true; }); renderEditorDraft();
+  try {
+    const saved = await transact(owner, local => { currentDraft(local).edit = null; currentDraft(local).editOpen = false; });
+    if (owner !== accountId || generation !== accountGeneration || editing !== pending) return;
+    state = saved; editing = null; edit.reset(); $('editor').close(); clearError(); render();
+  } catch (failure) { if (owner === accountId) storageFailure(failure); }
+  finally {
+    saving = false; controls.forEach(control => { control.disabled = false; });
+    if (accountId) renderEditorDraft();
+  }
 }
 
 async function updateRecord(record, fields, close = false) {
@@ -685,7 +693,7 @@ edit.addEventListener('submit', event => {
     else if (editing.version > 0 && editing.initialFields) {
       const initial = { ...editing.initialFields, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
-      if (!Object.keys(fields).length) { void discardEdit().finally(() => { saving = false; }); return; }
+      if (!Object.keys(fields).length) { void discardEdit(); return; }
     }
   } catch (failure) { saving = false; error(failure.message); return; }
   // Keep the submitted form stable until its local transaction commits.
