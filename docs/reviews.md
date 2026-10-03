@@ -10,7 +10,17 @@ for review. Deadlines use the device's local calendar day, including daylight-sa
 changes; timed waiting/deferred cues still use the current instant. Weekly reviews
 include all active items (including inbox, waiting and deferred) and project outcomes.
 Completed, dropped and reference items are excluded from new sessions. Projects can be
-retained; review their canonical actions individually to drop or defer them.
+retained; review their canonical actions individually to change their status.
+
+Use **Edit** or **Clarify** on the selected record without closing the review.
+The ordinary editor/clarification panel opens above it; closing or saving returns
+to the same review position. Editing alone does not mark the record reviewed:
+inspect the updated details and choose a decision. Existing draft recovery and
+version checks still apply. A project shows its unfinished linked actions and
+how many are next actions. Open an action to edit it, or choose **Add next action**
+to create one already linked to that project, without changing the Capture draft.
+New actions do not rewrite the frozen review inventory; they are eligible for a
+later batch or review.
 
 A session freezes the included record identities available on this device.
 Sync first to include newer remote changes. Each batch contains up to 200 records.
@@ -29,6 +39,9 @@ complete standalone review. Empty reviews are explicitly complete.
 - **Drop item** sets `status: dropped` and retains original capture, notes,
   relationships and dates. This is neither deletion nor completion. Dropped
   items remain accessible and editable in Your Work and its status filter.
+- **Complete item** sets `status: completed`; **Make next** sets `status: next`.
+  Both preserve optional dates, waiting details, text and relationships. Neither
+  changes a project's lifecycle or silently completes its other actions.
 - **Defer item** sets `status: deferred`, a calendar start date and clears a
   previous timed start value. It does not change a deadline or planned day.
 - Select a reviewed record and **Undo selected decision** to restore its prior
@@ -103,6 +116,12 @@ account switching. `api/test/daily-review-deadlines.test.mjs` verifies whole-day
 deadline inclusion, local midnight boundaries, spring/fall DST transitions,
 unchanged waiting/deferred cues, and offline review resumption. Layout checks
 cover 320/390/768/1440/2560 CSS pixels.
+
+`api/test/review-actions.test.mjs` checks complete/next decision validation,
+repeat-safe delivery, unchanged dates, undo and stale-version conflicts. Browser
+coverage includes direct project/item edits, retained unsaved text, clarification,
+linked action creation, daily completion, offline decisions, reload/resume and
+320/390/1440px layouts.
 
 `api/test/review-capacity.test.mjs` completes a 200-item production-handler review
 with 128-character IDs and 4,000-character multibyte waiting text, goes beyond

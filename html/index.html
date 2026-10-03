@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=41" defer></script>
+  <script src="/pwa.js?v=42" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=41"></script>
+  <script type="module" src="/inbox.js?v=42"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -156,8 +156,14 @@
         <label>Review record<select id="reviewRecord"></select></label>
         <h3 id="reviewTitle" tabindex="-1" aria-describedby="reviewProgress"></h3><pre id="reviewDetails"></pre>
         <details><summary>Original capture</summary><pre id="reviewOriginal"></pre></details>
+        <div class="actions"><button id="reviewEdit" type="button">Edit</button><button id="reviewClarify" type="button">Clarify</button></div>
+        <section id="reviewProject" hidden>
+          <h4>Project actions</h4><p id="reviewProjectSummary"></p><ul id="reviewProjectActions"></ul>
+          <button id="reviewAddAction" type="button">Add next action</button>
+        </section>
+        <p class="muted">Editing or clarifying keeps your place here. Return to choose a review decision.</p>
         <p>Retain keeps the current state without adding a date. Drop marks an item as dropped and keeps its text. Defer sets a review start date, not a deadline.</p>
-        <div class="actions"><button id="reviewRetain" type="button">Retain</button><button id="reviewDrop" type="button">Drop item</button></div>
+        <div class="actions"><button id="reviewRetain" type="button">Retain</button><button id="reviewComplete" type="button">Complete item</button><button id="reviewNext" type="button">Make next</button><button id="reviewDrop" type="button">Drop item</button></div>
         <label>Defer until<input id="reviewDefer" type="date" min="0001-01-01" max="9999-12-31"></label>
         <button id="reviewDeferSave" type="button">Defer item</button><button id="reviewUnavailable" type="button" hidden>Acknowledge unavailable record</button>
         <button id="reviewUndo" type="button">Undo selected decision</button>
