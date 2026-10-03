@@ -1,5 +1,5 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel } from './local-guidance.js?v=31';
+import { modelOptions, destroyModel } from './local-guidance.js?v=33';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -103,6 +103,15 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   const $ = id => document.getElementById(id);
   let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, busy = false, timer, enabled = false, includeLists = false, readiness = 'unavailable';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; };
+  function openReview() { showDialog($('extractionReview')); $('extractionHeading').focus(); }
+  function finishInteraction(focused, open = false) {
+    // A disabled initiating button may leave focus on body. A later control or
+    // navigation choice belongs to the user; the saved review remains reachable.
+    if (!focused?.getClientRects().length || document.querySelector('dialog[open]') ||
+        (document.activeElement !== document.body && document.activeElement !== focused)) return;
+    focused.focus();
+    if (open) openReview();
+  }
   function cancel() { clearTimeout(timer); generation++; controller?.abort(); controller = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; $('extractStart').disabled = $('extractManual').disabled = false; }
   async function check() {
     try { readiness = globalThis.LanguageModel?.availability && globalThis.LanguageModel?.create ? await LanguageModel.availability(modelOptions) : 'unavailable'; }
@@ -170,7 +179,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     $('extractAccept').disabled = !draft.items.length;
     $('extractAdd').disabled = draft.items.length >= 20;
   }
-  $('extractReview').onclick = () => { render(); showDialog($('extractionReview')); };
+  $('extractReview').onclick = () => { render(); openReview(); };
   $('extractionReview').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   $('extractClose').onclick = () => $('extractionReview').close();
   $('extractAdd').onclick = () => {
@@ -194,7 +203,9 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   $('extractManual').onclick = async () => {
     const input = current();
     if (busy || !input?.text.trim()) { status('Enter a capture first.'); return; }
-    if (draft) { render(); showDialog($('extractionReview')); return; }
+    if (draft) { render(); openReview(); return; }
+    const focused = document.activeElement;
+    let ready = false;
     changed(); cancel(); const run = generation, owner = input.accountId;
     busy = true; $('extractManual').disabled = $('extractStart').disabled = true;
     try {
@@ -207,14 +218,16 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       if (!await journal()) throw new Error('Manual review could not be saved. Copy/export it before leaving.');
       if (run !== generation || owner !== current()?.accountId) return;
       status('Manual review saved on device. Add titles and notes; nothing is committed until acceptance.');
-      if (!document.querySelector('dialog[open]')) showDialog($('extractionReview'));
+      ready = true;
     } catch (error) { if (run === generation && owner === current()?.accountId) status(error.message); }
-    finally { if (run === generation) { busy = false; $('extractManual').disabled = $('extractStart').disabled = false; } }
+    finally { if (run === generation) { busy = false; $('extractManual').disabled = $('extractStart').disabled = false; finishInteraction(focused, ready); } }
   };
   async function run(interactive) {
     const input = current();
     if (busy || !input?.text.trim()) { status('Enter a capture first.'); return; }
     if (draft) { status('A review is already saved. Accept it or discard its suggestions before requesting another batch.'); return; }
+    const focused = document.activeElement;
+    let ready = false;
     changed(); cancel(); const run = generation; busy = true;
     controller = new AbortController(); const signal = controller.signal;
     $('extractStart').disabled = $('extractManual').disabled = true; $('extractCancel').hidden = false;
@@ -259,10 +272,15 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       if (!await journal()) throw new Error('Suggestions could not be saved. Copy/export them before leaving.');
       if (stale()) return;
       status('Suggestions saved on device, not committed. Review every task and deadline.');
-      // Automatic completion does not steal focus from capture/navigation.
-      if (interactive && !document.querySelector('dialog[open]')) showDialog($('extractionReview'));
+      ready = true;
     } catch (error) { if (!stale()) status(signal.aborted ? 'Local AI timed out. Your text is kept; retry or save manually.' : error.message); }
-    finally { clearTimeout(timeout); destroyModel(session); if (run === generation) { model = null; controller = null; busy = false; $('extractStart').disabled = $('extractManual').disabled = false; $('extractCancel').hidden = true; } }
+    finally {
+      clearTimeout(timeout); destroyModel(session);
+      if (run === generation) {
+        model = null; controller = null; busy = false; $('extractStart').disabled = $('extractManual').disabled = false; $('extractCancel').hidden = true;
+        if (interactive) finishInteraction(focused, ready);
+      }
+    }
   }
   $('extractOriginal').onclick = async () => {
     if (!draft) return;

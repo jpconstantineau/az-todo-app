@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=31';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=31';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=31';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=31';
-import { clarificationUI } from './clarification.js?v=31';
-import { setupReviews } from './reviews.js?v=31';
-import { setupBriefs } from './briefs.js?v=31';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=31';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=33';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=33';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=33';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=33';
+import { clarificationUI } from './clarification.js?v=33';
+import { setupReviews } from './reviews.js?v=33';
+import { setupBriefs } from './briefs.js?v=33';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=33';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -29,11 +29,18 @@ function renderWorkspaces() {
   $('workspaceEntries').replaceChildren(...records.map(record => {
     const article = document.createElement('article'), heading = document.createElement('h3'), status = document.createElement('p');
     heading.textContent = record.title;
+    heading.tabIndex = -1; heading.dataset.focusKey = `workspace:${record.id}:heading`;
+    status.id = `workspace-status-${record.id}`; heading.setAttribute('aria-describedby', status.id);
     status.textContent = `${record.deleted ? 'Deleted' : record.archived ? 'Archived' : 'Active'} · ${record.localState || 'Server-confirmed'}`;
-    const action = (label, callback) => button(label, async () => {
-      try { await callback(); statusText('workspaceError', ''); }
-      catch (failure) { statusText('workspaceError', failure.message); }
-    }, `${label} workspace: ${record.title}`, `workspace:${record.id}:${label}`);
+    const action = (label, callback) => {
+      const control = button(label, async () => {
+        const generation = accountGeneration;
+        try { await callback(); if (generation === accountGeneration) statusText('workspaceError', ''); }
+        catch (failure) { if (generation === accountGeneration) statusText('workspaceError', failure.message); }
+      }, `${label} workspace: ${record.title}`, `workspace:${record.id}:${['Archive', 'Unarchive'].includes(label) ? 'archive' : label}`);
+      control.dataset.focusFallback = heading.dataset.focusKey;
+      return control;
+    };
     article.append(heading, status);
     if (record.deleted) article.append(action('Restore', () => saveWorkspace(record, 'restore')));
     else article.append(action('Rename', () => {
@@ -47,7 +54,7 @@ function renderWorkspaces() {
   }));
 }
 async function saveWorkspace(record, action, fields) {
-  const owner = accountId;
+  const owner = accountId, generation = accountGeneration;
   if (!owner) return;
   if (fields?.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Workspace name must be 1–200 characters.');
   const saved = await transact(owner, local => {
@@ -56,7 +63,7 @@ async function saveWorkspace(record, action, fields) {
     if ((current?.version || 0) !== record.version) throw new Error('This workspace changed. Review its latest state and try again.');
     queueMutations(local, owner, [{ type: 'workspace', id: record.id, action, expectedVersion: record.version, ...(fields ? { fields } : {}) }]);
   });
-  if (owner !== accountId) return;
+  if (owner !== accountId || generation !== accountGeneration) return;
   state = saved;
   if (action === 'restore' && record.id === selectedWorkspace) { $('workspaceManager').close(); restoreDraft(); }
   render(); broadcast(); void sync();
@@ -89,10 +96,14 @@ $('createWorkspace').onsubmit = event => {
   event.preventDefault();
   const form = event.currentTarget, control = form.querySelector('button');
   if (control.disabled) return;
+  const generation = accountGeneration, title = form.elements.title.value;
   control.disabled = true;
-  void saveWorkspace({ type: 'workspace', id: crypto.randomUUID(), version: 0 }, 'create', { title: form.elements.title.value }).then(() => {
-    form.reset(); statusText('workspaceError', ''); form.elements.title.focus();
-  }).catch(failure => statusText('workspaceError', failure.message)).finally(() => { control.disabled = false; });
+  void saveWorkspace({ type: 'workspace', id: crypto.randomUUID(), version: 0 }, 'create', { title }).then(() => {
+    if (generation !== accountGeneration) return;
+    if (form.elements.title.value === title) form.reset();
+    statusText('workspaceError', '');
+    if ($('workspaceManager').open && document.activeElement === control) form.elements.title.focus();
+  }).catch(failure => { if (generation === accountGeneration) statusText('workspaceError', failure.message); }).finally(() => { control.disabled = false; });
 };
 edit.elements.workspaceId.onchange = () => {
   const moving = edit.elements.workspaceId.value !== selectedWorkspace;
@@ -530,6 +541,7 @@ capture.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || switchingWorkspace || !accountId || workspaceReadOnly()) return;
   if (extraction.snapshot().draft) { error('A suggested batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
+  const focused = document.activeElement;
   saving = true; capture.querySelector('[type=submit]').disabled = true;
   void (async () => {
     const owner = accountId, submitted = captureDraft();
@@ -551,7 +563,10 @@ capture.addEventListener('submit', event => {
         extraction.reset(true);
       }
       clearError(); statusText('draftStatus', 'Saved on device');
-      render(); capture.elements.text.focus(); broadcast(); void sync();
+      render();
+      if (destination === 'capture' && !document.querySelector('dialog[open]') &&
+          (document.activeElement === document.body || document.activeElement === focused)) capture.elements.text.focus();
+      broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
     finally { saving = false; capture.querySelector('[type=submit]').disabled = false; }
   })();
@@ -604,10 +619,12 @@ function focusDestination() {
   (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : $('itemsHeading')).focus();
 }
 function restoreFocus(control) {
-  if (document.querySelector('dialog[open]')) { focusDestination(); return; }
+  const modal = document.querySelector('dialog[open]'), scope = modal || document;
+  if (modal?.contains(document.activeElement) && document.activeElement !== control) return;
   // Labels and DOM nodes can change; record ID plus action remains stable.
-  const target = control?.isConnected ? control : control?.dataset.focusKey
-    ? document.querySelector(`[data-focus-key="${CSS.escape(control.dataset.focusKey)}"]`) : null;
+  const matching = value => value ? scope.querySelector(`[data-focus-key="${CSS.escape(value)}"]`) : null;
+  const target = control?.isConnected && scope.contains(control) ? control
+    : matching(control?.dataset.focusKey) || matching(control?.dataset.focusFallback);
   if (target && target !== document.body && !target.disabled && target.getClientRects().length) target.focus();
   else focusDestination();
 }

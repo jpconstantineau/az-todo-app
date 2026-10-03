@@ -116,7 +116,7 @@ Account changes discard the old focus target.
 
 `api/test/shared-keyboard.test.mjs` covers keyboard-only complete/reopen/edit,
 duplicate titles, remote rename/deletion, modal draft retention, delayed refresh,
-offline acknowledgement and account changes. Shell v31 versions the shared
+offline acknowledgement and account changes. Shell v33 versions the shared
 module URL as well as the existing module graph, so an older worker cannot serve
 a stale shared module to the new page. Browser automation does not replace the
 screen-reader and physical-device verification still required by #16/#17.

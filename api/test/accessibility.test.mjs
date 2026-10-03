@@ -44,6 +44,69 @@ async function refresh(page) {
   });
 }
 
+async function delayDeviceSave(page) {
+  await page.evaluate(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', { ...descriptor, set(callback) {
+      const delay = this.mode === 'readwrite' && window.delayCaptureSave;
+      if (delay) window.delayCaptureSave = false;
+      descriptor.set.call(this, delay ? function (event) { window.releaseCaptureSave = () => callback.call(this, event); } : callback);
+    } });
+    window.delayCaptureSave = true;
+  });
+}
+
+test('accessibility: capture save preserves a later control choice and still supports quick-add', { timeout: 30000 }, async t => {
+  const { page } = await setup(t);
+  await page.locator('#captureText').fill('First task');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'First task');
+  await delayDeviceSave(page);
+  await page.keyboard.press('Control+Enter');
+  await page.waitForFunction(() => !!window.releaseCaptureSave);
+  await keyboardActivate(page, '#captureOptions > summary');
+  await page.locator('#capture [name=body]').focus();
+  await page.keyboard.type('Notes for my next capture');
+  await page.evaluate(() => releaseCaptureSave());
+  await page.waitForFunction(() => !document.querySelector('#capture [type=submit]').disabled);
+  await expectFocus(page, '#capture [name=body]');
+  assert.equal(await page.locator('#capture [name=body]').inputValue(), 'Notes for my next capture');
+  await page.locator('#captureText').fill('Next task');
+  await page.keyboard.press('Control+Enter');
+  await page.waitForFunction(() => document.querySelector('#captureText').value === '');
+  await expectFocus(page, '#captureText');
+});
+
+test('accessibility: delayed manual review stays available without interrupting navigation', { timeout: 30000 }, async t => {
+  const { page } = await setup(t);
+  await page.locator('#captureText').fill('Prepare the agenda');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Prepare the agenda');
+  await keyboardActivate(page, '#captureAI > summary');
+  await delayDeviceSave(page);
+  await keyboardActivate(page, '#extractManual');
+  await page.waitForFunction(() => !!window.releaseCaptureSave);
+  await keyboardActivate(page, 'a[href="#work"]');
+  await expectFocus(page, '#itemsHeading');
+  await page.evaluate(() => releaseCaptureSave());
+  await page.waitForFunction(() => !document.querySelector('#extractManual').disabled);
+  assert.equal(await page.locator('#extractionReview').evaluate(dialog => dialog.open), false);
+  await expectFocus(page, '#itemsHeading');
+  await keyboardActivate(page, 'a[href="#capture"]');
+  await keyboardActivate(page, '#extractReview');
+  await expectFocus(page, '#extractionHeading');
+  await page.keyboard.press('Escape');
+  await expectFocus(page, '#extractReview');
+});
+
+test('accessibility: manual task review announces its heading and returns to its initiating control', { timeout: 30000 }, async t => {
+  const { page } = await setup(t);
+  await page.locator('#captureText').fill('Prepare the agenda');
+  await keyboardActivate(page, '#captureAI > summary');
+  await keyboardActivate(page, '#extractManual');
+  await expectFocus(page, '#extractionHeading');
+  await page.keyboard.press('Escape');
+  await expectFocus(page, '#extractManual');
+});
+
 test('accessibility: review decisions and brief revisions keep a keyboard path to their results', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Insurance\nPolicy');
