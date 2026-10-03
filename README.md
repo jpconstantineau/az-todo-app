@@ -17,6 +17,7 @@ flowchart LR
 - [Capture, Your Work and List Workspace navigation](docs/navigation.md)
 - [Task flow and parity verification](docs/task-flow.md)
 - [Optional projects and planned-day views](docs/projects.md)
+- [Release checklist, runtime and paid-pilot decision](docs/release-readiness.md)
 - [Request security and deployed verification gates](docs/request-security.md)
 - [Versioned API, conflict handling and migration tooling](docs/data-api-v1.md)
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)
@@ -39,8 +40,10 @@ legacy writes are always blocked, independently of flag values. Disabling v1
 shows an unavailable error; it never falls back to legacy storage.
 
 From `api/`, run `npm ci`, install Playwright Chromium (`npx playwright install chromium`),
-and run `npm test` with Node 24+. On Windows with Edge installed, set
-`PLAYWRIGHT_CHANNEL=msedge`. CI uses Node 24 and Chromium. The tests use production
+and run `npm test` with Node 22.x. On Windows with Edge installed, set
+`PLAYWRIGHT_CHANNEL=msedge`. CI and the managed SWA API both select Node 22.
+The authenticated `/api/health` response reports the running version in
+`X-Node-Version`; verify it after deployment. The tests use production
 handlers with a transactional in-memory storage substitute; deployed Cosmos/auth,
 physical-device and screen-reader verification remain release gates.
 
