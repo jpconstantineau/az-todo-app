@@ -1,5 +1,5 @@
-import { key, projected } from './inbox-store.js?v=40';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=40';
+import { key, projected } from './inbox-store.js?v=41';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=41';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -47,7 +47,8 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
     const index = selected ?? (remaining < 0 ? 0 : remaining);
     const ref = session.included[index], target = ref ? records[key(ref)] : null;
     const previous = latest(session, index);
-    const progress = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${remaining < 0 ? available || nextBatch || session.previousReviewId ? ' Batch complete.' : ' Review complete.' : ''}`;
+    const completion = remaining < 0 ? (available || nextBatch || session.previousReviewId ? ' Batch complete.' : ' Review complete.') : '';
+    const progress = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${completion}`;
     if ($('reviewProgress').textContent !== progress) $('reviewProgress').textContent = progress;
     $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
     $('reviewRecord').value = String(index);
@@ -146,6 +147,6 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
   for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
   return { render, draft,
     restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
-    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewError']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
+    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
   };
 }
