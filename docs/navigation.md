@@ -49,6 +49,32 @@ On link activation and back/forward, focus moves to the destination heading (Cap
 
 ## Integration and verification
 
+### Context, available time and energy (issue #75)
+
+Your Work and List Workspace offer an optional **Context, time & energy**
+disclosure. Its summary shows the number of active limits even when collapsed.
+All limits combine with the existing status/list/project/planned-day filters.
+**Reset context, time & energy** clears only those limits.
+
+Context matches an exact saved context, including custom values; **No context**
+shows tasks without one. Available time compares positive numeric minutes or
+hours (`15m`, `30 minutes`, `1h`, `1.5 hours`) to the chosen maximum. Available
+energy includes the chosen Low/Medium/High level and lower levels. Missing or
+unrecognized time/energy values stay visible, as explained beside the controls.
+No metadata is required for capture or task actions.
+
+Choices use the existing account/workspace draft and remain independent between
+Your Work and Lists. They survive offline reload without editing or queuing tasks.
+Shell v34 updates the complete module graph for installed clients. Regression
+coverage lives in `api/test/execution-filters.test.mjs`, including custom values,
+combined scopes, reset, keyboard focus, offline reload and account/workspace isolation.
+
+Verified locally on October 3, 2026: all 249 tests pass with Node 26.7.0 and
+Playwright Chromium, including upgrades from shells v3–v33. The focused browser
+check verifies 44px controls and no horizontal overflow at 320/390/1440px;
+phone and desktop screenshots were inspected. Physical-device and screen-reader
+verification remain release gates. `git diff --check` passes.
+
 ### Include and exclude status filters (issue #49)
 
 In either Your Work or List Workspace, choose **Include statuses…** to show items

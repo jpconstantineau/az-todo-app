@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=33';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=33';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=33';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=33';
-import { clarificationUI } from './clarification.js?v=33';
-import { setupReviews } from './reviews.js?v=33';
-import { setupBriefs } from './briefs.js?v=33';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=33';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=34';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=34';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=34';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=34';
+import { clarificationUI } from './clarification.js?v=34';
+import { setupReviews } from './reviews.js?v=34';
+import { setupBriefs } from './briefs.js?v=34';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=34';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -340,6 +340,14 @@ function render() {
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status === 'completed' ? 'Completed' : status })), [['', 'Incomplete items'], ['@all', 'All statuses'], ['@review-ready', 'Ready for review'], ['@include', 'Include statuses…'], ['@exclude', 'Exclude statuses…']]);
   $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
   filters.status = $('statusFilter').value;
+  const contexts = [...new Set([...(userDefaults().contexts || []), ...lists.flatMap(list => list.defaults?.contexts || []), ...records.filter(record => record.type === 'item').flatMap(record => record.contexts || []), ...(filters.context?.startsWith('context:') ? [filters.context.slice(8)] : [])])];
+  options($('contextFilter'), contexts.map(context => ({ id: `context:${context}`, title: context })), [['', 'Any context'], ['@none', 'No context']]);
+  for (const [field, id] of [['context', 'contextFilter'], ['minutes', 'timeFilter'], ['energy', 'energyFilter']]) {
+    $(id).value = filters[field] || '';
+    filters[field] = $(id).value;
+  }
+  const executionCount = [filters.context, filters.minutes, filters.energy].filter(Boolean).length;
+  $('executionSummary').textContent = `Context, time & energy${executionCount ? ` (${executionCount} active)` : ''}`;
   const customStatuses = ['@include', '@exclude'].includes(filters.status);
   $('statusSelection').hidden = !customStatuses;
   $('statusSelectionLegend').textContent = filters.status === '@exclude' ? 'Hide selected statuses' : 'Show selected statuses';
@@ -364,6 +372,7 @@ function render() {
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
+    if (!matchesExecutionFilters(record, filters)) return false;
     if (!filters.status && record.status === 'completed') return false;
     if (customStatuses) {
       const selected = filters.statuses.includes(record.status);
@@ -405,7 +414,8 @@ function render() {
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
     ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
-    : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
+    : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
+      : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   $('failure').hidden = !failed;
   if (failed) {
@@ -674,11 +684,16 @@ for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('cla
     }
   });
 }
-$('view').onchange = $('day').onchange = $('statusFilter').onchange = $('statusChoices').onchange = () => {
+$('view').onchange = $('day').onchange = $('statusFilter').onchange = $('statusChoices').onchange = $('executionFilters').onchange = () => {
   navigation[destination === 'lists' ? 'lists' : 'work'] = {
     view: $('view').value, status: $('statusFilter').value,
-    statuses: [...$('statusChoices').querySelectorAll('input:checked')].map(input => input.value)
+    statuses: [...$('statusChoices').querySelectorAll('input:checked')].map(input => input.value),
+    context: $('contextFilter').value, minutes: $('timeFilter').value, energy: $('energyFilter').value
   };
+  render(); void journal();
+};
+$('resetExecutionFilters').onclick = () => {
+  Object.assign(navigation[destination === 'lists' ? 'lists' : 'work'], { context: '', minutes: '', energy: '' });
   render(); void journal();
 };
 $('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
@@ -833,6 +848,9 @@ function hideAccount() {
   $('view').replaceChildren(new Option('All items', 'all'));
   $('statusFilter').replaceChildren(new Option('Incomplete items', ''));
   $('statusSelection').hidden = true; $('statusChoices').replaceChildren();
+  $('contextFilter').replaceChildren(new Option('Any context', ''));
+  $('timeFilter').value = $('energyFilter').value = '';
+  $('executionFilters').open = false; $('executionSummary').textContent = 'Context, time & energy';
   $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
   $('syncStatus').textContent = ''; clearError();
   $('connectionLabel').textContent = 'Account & device status'; delete $('connection').dataset.state;
