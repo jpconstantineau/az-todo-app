@@ -282,6 +282,9 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   assert.equal(await page.locator('#view').inputValue(), 'inbox');
   assert.equal(await page.locator('#statusFilter').inputValue(), 'next');
   await page.goForward(); await page.reload();
+  await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  await page.locator('#resumeEdit').click();
   await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Keep this editor draft');
   assert.equal(await page.locator('#view').inputValue(), listId);
@@ -293,8 +296,8 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   await page.keyboard.press('Escape');
   await page.locator('#editor').waitFor({ state: 'hidden' });
   // Native close events run after the key event; wait for the promised focus result.
-  await page.waitForFunction(() => document.activeElement.id === 'captureText');
-  assert.ok(await page.locator('#captureText').evaluate(el => el === document.activeElement));
+  await page.waitForFunction(() => document.activeElement.id === 'resumeEdit');
+  assert.ok(await page.locator('#resumeEdit').evaluate(el => el === document.activeElement));
   await showView(page, 'lists');
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
   await page.locator('#edit [name=listId]').selectOption('');

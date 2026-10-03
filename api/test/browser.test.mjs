@@ -92,7 +92,8 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
         fields: { title: 'Milk', description: 'Draft from the old client', listId: record.listId } };
     });
   });
-  await page.reload(); await page.locator('#editor').waitFor();
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await page.locator('#resumeEdit').click(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=energy]').inputValue(), 'Low');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
   assert.equal(records().find(r => r.type === 'item').description, 'Draft from the old client');

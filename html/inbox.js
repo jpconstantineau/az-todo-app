@@ -254,8 +254,11 @@ function clearError(kind) {
 function captureDraft() {
   return { ...formValues(capture), ...(originalInput === undefined ? {} : { original: originalInput }) };
 }
+function hasEditDraft() {
+  return editing && (editing.version === 0 || JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields));
+}
 function draft() {
-  return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
+  return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: hasEditDraft() ? { ...editing, fields: formValues(edit) } : null, editOpen: $('editor').open,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
     day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
@@ -304,7 +307,7 @@ function restoreDraft() {
   $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
   workspace(false);
   // Keep unfinished list creation available through New list without opening it on arrival.
-  if (saved.edit) openEditor(saved.edit, false, !(saved.edit.type === 'list' && saved.edit.version === 0));
+  if (saved.edit) openEditor(saved.edit, false, saved.editOpen === true && !(saved.edit.type === 'list' && saved.edit.version === 0));
   else $('editor').close();
   if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
   refreshOptions(); render();
@@ -464,6 +467,7 @@ function render() {
   reviews.render();
   briefs.render();
   renderDeleted();
+  renderEditorDraft();
   const readOnly = workspaceReadOnly();
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
   $('captureAI').hidden = readOnly;
@@ -537,9 +541,19 @@ function addContextItem(target) {
   $('createdDestination').replaceChildren();
 }
 function openEditor(record, focus = true, show = true) {
+  if (focus && editing && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields) &&
+      (editing.id !== record.id || editing.type !== record.type || editing.version !== record.version)) {
+    showDialog($('editor'));
+    error('Save or discard this unfinished edit before opening another record. Your draft is kept.');
+    edit.elements.title.focus();
+    renderEditorDraft();
+    void journal();
+    return;
+  }
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
     if (show) showDialog($('editor'));
-    if (focus) edit.elements.title.focus();
+    if (focus) { edit.elements.title.focus(); void journal(); }
+    renderEditorDraft();
     return;
   }
   editing = { type: record.type, id: record.id, version: record.version, initialFields: record.initialFields };
@@ -567,7 +581,31 @@ function openEditor(record, focus = true, show = true) {
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
   $('editError').hidden = true;
   if (show) showDialog($('editor'));
+  renderEditorDraft();
   if (focus) { edit.elements.title.focus(); void journal(); }
+}
+
+function renderEditorDraft() {
+  const retained = hasEditDraft() && !$('editor').open;
+  $('savedEdit').hidden = !retained;
+  statusText('savedEditStatus', retained ? `Unfinished ${editing.type} edit: ${edit.elements.title.value || 'Untitled'}.` : '');
+  $('resumeEdit').disabled = saving || workspaceReadOnly();
+  $('discardEdit').disabled = saving;
+}
+async function discardEdit() {
+  const owner = accountId, generation = accountGeneration, pending = editing;
+  if (!owner || !pending) return;
+  const controls = [...edit.elements];
+  saving = true; controls.forEach(control => { control.disabled = true; }); renderEditorDraft();
+  try {
+    const saved = await transact(owner, local => { currentDraft(local).edit = null; currentDraft(local).editOpen = false; });
+    if (owner !== accountId || generation !== accountGeneration || editing !== pending) return;
+    state = saved; editing = null; edit.reset(); $('editor').close(); clearError(); render();
+  } catch (failure) { if (owner === accountId) storageFailure(failure); }
+  finally {
+    saving = false; controls.forEach(control => { control.disabled = false; });
+    if (accountId) renderEditorDraft();
+  }
 }
 
 async function updateRecord(record, fields, close = false) {
@@ -663,7 +701,7 @@ edit.addEventListener('submit', event => {
     else if (editing.version > 0 && editing.initialFields) {
       const initial = { ...editing.initialFields, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
-      if (!Object.keys(fields).length) { saving = false; $('editor').close(); return; }
+      if (!Object.keys(fields).length) { void discardEdit(); return; }
     }
   } catch (failure) { saving = false; error(failure.message); return; }
   // Keep the submitted form stable until its local transaction commits.
@@ -678,6 +716,11 @@ $('previewSplit').onclick = () => {
   $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
 };
 $('cancelEdit').onclick = () => $('editor').close();
+$('resumeEdit').onclick = () => { if (editing) openEditor(editing); };
+$('discardEdit').onclick = guard(async () => {
+  if (saving || !editing || !confirm('Discard this unfinished edit? Saved records and your Capture draft will stay unchanged.')) return;
+  await discardEdit();
+});
 $('undoEdit').onclick = guard(async () => {
   const owner = accountId, generation = accountGeneration, operationId = state?.undoEdit?.operationId;
   if (!owner || !operationId) return;
@@ -686,7 +729,11 @@ $('undoEdit').onclick = guard(async () => {
   state = saved; clearError(); render(); broadcast(); void sync();
   statusText('undoEditStatus', 'Undo saved on device. Sync to confirm it on the server.');
 });
-$('editor').addEventListener('close', () => { if (editing) void journal(); });
+$('editor').addEventListener('close', () => {
+  if ($('editor').open) return;
+  if (!hasEditDraft()) editing = null;
+  if (accountId) { renderEditorDraft(); void journal(); }
+});
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
 function focusDestination() {
   if (!accountId || $('workspace').hidden) return;
@@ -933,6 +980,7 @@ function hideAccount() {
   selectedWorkspace = PERSONAL; $('workspaceSelect').replaceChildren(); $('workspaceManager').close(); $('workspaceEntries').replaceChildren();
   $('createWorkspace').reset(); $('workspaceError').textContent = $('workspaceStatus').textContent = '';
   accountId = null; state = undefined; editing = null; originalInput = undefined;
+  $('savedEdit').hidden = true; $('savedEditStatus').textContent = '';
   clarification.hide();
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
