@@ -1,6 +1,7 @@
 // ponytail: keep a permanent destination for legacy clients until all writers support workspaces.
 export const PERSONAL = 'personal';
 export function workspaceOf(record, records) {
+  if (record?.type === 'reviewDecision') return records[`review:${record.reviewId}`]?.workspaceId || PERSONAL;
   if (record?.type === 'clarification') return records[`item:${record.id}`]?.workspaceId || PERSONAL;
   if (record?.type === 'brief') return records[`${record.subjectType}:${record.subjectId}`]?.workspaceId || PERSONAL;
   return record?.workspaceId || PERSONAL;

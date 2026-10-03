@@ -2,6 +2,7 @@ import { ValidationError } from '../shared/validate.mjs';
 
 const fail = message => { throw new ValidationError(message); };
 export async function workspaceOf(record, lookup) {
+  if (record?.type === 'reviewDecision') return (await lookup('review', record.reviewId))?.workspaceId || 'personal';
   if (record?.type === 'clarification') return (await lookup('item', record.id))?.workspaceId || 'personal';
   if (record?.type === 'brief') return (await lookup(record.subjectType, record.subjectId))?.workspaceId || 'personal';
   return record?.workspaceId || 'personal';
