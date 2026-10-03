@@ -124,6 +124,8 @@ test('dismissed unsaved text can be resumed or discarded offline and stays in it
   assert.match(await page.locator('#editError').innerText(), /Save or discard/);
   await page.locator('#cancelEdit').click(); await closedAndJournaled(page);
   await page.locator('#workspaceSelect').selectOption('work');
+  // Selecting the option dispatches change; the IndexedDB-backed switch finishes later.
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).selectedWorkspace === 'work');
   assert.equal(await page.locator('#savedEdit').isVisible(), false);
   await page.locator('#workspaceSelect').selectOption('personal');
   await page.locator('#resumeEdit').waitFor();
