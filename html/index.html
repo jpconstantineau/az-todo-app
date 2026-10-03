@@ -8,14 +8,22 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=18" defer></script>
+  <script src="/pwa.js?v=19" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=18"></script>
+  <script type="module" src="/inbox.js?v=19"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
-  <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Your workspace</h1></div><nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a> <button id="signOut" hidden>Sign out</button></nav></header>
+  <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Your workspace</h1></div>
+    <details id="appMenu" class="responsive-menu" open><summary aria-label="Menu" title="Menu">☰</summary>
+      <div class="menu-content">
+        <nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a href="/help.html" target="_blank" rel="noopener">Help <span class="sr-only">(opens in a new tab)</span></a><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a><button id="signOut" hidden>Sign out</button></nav>
+        <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="openReviews" type="button">Daily / weekly review</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="userDefaults">User defaults</button></div>
+        <p id="exportHelp" class="muted">Device copy only; sync first for newer changes. JSON includes recovery data.</p></div>
+      </div>
+    </details>
+  </header>
   <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
     <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
     <p class="muted">Saved for this browser.</p>
@@ -27,14 +35,16 @@
         <p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p>
       </details>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
-  <p id="sessionStatus" role="status">Checking account…</p>
-  <p id="offlineStatus" role="status"></p>
+  <details id="connection"><summary><span id="connectionLabel" role="status">Account &amp; device status</span><span id="offlineBadge" role="status"></span></summary>
+    <p id="sessionStatus" role="status">Checking account…</p>
+    <p id="offlineStatus" role="status"></p>
+    <p id="syncStatus" role="status"></p>
+  </details>
   <p id="appUpdateStatus" role="status"></p>
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>
-    <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists">List Workspace</a></nav>
-    <p id="syncStatus" role="status"></p>
+    <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists" aria-label="List Workspace">Lists</a></nav>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
       <p class="eyebrow">Capture</p><h2 id="captureHeading">Capture first</h2>
@@ -42,7 +52,7 @@
         <label for="captureText">What do you need to remember?</label>
         <textarea id="captureText" name="text" rows="8" maxlength="16000" required aria-describedby="captureHelp" placeholder="Get it out of your head. Write your items here."></textarea>
         <div class="save-bar"><button type="submit">Save on device</button><span id="draftStatus" role="status"></span></div>
-        <p id="captureHelp">One item per non-empty line. Save straight to your inbox. Ctrl/⌘ + Enter saves.</p>
+        <p id="captureHelp">One item per line. Ctrl/⌘ + Enter saves.</p>
         <details id="captureOptions"><summary>Notes, list, or split a sentence</summary>
           <label>Notes <textarea name="body" rows="2" maxlength="4000"></textarea></label>
           <label>Existing list <select name="listId"><option value="">Inbox (no list)</option></select></label>
@@ -61,7 +71,6 @@
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
       <p class="eyebrow" id="workEyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your Work</h2>
-      <p id="workHelp" class="muted">Review items across your account, or narrow by list and status.</p>
       <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
@@ -72,7 +81,7 @@
     </div>
     <dialog class="side-panel" id="reviews" aria-labelledby="reviewsHeading">
       <p class="eyebrow">Reflect</p><h2 id="reviewsHeading">Daily and weekly reviews</h2>
-      <p>Daily: next actions, today's plan and due cues. Weekly: active items and projects, including inbox, waiting and deferred work. Reviews use the work available on this device; sync first for newer changes.</p>
+      <p><a href="/help.html#reviews" target="_blank" rel="noopener">Review help (new tab)</a></p>
       <label>Saved reviews<select id="reviewSessions"></select></label>
       <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button></div>
       <p id="reviewError" role="alert"></p>
@@ -120,7 +129,7 @@
         </div>
         <div class="actions"><button id="clarifyAccept" type="submit">Accept answer</button><button id="clarifySkip" type="button">Skip question</button><button id="clarifySave" type="button">Save proposal without accepting</button><button id="clarifyStop" type="button">Stop for now</button></div>
       </form>
-      <p class="muted">Typing and stopping keep a device draft. Save proposal shares it with your other devices after sync. Only Accept changes a task. You can edit your answer before accepting, or skip any question.</p>
+      <p><a href="/help.html#clarification" target="_blank" rel="noopener">Clarification help (new tab)</a></p>
       <details id="localGuidance" hidden>
         <summary>Optional local guidance</summary>
         <p>English suggestions run on this device. The browser may download a model. Saved work still syncs to your cloud account.</p>
@@ -141,7 +150,7 @@
         <div class="actions"><button type="submit">Save new draft revision</button><button id="briefAccept" type="button">Accept this revision</button><button id="briefReject" type="button">Reject this revision</button></div>
       </form>
       <div class="actions"><button id="briefExport" type="button">Export selected revision</button><button id="closeBriefs" type="button">Stop and close brief</button></div>
-      <p class="muted">Typing keeps a device draft. Saved revisions and decisions sync with your account. Export labels drafts and pending decisions as unaccepted or unconfirmed; only a server-confirmed accepted revision is labeled accepted.</p>
+      <p><a href="/help.html#briefs" target="_blank" rel="noopener">Brief help (new tab)</a></p>
     </dialog>
     <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading">
       <h2 id="defaultsHeading">Defaults</h2><p>One option per line. Changing options keeps existing task values.</p>
@@ -150,9 +159,6 @@
         <button type="submit">Save defaults on device</button><button id="resetDefaults" type="button">Reset to built-in defaults</button><button id="closeDefaults" type="button">Close defaults</button>
       </form>
     </dialog>
-    <div class="toolbar device-tools"><button id="sync">Sync now</button><button id="openReviews" type="button">Daily / weekly review</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="userDefaults">User defaults</button></div>
-    <p id="exportHelp" class="muted">Includes all work available on this device, pending saves and drafts. Newer server changes may be missing; sync first when online. JSON preserves the full recovery copy.</p>
-    <p class="muted">Device copies belong to this browser profile. Unsynced work cannot be recovered after clearing site storage or losing this device. Export a copy before signing out or changing devices. Use a private browser profile on shared devices.</p>
   </main>
   <section class="card" id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>
 </body>

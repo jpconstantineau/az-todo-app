@@ -29,3 +29,39 @@
 .workspace-nav a { flex: 1; text-align: center; min-width: 0; }
 #listTools { margin-block: var(--space-4); }
 @media (forced-colors: active) { .workspace-nav [aria-current="page"] { outline: 2px solid Highlight; } }
+
+/* Native disclosures keep utility controls out of the active mobile workflow. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.responsive-menu > summary { display: none; }
+.menu-content { max-width: 760px; }
+.menu-content .device-tools { margin-block: var(--space-3); }
+#connection { margin-block: var(--space-2); font-size: var(--text-sm); }
+#connection summary { width: fit-content; min-height: 44px; }
+#connection[data-state="confirmed"] > summary { color: var(--success); }
+#connection[data-state="pending"] > summary { color: var(--warning); }
+#connection[data-state="error"] > summary { color: var(--error); }
+#offlineBadge { color: var(--warning); }
+#appUpdateStatus:empty { display: none; }
+.task-heading { display: flex; align-items: start; gap: var(--space-2); flex-wrap: wrap; }
+.task-heading h3 { flex: 1; min-width: 0; margin: 0; }
+.editable-title { background: transparent; border-color: transparent; color: var(--ink); padding: var(--space-2); font: inherit; font-weight: var(--weight-title); text-align: left; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+.editable-title:hover { text-decoration: underline; }
+.icon-button { min-width: 44px; font-size: 20px; }
+.task-menu { margin: 0; }
+.task-menu .actions { margin: 0; }
+@media (max-width: 767px) {
+  .inbox-page .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+  .app-header h1 { font-size: var(--text-heading); }
+  #appMenu { display: contents; }
+  .responsive-menu > summary { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: var(--space-2); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); cursor: pointer; }
+  .responsive-menu > summary::-webkit-details-marker { display: none; }
+  #appMenu > summary { font-size: 24px; }
+  #appMenu .menu-content { grid-column: 1 / -1; padding: var(--space-4); background: var(--surface); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
+  #appMenu:not([open]) > .menu-content { display: none; }
+  .menu-content .device-tools { align-items: stretch; }
+  .task-menu[open] { flex-basis: 100%; }
+  .task-menu > summary { width: 44px; margin-left: auto; }
+  .task-menu .actions { padding-top: var(--space-2); }
+  .task-heading .editable-title { padding-left: 0; }
+  .workspace-nav a { padding-inline: var(--space-2); }
+}

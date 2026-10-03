@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { test } from 'node:test';
@@ -154,9 +155,9 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
   assert.equal(await page.locator('#items article').count(), 1);
-  await page.getByRole('button', { name: 'Undo state change Get approval', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Undo state change Get approval', exact: true }));
   await page.waitForFunction(() => document.querySelector('#items').textContent.includes('waiting ·'));
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed();
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed();
   const saved = documents.find(doc => doc.id.startsWith('record:item:')).record;
   assert.equal(saved.status, 'waiting'); assert.equal(saved.nextAction, false);
   assert.equal(saved.waitingOn, 'Alex'); assert.equal(saved.dueDate, '2026-11-01'); assert.equal(saved.startDate, null);

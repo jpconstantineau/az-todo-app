@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -45,7 +46,7 @@ async function setup(t, mode = {}) {
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   await page.locator('a[href="#work"]').click();
-  await page.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await page.locator('#localGuidance').waitFor();
   await page.locator('#localGuidance summary').click();
   await page.waitForFunction(() => !document.querySelector('#guidanceStatus').textContent.startsWith('Checking'));
@@ -135,7 +136,7 @@ test('editing, skipping, closing and account changes invalidate late inference',
     assert.equal(await page.locator('#guidancePreview').textContent(), '');
     assert.equal(await page.locator('#guidanceUse').isVisible(), false);
     if (action === 'edit') assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Newer draft');
-    if (action === 'close') await page.getByRole('button', { name: 'Clarify sort out insurance', exact: true }).click();
+    if (action === 'close') await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   }
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), '');
 });

@@ -58,9 +58,13 @@
   render();
 
   const offline = document.getElementById('offlineStatus');
+  function offlineStatus(text, ready = false) {
+    offline.textContent = text;
+    document.getElementById('offlineBadge').textContent = ready ? '' : ' · ⚠ Offline setup';
+  }
   const update = document.getElementById('appUpdateStatus');
   if (!('serviceWorker' in navigator)) {
-    offline.textContent = 'This browser cannot reopen the inbox offline. Keep this page open or reconnect to reopen it.';
+    offlineStatus('This browser cannot reopen the inbox offline. Keep this page open or reconnect to reopen it.');
     return;
   }
   const waiting = () => {
@@ -69,7 +73,7 @@
   const failed = () => {
     update.textContent = 'The app update could not finish. Your current app and saved work remain available. Reopen online to retry.';
   };
-  offline.textContent = 'Preparing offline reopening… Keep this page open until ready.';
+  offlineStatus('Preparing offline reopening… Keep this page open until ready.');
   navigator.serviceWorker.register('/inbox-sw.js', { updateViaCache: 'none' }).then(async registration => {
     function watchWorker() {
       const worker = registration.installing;
@@ -78,7 +82,7 @@
         if (worker.state === 'installed' && registration.active && registration.waiting) waiting();
         if (worker.state === 'redundant') {
           if (registration.active) failed();
-          else offline.textContent = 'Offline reopening is not ready. Reopen online to retry; keep a copy of any unsynced work.';
+          else offlineStatus('Offline reopening is not ready. Reopen online to retry; keep a copy of any unsynced work.');
         }
       });
     }
@@ -91,12 +95,12 @@
       const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
       reply.port1.onmessage = event => {
         clearTimeout(timeout); reply.port1.close();
-        if (event.data === 'todo-inbox-shell-v18') resolve(); else reject(new Error('Old shell is still active'));
+        if (event.data === 'todo-inbox-shell-v19') resolve(); else reject(new Error('Old shell is still active'));
       };
       (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
     });
-    offline.textContent = 'Ready to reopen this inbox offline.';
+    offlineStatus('Ready to reopen this inbox offline.', true);
   }).catch(() => {
-    offline.textContent = 'Offline reopening is not ready. Save your work on device, close all app tabs and app windows, then reopen online to finish the update.';
+    offlineStatus('Offline reopening is not ready. Save your work on device, close all app tabs and app windows, then reopen online to finish the update.');
   });
 })();

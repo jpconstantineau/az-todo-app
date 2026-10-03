@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -55,19 +56,19 @@ test('accessibility: keyboard actions and editor return focus survive background
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await expectFocus(page, `${row} button:first-child`);
   assert.equal(await page.locator(`${row} button`).first().getAttribute('aria-label'), 'Edit Renamed task');
-  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Reopen Renamed task', exact: true }).waitFor();
-  await expectFocus(page, `${row} button:nth-child(3)`);
+  await expectFocus(page, `${row} .icon-button`);
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Complete Renamed task', exact: true }).waitFor();
-  await expectFocus(page, `${row} button:nth-child(3)`);
-  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Enter');
+  await expectFocus(page, `${row} .icon-button`);
+  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Enter');
   await page.locator('#editor').waitFor(); await refresh(page);
   await page.keyboard.press('Escape');
   await expectFocus(page, `${row} button:first-child`);
   // If a completed row leaves the current filter, use the visible view heading.
   await page.locator('#statusFilter').selectOption('inbox');
-  await page.locator(`${row} button`).nth(2).focus(); await page.keyboard.press('Enter');
+  await page.locator(`${row} .icon-button`).focus(); await page.keyboard.press('Enter');
   await page.locator(row).waitFor({ state: 'detached' });
   await expectFocus(page, '#itemsHeading');
 });
@@ -85,7 +86,7 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
   });
   await page.locator('#captureText').fill('Second draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture?.text === 'Second draft');
-  await page.locator('#sync').click();
+  await clickControl(page.locator('#sync'));
   assert.deepEqual(await page.evaluate(() => window.announcements), []);
   await page.locator('#captureText').focus(); await page.keyboard.press('Control+Enter');
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
@@ -173,14 +174,14 @@ test('accessibility: repeated verified sync leaves an unchanged account announce
   const { page, context } = await setup(t);
   await page.route('**/.auth/me', route => route.fulfill({ json: { clientPrincipal: { userId: 'alice', userDetails: 'alice-handle' } } }));
   await context.setOffline(false);
-  await page.locator('#sync').click();
+  await clickControl(page.locator('#sync'));
   await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent === 'Device inbox for alice-handle');
   await page.evaluate(() => {
     window.accountAnnouncements = 0;
     new MutationObserver(() => window.accountAnnouncements++).observe(document.querySelector('#sessionStatus'), { childList: true });
   });
   const response = page.waitForResponse('**/.auth/me');
-  await page.locator('#sync').click(); await response;
+  await clickControl(page.locator('#sync')); await response;
   // Wait for the ensuing change request and render, after profile completion.
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   assert.equal(await page.evaluate(() => window.accountAnnouncements), 0);

@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
@@ -67,7 +68,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   assert.equal(await page.locator('#day').inputValue(), '2026-10-05');
   assert.equal(await page.locator('#items article').getAttribute('data-id'), itemId);
   assert.deepEqual((await local(page)).queue, queued);
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   const item = records().find(r => r.id === itemId);
   assert.equal(item.originalText, 'Milk'); assert.equal(item.description, 'Two cartons');
   assert.equal(item.projectId, projectId); assert.equal(item.plannedDay, '2026-10-05');
@@ -100,7 +101,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
     await other.screenshot({ path: '../docs/design/projects-1440.png', fullPage: true });
   }
   // Account switching must also clear project context and the selected day.
-  user = 'bob'; await page.getByRole('button', { name: 'Sync now' }).click();
+  user = 'bob'; await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.waitForFunction(() => !document.querySelector('#items').textContent.includes('Milk') && !document.querySelector('#workspace').hidden);
   assert.equal(await page.locator('#view').inputValue(), 'all');
   assert.equal(await page.locator('#projectOutcome').textContent(), '');
