@@ -72,7 +72,7 @@ test('complete deployed security scenarios exercise real handlers, route coverag
   const mutationRoutes = [...routes.keys()].filter(route => route.startsWith('POST ')).map(route => route.slice('POST /api/'.length)).sort();
   const probedRoutes = [...new Set(f.report.requests.filter(row => row.phase.startsWith('every mutation')).map(row => row.route))].filter(route => mutationRoutes.includes(route)).sort();
   assert.deepEqual(probedRoutes, mutationRoutes, 'add deployed origin probes for new mutation routes');
-  const readRoutes = [...routes.keys()].filter(route => route.startsWith('GET /api/v1/')).map(route => route.slice('GET /api/'.length)).sort();
+  const readRoutes = [...routes.keys()].filter(route => /^GET \/api\/(v1|shared)\//.test(route)).map(route => route.slice('GET /api/'.length)).sort();
   assert.deepEqual([...new Set(f.report.requests.filter(row => readRoutes.includes(row.route)).map(row => row.route))].sort(), readRoutes,
     'add deployed isolation probes for new v1 read routes');
   assert.equal(documents.filter(doc => doc.kind === 'record').length, 6);

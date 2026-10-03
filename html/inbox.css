@@ -16,7 +16,7 @@
 .save-bar { padding: var(--space-3) 0; }
 #captureOptions { border-top: var(--border-width) solid var(--border); }
 #captureAI > label { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
-#extractAuto { width: 20px; height: 20px; min-height: 20px; flex: 0 0 20px; }
+#extractAuto, #extractLists { width: 20px; height: 20px; min-height: 20px; flex: 0 0 20px; }
 #extractionItems fieldset { min-width: 0; margin-block: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); padding: var(--space-4); }
 #extractionItems p, #extractionClock { overflow-wrap: anywhere; }
 #editor button { margin-top: var(--space-3); }

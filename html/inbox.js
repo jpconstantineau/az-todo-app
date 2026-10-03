@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=29';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=29';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=29';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=29';
-import { clarificationUI } from './clarification.js?v=29';
-import { setupReviews } from './reviews.js?v=29';
-import { setupBriefs } from './briefs.js?v=29';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=29';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=30';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=30';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=30';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=30';
+import { clarificationUI } from './clarification.js?v=30';
+import { setupReviews } from './reviews.js?v=30';
+import { setupBriefs } from './briefs.js?v=30';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=30';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -542,7 +542,7 @@ capture.addEventListener('submit', event => {
       }
       const saved = await transact(owner, local => {
         enqueue(local, owner, mutations);
-        if (JSON.stringify(currentDraft(local).capture) === JSON.stringify(submitted)) { currentDraft(local).capture = {}; currentDraft(local).extraction = { enabled: currentDraft(local).extraction?.enabled === true }; }
+        if (JSON.stringify(currentDraft(local).capture) === JSON.stringify(submitted)) { currentDraft(local).capture = {}; currentDraft(local).extraction = { enabled: currentDraft(local).extraction?.enabled === true, includeLists: currentDraft(local).extraction?.includeLists === true }; }
       });
       if (owner !== accountId) return;
       state = saved;

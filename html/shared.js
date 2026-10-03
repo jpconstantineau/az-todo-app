@@ -1,4 +1,4 @@
-import { transact } from './inbox-store.js?v=29';
+import { transact } from './inbox-store.js?v=30';
 
 const $ = id => document.getElementById(id);
 const rights = ['view', 'add', 'edit', 'complete', 'delete'];
@@ -12,7 +12,7 @@ async function offlineReady() {
   const channel = new MessageChannel();
   channel.port1.onmessage = event => {
     channel.port1.close();
-    message('sharedOffline', event.data === 'todo-inbox-shell-v29' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
+    message('sharedOffline', event.data === 'todo-inbox-shell-v30' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
   };
   worker.postMessage('shell-version', [channel.port2]);
 }
@@ -22,7 +22,7 @@ if ('serviceWorker' in navigator) {
     .catch(() => message('sharedOffline', 'Offline setup could not finish. Keep this page open or reopen online.'));
 } else message('sharedOffline', 'This browser cannot reopen shared lists offline. Keep this page open while offline.');
 const current = () => state.lists[state.selected];
-const can = permission => !working && !state.pending && !current()?.deleted && current()?.permissions.includes(permission);
+const can = permission => !working && !syncing && !state.pending && !current()?.deleted && current()?.permissions.includes(permission);
 function clearAccount() {
   generation++; accountId = null; state = fresh(); invitation = null; editItem = null;
   $('sharedMain').hidden = true; $('sharedEditor').close(); $('sharedItems').replaceChildren(); $('sharedDeleted').replaceChildren();
@@ -34,9 +34,9 @@ function clearAccount() {
 async function local(update) {
   const owner = accountId, epoch = generation;
   if (!owner) throw new Error('Sign in to save this action.');
-  const saved = await transact(owner, data => { data.sharedLists ??= fresh(); update?.(data.sharedLists); });
+  const saved = await transact(owner, update ? data => { data.sharedLists ??= fresh(); update(data.sharedLists); } : undefined);
   if (owner !== accountId || epoch !== generation) throw new Error('Account changed. The action stays with its original account.');
-  state = saved.sharedLists;
+  state = saved.sharedLists ?? fresh();
   return state;
 }
 async function request(path, body) {
@@ -95,7 +95,7 @@ function render() {
     message('pendingText', `${op.action} · ${op.listId}\n${JSON.stringify({ ...op.fields, ...('token' in op.fields ? { token: '(invitation code kept privately for retry)' } : {}) }, null, 2)}\n${state.pending.error || 'Saved on device — pending server confirmation.'}`);
     $('reviewShared').hidden = state.pending.code !== 'shared_conflict' || !state.lists[op.listId] || ['create', 'join', 'invite', 'deleteList', 'restoreList', 'permissions', 'revoke', 'cancelInvite'].includes(op.action);
   }
-  for (const id of ['createShared', 'joinShared']) $(id).querySelector('button').disabled = working || !!state.pending;
+  for (const id of ['createShared', 'joinShared']) $(id).querySelector('button').disabled = working || syncing || !!state.pending;
   $('retryShared').disabled = $('reviewShared').disabled = $('discardShared').disabled = working || syncing;
   message('sharedStatus', !navigator.onLine ? 'Offline — showing the last saved copy. Permissions are checked again when you reconnect.' : state.pending ? 'An action is saved on this device and needs confirmation.' : 'Shared device copy ready. Refresh to check for changes.');
   if (!list) return;
@@ -124,8 +124,8 @@ function render() {
   $('sharedOwner').hidden = !list.owner;
   $('renameShared').hidden = $('inviteShared').hidden = $('deleteShared').hidden = list.deleted;
   $('restoreShared').hidden = !list.deleted;
-  $('deleteShared').disabled = $('restoreShared').disabled = working || !!state.pending;
-  $('renameShared').querySelector('button').disabled = $('inviteShared').querySelector('button').disabled = working || !!state.pending;
+  $('deleteShared').disabled = $('restoreShared').disabled = working || syncing || !!state.pending;
+  $('renameShared').querySelector('button').disabled = $('inviteShared').querySelector('button').disabled = working || syncing || !!state.pending;
   if (document.activeElement !== $('renameShared').elements.title) $('renameShared').elements.title.value = list.title;
   $('invitationResult').hidden = !invitation || invitation.listId !== list.id || list.deleted;
   $('sharedInvitations').replaceChildren(...(list.invitations || []).map(entry => {
@@ -161,7 +161,7 @@ async function pull(id = state.selected) {
 }
 async function sync(force = false) {
   if (syncing || !accountId || !navigator.onLine) { render(); return; }
-  syncing = true;
+  syncing = true; render();
   const owner = accountId, epoch = generation;
   try {
     await verify();
@@ -205,6 +205,7 @@ async function sync(force = false) {
   finally { syncing = false; render(); }
 }
 async function save(action, fields, id = state.selected, revision = current()?.revision || 0) {
+  if (syncing) throw new Error('Wait for the current refresh to finish, then save again.');
   if (!id) throw new Error('Choose a shared list first.');
   const operation = { accountId, listId: id, operationId: crypto.randomUUID(), expectedRevision: revision, action, fields };
   await local(data => {
@@ -272,8 +273,10 @@ $('reviewShared').onclick = () => void run(async () => {
   await sync(true);
 });
 $('sharedExport').onclick = () => void run(async () => {
-  await local();
+  try { await local(); } catch { /* Export the memory copy if IndexedDB is unavailable. */ }
   const copy = structuredClone(state); if (copy.pending?.operation.fields.token) copy.pending.operation.fields.token = '(invitation code omitted)';
+  copy.currentForm = { listId: state.selected, add: $('addShared').elements.title.value, create: $('createShared').elements.title.value,
+    edit: editItem ? { ...editItem, title: $('editShared').elements.title.value } : null };
   const blob = new Blob([JSON.stringify({ format: 'az-todo-shared-device-copy', accountId, exportedAt: new Date().toISOString(), state: copy }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'shared-lists-device-copy.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 });

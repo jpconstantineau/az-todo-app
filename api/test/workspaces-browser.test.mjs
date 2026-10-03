@@ -112,6 +112,33 @@ test('workspaces: AI capture cancels on switching and restored reviewed batches 
   assert.equal((await local(page)).workspaceDrafts[family].capture.text, 'Write report');
 });
 
+test('workspaces: manual reviews and list-name permission stay with their workspace', async t => {
+  const { page, context } = await setup(t);
+  const work = await createSpace(page, 'Work'); await synced(page);
+  await switchTo(page, work); await context.setOffline(true);
+  await page.locator('#captureText').fill('Prepare the report and check its figures.');
+  await page.locator('#captureAI summary').click();
+  await page.locator('#extractLists').check();
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  await page.locator('#extractionItems [name=title]').fill('Prepare the report');
+  await page.locator('#extractClose').click();
+  await switchTo(page, 'personal');
+  assert.equal(await page.locator('#extractLists').isChecked(), false);
+  assert.equal(await page.locator('#extractReview').isVisible(), false);
+  await switchTo(page, work); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#extractLists').isChecked(), true);
+  await clickControl(page.locator('#extractReview'));
+  assert.equal(await page.locator('#extractionItems [name=title]').inputValue(), 'Prepare the report');
+  await page.locator('#extractAccept').click(); await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  const saved = await local(page);
+  assert.equal(saved.queue.length, 1);
+  assert.equal(saved.queue[0].operation.mutations[0].fields.workspaceId, work);
+  assert.equal(saved.workspaceDrafts[work].extraction.includeLists, true);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
+  const items = documents.filter(row => row.kind === 'record' && row.record.type === 'item');
+  assert.equal(items.length, 1); assert.equal(items[0].record.workspaceId, work);
+});
+
 test('workspaces: archive, delete, offline recovery and responsive management preserve all contents', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t);
   const work = await createSpace(page, 'Work'); await switchTo(page, work);
