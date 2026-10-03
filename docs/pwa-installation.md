@@ -141,12 +141,45 @@ manual guidance; they are not Safari or physical-device evidence. Set
 
 ## Remaining release evidence
 
+### Read-only deployed asset verification (October 3, 2026)
+
+Run from `api/` with Node 22+ against an explicit HTTPS origin:
+
+```sh
+node scripts/verify-pwa-deployment.mjs https://todo.jpto.dev > pwa-deployment.json
+```
+
+The command makes eight anonymous GET requests: the root and bookmark shells,
+manifest, three icons, service worker, and a unique nonexistent icon. It checks
+HTTP status, MIME type, exact repository CSP and SHA-256 content agreement with
+the checkout (text CRLF is normalized to LF; PNG bytes are unchanged). Redirects,
+HTML navigation fallbacks, stale assets, missing/different CSP and 15-second
+timeouts fail with exit code 1. JSON evidence includes the source commit, whether
+`html/` is dirty, UTC timestamp and per-path results; it records no response bodies.
+It never accesses API/auth endpoints, uses a signed-in browser or changes data.
+
+The [recorded live report](pwa-deployment-2026-10-03.json) passed all eight checks
+against `https://todo.jpto.dev` on Windows with Node 26.7.0. All seven public asset
+bodies matched clean `html/` files at the report's `sourceCommit`; the random
+missing icon returned 404. The deployed CSP matches the reviewed policy:
+same-origin manifest/worker loading inherits `default-src 'self'`, and icons are
+allowed by `img-src 'self' data:`. This checks delivered headers, not browser CSP
+enforcement or installation. The checker deliberately fails on policy drift;
+review a legitimate policy change before updating the checkout and rerunning.
+
+`test/pwa-deployment.test.mjs` covers successful deployment evidence and injected
+failure responses without network access. Existing `pwa-assets.test.mjs` checks
+the matching manifest metadata and decoded icon dimensions/maskable artwork.
+Run against the intended deployed revision: a newer local shell correctly fails
+until that release is served. A matching subset of public files does not prove
+the entire deployed Git revision, backend runtime or all shell modules.
+
 Issue #14 stays open until the following are exercised, recording commit, date,
 environment, OS/browser version, steps, expected/actual result and evidence:
 
 | Check | Status |
 | --- | --- |
-| Deployed HTTPS manifest/icon paths, MIME types, missing-asset behavior and CSP | Unverified |
+| Deployed HTTPS manifest/icon paths, MIME types, missing-asset behavior and CSP headers | Pass, October 3, 2026; [live report](pwa-deployment-2026-10-03.json). Browser enforcement remains unverified. |
 | Physical Android Chrome (including Pixel 4a), iPhone Safari and desktop Chrome/Edge install, name/icon and launcher reopen | Unverified |
 | Standalone auth return, root/bookmark links, refresh, back and account switching | Unverified |
 | Installed offline save/edit, process restart and one acknowledgement on a second physical device | Unverified |
