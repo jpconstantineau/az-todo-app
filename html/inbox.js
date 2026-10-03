@@ -1,15 +1,16 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=21';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=21';
-import { deviceExport, readableExport } from './inbox-export.js?v=21';
-import { clarificationUI } from './clarification.js?v=21';
-import { setupReviews } from './reviews.js?v=21';
-import { setupBriefs } from './briefs.js?v=21';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=22';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=22';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=22';
+import { clarificationUI } from './clarification.js?v=22';
+import { setupReviews } from './reviews.js?v=22';
+import { setupBriefs } from './briefs.js?v=22';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
+let exportController;
 const dialogOpeners = new Map();
 const mobile = matchMedia('(max-width: 767px)');
 function responsiveMenus() {
@@ -533,17 +534,53 @@ $('export').onclick = guard(async () => {
   catch { snapshot = memory; source = 'memory-recovery'; }
   if (owner !== accountId || generation !== accountGeneration) return;
   const value = deviceExport(owner, snapshot, currentDraft, source);
+  downloadExport(value, readable, readable ? 'todo-tasks.txt' : 'todo-device-recovery.json');
+});
+function downloadExport(value, readable, filename) {
   const blob = new Blob([readable ? readableExport(value) : JSON.stringify(value, null, 2)], { type: readable ? 'text/plain;charset=utf-8' : 'application/json' });
   const url = URL.createObjectURL(blob), link = document.createElement('a');
-  link.href = url; link.download = readable ? 'todo-tasks.txt' : 'todo-device-recovery.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
+  link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$('accountExport').onclick = async () => {
+  if (!accountId || exportController) return;
+  const owner = accountId, generation = accountGeneration, controller = new AbortController();
+  const readable = $('exportFormat').value === 'text';
+  exportController = controller;
+  $('accountExport').disabled = true; $('cancelExport').hidden = false;
+  statusText('exportStatus', 'Reading server history…');
+  try {
+    const value = await accountExport(owner, async path => {
+      const page = await request(path, undefined, controller.signal);
+      if (owner !== accountId || generation !== accountGeneration) controller.abort();
+      return page;
+    }, { signal: controller.signal, onProgress: (after, through) => statusText('exportStatus', `Reading server history: ${after} of ${through}.`) });
+    controller.signal.throwIfAborted();
+    if (owner !== accountId || generation !== accountGeneration) return;
+    downloadExport(value, readable, readable ? 'todo-account.txt' : 'todo-account.json');
+    statusText('exportStatus', 'Server copy downloaded. Pending device saves and drafts are excluded.');
+  } catch (failure) {
+    if (owner === accountId && generation === accountGeneration) {
+      statusText('exportStatus', controller.signal.aborted ? 'Export cancelled. No file was downloaded.' : `Export failed: ${failure.message} You can still export a device copy.`);
+      if ([401, 403].includes(failure.status) || failure.code === 'account_mismatch') {
+        await pauseSession('Sign in to the original account to export its server copy. Pending work is kept on this device.');
+      }
+    }
+  } finally {
+    if (exportController === controller) {
+      const restoreFocus = document.activeElement === $('cancelExport');
+      exportController = null; $('accountExport').disabled = false; $('cancelExport').hidden = true;
+      if (restoreFocus) $('accountExport').focus();
+    }
+  }
+};
+$('cancelExport').onclick = () => exportController?.abort();
 $('copyRecovery').onclick = guard(async () => {
   $('recoveryText').select(); await navigator.clipboard.writeText($('recoveryText').value);
 });
 
-async function request(path, operation) {
+async function request(path, operation, signal) {
   const response = await fetch(`/api/v1/${path}`, { cache: 'no-store', credentials: 'same-origin', redirect: 'error',
-    signal: AbortSignal.timeout(15000), ...(operation ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation) } : {}) });
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), ...(operation ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation) } : {}) });
   let body;
   try { body = await response.json(); } catch { body = {}; }
   if (response.status === 409 && body.status === 'conflict') return body;
@@ -572,6 +609,8 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  exportController?.abort();
+  $('exportStatus').textContent = '';
   reviews.reset();
   briefs.reset();
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');

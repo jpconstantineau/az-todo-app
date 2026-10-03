@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import { showView } from './navigation-helper.mjs';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
-import { validateDeviceExport } from '../../html/inbox-export.js';
+import { validateDeviceExport, validateAccountExport } from '../../html/inbox-export.js';
 
 async function download(page, format = 'json') {
   await openMenu(page);
@@ -105,4 +105,92 @@ test('export retains current form text when local storage reads fail', { timeout
   const value = JSON.parse(await download(page));
   assert.equal(value.source, 'memory-recovery');
   assert.equal(value.draft.capture.text, 'Text that could not be journaled');
+});
+
+test('server download includes unsynced remote records, excludes local drafts, and supports both formats without changing device data', { timeout: 60000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 320, height: 740 }, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  await page.route('**/api/v1/changes?*', route => route.abort());
+  const saved = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'other-device', mutations: [
+      { type: 'item', id: 'remote', expectedVersion: 0, action: 'create', fields: { title: 'Only on the server <script>', originalText: 'Exact remote original' } }
+    ] }) });
+  assert.equal(saved.status, 200);
+  await page.locator('#captureText').fill('Unsubmitted local draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Unsubmitted local draft');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
+  const before = await local(), serverBefore = structuredClone(documents);
+  assert.deepEqual(before.records, {});
+  await openMenu(page);
+  for (const format of ['json', 'text']) {
+    await page.locator('#exportFormat').selectOption(format);
+    const pending = page.waitForEvent('download');
+    await page.locator('#accountExport').click();
+    const file = await pending, text = await readFile(await file.path(), 'utf8');
+    assert.equal(file.suggestedFilename(), format === 'json' ? 'todo-account.json' : 'todo-account.txt');
+    assert.match(text, /Only on the server <script>/); assert.doesNotMatch(text, /Unsubmitted local draft/);
+    if (format === 'json') assert.equal(validateAccountExport(JSON.parse(text)).records, 1);
+  }
+  assert.deepEqual(await local(), before); assert.deepEqual(documents, serverBefore);
+  assert.equal(await page.locator('#captureText').inputValue(), 'Unsubmitted local draft');
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); await openMenu(page);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    if (process.env.EXPORT_SCREENSHOTS) {
+      await mkdir(process.env.EXPORT_SCREENSHOTS, { recursive: true });
+      await page.screenshot({ path: `${process.env.EXPORT_SCREENSHOTS}/server-export-${width}.png`, fullPage: true });
+    }
+  }
+  await context.setOffline(true);
+  await page.locator('#accountExport').click();
+  await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('Export failed'));
+  assert.equal(JSON.parse(await download(page)).draft.capture.text, 'Unsubmitted local draft');
+});
+
+test('server export cancels promptly, rejects malformed/error pages and discards delayed results on account switch', { timeout: 60000 }, async t => {
+  documents.length = 0;
+  let user = 'alice';
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage({ serviceWorkers: 'block' });
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  const downloads = []; page.on('download', file => downloads.push(file));
+  const pattern = '**/api/v1/export?*';
+  let held;
+  await page.route(pattern, route => { held = route; });
+  await clickControl(page.locator('#accountExport'));
+  await page.locator('#cancelExport').click();
+  await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('cancelled'));
+  assert.equal(await page.locator('#accountExport').evaluate(el => el === document.activeElement), true);
+  await held.abort(); await page.unroute(pattern);
+  for (const status of [200, 503]) {
+    await page.route(pattern, route => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ apiVersion: 1, message: 'Try again' }) }));
+    await page.locator('#accountExport').click();
+    await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('Export failed'));
+    await page.unroute(pattern);
+  }
+  let release;
+  const intercepted = new Promise(resolve => { release = resolve; });
+  await page.route(pattern, async route => {
+    const response = await route.fetch();
+    held = { route, response }; release();
+  });
+  await page.locator('#accountExport').click(); await intercepted;
+  user = 'bob';
+  await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await held.route.fulfill({ response: held.response });
+  await page.unroute(pattern);
+  await page.waitForFunction(() => !document.querySelector('#accountExport').disabled);
+  assert.equal(downloads.length, 0);
+  user = null;
+  await clickControl(page.locator('#accountExport'));
+  await page.waitForFunction(() => document.querySelector('#workspace').hidden);
+  assert.equal(downloads.length, 0);
 });

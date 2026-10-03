@@ -120,9 +120,11 @@ export async function commit(accountId, input, requestHash = digest(input)) {
   throw new ApiError(503, "account_busy", "Concurrent writes are busy. Retry the same operationId and content.");
 }
 
-export async function changes(accountId, after, limit) {
+export async function changes(accountId, after, limit, through) {
   const state = await read(accountId, "state");
-  const highWater = state?.sequence ?? 0;
+  const visible = state?.sequence ?? 0;
+  if (through !== undefined && through > visible) throw new ApiError(409, "snapshot_unavailable", "Export cutoff exceeds visible history. Retry later or start a new export.");
+  const highWater = through ?? visible;
   if (after > highWater) throw new ApiError(409, "cursor_ahead", "Cursor exceeds visible account history. Keep local work and retry; check for a restored database.");
   const entries = [];
   let next = after;

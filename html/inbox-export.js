@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=21';
+import { readableBrief } from './briefs.js?v=22';
 const knownTypes = ['item', 'list', 'project', 'settings', 'clarification', 'review', 'brief'];
 const recordFields = ['id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText',
@@ -11,15 +11,20 @@ const recordFields = ['id', 'type', 'accountId', 'version', 'createdUtc', 'updat
   'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'decisions', 'step', 'answers', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content'];
 
-export function validateDeviceExport(value) {
-  const require = (condition, message) => { if (!condition) throw new Error(`Invalid device export: ${message}`); };
-  require(object(value) && value.format === FORMAT && value.formatVersion === 1, 'unsupported format/version.');
+export const validateDeviceExport = value => validateExport(value);
+export const validateAccountExport = value => validateExport(value, true);
+function validateExport(value, server = false) {
+  const require = (condition, message) => { if (!condition) throw new Error(`Invalid ${server ? 'account' : 'device'} export: ${message}`); };
+  require(object(value) && value.format === (server ? 'az-todo-account-export' : FORMAT) && value.formatVersion === 1, 'unsupported format/version.');
   require(typeof value.accountId === 'string' && value.accountId.length > 0, 'accountId is required.');
   require(typeof value.exportedAt === 'string' && Number.isFinite(Date.parse(value.exportedAt)), 'exportedAt is required.');
-  require(value.scope === 'device' && ['indexeddb', 'memory-recovery'].includes(value.source), 'device scope/source is required.');
+  require(server ? value.scope === 'account' && value.source === 'server-history' :
+    value.scope === 'device' && ['indexeddb', 'memory-recovery'].includes(value.source), 'invalid scope/source.');
   const state = value.state;
   require(object(state) && object(state.records) && Array.isArray(state.queue) && object(state.draft) && object(value.draft), 'records, queue and drafts are required.');
   require(Number.isSafeInteger(state.after) && state.after >= 0, 'change cursor must be a non-negative integer.');
+  if (server) require(state.queue.length === 0 && Object.keys(state.draft).length === 0 && Object.keys(value.draft).length === 0,
+    'a server snapshot cannot contain device drafts or pending saves.');
   const warnings = [];
   const unknown = (entry, allowed, path) => {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
@@ -77,14 +82,58 @@ export function deviceExport(accountId, state, draft, source = 'indexeddb') {
   return value;
 }
 
+export async function accountExport(accountId, request, { signal, onProgress = () => {} } = {}) {
+  const state = { records: {}, queue: [], draft: {}, after: 0 };
+  let through, transferred = 0;
+  do {
+    signal?.throwIfAborted();
+    const query = new URLSearchParams({ accountId, after: state.after, limit: 50 });
+    if (through !== undefined) query.set('through', through);
+    const page = await request(`export?${query}`);
+    signal?.throwIfAborted();
+    const invalid = () => { throw new Error('Invalid server export page. No file was downloaded; try again.'); };
+    if (!object(page) || page.apiVersion !== 1 || page.accountId !== accountId || !Array.isArray(page.entries) ||
+        !Number.isSafeInteger(page.highWater) || page.highWater < state.after ||
+        (through !== undefined && page.highWater !== through)) invalid();
+    through = page.highWater;
+    // ponytail: bound browser memory/work; use a streaming export for larger histories.
+    transferred += new TextEncoder().encode(JSON.stringify(page)).length;
+    if (transferred > 50 * 1024 * 1024) throw new Error('Server history exceeds the 50 MiB browser export limit. No partial file was downloaded. Export a device copy and contact support for a full export.');
+    if (state.after === 0) state.legacyDefaults = page.legacyDefaults ?? null;
+    for (const entry of page.entries) {
+      if (!object(entry) || entry.accountId !== accountId || entry.apiVersion !== 1 || entry.sequence !== state.after + 1 ||
+          !['committed', 'conflict'].includes(entry.status) || !Array.isArray(entry.records) ||
+          (entry.status === 'conflict' && entry.records.length)) invalid();
+      for (const record of entry.records) {
+        if (!object(record) || record.accountId !== accountId) invalid();
+        const key = `${record.type}:${record.id}`;
+        if (state.records[key] && record.version <= state.records[key].version) invalid();
+        state.records[key] = record;
+      }
+      state.after = entry.sequence;
+    }
+    if (page.nextAfter !== state.after || state.after > through || page.hasMore !== (state.after < through) ||
+        (page.hasMore && !page.entries.length)) invalid();
+    onProgress(state.after, through);
+  } while (state.after < through);
+  const value = { format: 'az-todo-account-export', formatVersion: 1, exportedAt: new Date().toISOString(),
+    scope: 'account', source: 'server-history', accountId, state, draft: {} };
+  validateAccountExport(value);
+  return value;
+}
+
 const label = key => key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, letter => letter.toUpperCase());
 function fields(value) {
   return Object.entries(value).map(([key, entry]) => `${label(key)}: ${typeof entry === 'string' ? entry : JSON.stringify(entry, null, 2)}`).join('\n');
 }
 
 export function readableExport(value) {
-  validateDeviceExport(value);
-  const lines = ['To-Do device copy', `Exported: ${value.exportedAt}`, `Account: ${value.accountId}`,
+  const server = value?.format === 'az-todo-account-export';
+  validateExport(value, server);
+  const lines = server ? ['To-Do server account copy', `Exported: ${value.exportedAt}`, `Account: ${value.accountId}`,
+    `Server history cutoff: ${value.state.after}`,
+    'All committed v1 records through this cutoff, including tombstones. Later changes and device drafts/pending saves are excluded.',
+    'This file does not restore or submit work.'] : ['To-Do device copy', `Exported: ${value.exportedAt}`, `Account: ${value.accountId}`,
     `Last pulled change cursor: ${value.state.after}`, `Source: ${value.source}`,
     'Only data available on this device is included. Other devices or newer server changes may be missing.',
     'Pending saves and drafts below are NOT server-confirmed. This file does not restore or submit work.'];
@@ -93,6 +142,10 @@ export function readableExport(value) {
     const records = Object.values(value.state.records).filter(record => record.deleted === deleted);
     if (!records.length) lines.push('(none)');
     for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`, record.type === 'brief' && record.content ? readableBrief(record) : fields(record));
+  }
+  if (server) {
+    lines.push('', 'LEGACY DEFAULTS', JSON.stringify(value.state.legacyDefaults, null, 2));
+    return lines.join('\n') + '\n';
   }
   lines.push('', 'PENDING SAVES (not server-confirmed)');
   if (!value.state.queue.length) lines.push('(none)');
