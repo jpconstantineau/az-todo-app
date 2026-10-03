@@ -76,11 +76,15 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.getByRole('button', { name: 'Complete Bread', exact: true }).click();
   await page.locator('#undoTaskChange').waitFor(); await synced(page);
   assert.equal(await page.locator('#recentTaskChange').isVisible(), true, 'server confirmation preserves immediate undo');
-  await page.locator('#undoTaskChange').click(); await synced(page);
-  // A rejected save remains visible on its task, and cannot offer a misleading undo.
+  await page.locator('#undoTaskChange').click();
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).waitFor(); await synced(page);
+  // A rejected save stays on its task even when a later offline change is queued.
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Complete Bread', exact: true }).click();
   await page.locator('#undoTaskChange').waitFor();
+  await page.locator('#statusFilter').selectOption('@all');
+  await page.getByRole('button', { name: 'Reopen Bread', exact: true }).click();
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).waitFor();
   await page.evaluate(async () => {
     const { transact } = await import('/inbox-store.js');
     await transact('alice', local => {

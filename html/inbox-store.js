@@ -51,7 +51,7 @@ export function projected(state) {
           ? { statusBeforeCompletion: previous?.status || 'inbox' } : {}),
         version: mutation.expectedVersion + 1, deleted: mutation.action === 'delete',
         ...(mutation.action === 'restore' ? { deletedUtc: null } : {}),
-        localState: entry.failure ? 'Failed — needs attention' : 'Saved on device — pending' };
+        localState: entry.failure || previous?.localState === 'Failed — needs attention' ? 'Failed — needs attention' : 'Saved on device — pending' };
       if (mutation.type === 'item') {
         records[id].nextAction = records[id].status === 'next';
         if (records[id].status === 'completed' && previous?.status !== 'completed' && previous?.workflowBeforeTransition?.status === 'completed' &&
