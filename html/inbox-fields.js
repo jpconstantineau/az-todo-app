@@ -108,9 +108,9 @@ export function refreshTaskOptions(form, defaults) {
   for (const name of ['status', ...Object.keys(optionFields).filter(name => name !== 'statuses')]) {
     const control = form.elements.namedItem(name);
     const selected = control.multiple ? [...control.selectedOptions].map(option => option.value) : [control.value];
-    const values = name === 'status' ? ['inbox', 'next', 'waiting', 'deferred', 'completed', 'dropped', ...(defaults.statuses || [])] : defaults[name] || [];
+    const values = name === 'status' ? ['inbox', 'next', 'waiting', 'deferred', 'reference', 'completed', 'dropped', ...(defaults.statuses || [])] : defaults[name] || [];
     const options = [...new Set([...(control.multiple ? [] : name === 'status' ? [] : ['']), ...values, ...selected.filter(Boolean)])];
-    control.replaceChildren(...options.map(value => new Option(value || 'None', value)));
+    control.replaceChildren(...options.map(value => new Option(name === 'status' && value === 'reference' ? 'Reference (non-actionable)' : value || 'None', value)));
     if (control.multiple) for (const option of control.options) option.selected = selected.includes(option.value);
     else control.value = selected[0] || (name === 'status' ? 'inbox' : '');
   }

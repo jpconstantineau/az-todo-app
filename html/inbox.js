@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=37';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=37';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=37';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=37';
-import { clarificationUI } from './clarification.js?v=37';
-import { setupReviews } from './reviews.js?v=37';
-import { setupBriefs } from './briefs.js?v=37';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=37';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=38';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=38';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=38';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=38';
+import { clarificationUI } from './clarification.js?v=38';
+import { setupReviews } from './reviews.js?v=38';
+import { setupBriefs } from './briefs.js?v=38';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=38';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -337,7 +337,7 @@ function render() {
   filters.view = $('view').value;
   refreshOptions();
   filters.statuses = Array.isArray(filters.statuses) ? filters.statuses.filter(status => typeof status === 'string') : [];
-  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status), ...filters.statuses])];
+  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'reference', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status), ...filters.statuses])];
   options($('statusFilter'), statuses.map(status => ({ id: status, title: status === 'completed' ? 'Completed' : status })), [['', 'Incomplete items'], ['@all', 'All statuses'], ['@review-ready', 'Ready for review'], ['@include', 'Include statuses…'], ['@exclude', 'Exclude statuses…']]);
   $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
   filters.status = $('statusFilter').value;
@@ -379,7 +379,8 @@ function render() {
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
     if (!matchesExecutionFilters(record, filters)) return false;
-    if (!filters.status && record.status === 'completed') return false;
+    if (!filters.status && ['completed', 'reference'].includes(record.status)) return false;
+    if (view === 'day' && record.status === 'reference') return false;
     if (customStatuses) {
       const selected = filters.statuses.includes(record.status);
       if (filters.status === '@include' ? !selected : selected) return false;
@@ -412,11 +413,14 @@ function render() {
     const menu = document.createElement('details'); menu.className = 'task-menu responsive-menu'; menu.dataset.recordKey = key(record);
     menu.open = !mobile.matches || expandedActions.has(key(record));
     const summary = document.createElement('summary'); summary.textContent = '•••'; summary.setAttribute('aria-label', `More actions for ${record.title}`); summary.title = 'More actions'; summary.dataset.focusKey = `${key(record)}:more`;
-    actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
-      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`), deleteButton(record));
+    if (record.status !== 'reference') actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
+      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
+    actions.append(deleteButton(record));
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
     menu.append(summary, actions);
-    const heading = document.createElement('div'); heading.className = 'task-heading'; heading.append(title, complete, menu);
+    const heading = document.createElement('div'); heading.className = 'task-heading'; heading.append(title);
+    if (record.status !== 'reference') heading.append(complete);
+    heading.append(menu);
     article.append(heading, notes, metadata, status); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view

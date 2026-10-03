@@ -1,11 +1,11 @@
-import { localGuidance } from './local-guidance.js?v=37';
+import { localGuidance } from './local-guidance.js?v=38';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [
   ['outcome', 'What outcome would resolve this?', 'Describe what done looks like. This records an outcome here; it does not create a project.'],
   ['nextAction', 'What is one concrete next action?', 'Accepting replaces the task title with your wording. Its status stays unchanged until you decide below.'],
   ['missingFacts', 'What information is still missing?', 'Name the unknowns, or intentionally enter “None known”. Skipping leaves this unanswered.'],
-  ['disposition', 'What should happen next?', 'Choose Next, Waiting, Deferred, Someday, Already done, or Drop. You can also keep the current state.']
+  ['disposition', 'What should happen next?', 'Choose Next, Waiting, Deferred, Someday, Reference, Already done, or Drop. Reference keeps useful information outside action queues and reviews. You can also keep the current state.']
 ];
 export const emptyProposal = () => ({ text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' });
 
@@ -23,7 +23,7 @@ export function decision(session, proposal, choice) {
   if (choice === 'accepted') {
     if (name === 'disposition') {
       const { status, waitingOn, reviewDate, startDate } = proposal;
-      if (!['keep', 'next', 'waiting', 'deferred', 'someday', 'completed', 'dropped'].includes(status)) throw new Error('Choose what should happen next, or skip.');
+      if (!['keep', 'next', 'waiting', 'deferred', 'someday', 'reference', 'completed', 'dropped'].includes(status)) throw new Error('Choose what should happen next, or skip.');
       if (status === 'waiting' && !waitingOn.trim()) throw new Error('Waiting needs who/what you await.');
       if (status === 'deferred' && !startDate) throw new Error('Deferred needs a start date.');
       value = { status, waitingOn: status === 'waiting' ? waitingOn : '', reviewDate: status === 'waiting' ? reviewDate : '', startDate: status === 'deferred' ? startDate : '' };

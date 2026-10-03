@@ -24,7 +24,7 @@ deadline or completed questionnaire is required for a simple next action.
 3. What information is missing? Supply the unknowns or explicitly enter
    “None known”. Skipping means unknown, never an inferred answer.
 4. What happens next? Explicitly keep the existing state, choose Next, Someday /
-   maybe, Already done or Drop, wait
+   maybe, Reference, Already done or Drop, wait
    for a named person/dependency with an optional review date, or defer until a date.
    A blank waiting review date preserves any existing calendar or timed cue;
    use the item editor to clear one. Undated waiting work stays in weekly reviews.
@@ -37,8 +37,10 @@ Escape also stops. There is no timer or default commitment. **Original request**
 is always available, and **Accepted answers and unknowns** shows all four questions
 with unanswered/skipped distinctions. Accepted facts remain separate from source
 text; the API still forbids editing `originalText`.
-After all decisions, **Done** closes the completed flow. Non-actionable reference
-filing remains the separate scope of #77; Someday is for possible future actions.
+After all decisions, **Done** closes the completed flow. Reference keeps useful
+non-actionable information outside action queues and new reviews. Retrieve and
+edit it using the reference status filter or All statuses; Someday is for possible
+future actions.
 
 ## Persistence and conflicts
 

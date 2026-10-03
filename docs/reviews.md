@@ -8,7 +8,7 @@ Daily reviews include active next actions, today's planned items, overdue/due
 deadlines, and waiting/deferred items ready for review. Calendar dates use the
 device's local day; timestamp cues use the current instant. Weekly reviews include
 all active items (including inbox, waiting and deferred) and project outcomes.
-Completed and dropped items are excluded from new sessions. Projects can be
+Completed, dropped and reference items are excluded from new sessions. Projects can be
 retained; review their canonical actions individually to drop or defer them.
 
 A session freezes the included record identities available on this device.
