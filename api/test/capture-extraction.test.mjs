@@ -71,7 +71,7 @@ async function setup(t, mode = {}) {
     } });
   }, { mode, raw: output([suggestion(), suggestion({ title: 'Buy milk', evidence: 'Buy milk, urgent, at the shop.', description: 'At the shop', priority: 'urgent', dueDate: '', dueTime: '' })]) });
   const page = await context.newPage();
-  page.on('pageerror', error => console.error('Capture page error:', error.message));
+  page.on('pageerror', error => assert.fail(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.locator('#captureAI summary').click();
@@ -165,5 +165,37 @@ test('invalid output and no-action notes stay recoverable; add/remove edits are 
   await page.locator('#extractClose').click(); await page.locator('#extractStart').click();
   await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.includes('already saved'));
   assert.equal(await page.evaluate(() => aiCalls.creates), 2);
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('explicitly discard'));
+  assert.equal(records().length, 0);
   await clickControl(page.locator('#extractReview')); assert.equal(await page.locator('#extractionItems [name=title]').inputValue(), 'My manual task');
+});
+
+test('model download requires interaction; explicit notes survive suggestions and later edits block acceptance', { timeout: 60000 }, async t => {
+  const { page } = await setup(t, { state: 'downloadable' });
+  await page.locator('#captureText').fill(source);
+  await page.locator('#captureOptions summary').click();
+  await page.locator('#capture [name=body]').fill('Keep this exact note.');
+  await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
+  assert.equal(await page.evaluate(() => aiCalls.active), true);
+  assert.match(await page.locator('#extractionItems [name=description]').first().inputValue(), /Keep this exact note\./);
+  await page.locator('#extractClose').click();
+  await page.locator('#capture [name=body]').fill('A newer note');
+  await clickControl(page.locator('#extractReview')); await page.locator('#extractAccept').click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Capture changed'));
+  assert.equal(records().length, 0);
+  assert.equal((await local(page)).draft.capture.body, 'A newer note');
+});
+
+test('failed persistence never passes capture to inference or loses its recovery text', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await page.locator('#captureText').fill(source);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture?.text?.startsWith('Call Sam'));
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.locator('#extractStart').click();
+  await page.locator('#recovery').waitFor();
+  await page.waitForFunction(() => !document.querySelector('#extractStart').disabled);
+  assert.equal(await page.evaluate(() => aiCalls.prompts.length), 0);
+  assert.match(await page.locator('#recoveryText').inputValue(), /Call Sam tomorrow/);
+  assert.equal(records().length, 0);
 });

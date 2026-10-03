@@ -101,7 +101,7 @@ export function extractionMutations(draft, records) {
 
 export function setupCaptureExtraction({ current, journal, save, showDialog, recovery }) {
   const $ = id => document.getElementById(id);
-  let draft = null, clock = null, sourceText = '', generation = 0, controller, model, busy = false, timer, enabled = false, readiness = 'unavailable';
+  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, busy = false, timer, enabled = false, readiness = 'unavailable';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; };
   function cancel() { clearTimeout(timer); generation++; controller?.abort(); controller = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; $('extractStart').disabled = false; }
   async function check() {
@@ -112,8 +112,10 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   void check();
   function changed() {
     const value = current()?.text || '';
-    if (value !== sourceText) {
-      sourceText = value; clock = value ? captureClock() : null; cancel();
+    const fields = JSON.stringify(captureInput(current()));
+    if (value !== sourceText || fields !== sourceFields) {
+      if (value !== sourceText) clock = value ? captureClock() : null;
+      sourceText = value; sourceFields = fields; cancel();
       if (enabled && value.trim()) {
         if (draft) status('Your reviewed suggestions are kept. Accept or discard that review before processing changed text.');
         else timer = setTimeout(() => { void run(false); }, 1200);
@@ -215,14 +217,14 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       if (stale()) return;
       status('Suggestions saved on device, not committed. Review every task and deadline.');
       // Automatic completion does not steal focus from capture/navigation.
-      if (interactive) showDialog($('extractionReview'));
+      if (interactive && !document.querySelector('dialog[open]')) showDialog($('extractionReview'));
     } catch (error) { if (!stale()) status(signal.aborted ? 'Local AI timed out. Your text is kept; retry or save manually.' : error.message); }
     finally { clearTimeout(timeout); destroyModel(session); if (run === generation) { model = null; controller = null; busy = false; $('extractStart').disabled = false; $('extractCancel').hidden = true; } }
   }
   $('extractOriginal').onclick = async () => {
     if (!draft) return;
     // Explicit discard of the proposal; the original input itself remains in Capture.
-    draft = null; cancel(); render(); await journal(); $('extractionReview').close(); status('Returned to capture. Reviewed suggestions were discarded; original text is kept.');
+    draft = null; cancel(); render(); await journal(); $('extractionReview').close(); status('Returned to capture. Reviewed suggestions were discarded; capture text is kept.');
   };
   $('extractionForm').onsubmit = async event => {
     event.preventDefault(); if (busy || !draft) return;
@@ -238,8 +240,8 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   return {
     changed,
     snapshot: () => ({ draft: structuredClone(draft), clock, sourceText, enabled }),
-    restore(value) { cancel(); draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; enabled = value?.enabled === true; $('extractAuto').checked = enabled; render(); },
-    reset() { cancel(); draft = null; clock = null; sourceText = ''; enabled = false; $('extractAuto').checked = false; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; $('extractReview').hidden = true; status('Optional local AI. Manual capture always works.'); },
+    restore(value) { cancel(); draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; $('extractAuto').checked = enabled; render(); },
+    reset(keepEnabled = false) { cancel(); draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; $('extractAuto').checked = enabled; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; $('extractReview').hidden = true; status('Optional local AI. Manual capture always works.'); },
     close() { $('extractionReview').close(); }
   };
 }

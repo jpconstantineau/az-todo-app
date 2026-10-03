@@ -20,7 +20,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
     if (!owner) throw new Error('Sign in to accept these suggestions.');
     if (JSON.stringify(captureDraft()) !== JSON.stringify(submitted.inputCapture)) throw new Error('Capture changed. Your reviewed suggestions are kept; return to capture before starting a new review.');
     const saved = await transact(owner, local => {
-      if (local.draft.extraction?.draft?.id !== submitted.id || JSON.stringify(local.draft.capture) !== JSON.stringify(submitted.inputCapture)) throw new Error('This capture changed in another tab. Reload to inspect the saved draft.');
+      if (JSON.stringify(local.draft.extraction?.draft) !== JSON.stringify(submitted) || JSON.stringify(local.draft.capture) !== JSON.stringify(submitted.inputCapture)) throw new Error('This capture changed in another tab. Reload to inspect the saved draft.');
       const records = projected(local);
       // Stable task IDs survive reviewed edits. A stale tab cannot accept twice,
       // even after the operation is acknowledged or an accepted task is deleted.
@@ -419,6 +419,7 @@ edit.elements.listId.addEventListener('change', refreshOptions);
 capture.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || !accountId) return;
+  if (extraction.snapshot().draft) { error('A suggested batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
   saving = true; capture.querySelector('[type=submit]').disabled = true;
   void (async () => {
     const owner = accountId, submitted = captureDraft();
@@ -431,13 +432,13 @@ capture.addEventListener('submit', event => {
       }
       const saved = await transact(owner, local => {
         enqueue(local, owner, mutations);
-        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) { local.draft.capture = {}; local.draft.extraction = null; }
+        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) { local.draft.capture = {}; local.draft.extraction = { enabled: local.draft.extraction?.enabled === true }; }
       });
       if (owner !== accountId) return;
       state = saved;
       if (JSON.stringify(captureDraft()) === JSON.stringify(submitted)) {
         capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
-        extraction.reset();
+        extraction.reset(true);
       }
       clearError(); statusText('draftStatus', 'Saved on device');
       render(); capture.elements.text.focus(); broadcast(); void sync();
