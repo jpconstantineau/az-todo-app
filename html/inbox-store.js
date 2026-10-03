@@ -1,5 +1,5 @@
-import { workspaceOf } from './workspaces.js?v=36';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=36';
+import { workspaceOf } from './workspaces.js?v=37';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=37';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;

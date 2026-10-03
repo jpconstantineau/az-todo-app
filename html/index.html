@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=36" defer></script>
+  <script src="/pwa.js?v=37" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=36"></script>
+  <script type="module" src="/inbox.js?v=37"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -78,7 +78,7 @@
         <p id="captureHelp">One item per line. Ctrl/⌘ + Enter saves.</p>
         <details id="captureOptions"><summary>Notes, list, or split a sentence</summary>
           <label>Notes <textarea name="body" rows="2" maxlength="4000"></textarea></label>
-          <label>Existing list <select name="listId"><option value="">Inbox (no list)</option></select></label>
+          <label>Existing list <select name="listId"><option value="">No list</option></select></label>
           <label>Or create a list <input name="newList" maxlength="200" placeholder="e.g. Groceries"></label>
           <div id="captureFields"></div>
           <button id="previewSplit" type="button">Preview comma / semicolon split</button>
@@ -101,7 +101,7 @@
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
       <p class="eyebrow" id="workEyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your Work</h2>
-      <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
+      <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (unprocessed)</option><option value="unfiled">No list</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
       <fieldset id="statusSelection" hidden aria-describedby="statusSelectionHelp">

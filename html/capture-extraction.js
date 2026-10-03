@@ -1,5 +1,5 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel } from './local-guidance.js?v=36';
+import { modelOptions, destroyModel } from './local-guidance.js?v=37';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -150,7 +150,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
         const label = document.createElement('label'); label.textContent = labelText;
         const input = document.createElement(name === 'description' ? 'textarea' : name === 'listId' ? 'select' : 'input'); input.name = name;
         if (name === 'listId') {
-          input.append(new Option('Inbox (no list)', ''), ...(current()?.lists || []).map(list => new Option(list.title, list.id)));
+          input.append(new Option('No list', ''), ...(current()?.lists || []).map(list => new Option(list.title, list.id)));
           if (item.listId && ![...input.options].some(option => option.value === item.listId)) input.add(new Option('Unavailable list — choose another', item.listId));
         } else if (name === 'dueDate') { input.type = 'date'; input.min = '0001-01-01'; input.max = '9999-12-31'; }
         else if (name === 'dueTime') input.type = 'time';

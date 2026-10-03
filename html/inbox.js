@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=36';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=36';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=36';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=36';
-import { clarificationUI } from './clarification.js?v=36';
-import { setupReviews } from './reviews.js?v=36';
-import { setupBriefs } from './briefs.js?v=36';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=36';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=37';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=37';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=37';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=37';
+import { clarificationUI } from './clarification.js?v=37';
+import { setupReviews } from './reviews.js?v=37';
+import { setupBriefs } from './briefs.js?v=37';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=37';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -108,7 +108,7 @@ $('createWorkspace').onsubmit = event => {
 };
 edit.elements.workspaceId.onchange = () => {
   const moving = edit.elements.workspaceId.value !== selectedWorkspace;
-  options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'Inbox (no list)']]);
+  options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'No list']]);
   options(edit.elements.projectId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'project' && !record.deleted), [['', 'No project']]);
   if (moving) edit.elements.listId.value = edit.elements.projectId.value = '';
   void journal();
@@ -324,15 +324,15 @@ function render() {
     ? undoAvailable ? `Undo edit to “${state.undoEdit.title}” until ${new Date(state.undoEdit.expiresAt).toLocaleString()}.`
       : 'The last edit expired, its record changed, or a save needs attention.'
     : 'No editor save to undo on this device.');
-  options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
+  options(capture.elements.listId, lists, [['', 'No list']]);
   const moving = editing?.type === 'item' && edit.elements.workspaceId.value && edit.elements.workspaceId.value !== selectedWorkspace;
-  options(edit.elements.listId, moving ? [] : lists, [['', 'Inbox (no list)']]);
+  options(edit.elements.listId, moving ? [] : lists, [['', 'No list']]);
   options(capture.elements.projectId, projects, [['', 'No project']], true);
   options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
   const listMode = destination === 'lists';
   const filters = navigation[listMode ? 'lists' : 'work'];
   options($('view'), listMode ? lists : [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))],
-    listMode ? [['', 'Choose a list']] : [['all', 'All items'], ['inbox', 'Inbox (no list)'], ['day', 'Planned day']]);
+    listMode ? [['', 'Choose a list']] : [['all', 'All items'], ['inbox', 'Inbox (unprocessed)'], ['unfiled', 'No list'], ['day', 'Planned day']]);
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'all';
   filters.view = $('view').value;
   refreshOptions();
@@ -385,7 +385,8 @@ function render() {
       if (filters.status === '@include' ? !selected : selected) return false;
     } else if (filters.status && filters.status !== '@all' && (filters.status === '@review-ready' ? !reviewReady(record) : record.status !== filters.status)) return false;
     if (view === 'all') return true;
-    if (view === 'inbox') return !record.listId;
+    if (view === 'inbox') return record.status === 'inbox';
+    if (view === 'unfiled') return !record.listId;
     if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
     if (view.startsWith('project:')) return record.projectId === project?.id;
     return record.listId === view;
@@ -421,6 +422,7 @@ function render() {
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
     ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
     : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
+    : view === 'inbox' ? 'No unprocessed captures match this view. Check Status for additional filters, or use Capture to add work.'
     : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
     : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
@@ -429,7 +431,7 @@ function render() {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
       [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
-        .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'Inbox / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
+        .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
     $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
