@@ -19,6 +19,7 @@ flowchart LR
 - [Optional projects and planned-day views](docs/projects.md)
 - [Release checklist, runtime and paid-pilot decision](docs/release-readiness.md)
 - [Request security and deployed verification gates](docs/request-security.md)
+- [Opt-in deployed SWA security rehearsal with two disposable accounts](docs/security-rehearsal.md)
 - [Versioned API, conflict handling and migration tooling](docs/data-api-v1.md)
 - [Opt-in isolated Cosmos protocol rehearsal](docs/cosmos-rehearsal.md)
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)

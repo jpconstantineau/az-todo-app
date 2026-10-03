@@ -130,6 +130,14 @@ verify this branch, authenticated headers, or direct backend ingress.
 
 ## Remaining Azure verification gate
 
+The [opt-in deployed security runner](security-rehearsal.md) now exercises the
+current v1 boundary, retired mutation routes and two-account isolation over HTTPS.
+It writes only generated synthetic records, records sanitized response checks and
+tombstones its fixtures. Its local regression tests use the production handlers
+with a simulated ingress and in-memory Cosmos; they do not pass this Azure gate.
+Use the runner's report alongside the manual observations below. The historical
+pre-v1 section above is not the current route or capability inventory.
+
 Use a disposable Azure environment and two real SWA accounts. Record the deployed
 commit, resource/environment identity, timestamp, and response statuses/headers
 without saving session cookies or task contents:
