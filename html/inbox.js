@@ -1,17 +1,17 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=36';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=36';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=36';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=36';
-import { clarificationUI } from './clarification.js?v=36';
-import { setupReviews } from './reviews.js?v=36';
-import { setupBriefs } from './briefs.js?v=36';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=36';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=38';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=38';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=38';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=38';
+import { clarificationUI } from './clarification.js?v=38';
+import { setupReviews } from './reviews.js?v=38';
+import { setupBriefs } from './briefs.js?v=38';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=38';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
-let defaultsEditing = null;
+let defaultsEditing = null, recentTaskChange = null;
 let exportController;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
 const scopedRecords = () => workspaceRecords(projected(state), selectedWorkspace);
@@ -145,7 +145,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
 });
 const mobile = matchMedia('(max-width: 767px)');
 function responsiveMenus() {
-  document.querySelectorAll('.responsive-menu').forEach(menu => {
+  document.querySelectorAll('.responsive-menu:not(.task-menu)').forEach(menu => {
     const hidesFocus = mobile.matches && menu.contains(document.activeElement);
     menu.open = !mobile.matches;
     if (hidesFocus) menu.querySelector('summary').focus();
@@ -156,7 +156,7 @@ responsiveMenus();
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   const menu = document.activeElement.closest('details');
-  if (menu?.open && (menu.id === 'connection' || mobile.matches && menu.classList.contains('responsive-menu'))) {
+  if (menu?.open && (menu.id === 'connection' || menu.classList.contains('task-menu') || mobile.matches && menu.classList.contains('responsive-menu'))) {
     menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
   }
 });
@@ -318,6 +318,18 @@ function render() {
   const lists = records.filter(record => record.type === 'list');
   const projects = records.filter(record => record.type === 'project');
   renderWorkspaces();
+  // A conflict can replace the optimistic record with a different record at the same version.
+  if (state.queue.some(entry => entry.failure)) recentTaskChange = null;
+  const recent = recentTaskChange?.owner === accountId && recentTaskChange.workspace === selectedWorkspace
+    ? records.find(record => key(record) === recentTaskChange.key && record.version === recentTaskChange.version) : null;
+  const canUndoTask = !!recent && !workspaceReadOnly() && !state.queue.some(entry => entry.failure);
+  $('recentTaskChange').hidden = !canUndoTask;
+  statusText('recentTaskChangeStatus', canUndoTask ? `${recent.status === 'completed' ? 'Completed' : 'Reopened'} “${recent.title}”. Saved on device.` : '');
+  $('undoTaskChange').onclick = guard(async () => {
+    const current = scopedRecords()[recentTaskChange?.key];
+    if (!current || current.version !== recentTaskChange.version || state.queue.some(entry => entry.failure)) throw new Error('This task changed. Review its latest state before undoing.');
+    await updateRecord(current, current.workflowBeforeTransition);
+  });
   const undoAvailable = !workspaceReadOnly() && canUndoEdit(state) && workspaceOf(projected(state)[key(state.undoEdit)], projected(state)) === selectedWorkspace;
   $('undoEdit').disabled = !undoAvailable;
   statusText('undoEditStatus', state.undoEdit
@@ -403,13 +415,13 @@ function render() {
     }
     if (reviewReady(record)) metadata.append(' · Ready for review — choose Next or set a new date');
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
-    status.textContent = `${record.status || 'inbox'} · ${record.localState || 'Server-confirmed'}`;
+    status.textContent = [record.status || 'inbox', record.localState].filter(Boolean).join(' · ');
     const actions = document.createElement('div'); actions.className = 'actions';
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     const complete = button(record.status === 'completed' ? '↶' : '✓', () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`);
     complete.className = 'icon-button'; complete.title = action;
     const menu = document.createElement('details'); menu.className = 'task-menu responsive-menu'; menu.dataset.recordKey = key(record);
-    menu.open = !mobile.matches || expandedActions.has(key(record));
+    menu.open = expandedActions.has(key(record));
     const summary = document.createElement('summary'); summary.textContent = '•••'; summary.setAttribute('aria-label', `More actions for ${record.title}`); summary.title = 'More actions'; summary.dataset.focusKey = `${key(record)}:more`;
     actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
       button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`), deleteButton(record));
@@ -566,6 +578,11 @@ async function updateRecord(record, fields, close = false) {
     if (owner === accountId) state = saved;
   } catch (failure) { if (owner === accountId) storageFailure(failure); return; }
   if (owner !== accountId) return;
+  if (!close && record.type === 'item') {
+    const current = projected(state)[key(record)];
+    recentTaskChange = fields === record.workflowBeforeTransition ? null
+      : { owner, workspace: selectedWorkspace, key: key(record), version: current.version };
+  }
   if (close) { editing = null; $('editor').close(); }
   clearError(); render();
   if (close && record.version === 0 && ['list', 'project'].includes(record.type)) {

@@ -29,6 +29,9 @@ async function capture(page, text) {
 }
 const expectFocus = (page, selector) => page.waitForFunction(selector => document.activeElement.matches(selector), selector);
 async function keyboardActivate(page, selector) {
+  // Open the task disclosure using the keyboard before reaching its actions.
+  const summaries = await page.locator(selector).locator('xpath=ancestor::details[contains(@class, "task-menu") and not(@open)]/summary').all();
+  for (const summary of summaries) { await summary.focus(); await page.keyboard.press('Enter'); }
   for (let i = 0; i < 80; i++) {
     if (await page.locator(selector).evaluate(control => control === document.activeElement)) {
       await page.keyboard.press('Enter'); return;
@@ -281,8 +284,7 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   const { page } = await setup(t);
   await capture(page, 'Insurance');
   await showView(page, 'work');
-  const clarify = page.getByRole('button', { name: 'Clarify Insurance', exact: true });
-  await clarify.focus(); await page.keyboard.press('Enter');
+  await keyboardActivate(page, '[aria-label="Clarify Insurance"]');
   await expectFocus(page, '#clarifyQuestion');
   await page.keyboard.press('Tab');
   await expectFocus(page, '#clarifyForm [name=text]');

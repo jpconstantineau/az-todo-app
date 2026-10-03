@@ -162,3 +162,24 @@ After integrating main at `36277d7`, all **65 tests pass** locally via `cd api; 
 The final pre-push check also found PR #33 merged at `e78baf8`. Its waiting/deferred states, undo, date validation and Ready for review filter are integrated. The workflow browser check now verifies that Ready for review survives Capture/List Workspace navigation and offline reload, with independent list filters.
 
 Final combined verification: all **70 tests pass**, none skipped, on Playwright Chromium 153.0.8010.12 / Node 26.7.0. The new workflow store-to-fields module import also uses v9, so every transitive dependency is available after offline reload. `git diff --check` passes.
+
+
+## Task actions at every width
+
+Task rows keep their title/edit target, completion control and labelled More actions
+menu visible on phone and desktop. Clarify, Brief, Delete and historical Undo state
+change stay in that row's native disclosure. Enter/Space opens it; Escape closes it
+and returns focus to its summary. Resizing and background refresh preserve each
+row's chosen expansion state independently of the global utility menu.
+
+Completing or reopening a task also shows Undo last task change above the list,
+even if that task leaves the selected filter. This immediate shortcut lasts for the
+current page session, until the task changes again or another completion/reopening
+replaces it. Failed saves and read-only workspaces disable this shortcut; existing
+conflict recovery and historical state undo remain available. Synced rows show
+workflow status without repeating the global confirmation; pending/failed saves
+retain their task-specific labels.
+
+Regression coverage: task-menus.test.mjs verifies 767/768/936/1440px layouts, long
+titles, multiple rows, keyboard/dialog focus, resizing, completion/reopening undo,
+offline pending saves and failure visibility. The PWA shell advances to v38.
