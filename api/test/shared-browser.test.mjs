@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
+import { waitForBrowser } from './browser-wait.mjs';
 
 const local = page => page.evaluate(async () => (await (await import('/inbox-store.js')).transact('alice')).sharedLists);
-const settled = page => page.waitForFunction(async () => {
+const settled = page => waitForBrowser(page, async () => {
   const session = await (await import('/inbox-store.js')).transact(null);
   const data = await (await import('/inbox-store.js')).transact(session.accountId);
-  return !data.sharedLists?.pending && !document.querySelector('#sharedContent').hidden;
+  return !data.sharedLists?.pending && !document.querySelector('#sharedContent').hidden && document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false';
 });
 const openDetails = async locator => locator.evaluate(element => { element.open = true; });
 
@@ -16,7 +17,7 @@ test('shared lists browser: create, invite, constrained member, offline conflict
   documents.length = 0;
   // Two servers provide independently authenticated browser sessions over one store.
   let alice = 'alice';
-  const a = await startServer({ browserUser: () => alice }), b = await startServer({ browserUser: 'bob' });
+  const a = await startServer({ browserUser: () => alice }), b = await startServer({ browserUser: () => 'bob' });
   t.after(a.close); t.after(b.close);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const owner = await browser.newContext({ viewport: { width: 390, height: 844 } }), member = await browser.newContext();
@@ -70,7 +71,7 @@ test('shared lists browser: create, invite, constrained member, offline conflict
   assert.match(await second.locator('#pendingText').textContent(), /Do not lose revoked work/);
   assert.equal(documents.find(d => d.kind === 'shared-list').items.length, 3);
   await page.locator('#addShared input').fill('Alice private draft');
-  await page.waitForFunction(async id => (await (await import('/inbox-store.js')).transact('alice')).sharedLists.drafts[id]?.add === 'Alice private draft', id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).sharedLists.drafts[id]?.add === 'Alice private draft', id);
   alice = 'eve'; await page.locator('#sharedRefresh').click(); await page.locator('#sharedSignIn').waitFor();
   assert.equal(await page.locator('#sharedMain').isVisible(), false);
   assert.equal(await page.locator('#addShared input').inputValue(), '');
@@ -81,11 +82,12 @@ test('shared lists browser: create, invite, constrained member, offline conflict
 
 test('shared lists browser: edit/delete recovery, permissions, export, responsive layouts and keyboard focus', { timeout: 60000 }, async t => {
   documents.length = 0;
-  const server = await startServer({ browserUser: 'alice' }); t.after(server.close);
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   page.on('dialog', dialog => dialog.accept());
   await page.goto(server.url + '/shared.html'); await page.locator('#sharedMain').waitFor();
+  await page.waitForFunction(() => document.querySelector('#sharedOffline').textContent === 'Ready to reopen shared lists offline.');
   await openDetails(page.locator('details').filter({ has: page.locator('#createShared') }));
   await page.locator('#createShared input').fill('Weekend shopping'); await page.locator('#createShared button').click(); await settled(page);
   await page.locator('#addShared input').fill('<img src=x> Milk'); await page.locator('#addShared button').click(); await settled(page);
@@ -115,4 +117,25 @@ test('shared lists browser: edit/delete recovery, permissions, export, responsiv
   await page.locator('#restoreShared').waitFor(); await page.locator('#restoreShared').click(); await settled(page);
   await page.getByRole('button', { name: 'Edit Oat milk', exact: true }).waitFor();
   assert.equal(documents.find(d => d.kind === 'shared-list').items.length, 1);
+});
+
+test('shared lists browser: quota failure keeps text and exports the unsaved form', { timeout: 30000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(server.url + '/shared.html'); await page.locator('#sharedMain').waitFor();
+  await openDetails(page.locator('details').filter({ has: page.locator('#createShared') }));
+  await page.locator('#createShared input').fill('Quota recovery'); await page.locator('#createShared button').click(); await settled(page);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Storage full', 'QuotaExceededError'); }; });
+  await page.locator('#addShared input').fill('Keep this unsaved item');
+  await page.locator('#addShared button').click();
+  await page.waitForFunction(() => document.querySelector('#sharedError').textContent.includes('Storage full'));
+  await page.waitForFunction(() => document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false');
+  assert.equal(await page.locator('#addShared input').inputValue(), 'Keep this unsaved item');
+  assert.equal(documents.find(d => d.kind === 'shared-list').items.length, 0);
+  const download = page.waitForEvent('download'); await page.locator('#sharedExport').click();
+  const stream = await (await download).createReadStream(); let contents = '';
+  for await (const chunk of stream) contents += chunk.toString();
+  assert.equal(JSON.parse(contents).state.currentForm.add, 'Keep this unsaved item');
 });

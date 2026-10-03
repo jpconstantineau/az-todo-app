@@ -120,3 +120,23 @@ test('shared lists: join retry after lost acknowledgement and account mismatch d
   assert.equal((await f.act('create', { title: 'Guess ID' }, 'eve')).status, 403);
   assert.equal((await f.act('add', { id: 'oversize', title: 'x'.repeat(10000) })).status, 413);
 });
+
+test('shared lists: create retry is repeat-safe and paged discovery never admits an outsider', async t => {
+  const f = await fixture(t);
+  const create = f.op('create', { title: 'Second shared list' }, 0, 'alice', { listId: 'second' });
+  faults.loseBatchResponse = true;
+  assert.equal((await f.post(create)).status, 503);
+  const receipt = await f.post(create);
+  assert.equal(receipt.status, 200); assert.deepEqual(await f.post(create), receipt);
+  const template = documents.find(d => d.kind === 'shared-list');
+  for (let i = 0; i < 55; i++) documents.push({ ...structuredClone(template), listId: 'page-' + i, UserID: 'shared:page-' + i });
+  const first = (await f.request('lists')).body;
+  assert.equal(first.lists.length, 50); assert.ok(first.cursor);
+  const second = (await f.request('lists?cursor=' + encodeURIComponent(first.cursor))).body;
+  assert.equal(second.lists.length, 7); assert.equal(second.cursor, null);
+  assert.deepEqual((await f.request('lists?cursor=' + encodeURIComponent(first.cursor), 'eve')).body.lists, []);
+  const limit = documents.find(d => d.kind === 'shared-list');
+  limit.items = Array.from({ length: 200 }, (_, i) => ({ id: 'item-' + i, title: 'Item', completed: false, deleted: true }));
+  assert.equal((await f.act('add', { id: 'overflow', title: 'No silent purge' })).status, 400);
+  assert.equal(limit.items.length, 200);
+});

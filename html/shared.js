@@ -81,6 +81,8 @@ function restoreInputs() {
 }
 function render() {
   if (!accountId) return;
+  $('sharedMain').setAttribute('aria-busy', String(working || syncing));
+  $('sharedExport').disabled = working;
   const list = current(), focused = document.activeElement;
   const entries = new Map(state.directory.map(item => [item.id, item]));
   for (const item of Object.values(state.lists)) entries.set(item.id, item);
@@ -217,7 +219,7 @@ async function save(action, fields, id = state.selected, revision = current()?.r
 async function run(action) {
   if (working) return;
   working = true; message('sharedError', '');
-  try { await action(); }
+  try { const result = action(); render(); await result; }
   catch (error) { message('sharedError', error.message + ' Your entered text is kept.'); }
   finally { working = false; render(); }
 }
