@@ -71,7 +71,7 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
     const now = new Date(), day = localDate(now.toISOString()).slice(0, 10);
     // Local midnight, rather than 24 hours later, also handles daylight-saving days.
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-    const included = Object.values(scopedRecords ? scopedRecords() : projected(state)).filter(record => !record.deleted && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped'].includes(record.status) &&
+    const included = Object.values(scopedRecords ? scopedRecords() : projected(state)).filter(record => !record.deleted && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped', 'reference'].includes(record.status) &&
       (reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) || record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow)))
       .map(({ type, id }) => ({ type, id }));
     if (included.length > 200) throw new Error('This review exceeds 200 records. Complete or drop inactive work before starting; no records have been omitted.');

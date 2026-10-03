@@ -93,7 +93,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
           if (!project || project.deleted) throw new ApiError(404, "project_not_found", "Destination project not found in this account.");
         }
         const mutation = input.mutations[i], old = current[i]?.record;
-        const allowed = ["inbox", "next", "waiting", "deferred", "completed", "dropped", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
+        const allowed = ["inbox", "next", "waiting", "deferred", "reference", "completed", "dropped", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
         // Historic values stay editable; unrelated edits and moves never erase them.
         if (mutation.fields?.status !== undefined && ![...allowed, old?.status, old?.statusBeforeCompletion, old?.workflowBeforeTransition?.status].includes(record.status)) {
           throw new ValidationError("status is not configured for this list or account.");
