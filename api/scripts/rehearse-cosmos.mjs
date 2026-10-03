@@ -4,6 +4,7 @@ import { open, readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { protocolScenarios } from './cosmos-scenarios.mjs';
+import { measurementScenarios } from './cosmos-measurements.mjs';
 
 const partitionKey = { paths: ['/UserID', '/ObjectType', '/ObjectID'], kind: 'MultiHash', version: 2 };
 const indexingPolicy = { automatic: true, indexingMode: 'consistent', includedPaths: [{ path: '/*' }], excludedPaths: [{ path: '/"_etag"/?' }] };
@@ -53,7 +54,7 @@ export async function rehearse({ client, loadStore, report, checkpoint = async (
     assert.equal(resource.indexingPolicy.indexingMode, 'consistent');
     report.environment.partitionKey = resource.partitionKey;
     report.environment.indexingPolicy = resource.indexingPolicy;
-    report.phase = 'protocol scenarios';
+    report.phase = report.mode === 'measurements' ? 'workload measurements' : 'protocol scenarios';
     const store = await loadStore(report.databaseId, report.containerId);
     await scenarios({ store, container, check });
     report.status = 'PASS';
@@ -78,22 +79,27 @@ export async function rehearse({ client, loadStore, report, checkpoint = async (
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
+  const measure = args[0] === '--measure';
+  if (measure) args = args.slice(1);
   if (args.length !== 2 || args[0] !== '--isolated-account' || !env.COSMOS_REHEARSAL_CONNECTION_STRING) {
-    console.error('Usage: node scripts/rehearse-cosmos.mjs --isolated-account <new-report.jsonl>\nSet COSMOS_REHEARSAL_CONNECTION_STRING to a disposable, single-write-region Cosmos NoSQL account with Session or stronger consistency. This command creates and deletes a temporary database and consumes Azure resources.');
+    console.error('Usage: node scripts/rehearse-cosmos.mjs [--measure] --isolated-account <new-report.jsonl>\nSet COSMOS_REHEARSAL_CONNECTION_STRING to a disposable, single-write-region Cosmos NoSQL account with Session or stronger consistency. This command creates and deletes a temporary database and consumes Azure resources.');
     return 1;
   }
   let output;
   try { output = await open(args[1], 'wx'); }
   catch { console.error('Cannot create report; choose a new writable path. Existing evidence is never overwritten.'); return 1; }
   const report = { formatVersion: 1, startedUtc: new Date().toISOString(), node: process.version,
-    scope: 'Cosmos storage protocol only; SWA authentication, browser queues, migration, backup restoration and capacity are not verified.' };
+    mode: measure ? 'measurements' : 'protocol',
+    scope: measure
+      ? 'Synthetic storage workloads with 1/2/8 concurrent callers sharing one SDK client. Not independent devices, HTTP/SWA latency, cold-cache, index storage or capacity certification. SDK-internal retries/statuses are not observed.'
+      : 'Cosmos storage protocol only; SWA authentication, browser queues, migration, backup restoration and capacity are not verified.' };
   const checkpoint = async () => {
     // Append snapshots so an interrupted write cannot erase the previously
     // recorded database ID needed for cleanup. Read the last complete line.
     await output.write(JSON.stringify(report) + '\n');
     await output.sync();
   };
-  let client, storeClient;
+  let client, storeClient, storeContainer;
   try {
     const cwd = new URL('../..', import.meta.url);
     try {
@@ -104,13 +110,16 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     report.cosmosSdk = lock.packages['node_modules/@azure/cosmos'].version;
     const { CosmosClient } = await import('@azure/cosmos');
     client = new CosmosClient(env.COSMOS_REHEARSAL_CONNECTION_STRING);
-    await rehearse({ client, report, checkpoint, loadStore: async (databaseId, containerId) => {
+    await rehearse({ client, report, checkpoint,
+      scenarios: measure ? args => measurementScenarios({ ...args, container: storeContainer, report, checkpoint }) : protocolScenarios,
+      loadStore: async (databaseId, containerId) => {
       // Only this standalone process is changed. Never use app database defaults.
       process.env.CosmosDbConnectionSetting = env.COSMOS_REHEARSAL_CONNECTION_STRING;
       process.env.COSMOS_DB = databaseId;
       process.env.COSMOS_CONTAINER = containerId;
       const db = await import('../api/shared/db.mjs');
       storeClient = db.client;
+      storeContainer = db.container;
       return import('../api/v1/store.mjs');
     } });
     console.log(`Cosmos rehearsal ${report.status}; cleanup: ${report.cleanup}. Evidence saved to ${args[1]}.`);

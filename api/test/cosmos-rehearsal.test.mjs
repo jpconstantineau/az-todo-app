@@ -113,7 +113,7 @@ test('CLI requires explicit isolated-account opt-in and a dedicated credential, 
   const output = join(folder, 'evidence.json');
   const env = { ...process.env, CosmosDbConnectionSetting: 'must-not-use-app-credentials' };
   delete env.COSMOS_REHEARSAL_CONNECTION_STRING;
-  for (const args of [[], ['--isolated-account', output], ['--existing-database', 'production', output]]) {
+  for (const args of [[], ['--isolated-account', output], ['--measure', '--isolated-account', output], ['--existing-database', 'production', output]]) {
     const result = spawnSync(process.execPath, [script, ...args], { env, encoding: 'utf8' });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Usage:/);
@@ -124,6 +124,12 @@ test('CLI requires explicit isolated-account opt-in and a dedicated credential, 
   assert.throws(() => execFileSync(process.execPath, [script, '--isolated-account', output], {
     env: { ...env, COSMOS_REHEARSAL_CONNECTION_STRING: 'invalid-but-must-not-be-read' }, stdio: 'pipe'
   }), /Existing evidence is never overwritten/);
+  assert.equal(await readFile(output, 'utf8'), 'prior evidence');
+  const measureExisting = spawnSync(process.execPath, [script, '--measure', '--isolated-account', output], {
+    env: { ...env, COSMOS_REHEARSAL_CONNECTION_STRING: 'invalid-but-must-not-be-read' }, encoding: 'utf8'
+  });
+  assert.equal(measureExisting.status, 1);
+  assert.match(measureExisting.stderr, /Existing evidence is never overwritten/);
   assert.equal(await readFile(output, 'utf8'), 'prior evidence');
   const failedOutput = join(folder, 'invalid-credential.jsonl');
   const invalid = spawnSync(process.execPath, [script, '--isolated-account', failedOutput], {

@@ -120,6 +120,13 @@ region, indexing policy and throughput settings. Include cold-cache catch-up
 from cursor zero and incremental pages. Do not infer RU from JSON bytes or mock
 time. Retain the measurement report with its commit and environment.
 
+The [opt-in Cosmos workload runner](cosmos-measurements.md) now provides a bounded
+storage-only measurement step for small/near-limit records, 1/2/8 concurrent
+callers, edits and catch-up. It records SDK-visible RU, batch attempts, outcomes,
+payload bytes and latency percentiles. It shares one SDK client; independent
+clients, authenticated HTTP latency, indexed storage and throughput observations
+remain separate requirements. No real Azure result is established by its tests.
+
 Revisit the design when measured per-account storage approaches the configured
 logical-partition capacity, sustained contention causes retry exhaustion, or
 RU/latency/catch-up exceeds the pilot's agreed budget. First evaluate a documented
