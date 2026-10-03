@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=26" defer></script>
+  <script src="/pwa.js?v=28" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=26"></script>
+  <script type="module" src="/inbox.js?v=28"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -42,6 +42,11 @@
         <p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p>
         <p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p>
       </details>
+    </section>
+    <section aria-labelledby="updatesHeading"><p class="eyebrow">App updates</p><h2 id="updatesHeading">Keep To-Do ready</h2>
+      <button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button>
+      <p id="checkAppUpdateStatus" role="status"></p>
+      <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
   <details id="connection"><summary><span id="connectionLabel" role="status">Account &amp; device status</span><span id="offlineBadge" role="status"></span></summary>
     <p id="sessionStatus" role="status">Checking account…</p>
@@ -70,21 +75,12 @@
           <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
         </details>
       </form>
-      <details id="localCapture">
-        <summary>Turn free-form thoughts into tasks</summary>
-        <p>Choose local AI for English suggestions, or review manually. AI may need a browser model download. Your text stays on this device during inference; accepted tasks sync to your account.</p>
-        <p>Suggestions use the text and notes above. Review their fields here before saving; other manual capture settings are not applied.</p>
-        <label id="captureListPermission"><input type="checkbox" id="captureAILists"> Include my existing list names in the local prompt</label>
-        <div class="actions"><button id="captureSuggest" type="button" disabled>Suggest tasks</button><button id="captureSuggestCancel" type="button" hidden>Cancel suggestion</button><button id="captureManualReview" type="button">Review tasks manually</button></div>
-        <p id="captureAIStatus" role="status"></p>
-        <form id="captureReview" hidden>
-          <p class="eyebrow">Review before saving</p><h3 id="captureReviewHeading" tabindex="-1">Suggested tasks</h3>
-          <p>Every field is an unaccepted suggestion. Correct uncertain facts, remove unwanted tasks, or merge with the previous task. To split a task, add another and move its text. Original text is retained with every saved task.</p>
-          <p id="captureMoment"></p>
-          <details><summary>Exact original capture</summary><pre id="captureOriginal"></pre></details>
-          <div id="captureReviewItems"></div>
-          <div class="actions"><button id="captureAdd" type="button">Add task</button><button id="captureAccept" type="submit">Accept and save tasks on device</button><button id="captureReturn" type="button">Discard suggestions and return to original</button></div>
-        </form>
+      <details id="captureAI"><summary>Free-form task review and local AI</summary>
+        <p>Review tasks manually without AI, or enable local suggestions after you pause typing. AI is English only, on this device; the browser may download a model. Saved tasks still sync to your cloud account. Review is always required.</p>
+        <label><input id="extractAuto" type="checkbox"> Automatically suggest with local AI</label>
+        <label><input id="extractLists" type="checkbox"> Include my existing list names in local AI suggestions</label>
+        <p id="extractionStatus" role="status">Optional local AI. Manual capture always works.</p>
+        <div class="actions"><button id="extractStart" type="button">Suggest tasks now</button><button id="extractManual" type="button">Review tasks manually</button><button id="extractCancel" type="button" hidden>Cancel suggestions</button><button id="extractReview" type="button" hidden>Review saved suggestions</button></div>
       </details>
     </section>
     <section class="card" id="failure" hidden aria-labelledby="failureHeading">
@@ -108,6 +104,17 @@
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
     </section>
     </div>
+    <dialog class="side-panel" id="extractionReview" aria-labelledby="extractionHeading">
+      <p class="eyebrow">Review capture</p><h2 id="extractionHeading">Suggested tasks</h2>
+      <p id="extractionHelp">These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, use Merge into previous task.</p>
+      <p id="extractionClock"></p><details><summary>Exact original capture</summary><pre id="extractionOriginal"></pre></details>
+      <p id="extractionNotes"></p><p>Original text is retained on every accepted task, including notes that are not tasks.</p>
+      <p id="extractionError" role="alert"></p>
+      <form id="extractionForm"><div id="extractionItems"></div>
+        <div class="actions"><button id="extractAdd" type="button">Add task</button><button id="extractAccept" type="submit">Accept all tasks on device</button></div>
+      </form>
+      <div class="actions"><button id="extractClose" type="button">Stop and keep review</button><button id="extractOriginal" type="button">Discard suggestions and return to capture</button></div>
+    </dialog>
     <dialog class="side-panel" id="deletedRecords" aria-labelledby="deletedHeading">
       <p class="eyebrow">Recovery</p><h2 id="deletedHeading">Deleted records</h2>
       <p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p>

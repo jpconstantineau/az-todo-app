@@ -142,7 +142,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v26', 'shell-next');
+    const next = worker.replaceAll('shell-v28', 'shell-next');
     return version === 'failure' ? next.replace('ASSETS.push(', "ASSETS.push('/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -150,23 +150,127 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Draft across update');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=26')).transact('alice')).draft.capture.text === 'Draft across update');
-  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=26')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=28')).transact('alice')).draft.capture.text === 'Draft across update');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=28')).transact('alice'));
   const before = await local();
   assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   version = 'failure';
-  await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#appUpdateStatus').textContent.includes('could not finish'));
+  await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /could not finish/);
   assert.deepEqual((await local()).queue, before.queue);
   assert.equal(await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-next')).keys()).length), 0, 'addAll fails atomically');
   await context.setOffline(true); await page.reload(); await ready(page); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across update');
   await context.setOffline(false);
   version = 'success';
-  await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#appUpdateStatus').textContent.includes('update is ready'));
+  await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /update is ready.*close all app tabs/);
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v26')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v28')));
+});
+
+test('PWA: update checks report current/offline, prevent duplicate checks, and recover from failure and timeout', async t => {
+  const { page, context, server } = await setup(t);
+  await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
+  await page.locator('#captureText').fill('Keep working while checking');
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+  const check = page.getByRole('button', { name: 'Check for updates', exact: true });
+  await check.focus(); await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#checkAppUpdateStatus').textContent === 'To-Do is up to date.');
+  assert.ok(await check.evaluate(el => el === document.activeElement));
+  assert.equal(await page.locator('#appUpdateStatus').textContent(), '');
+  await context.setOffline(true); await check.click();
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /offline.*Reconnect/);
+  await context.setOffline(false);
+  await page.evaluate(() => {
+    window.realUpdate = ServiceWorkerRegistration.prototype.update;
+    window.updateCalls = 0;
+    ServiceWorkerRegistration.prototype.update = () => {
+      window.updateCalls++;
+      return new Promise((resolve, reject) => { window.finishCheck = resolve; window.failCheck = reject; });
+    };
+  });
+  await check.click();
+  assert.equal(await check.getAttribute('aria-disabled'), 'true');
+  await check.evaluate(el => { el.click(); el.dispatchEvent(new Event('click')); });
+  assert.equal(await page.evaluate(() => window.updateCalls), 1);
+  await page.evaluate(() => window.failCheck(new Error('Network unavailable')));
+  await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /could not finish.*retry online/);
+  await page.evaluate(() => {
+    window.realTimeout = window.setTimeout;
+    window.setTimeout = (callback, delay, ...args) => window.realTimeout(callback, delay === 30000 ? 100 : delay, ...args);
+  });
+  await check.click();
+  await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
+  assert.equal(await page.evaluate(() => window.updateCalls), 2);
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /could not finish/);
+  await page.evaluate(async () => {
+    window.finishCheck();
+    await new Promise(resolve => window.realTimeout(resolve, 0));
+    window.setTimeout = window.realTimeout;
+    ServiceWorkerRegistration.prototype.update = window.realUpdate;
+  });
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /could not finish/, 'late check completion cannot overwrite the timeout result');
+  await check.click();
+  await page.waitForFunction(() => document.querySelector('#checkAppUpdateStatus').textContent === 'To-Do is up to date.');
+  assert.equal(await page.locator('#appUpdateStatus').textContent(), '');
+  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Keep working while checking');
+});
+
+test('PWA: a failed initial registration can be retried without reloading or losing capture', async t => {
+  const { page, server } = await setup(t);
+  await page.addInitScript(() => {
+    const register = ServiceWorkerContainer.prototype.register;
+    let calls = 0;
+    ServiceWorkerContainer.prototype.register = function (...args) {
+      return ++calls === 1 ? Promise.reject(new Error('Temporary failure')) : register.apply(this, args);
+    };
+  });
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.locator('#captureText').fill('Preserve this first visit');
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await ready(page);
+  await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
+  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Preserve this first visit');
+});
+
+test('PWA: unsupported browsers explain update checks and keep the rest of Preferences usable', async t => {
+  const { page, server } = await setup(t);
+  await page.addInitScript(() => { delete Navigator.prototype.serviceWorker; });
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+  assert.equal(await page.locator('#checkAppUpdate').isVisible(), false);
+  assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /unavailable in this browser/);
+  await page.locator('[data-appearance]').selectOption('light');
+  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  assert.ok(await page.locator('#captureText').isVisible());
+});
+
+test('PWA: retry rebuilds a registration removed after its first shell download fails', async t => {
+  const worker = await readFile(new URL('../../html/inbox-sw.js', import.meta.url), 'utf8');
+  let broken = true;
+  const { page, server } = await setup(t, {}, { assetContents: path => path === '/inbox-sw.js' && broken
+    ? worker.replace('ASSETS.push(', "ASSETS.push('/missing-first-install-asset', ") : undefined });
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('not ready'));
+  await page.locator('#captureText').fill('Keep the first offline draft');
+  broken = false;
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+  await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  await ready(page);
+  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Keep the first offline draft');
 });

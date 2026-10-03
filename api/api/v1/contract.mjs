@@ -58,19 +58,22 @@ export function fieldsFor(type, action, input) {
     return { defaults: validateDefaults(input.defaults) };
   }
   const shared = ["title", "description"];
-  const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", ...(type === 'item' ? ['capture'] : [])];
+  const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const itemFields = ["listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome"] : ["defaults"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
-    if (key === 'capture') {
-      object(value, ['id', 'capturedUtc', 'timeZone', 'notes'], 'capture');
-      identifier(value.id, 'capture.id');
-      if (typeof value.capturedUtc !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.capturedUtc) || !Number.isFinite(Date.parse(value.capturedUtc)) || new Date(value.capturedUtc).toISOString() !== value.capturedUtc) throw new ValidationError('capture.capturedUtc must be a UTC timestamp.');
-      exactText(value.timeZone, 100, 'capture.timeZone');
-      try { new Intl.DateTimeFormat('en', { timeZone: value.timeZone }); } catch { throw new ValidationError('capture.timeZone must be a valid timezone.'); }
-      result[key] = { id: value.id, capturedUtc: value.capturedUtc, timeZone: value.timeZone, notes: exactText(value.notes, 4000, 'capture.notes') };
+    if (key === "captureId") result[key] = identifier(value, key);
+    else if (key === "capturedAt") {
+      if (!value) throw new ValidationError('capturedAt is required.');
+      result[key] = utcDate(exactText(value, 24, key));
+    }
+    else if (key === "captureTimeZone") {
+      exactText(value, 100, key);
+      try { new Intl.DateTimeFormat('en', { timeZone: value }); }
+      catch { throw new ValidationError('captureTimeZone must be a supported timezone.'); }
+      result[key] = value;
     }
     else if (key === "defaults") result[key] = validateDefaults(value);
     else if (key === "title") {
