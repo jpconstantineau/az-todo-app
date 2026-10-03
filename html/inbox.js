@@ -81,6 +81,7 @@ async function switchWorkspace(id) {
     });
     if (owner !== accountId) return;
     editing = defaultsEditing = null;
+    $('createdDestination').replaceChildren();
     $('editor').close(); $('defaultsEditor').close(); $('deletedRecords').close();
     extraction.reset(); clarification.hide(); reviews.reset(); briefs.reset();
     state = saved; selectedWorkspace = id;
@@ -367,6 +368,11 @@ function render() {
   const view = $('view').value;
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
+  const context = project || lists.find(list => list.id === view);
+  $('addContextItem').hidden = !context;
+  $('addContextItem').disabled = workspaceReadOnly();
+  $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
+  $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
   $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
@@ -415,7 +421,8 @@ function render() {
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
     ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
     : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
-      : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
+    : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
+    : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   $('failure').hidden = !failed;
   if (failed) {
@@ -486,6 +493,23 @@ function titleButton(record, label = `Edit ${record.title}`) {
   const control = button(record.title, () => openEditor(record), label, `${key(record)}:edit`);
   control.className = 'editable-title'; control.title = 'Edit title and details'; return control;
 }
+function addContextItem(target) {
+  if (!target || workspaceReadOnly()) throw new Error('Choose an active list or project before adding an item.');
+  const current = scopedRecords()[key(target)];
+  if (!current || current.deleted) throw new Error('This destination is no longer available. Choose another list or project.');
+  // Reuse the editor without overwriting an unfinished edit or the Capture draft.
+  if (editing && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields)) {
+    showDialog($('editor'));
+    error('Finish saving this edit before adding another item. Your draft is still here.');
+    edit.elements.title.focus();
+    return;
+  }
+  openEditor({ type: 'item', id: crypto.randomUUID(), version: 0, title: '', description: '',
+    listId: target.type === 'list' ? target.id : null,
+    projectId: target.type === 'project' ? target.id : null,
+    status: target.type === 'project' ? 'next' : 'inbox' });
+  $('createdDestination').replaceChildren();
+}
 function openEditor(record, focus = true, show = true) {
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
     if (show) showDialog($('editor'));
@@ -510,6 +534,10 @@ function openEditor(record, focus = true, show = true) {
   $('editOutcomeLabel').hidden = record.type !== 'project';
   edit.elements.outcome.required = record.type === 'project';
   $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
+  if (record.type === 'item' && record.version === 0) {
+    const target = scopedRecords()[fields.projectId ? `project:${fields.projectId}` : `list:${fields.listId}`];
+    if (target) $('editHeading').textContent = `Add ${fields.projectId ? 'next action' : 'item'} to ${target.title}`;
+  }
   $('original').textContent = projected(state)[key(record)]?.originalText || '';
   $('editError').hidden = true;
   if (show) showDialog($('editor'));
@@ -540,6 +568,16 @@ async function updateRecord(record, fields, close = false) {
   if (owner !== accountId) return;
   if (close) { editing = null; $('editor').close(); }
   clearError(); render();
+  if (close && record.version === 0 && ['list', 'project'].includes(record.type)) {
+    const target = scopedRecords()[key(record)];
+    $('createdDestination').replaceChildren(document.createTextNode(`Created “${target.title}”. `),
+      button(target.type === 'project' ? 'Add next action' : 'Add item', () => {
+        const mode = target.type === 'project' ? 'work' : 'lists';
+        navigation[mode].view = target.type === 'project' ? `project:${target.id}` : target.id;
+        history.replaceState(null, '', '#' + mode); workspace(false);
+        addContextItem(target);
+      }, `Add ${target.type === 'project' ? 'next action to' : 'item to'} ${target.title}`));
+  }
   broadcast(); void sync();
 }
 
@@ -591,7 +629,7 @@ edit.addEventListener('submit', event => {
     fields = { title: values.title, description: values.description,
       ...(editing.type === 'item' ? { workspaceId: values.workspaceId, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
-    else if (editing.initialFields) {
+    else if (editing.version > 0 && editing.initialFields) {
       const initial = { ...editing.initialFields, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { saving = false; $('editor').close(); return; }
@@ -659,7 +697,7 @@ function workspace(focus = true) {
   }
   document.title = (destination === 'capture' ? 'Capture' : listMode ? 'List Workspace' : 'Your Work') + ' · To-Do';
   render();
-  if (focus) { focusDestination(); void journal(); }
+  if (focus) { $('createdDestination').replaceChildren(); focusDestination(); void journal(); }
 }
 addEventListener('hashchange', () => workspace());
 for (const link of document.querySelectorAll('.workspace-nav a')) {
@@ -685,6 +723,7 @@ for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('cla
   });
 }
 $('view').onchange = $('day').onchange = $('statusFilter').onchange = $('statusChoices').onchange = $('executionFilters').onchange = () => {
+  $('createdDestination').replaceChildren();
   navigation[destination === 'lists' ? 'lists' : 'work'] = {
     view: $('view').value, status: $('statusFilter').value,
     statuses: [...$('statusChoices').querySelectorAll('input:checked')].map(input => input.value),
@@ -867,6 +906,7 @@ function hideAccount() {
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
   $('projectOutcome').textContent = ''; $('projectActions').replaceChildren(); $('day').value = '';
+  $('createdDestination').replaceChildren(); $('addContextItem').hidden = true;
   $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
 }
 async function pauseSession(message) {
