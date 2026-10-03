@@ -74,7 +74,7 @@ test('workspaces: offline drafts, filters, capture, reviews, moves, reload and a
   assert.equal(await page.locator('#captureText').inputValue(), 'Personal unsent draft');
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
   assert.equal(documents.filter(row => row.kind === 'record' && row.record.type === 'item').length, 3);
-  setUser('bob'); await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  setUser('bob'); await page.reload(); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#workspaceSelect').options.length === 1);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   assert.equal(await page.locator('#workspaceSelect').inputValue(), 'personal');

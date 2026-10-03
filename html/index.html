@@ -42,6 +42,11 @@
         <p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p>
         <p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p>
       </details>
+    </section>
+    <section aria-labelledby="updatesHeading"><p class="eyebrow">App updates</p><h2 id="updatesHeading">Keep To-Do ready</h2>
+      <button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button>
+      <p id="checkAppUpdateStatus" role="status"></p>
+      <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
   <details id="connection"><summary><span id="connectionLabel" role="status">Account &amp; device status</span><span id="offlineBadge" role="status"></span></summary>
     <p id="sessionStatus" role="status">Checking account…</p>
@@ -118,7 +123,7 @@
       <section id="reviewBody" hidden>
         <p id="reviewProgress" role="status"></p>
         <label>Review record<select id="reviewRecord"></select></label>
-        <h3 id="reviewTitle"></h3><pre id="reviewDetails"></pre>
+        <h3 id="reviewTitle" tabindex="-1" aria-describedby="reviewProgress"></h3><pre id="reviewDetails"></pre>
         <details><summary>Original capture</summary><pre id="reviewOriginal"></pre></details>
         <p>Retain keeps the current state without adding a date. Drop marks an item as dropped and keeps its text. Defer sets a review start date, not a deadline.</p>
         <div class="actions"><button id="reviewRetain" type="button">Retain</button><button id="reviewDrop" type="button">Drop item</button></div>
@@ -176,7 +181,7 @@
       <p>Review the template and unknowns. Saving edited content creates a new draft revision; acceptance applies only to the selected revision. Nothing is sent automatically.</p>
       <details><summary>Original capture and supplied sources</summary><pre id="briefOriginal"></pre></details>
       <label>Saved revision<select id="briefRevisions"></select></label>
-      <p id="briefState" role="status"></p><p id="briefError" role="alert"></p>
+      <p id="briefState" role="status" tabindex="-1"></p><p id="briefError" role="alert"></p>
       <form id="briefForm"><div id="briefFields"></div>
         <div class="actions"><button type="submit">Save new draft revision</button><button id="briefAccept" type="button">Accept this revision</button><button id="briefReject" type="button">Reject this revision</button></div>
       </form>
