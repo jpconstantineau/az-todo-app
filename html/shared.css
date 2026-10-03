@@ -1,0 +1,9 @@
+.shared-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: var(--space-6); margin-top: var(--space-6); align-items: start; }
+.shared-grid .card, #sharedPending { margin-bottom: var(--space-4); }
+#sharedItems article, #sharedDeleted article { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+#sharedItems h3, #sharedDeleted h3 { margin: 0; overflow-wrap: anywhere; }
+#sharedMain fieldset label { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target); }
+#sharedMain input[type="checkbox"] { display: inline-block; width: 20px; height: 20px; min-height: 20px; margin: 0; }
+#sharedMain pre, #sharedAccess { white-space: pre-wrap; overflow-wrap: anywhere; }
+#sharedEditor { width: min(560px, calc(100% - 32px)); }
+@media (max-width: 767px) { .shared-grid { grid-template-columns: minmax(0, 1fr); } }

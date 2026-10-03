@@ -33,7 +33,8 @@ const mutationCases = {
   "settings/update": { "contexts[]": "@Home" },
   "settings/reset": {},
   "settings/ensure": {},
-  "v1/operations": capture
+  "v1/operations": capture,
+  "shared/operations": { accountId: 'alice', listId: 'shared-fixture', operationId: 'create-shared', expectedRevision: 0, action: 'create', fields: { title: 'Shared groceries' } }
 };
 function assertHeaders(response) {
   assert.equal(response.headers.get("cache-control"), "private, no-store");
@@ -50,9 +51,10 @@ async function fixture(t) {
     async request(path, { data, user = "alice", headers = {}, method = data ? "POST" : "GET", origin = server.url, body } = {}) {
       const requestHeaders = new Headers({ ...(user ? { "x-ms-client-principal": principal(user) } : {}), ...headers });
       if (origin !== null) requestHeaders.set("origin", origin);
-      if (path.startsWith("v1/") && data) requestHeaders.set("content-type", "application/json");
+      const json = path.startsWith("v1/") || path.startsWith("shared/");
+      if (json && data) requestHeaders.set("content-type", "application/json");
       const response = await fetch(`${server.url}/api/${path}`, {
-        method, headers: requestHeaders, body: body ?? (data ? path.startsWith("v1/") ? JSON.stringify(data) : new URLSearchParams(data) : undefined)
+        method, headers: requestHeaders, body: body ?? (data ? json ? JSON.stringify(data) : new URLSearchParams(data) : undefined)
       });
       assertHeaders(response);
       return { status: response.status, html: await response.text() };
@@ -87,10 +89,10 @@ test("every mutation rejects untrusted browser origins without writing, and acce
     }
     for (const headers of [{}, { referer: f.url + "/page?view=tasks", "sec-fetch-site": "same-origin" }]) {
       seed();
-      assert.equal((await f.request(path, { data, headers })).status, path.startsWith("v1/") ? 200 : 409, path);
+      assert.equal((await f.request(path, { data, headers })).status, /^(v1|shared)\//.test(path) ? 200 : 409, path);
     }
     seed();
-    assert.equal((await f.request(path, { data, origin: null, headers: { referer: f.url + "/page" } })).status, path.startsWith("v1/") ? 200 : 409, `${path}: Referer fallback`);
+    assert.equal((await f.request(path, { data, origin: null, headers: { referer: f.url + "/page" } })).status, /^(v1|shared)\//.test(path) ? 200 : 409, `${path}: Referer fallback`);
   }
 });
 
@@ -141,14 +143,14 @@ test("all read routes isolate accounts and never initialize data", async t => {
   const reads = {
     "v1/session": "v1/session", "v1/records": "v1/records?accountId=alice&type=item&id=alice-item",
     "v1/receipts": "v1/receipts?accountId=alice&operationId=seed", "v1/changes": "v1/changes?accountId=alice",
-    "v1/export": "v1/export?accountId=alice", health: "health"
+    "v1/export": "v1/export?accountId=alice", health: "health", "shared/lists": "shared/lists"
   };
   const before = structuredClone(documents);
   for (const route of routes.keys()) {
     if (!route.startsWith("GET ")) continue;
     const path = route.slice(9), active = reads[path];
     const response = await f.request(active || path);
-    assert.equal(response.status, active ? 200 : 410, path);
+    assert.equal(response.status, active ? 200 : path === 'shared/list' ? 400 : 410, path);
     assert.doesNotMatch(response.html, /bob-private/);
     if (active?.includes('accountId=')) assert.equal((await f.request(active, { user: 'bob' })).status, 409);
   }

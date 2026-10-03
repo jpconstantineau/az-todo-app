@@ -3,7 +3,8 @@
 [Open the app](https://todo.jpto.dev/).
 
 The client is native HTML, CSS and JavaScript ES modules with IndexedDB drafts,
-an account-bound outbox and an offline shell. All current writes use `/api/v1/operations`.
+an account-bound outbox and an offline shell. Private writes use `/api/v1/operations`;
+shared shopping/family lists use `/api/shared/operations` with per-list permissions.
 There is no frontend build step, CDN dependency or HTMX runtime.
 
 ```mermaid
@@ -16,6 +17,7 @@ flowchart LR
 
 - [Capture, Your Work and List Workspace navigation](docs/navigation.md)
 - [Separate workspaces, offline drafts, archive and recovery](docs/workspaces.md)
+- [Shared shopping/family lists, invitations and granular permissions](docs/shared-lists.md)
 - [Task flow and parity verification](docs/task-flow.md)
 - [Optional projects and planned-day views](docs/projects.md)
 - [Release checklist, runtime and paid-pilot decision](docs/release-readiness.md)

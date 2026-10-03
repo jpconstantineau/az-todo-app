@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Shared lists · To-Do</title>
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/inbox.css"><link rel="stylesheet" href="/shared.css">
+  <script src="/theme.js"></script><script type="module" src="/shared.js"></script>
+</head>
+<body class="container inbox-page">
+  <a class="skip-link" href="#sharedMain">Skip to shared lists</a>
+  <header class="app-header"><div><p class="eyebrow">Together</p><h1>Shared lists</h1></div><a class="button" href="/">My workspace</a></header>
+  <p>Shop and plan together. Shared lists are separate from your private tasks and projects.</p>
+  <p id="sharedStatus" role="status">Checking account…</p><p id="sharedOffline" class="muted" role="status">Preparing offline reopening…</p><p id="sharedError" role="alert"></p>
+  <a id="sharedSignIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/shared.html" hidden>Sign in</a>
+  <main id="sharedMain" hidden>
+    <div class="toolbar"><button id="sharedRefresh">Refresh and sync</button><button id="sharedExport">Export shared device copy</button></div>
+    <p class="muted">Refresh, reopen or return to this page to see others’ changes. A pending action stays on this device until confirmed; only one action can be pending at a time. Export before clearing browser storage.</p>
+    <section id="sharedPending" class="card" hidden aria-labelledby="pendingHeading"><p class="eyebrow">Recovery</p><h2 id="pendingHeading">Pending action</h2><pre id="pendingText"></pre><div class="actions"><button id="retryShared">Retry unchanged</button><button id="reviewShared" hidden>Review and apply to latest list</button><button id="discardShared">Remove pending action</button></div></section>
+    <div class="shared-grid">
+      <section class="card" aria-labelledby="sharedListsHeading"><p class="eyebrow">Choose</p><h2 id="sharedListsHeading">Your shared lists</h2>
+        <label>List<select id="sharedSelect"><option value="">Choose a list</option></select></label><button id="sharedMore" hidden>Load more lists</button>
+        <details><summary>Create a shared list</summary><form id="createShared"><label>List name<input name="title" maxlength="200" required></label><button type="submit">Create shared list</button></form></details>
+        <details id="joinDetails"><summary>Join an invitation</summary><p>Invitations can be used once within seven days. The owner can change or remove access later.</p><form id="joinShared"><label>List ID<input name="listId" maxlength="128" required></label><label>Invitation code<input name="token" maxlength="128" required autocomplete="off"></label><button type="submit">Accept invitation</button></form></details>
+      </section>
+      <section class="card" id="sharedContent" hidden aria-labelledby="sharedTitle"><p class="eyebrow">Shared list</p><h2 id="sharedTitle" tabindex="-1"></h2><p id="sharedAccess"></p>
+        <form id="addShared"><label>New item<input name="title" maxlength="200" required></label><button type="submit">Add item</button></form>
+        <div id="sharedItems"></div><details><summary>Deleted items</summary><div id="sharedDeleted"></div></details>
+        <details id="sharedOwner" hidden><summary>Manage list and sharing</summary>
+          <p>Only you can manage this list. Revocation stops future access after a device reconnects; it cannot erase copies already downloaded. Deleting the list removes all grants and invitations. Restoring retains its items but does not restore access.</p>
+          <form id="renameShared"><label>List name<input name="title" maxlength="200" required></label><button type="submit">Rename list</button></form>
+          <form id="inviteShared"><fieldset id="invitePermissions"><legend>Invitation permissions</legend></fieldset><button type="submit">Create invitation</button></form>
+          <div id="invitationResult" hidden><label>Invitation link<textarea id="invitationLink" rows="3" readonly></textarea></label><button id="copyInvitation">Copy invitation</button><p>Send this link privately to one person. Anyone with the code can accept it once after signing in.</p></div>
+          <h3>Open invitations</h3><div id="sharedInvitations"></div><h3>Members</h3><div id="sharedMembers"></div>
+          <button id="deleteShared">Delete shared list</button><button id="restoreShared" hidden>Restore shared list</button>
+        </details>
+      </section>
+    </div>
+    <dialog id="sharedEditor" aria-labelledby="sharedEditHeading"><h2 id="sharedEditHeading">Edit shared item</h2><form id="editShared"><label>Title<input name="title" maxlength="200" required></label><button type="submit">Save shared edit</button><button type="button" id="closeSharedEdit">Close editor</button></form></dialog>
+  </main>
+</body>
+</html>
