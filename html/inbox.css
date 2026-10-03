@@ -41,7 +41,7 @@
 .execution-controls label { min-width: 0; }
 @media (forced-colors: active) { .workspace-nav [aria-current="page"] { outline: 2px solid Highlight; } }
 
-/* Native disclosures keep utility controls out of the active mobile workflow. */
+/* Native disclosures keep secondary actions out of the active workflow. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .responsive-menu > summary { display: none; }
 .menu-content { max-width: 760px; }
@@ -59,7 +59,11 @@
 .editable-title:hover { text-decoration: underline; }
 .icon-button { min-width: 44px; font-size: 20px; }
 .task-menu { margin: 0; }
-.task-menu .actions { margin: 0; }
+.task-menu .actions { margin: 0; padding-top: var(--space-2); }
+.task-menu[open] { flex-basis: 100%; }
+.task-menu > summary { display: flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; margin-left: auto; padding: var(--space-2); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); cursor: pointer; }
+.task-menu > summary::-webkit-details-marker { display: none; }
+.task-heading .editable-title { padding-left: 0; }
 @media (max-width: 767px) {
   .inbox-page .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
   .app-header h1 { font-size: var(--text-heading); }
@@ -70,10 +74,6 @@
   #appMenu .menu-content { grid-column: 1 / -1; padding: var(--space-4); background: var(--surface); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
   #appMenu:not([open]) > .menu-content { display: none; }
   .menu-content .device-tools { align-items: stretch; }
-  .task-menu[open] { flex-basis: 100%; }
-  .task-menu > summary { width: 44px; margin-left: auto; }
-  .task-menu .actions { padding-top: var(--space-2); }
-  .task-heading .editable-title { padding-left: 0; }
   .workspace-nav a { padding-inline: var(--space-2); }
 }
 
