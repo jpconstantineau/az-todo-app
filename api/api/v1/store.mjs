@@ -3,7 +3,7 @@ import { bytes, digest, document, partition, recordId, MAX_RECORD_BYTES } from "
 import { ValidationError } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { applyWorkflow } from "./workflow.mjs";
-import { validateReview } from "./reviews.mjs";
+import { validateReview, validateReviewDecision } from "./reviews.mjs";
 import { validateBrief } from "./briefs.mjs";
 
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
@@ -60,7 +60,10 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         applyWorkflow(record, old, m.fields);
         record.completedUtc = record.status === "completed" ? (old?.completedUtc ?? now) : null;
       }
-      if (bytes(record) > MAX_RECORD_BYTES) throw new ValidationError("Record exceeds the 32 KiB limit; shorten its text or links.");
+      // Review metadata keeps at most 200 references/heads plus legacy history.
+      // New history lives in individually bounded, immutable decision records.
+      if (bytes(record) > (record.type === 'review' && record.decisionCount ? 65536 : MAX_RECORD_BYTES)) throw new ValidationError(
+        ['review', 'reviewDecision'].includes(record.type) ? "Review save exceeds its capacity. Update the app and resume this saved review; its history is retained." : "Record exceeds the 32 KiB limit; shorten its text or links.");
       return record;
     });
     const settings = records.find(record => record.type === "settings") ?? (await read(accountId, recordId("settings", "settings")))?.record;
@@ -68,6 +71,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const lookup = async (type, id) => records.find(r => r.type === type && r.id === id) ?? (await read(accountId, recordId(type, id)))?.record;
     for (const [i, record] of records.entries()) {
       await validateWorkspace(record, current[i]?.record, lookup);
+      if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
       if (record.type === 'brief') await validateBrief(record, current[i]?.record,
         async (type, id) => (type === 'brief' ? undefined : records.find(r => r.type === type && r.id === id)) ?? (await read(accountId, recordId(type, id)))?.record);
       if (record.type === 'review') await validateReview(record, current[i]?.record, input.mutations, records,

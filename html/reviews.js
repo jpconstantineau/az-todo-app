@@ -1,30 +1,54 @@
-import { key, projected } from './inbox-store.js?v=41';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=41';
+import { key, projected } from './inbox-store.js?v=42';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=42';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
 const latest = (session, index) => [...session.decisions].reverse().find(entry => entry.index === index);
 const done = (session, index) => { const decision = latest(session, index); return decision && decision.choice !== 'undo'; };
+export function reviewHistory(session, records) {
+  return [...session.decisions, ...Object.values(records).filter(record => record.type === 'reviewDecision' && record.reviewId === session.id)
+    .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }))];
+}
 
 export function setupReviews({ current, save, journal, showDialog, records: scopedRecords }) {
   let active = null, selected = null, displayed, busy = false;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
   const message = value => { $('reviewError').textContent = value; };
+  function candidates(records, reviewKind, day, previous) {
+    const seen = new Set(), visited = new Set();
+    for (let session = previous; session && !visited.has(session.id); session = records[`review:${session.previousReviewId}`]) {
+      visited.add(session.id); session.included.forEach(ref => seen.add(key(ref)));
+    }
+    const now = new Date(), [year, month, date] = day.split('-').map(Number);
+    const tomorrow = new Date(year, month - 1, date + 1).getTime();
+    return Object.values(records).filter(record => !record.deleted && !seen.has(key(record)) && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped', 'reference'].includes(record.status) &&
+      (reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) || record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow)))
+      .map(({ type, id }) => ({ type, id }));
+  }
   function render() {
     const state = current();
     if (!state) return;
-    const records = scopedRecords ? scopedRecords() : projected(state), sessions = Object.values(records).filter(record => record.type === 'review' && !record.deleted);
+    const records = scopedRecords ? scopedRecords() : projected(state), sessions = Object.values(records).filter(record => record.type === 'review' && !record.deleted)
+      .map(session => ({ ...session, decisions: reviewHistory(session, records) }));
     const select = $('reviewSessions');
     select.replaceChildren(new Option('Choose a saved review', ''), ...sessions.map(session => new Option(`${session.reviewKind} · ${session.reviewDay} · ${session.included.filter((_, i) => done(session, i)).length}/${session.included.length}`, session.id)));
     select.value = active || '';
-    const session = records[`review:${active}`];
+    const session = sessions.find(session => session.id === active);
     $('reviewBody').hidden = !session;
     if (!session) { displayed = null; return; }
     const remaining = session.included.findIndex((_, i) => !done(session, i));
+    const nextBatch = sessions.find(next => next.previousReviewId === session.id);
+    const available = candidates(records, session.reviewKind, session.reviewDay, session).length;
+    $('reviewNextBatch').hidden = !nextBatch && !available;
+    $('reviewNextBatch').disabled = busy || state.queue.some(entry => entry.failure) || remaining >= 0;
+    $('reviewNextBatch').textContent = nextBatch ? 'Open next review batch' : `Review next batch (${available} remaining)`;
+    $('reviewCapacity').textContent = nextBatch ? 'This is one batch. Open the next batch to continue; previous batches stay in Saved reviews.' : available
+      ? `${available} more eligible records can be reviewed in batches of up to 200. Finish this batch, then choose Review next batch. Earlier decisions and history are kept.` : '';
     const index = selected ?? (remaining < 0 ? 0 : remaining);
     const ref = session.included[index], target = ref ? records[key(ref)] : null;
     const previous = latest(session, index);
-    const progress = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${remaining < 0 ? ' Review complete.' : ''}`;
+    const completion = remaining < 0 ? (available || nextBatch || session.previousReviewId ? ' Batch complete.' : ' Review complete.') : '';
+    const progress = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${completion}`;
     if ($('reviewProgress').textContent !== progress) $('reviewProgress').textContent = progress;
     $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
     $('reviewRecord').value = String(index);
@@ -52,7 +76,7 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
     const focused = document.activeElement;
     let succeeded = false;
     busy = true; message('');
-    const controls = ['reviewSessions', 'reviewRecord', 'startDaily', 'startWeekly'];
+    const controls = ['reviewSessions', 'reviewRecord', 'startDaily', 'startWeekly', 'reviewNextBatch'];
     for (const id of controls) $(id).disabled = true;
     try { await action(); succeeded = true; }
     catch (error) { message(error.message); }
@@ -65,18 +89,18 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
       }
     }
   }
-  async function start(reviewKind) {
+  async function start(reviewKind, previous) {
     const state = current();
     if (!state || state.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before starting a review.');
-    const now = new Date(), day = localDate(now.toISOString()).slice(0, 10);
-    // Local midnight, rather than 24 hours later, also handles daylight-saving days.
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
-    const included = Object.values(scopedRecords ? scopedRecords() : projected(state)).filter(record => !record.deleted && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped', 'reference'].includes(record.status) &&
-      (reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) || record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow)))
-      .map(({ type, id }) => ({ type, id }));
-    if (included.length > 200) throw new Error('This review exceeds 200 records. Complete or drop inactive work before starting; no records have been omitted.');
-    const id = crypto.randomUUID();
-    await save([{ type: 'review', id, action: 'create', expectedVersion: 0, fields: { reviewKind, reviewDay: day, included, decisions: [] } }]);
+    const records = scopedRecords ? scopedRecords() : projected(state);
+    const day = previous?.reviewDay || localDate(new Date().toISOString()).slice(0, 10);
+    const next = previous && Object.values(records).find(record => record.type === 'review' && record.previousReviewId === previous.id);
+    if (next) { active = next.id; selected = null; render(); await journal(); return; }
+    const included = candidates(records, reviewKind, day, previous).slice(0, 200);
+    // A deterministic continuation ID makes concurrent next-batch starts conflict safely.
+    const id = previous ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(previous.id))), byte => byte.toString(16).padStart(2, '0')).join('') : crypto.randomUUID();
+    await save([{ type: 'review', id, action: 'create', expectedVersion: 0, fields: { reviewKind, reviewDay: day, included, decisions: [],
+      ...(previous ? { previousReviewId: previous.id } : {}) } }]);
     if (!current()) return;
     active = id; selected = null; render(); await journal();
   }
@@ -85,7 +109,6 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
     const { session, target, index } = displayed;
     const state = current();
     if (!state || state.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before continuing.');
-    if (session.decisions.length >= 200) throw new Error('This review has reached 200 history entries. Its history is kept; start a new review.');
     let fields;
     if (choice === 'retain') fields = { title: target.title };
     if (choice === 'drop') fields = { status: 'dropped' };
@@ -100,9 +123,14 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
       if (!prior || target.version !== prior.recordVersion + 1) throw new Error('This record changed since the decision. Review the latest state instead of undoing.');
       fields = target.type === 'project' || prior.choice === 'retain' ? { title: target.title } : prior.before;
     }
-    const decision = { index, choice, recordVersion: target?.version ?? 0,
-      before: fields ? snapshot(target) : {}, after: fields ? snapshot({ ...target, ...fields }) : {} };
-    const mutations = [{ type: 'review', id: session.id, action: 'update', expectedVersion: session.version, fields: { decisions: [...session.decisions, decision] } }];
+    const before = fields ? snapshot(target) : {}, after = fields ? snapshot({ ...target, ...fields }) : {};
+    const id = crypto.randomUUID(), sequence = (session.decisionCount || 0) + 1;
+    const decisionHeads = session.decisionHeads ? [...session.decisionHeads] : session.included.map(() => null);
+    decisionHeads[index] = id;
+    const decision = { reviewId: session.id, sequence, index, choice, recordVersion: target?.version ?? 0, before,
+      changes: Object.fromEntries(Object.entries(after).filter(([name, value]) => value !== before[name])) };
+    const mutations = [{ type: 'review', id: session.id, action: 'update', expectedVersion: session.version, fields: { decisionHeads, decisionCount: sequence } },
+      { type: 'reviewDecision', id, action: 'create', expectedVersion: 0, fields: decision }];
     if (fields) mutations.push({ type: target.type, id: target.id, action: 'update', expectedVersion: target.version, fields });
     await save(mutations);
     if (!current()) return;
@@ -112,12 +140,13 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
   $('closeReviews').onclick = () => $('reviews').close();
   $('startDaily').onclick = () => void perform(() => start('daily'));
   $('startWeekly').onclick = () => void perform(() => start('weekly'));
+  $('reviewNextBatch').onclick = () => void perform(() => start(displayed.session.reviewKind, displayed.session));
   $('reviewSessions').onchange = () => { active = $('reviewSessions').value; selected = null; message(''); render(); void journal(); };
   $('reviewRecord').onchange = () => { selected = Number($('reviewRecord').value); message(''); render(); void journal(); };
   $('reviewDefer').oninput = () => void journal();
   for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
   return { render, draft,
     restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
-    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewError']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
+    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
   };
 }

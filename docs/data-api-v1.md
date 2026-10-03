@@ -237,7 +237,8 @@ at most 2,048 characters. Statuses allow `inbox`, `next`, `deferred`, `completed
 Creation-only fields are `originalText` (16,000 characters), `selectedText` (8,000),
 `sourceTitle` (2,000) and nullable `sourceUrl`. Text retains its whitespace; omitted
 `originalText` defaults to the supplied title. Updates cannot rewrite those
-originals. Each resulting record must fit in 32 KiB. A complete Cosmos batch must
+originals. Each resulting record must fit in 32 KiB, except bounded review metadata
+using separate decision history (64 KiB; see Review sessions). A complete Cosmos batch must
 fit in 1.5 MB; larger operations receive a validation error before writing. These
 limits also bound stored receipts and change entries.
 
@@ -461,10 +462,12 @@ Existing pending operation IDs/content and migration checksums remain unchanged.
 
 ## Review sessions
 
-`review` records reference canonical item/project IDs and hold a daily/weekly
-scope plus append-only decisions. A decision and its canonical task edit share
-one version-checked operation; retries do not duplicate decisions, and conflicts
-apply neither edit. The server validates exact prior/next states and guards undo
+`review` records reference up to 200 canonical item/project IDs and hold a
+daily/weekly scope plus bounded pointers to immutable `reviewDecision` records.
+Existing inline decisions remain readable and immutable. Continuation batches
+link through `previousReviewId`. A decision, its review pointer and canonical task
+edit share one version-checked operation; retries do not duplicate decisions, and
+conflicts apply none of the edits. The server validates exact prior/next states and guards undo
 against subsequent edits. `dropped` is a retained, editable item status, not a
 tombstone. See [review behavior, contract and recovery limits](reviews.md).
 

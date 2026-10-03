@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { taskFields, reviewReady } from '../../html/inbox-fields.js';
 import { enqueue, projected } from '../../html/inbox-store.js';
+import { reviewHistory } from '../../html/reviews.js';
 
 test('workflow API: atomic validation, waiting/deferred, completion, undo and stale transitions', async t => {
   documents.length = 0;
@@ -112,7 +113,8 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
   assert.equal(item.reviewDate, null); assert.equal(item.reviewDateUtc, null);
   assert.equal(item.originalText, 'Get the quote');
   const weekly = documents.find(doc => doc.kind === 'record' && doc.record.reviewKind === 'weekly').record;
-  assert.deepEqual(weekly.decisions.map(entry => entry.choice), ['retain', 'undo']);
+  const reviewRecords = Object.fromEntries(documents.filter(doc => doc.kind === 'record').map(doc => [`${doc.record.type}:${doc.record.id}`, doc.record]));
+  assert.deepEqual(reviewHistory(weekly, reviewRecords).map(entry => entry.choice), ['retain', 'undo']);
   assert.deepEqual(errors, []);
 });
 
