@@ -36,6 +36,9 @@
 #statusChoices { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
 #statusChoices label { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; overflow-wrap: anywhere; }
 #statusChoices input { width: 20px; min-height: 20px; height: 20px; flex: 0 0 20px; accent-color: var(--link); }
+#executionFilters { margin-bottom: var(--space-3); }
+.execution-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: var(--space-3); }
+.execution-controls label { min-width: 0; }
 @media (forced-colors: active) { .workspace-nav [aria-current="page"] { outline: 2px solid Highlight; } }
 
 /* Native disclosures keep utility controls out of the active mobile workflow. */
