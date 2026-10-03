@@ -786,8 +786,8 @@ $('discard').onclick = guard(async () => {
   const owner = accountId, id = state.queue[0].operation.operationId;
   const saved = await transact(owner, local => {
     if (local.queue[0]?.operation.operationId !== id || !local.queue[0].failure) throw new Error('Queue changed; review it again.');
-    local.queue.shift();
-    if (local.undoEdit?.operationId === id) delete local.undoEdit;
+    const discarded = local.queue.shift();
+    if (local.undoEdit && discarded.operation.mutations.some(mutation => key(mutation) === key(local.undoEdit))) delete local.undoEdit;
   });
   if (owner !== accountId) return;
   state = saved;

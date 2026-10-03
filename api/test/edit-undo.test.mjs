@@ -78,6 +78,14 @@ test('competing same-version receipts and rejected edit receipts invalidate undo
     conflicts: [{ current: failed.records['item:one'] }] }, 'alice');
   assert.equal(failed.undoEdit, undefined);
   assert.throws(() => undoEdit(state, 'alice', id, now));
+  // A later offline edit's inverse must not recover a rejected predecessor.
+  const chained = fixture(), previous = structuredClone(chained.queue[0].operation);
+  const current = projected(chained)['item:one'];
+  enqueue(chained, 'alice', [{ type: 'item', id: 'one', action: 'update', expectedVersion: 2, fields: { title: 'Second edit' } }]);
+  rememberEdit(chained, current, { title: 'Second edit' }, now);
+  applyReceipt(chained, { apiVersion: 1, accountId: 'alice', operationId: previous.operationId, sequence: 2,
+    status: 'conflict', records: [], conflicts: [{ current: chained.records['item:one'] }] }, 'alice');
+  assert.equal(chained.undoEdit, undefined);
 });
 
 test('device export preserves exact undo fields and explains them in readable output', () => {

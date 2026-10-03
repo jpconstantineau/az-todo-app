@@ -122,7 +122,7 @@ export function applyReceipt(state, receipt, accountId) {
   if (index < 0) return;
   if (receipt.status === 'committed') state.queue.splice(index, 1);
   else {
-    if (state.undoEdit?.operationId === receipt.operationId) delete state.undoEdit;
+    if (state.undoEdit && state.queue[index].operation.mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
     state.queue[index].failure = 'Another edit or deletion conflicts with this save. Review both versions.';
     state.queue[index].receipt = receipt;
     for (const conflict of receipt.conflicts) {

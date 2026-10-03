@@ -100,6 +100,12 @@ export preservation. [Layout screenshots](design/edit-undo/) cover 320/390/1440p
 in both appearances. Real SWA/Cosmos, physical devices and screen readers remain
 unverified.
 
+On October 2, 2026, all **153 tests passed**, none skipped, in an isolated Windows
+worktree with Node **22.23.3** and Playwright Chromium **153.0.8010.12**. This run
+includes main at `c897130` (PRs #54 and #55), the final undo conflict checks, and
+shell upgrades through v22. Run from `api/` with Node 22:
+`node --experimental-test-module-mocks --test test/*.test.mjs`.
+
 `todo-device-recovery.json` uses `format: "az-todo-device-export"` and
 `formatVersion: 1`. The existing recovery fields `accountId`, `state` and `draft`
 are retained. Additional metadata records `exportedAt`, `scope: "device"` and
