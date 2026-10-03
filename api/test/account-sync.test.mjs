@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
@@ -37,7 +38,7 @@ async function edit(page, title, replacement) {
 }
 async function sync(page) {
   const response = page.waitForResponse(response => response.url().includes('/api/v1/changes?'));
-  await page.getByRole('button', { name: 'Sync now' }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   const changes = await (await response).json();
   // Headers and an unchanged confirmation label do not mean this pull was applied.
   await waitForBrowser(page, async ({ accountId, highWater }) => {
@@ -107,7 +108,7 @@ test('account label: delayed previous-account responses and expiry cannot restor
   for (const route of pending) await route.fulfill({ json: { clientPrincipal: { userId: 'alice', userDetails: 'late-alice' } } });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await label(page, 'Device inbox for bob-handle');
-  setUser(null); await page.getByRole('button', { name: 'Sync now' }).click();
+  setUser(null); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /bob-handle|late-alice/);
 });
@@ -128,7 +129,7 @@ test('account label: explicit sign-out clears the label and pauses the original 
   await page.route('**/.auth/logout?**', route => route.fulfill({ status: 204 }));
   await open(page, url); await label(page, 'Device inbox for alice-handle');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
-  await page.locator('#signOut').click();
+  await clickControl(page.locator('#signOut'));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).paused);
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /alice-handle/);
@@ -180,7 +181,7 @@ test('independent browser profiles sync records, preserve offline conflicts and 
   await capture(laptop, 'Behind conflict');
   const proposal = (await local(laptop)).queue[0].operation;
   await phoneContext.setOffline(false); await sync(phone);
-  await laptopContext.setOffline(false); await laptop.locator('#sync').click();
+  await laptopContext.setOffline(false); await clickControl(laptop.locator('#sync'));
   await laptop.locator('#failure').waitFor();
   assert.deepEqual((await local(laptop)).queue[0].operation, proposal);
   assert.equal((await local(laptop)).queue.length, 2);

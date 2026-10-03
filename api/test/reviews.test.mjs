@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -92,7 +93,7 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.locator('#captureText').fill('Milk\nInsurance'); await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll('#items article').length === 2); await confirmed(page);
-  await page.locator('#openReviews').click(); await page.locator('#startDaily').click();
+  await clickControl(page.locator('#openReviews')); await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
   assert.match(await page.locator('#reviewDetails').textContent(), /empty/); await confirmed(page);
   await context.setOffline(true);
@@ -101,20 +102,20 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   assert.match(await page.locator('#reviewProgress').textContent(), /pending/);
   await page.locator('#reviewDefer').fill('2026-10-08');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.review?.deferUntil === '2026-10-08');
-  await page.reload(); await page.locator('#workspace').waitFor(); await page.locator('#openReviews').click();
+  await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#openReviews'));
   assert.match(await page.locator('#reviewProgress').textContent(), /1 of 2/); assert.equal(await page.locator('#reviewDefer').inputValue(), '2026-10-08');
   await page.locator('#reviewDeferSave').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
   await page.locator('#reviewRecord').selectOption('1'); await page.locator('#reviewUndo').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
   await page.locator('#reviewDrop').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
-  await page.locator('#closeReviews').click(); await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  await page.locator('#closeReviews').click(); await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
   assert.deepEqual(session.decisions.map(d => d.choice), ['retain', 'defer', 'undo', 'drop']);
   const retained = records().find(r => r.id === session.included[0].id);
   assert.equal(retained.status, 'inbox'); assert.equal(retained.startDate ?? null, null);
   const second = await browser.newContext(); const other = await second.newPage();
   await other.goto(server.url); await other.locator('#workspace').waitFor(); await confirmed(other);
-  await other.locator('#openReviews').click(); await other.locator('#reviewSessions').selectOption(session.id);
+  await clickControl(other.locator('#openReviews')); await other.locator('#reviewSessions').selectOption(session.id);
   assert.match(await other.locator('#reviewProgress').textContent(), /2 of 2/);
   await other.locator('#reviewRecord').selectOption('1'); await other.locator('#reviewUndo').click();
   await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2')); await confirmed(other);
@@ -134,8 +135,8 @@ test('reviews resume offline and across devices, allow retained unknowns and und
     }
   }
   await other.locator('#closeReviews').click();
-  user = 'bob'; await other.locator('#sync').click(); await other.waitForFunction(() => document.querySelector('#workspace').hidden === false && document.querySelectorAll('#items article').length === 0);
-  await other.locator('#openReviews').click(); assert.equal(await other.locator('#reviewSessions option').count(), 1);
+  user = 'bob'; await clickControl(other.locator('#sync')); await other.waitForFunction(() => document.querySelector('#workspace').hidden === false && document.querySelectorAll('#items article').length === 0);
+  await clickControl(other.locator('#openReviews')); assert.equal(await other.locator('#reviewSessions option').count(), 1);
   assert.equal(await other.locator('#reviewHistory').textContent(), ''); assert.deepEqual(errors, []);
 });
 
@@ -156,7 +157,7 @@ test('review cues include projects and waiting work; competing devices and delet
   const first = await browser.newContext(), second = await browser.newContext();
   const page = await first.newPage(), other = await second.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
-  await page.locator('#openReviews').click(); await page.locator('#startDaily').click();
+  await clickControl(page.locator('#openReviews')); await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2')); await confirmed(page);
   let session = records().find(r => r.type === 'review');
   assert.deepEqual(session.included.map(r => r.id).sort(), ['next', 'waiting']);
@@ -164,20 +165,20 @@ test('review cues include projects and waiting work; competing devices and delet
   session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
   const index = id => String(session.included.findIndex(r => r.id === id));
   await other.goto(server.url); await other.locator('#workspace').waitFor(); await confirmed(other);
-  await other.locator('#openReviews').click(); await other.locator('#reviewSessions').selectOption(session.id);
+  await clickControl(other.locator('#openReviews')); await other.locator('#reviewSessions').selectOption(session.id);
   await second.setOffline(true);
   await page.locator('#reviewRecord').selectOption(index('next')); await other.locator('#reviewRecord').selectOption(index('next'));
   await page.locator('#reviewRetain').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 5')); await confirmed(page);
   await other.locator('#reviewDrop').click(); await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 5'));
-  await other.locator('#closeReviews').click(); await second.setOffline(false); await other.locator('#sync').click(); await other.locator('#failure').waitFor();
+  await other.locator('#closeReviews').click(); await second.setOffline(false); await clickControl(other.locator('#sync')); await other.locator('#failure').waitFor();
   assert.equal(await other.locator('#resolve').isVisible(), false);
   assert.equal(records().find(r => r.id === 'next' && r.type === 'item').status, 'next');
   other.once('dialog', dialog => dialog.accept()); await other.locator('#discard').click(); await other.locator('#failure').waitFor({ state: 'hidden' }); await confirmed(other);
   const doomed = records().find(r => r.id === 'inbox' && r.type === 'item');
   await post([{ type: 'item', id: doomed.id, action: 'delete', expectedVersion: doomed.version }]);
-  await other.locator('#sync').click();
+  await clickControl(other.locator('#sync'));
   await waitForBrowser(other, async () => (await (await import('/inbox-store.js')).transact('alice')).records['item:inbox']?.deleted);
-  await other.locator('#openReviews').click(); await other.locator('#reviewRecord').selectOption(index('inbox'));
+  await clickControl(other.locator('#openReviews')); await other.locator('#reviewRecord').selectOption(index('inbox'));
   assert.match(await other.locator('#reviewDetails').textContent(), /deleted or is unavailable/);
   await other.locator('#reviewUnavailable').click(); await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 5')); await confirmed(other);
   await other.locator('#reviewRecord').selectOption(index('project'));

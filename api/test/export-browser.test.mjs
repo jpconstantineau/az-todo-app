@@ -1,3 +1,4 @@
+import { clickControl, openMenu } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import { showView } from './navigation-helper.mjs';
@@ -8,9 +9,10 @@ import { documents, startServer } from './harness.mjs';
 import { validateDeviceExport } from '../../html/inbox-export.js';
 
 async function download(page, format = 'json') {
+  await openMenu(page);
   await page.locator('#exportFormat').selectOption(format);
   const pending = page.waitForEvent('download');
-  await page.locator('#export').click();
+  await clickControl(page.locator('#export'));
   const file = await pending;
   assert.equal(file.suggestedFilename(), format === 'json' ? 'todo-device-recovery.json' : 'todo-tasks.txt');
   return readFile(await file.path(), 'utf8');
@@ -82,7 +84,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   });
   await page.waitForFunction(() => !!window.releaseExport);
   user = 'bob'; await context.setOffline(false);
-  await page.getByRole('button', { name: 'Sync now', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now', exact: true }));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await page.locator('#workspace').waitFor();
   await page.evaluate(async () => { window.releaseExport(); await window.pendingExport; });
