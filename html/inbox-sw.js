@@ -4,6 +4,7 @@ const ASSETS = ['/local-guidance.js?v=27', '/', '/index.html', '/inbox.html', '/
 // Fresh module URLs bypass older workers' exact asset allowlists.
 ASSETS.push('/inbox.js?v=27', '/inbox-store.js?v=27', '/inbox-fields.js?v=27', '/inbox-export.js?v=27', '/briefs.js', '/briefs.js?v=27', '/help.html');
 ASSETS.push('/capture-extraction.js?v=27');
+ASSETS.push('/shared.html', '/shared.js', '/shared.css');
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
@@ -16,7 +17,7 @@ self.addEventListener('message', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  const navigation = event.request.mode === 'navigate' && ['/', '/index.html', '/inbox.html', '/help.html'].includes(url.pathname);
+  const navigation = event.request.mode === 'navigate' && ['/', '/index.html', '/inbox.html', '/help.html', '/shared.html'].includes(url.pathname);
   if (!navigation && !ASSETS.includes(url.pathname + url.search)) return;
   event.respondWith(caches.open(CACHE).then(cache => cache.match(navigation ? url.pathname : event.request).then(cached => cached || fetch(event.request))));
 });
