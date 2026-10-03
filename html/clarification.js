@@ -1,4 +1,4 @@
-import { localGuidance } from './local-guidance.js?v=25';
+import { localGuidance } from './local-guidance.js?v=26';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [

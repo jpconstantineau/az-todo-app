@@ -18,7 +18,7 @@ timezone (up to 100 characters), and notes preserve up to 4,000 original
 characters. Updates cannot change this metadata or `originalText`. Items from
 one accepted batch share the capture ID and exact source, retaining their own
 stable item IDs. These fields are data, never an ownership authority. Existing
-records need no backfill. Deploy the additive API before the v25 shell; an older
+records need no backfill. Deploy the additive API before the v26 shell; an older
 API rejects these creates visibly and preserves the outbox. See
 [local capture](local-capture.md) for client review and limits.
 

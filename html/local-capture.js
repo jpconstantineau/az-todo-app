@@ -1,4 +1,4 @@
-import { modelOptions, extractionSchema, extractionPrompt, parseExtraction } from './capture-extraction.js?v=25';
+import { modelOptions, extractionSchema, extractionPrompt, parseExtraction } from './capture-extraction.js?v=26';
 
 export function setupLocalCapture({ source, lists, journal, save }) {
   const $ = id => document.getElementById(id);

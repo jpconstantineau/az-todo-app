@@ -78,10 +78,16 @@ Uses the [Chrome Prompt API documentation](https://developer.chrome.com/docs/ai/
 reviewed October 3, 2026: global `LanguageModel`, matching English/text options,
 availability before explicit creation, download progress, structured response
 constraints and session destruction. Unsupported browsers keep manual workflows.
-The new modules join the public v25 service-worker shell; API/auth/task data never
+The new modules join the public v26 service-worker shell; API/auth/task data never
 enter Cache Storage. No IndexedDB migration, database reset or partition change.
 
 ## Verification and remaining evidence
+
+After integrating main at `6925eca` (PR #62) and advancing the shell to v26,
+all **208 Node/Playwright tests passed** on October 3, 2026. This includes
+upgrades from shells v3–v25 and the merged review/brief accessibility checks.
+`git diff --check` passed. The earlier sandbox run's extension launch was blocked
+by Windows; the host-launcher rerun passed the extension test and full suite.
 
 Focused Node/Playwright checks cover strict parsing, timezone/DST conversion,
 immutable server metadata, all-or-nothing size rejection, offline review/reload,
