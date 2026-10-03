@@ -1,22 +1,29 @@
-import { localGuidance } from './local-guidance.js?v=35';
+import { localGuidance } from './local-guidance.js?v=36';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [
   ['outcome', 'What outcome would resolve this?', 'Describe what done looks like. This records an outcome here; it does not create a project.'],
   ['nextAction', 'What is one concrete next action?', 'Accepting replaces the task title with your wording. Its status stays unchanged until you decide below.'],
   ['missingFacts', 'What information is still missing?', 'Name the unknowns, or intentionally enter “None known”. Skipping leaves this unanswered.'],
-  ['disposition', 'What should happen next?', 'Keep the current state, choose Next, wait for a person or dependency, or defer until a date.']
+  ['disposition', 'What should happen next?', 'Choose Next, Waiting, Deferred, Someday, Already done, or Drop. You can also keep the current state.']
 ];
 export const emptyProposal = () => ({ text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' });
 
 export function decision(session, proposal, choice) {
   const name = questions[session.step]?.[0];
   if (!name) throw new Error('This clarification is complete.');
+  if (choice === 'disposition') {
+    if (session.step >= 3) throw new Error('The disposition is already open.');
+    if (proposal.text) throw new Error('Accept your proposed answer or clear it before skipping the remaining questions. Your wording is still here.');
+    let next = session;
+    while (next.step < 3) next = decision(next, emptyProposal(), 'skipped').session;
+    return { session: next, fields: null };
+  }
   let value = null, fields = null;
   if (choice === 'accepted') {
     if (name === 'disposition') {
       const { status, waitingOn, reviewDate, startDate } = proposal;
-      if (!['keep', 'next', 'waiting', 'deferred'].includes(status)) throw new Error('Choose what should happen next, or skip.');
+      if (!['keep', 'next', 'waiting', 'deferred', 'someday', 'completed', 'dropped'].includes(status)) throw new Error('Choose what should happen next, or skip.');
       if (status === 'waiting' && !waitingOn.trim()) throw new Error('Waiting needs who/what you await.');
       if (status === 'deferred' && !startDate) throw new Error('Deferred needs a start date.');
       value = { status, waitingOn: status === 'waiting' ? waitingOn : '', reviewDate: status === 'waiting' ? reviewDate : '', startDate: status === 'deferred' ? startDate : '' };
@@ -55,6 +62,8 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     $('clarifyHelp').textContent = question?.[2] || 'Accepted decisions are saved below. Ordinary editing remains available for the task.';
     $('clarifyTextLabel').hidden = !question || step === 3;
     $('clarifyDisposition').hidden = step !== 3;
+    $('clarifyDirect').hidden = step >= 3;
+    $('clarifyStop').textContent = question ? 'Stop for now' : 'Done';
     $('clarifyAccept').hidden = $('clarifySkip').hidden = $('clarifySave').hidden = !question;
     form.elements.text.maxLength = step === 1 ? 200 : 4000;
     for (const [name, value] of Object.entries(active.proposal)) form.elements.namedItem(name).value = value;
@@ -94,6 +103,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
   form.addEventListener('input', () => { guidance.invalidate(); void journal(); });
   form.addEventListener('submit', event => { event.preventDefault(); void commit('accepted'); });
   $('clarifySkip').onclick = () => { void commit('skipped'); };
+  $('clarifyDirect').onclick = () => { void commit('disposition'); };
   $('clarifySave').onclick = () => { void commit(); };
   $('clarifyStop').onclick = () => { guidance.hide(); dialog.close(); };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); else guidance.hide(); });

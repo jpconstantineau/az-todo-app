@@ -35,7 +35,7 @@ export function clarificationFields(input) {
 }
 function disposition(value, draft = false) {
   shape(value, draft ? ['text', 'status', 'waitingOn', 'reviewDate', 'startDate'] : ['status', 'waitingOn', 'reviewDate', 'startDate']);
-  if (!['', 'keep', 'next', 'waiting', 'deferred'].includes(value.status) || (!draft && !value.status)) fail('Choose a clarification disposition.');
+  if (!['', 'keep', 'next', 'waiting', 'deferred', 'someday', 'completed', 'dropped'].includes(value.status) || (!draft && !value.status)) fail('Choose a clarification disposition.');
   text(value.waitingOn);
   for (const name of ['reviewDate', 'startDate']) {
     const date = value[name];

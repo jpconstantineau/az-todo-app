@@ -7,7 +7,15 @@ model download, inference service or additional dependency is needed.
 three questions on supported desktops; all decisions still use this manual flow.
 
 The native dialog uses the existing theme, controls and responsive side-panel
-styles from `DESIGN.md`. It asks one question at a time:
+styles from `DESIGN.md`. It asks one optional question at a time.
+
+For an already clear capture, **Choose disposition — skip remaining questions**
+jumps straight to the state decision from any of the first three questions.
+It records the remaining questions as skipped, preserves accepted answers and
+original text, and does not change the task until a disposition is accepted.
+If the current question has proposed wording, accept it or explicitly clear it
+first; the shortcut never silently discards that wording. No AI, project,
+deadline or completed questionnaire is required for a simple next action.
 
 1. What outcome would resolve this? Accepted wording is a clarification fact;
    it does not silently create a project.
@@ -15,7 +23,8 @@ styles from `DESIGN.md`. It asks one question at a time:
    the exact supplied wording. Status is unchanged.
 3. What information is missing? Supply the unknowns or explicitly enter
    “None known”. Skipping means unknown, never an inferred answer.
-4. What happens next? Explicitly keep the existing state, choose Next, wait
+4. What happens next? Explicitly keep the existing state, choose Next, Someday /
+   maybe, Already done or Drop, wait
    for a named person/dependency with an optional review date, or defer until a date.
    A blank waiting review date preserves any existing calendar or timed cue;
    use the item editor to clear one. Undated waiting work stays in weekly reviews.
@@ -28,6 +37,8 @@ Escape also stops. There is no timer or default commitment. **Original request**
 is always available, and **Accepted answers and unknowns** shows all four questions
 with unanswered/skipped distinctions. Accepted facts remain separate from source
 text; the API still forbids editing `originalText`.
+After all decisions, **Done** closes the completed flow. Non-actionable reference
+filing remains the separate scope of #77; Someday is for possible future actions.
 
 ## Persistence and conflicts
 
@@ -35,7 +46,9 @@ Typing journals the device draft in IndexedDB. “Draft saved on device” appea
 only after the transaction commits. Stopping keeps that draft and the current
 step; reload restores an open dialog, and reopening Clarify restores a stopped
 draft. Saving a proposal queues the session without editing its task. Accept/Skip
-queues the decision and advances exactly one step after the local commit. A task
+queues the decision and advances exactly one step after the local commit. The
+disposition shortcut saves all remaining skips together and resumes at the state
+decision, including offline after reload. A task
 edit and its associated accepted decision share one operation and one server batch.
 
 As with the ordinary editor, there is one active unsaved clarification form per
@@ -67,6 +80,8 @@ conflict versions and the current/device clarification drafts.
 `clarification` is an additive v1 record type. Its ID equals its owned item's ID;
 storage is `record:clarification:<itemId>` in the existing account partition.
 No data migration, key change, receipt rewrite or cache reset is needed.
+The direct-disposition release expands the accepted statuses to `someday`,
+`completed` and `dropped`; deploy that API support before the updated shell.
 
 Create/update supplies the full `{ step, answers, proposal }` snapshot:
 

@@ -114,6 +114,68 @@ async function browserSetup(t) {
 }
 const question = (page, step) => page.waitForFunction(step => document.querySelector('#clarifyHeading').textContent === (step === 4 ? 'Clarification complete' : `Question ${step + 1} of 4`), step);
 
+test('direct clarification skips only unanswered questions and accepts simple dispositions through the API', async t => {
+  documents.length = 0;
+  const server = await startServer(); t.after(server.close);
+  const outcome = decision(initial(), { ...emptyProposal(), text: 'An optional outcome' }, 'accepted').session;
+  const direct = decision(outcome, emptyProposal(), 'disposition');
+  assert.equal(direct.fields, null);
+  assert.equal(direct.session.step, 3);
+  assert.deepEqual(direct.session.answers.outcome, outcome.answers.outcome);
+  assert.deepEqual(direct.session.answers.nextAction, { decision: 'skipped', value: null });
+  assert.deepEqual(clarificationFields(direct.session), direct.session);
+  assert.throws(() => decision(initial(), { ...emptyProposal(), text: 'Keep my draft' }, 'disposition'), /wording is still here/);
+  for (const status of ['next', 'someday', 'completed', 'dropped']) {
+    const id = `direct-${status}`;
+    assert.equal((await post(server.url, [{ ...mutation('item', 0, { title: id, originalText: 'Original capture' }), id }])).status, 200);
+    const result = decision(decision(initial(), emptyProposal(), 'disposition').session, { ...emptyProposal(), status }, 'accepted');
+    const mutations = [{ ...mutation('clarification', 0, result.session), id }, { ...mutation('item', 1, result.fields), id }];
+    const saved = await post(server.url, mutations, id);
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await post(server.url, mutations, id), saved);
+    const item = saved.body.records.find(record => record.type === 'item');
+    assert.equal(item.status, status); assert.equal(item.title, id); assert.equal(item.originalText, 'Original capture');
+  }
+});
+
+test('direct clarification works offline, preserves wording, resumes and closes with Done', { timeout: 60000 }, async t => {
+  const { page, context } = await browserSetup(t);
+  await context.setOffline(true);
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
+  assert.equal(await page.locator('#clarifyStop').textContent(), 'Stop for now');
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.ok(await page.locator('#clarifier').evaluate(el => el.scrollWidth <= el.clientWidth));
+    if (process.env.CLARIFICATION_SCREENSHOTS) {
+      await mkdir(process.env.CLARIFICATION_SCREENSHOTS, { recursive: true });
+      await page.screenshot({ path: `${process.env.CLARIFICATION_SCREENSHOTS}/direct-clarification-${width}.png` });
+    }
+  }
+  await page.locator('#clarifyForm [name=text]').fill('Keep my optional outcome');
+  await page.locator('#clarifyDirect').click(); await page.locator('#clarifyError').waitFor();
+  assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Keep my optional outcome');
+  assert.equal((await local(page)).queue.length, 0);
+  await page.locator('#clarifyAccept').click(); await question(page, 1);
+  await page.locator('#clarifyDirect').focus(); await page.keyboard.press('Enter'); await question(page, 3);
+  assert.equal(await page.locator('#clarifyQuestion').evaluate(el => el === document.activeElement), true);
+  assert.equal(await page.locator('#clarifyDirect').isVisible(), false);
+  await page.reload(); await page.locator('#clarifier').waitFor(); await question(page, 3);
+  await page.locator('#clarifyForm [name=status]').selectOption('someday');
+  await page.locator('#clarifyAccept').click(); await question(page, 4);
+  assert.equal(await page.locator('#clarifyStop').textContent(), 'Done');
+  assert.match(await page.locator('#clarifyAnswers').textContent(), /Keep my optional outcome/);
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.ok(await page.locator('#clarifier').evaluate(el => el.scrollWidth <= el.clientWidth));
+  }
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+  assert.equal(record('item').status, 'someday');
+  assert.equal(record('item').originalText, 'sort out insurance');
+  assert.equal(record('clarification').answers.outcome.value, 'Keep my optional outcome');
+  assert.equal(record('clarification').answers.nextAction.decision, 'skipped');
+});
+
 test('clarification browser: no AI, offline stop/reload/resume, editable proposals, explicit acceptance and original retention', { timeout: 60000 }, async t => {
   const { page, context, browser, url } = await browserSetup(t);
   assert.equal(await page.evaluate(() => typeof LanguageModel), 'undefined');
