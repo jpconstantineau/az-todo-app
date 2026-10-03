@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=41';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=41';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=41';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=41';
-import { clarificationUI } from './clarification.js?v=41';
-import { setupReviews } from './reviews.js?v=41';
-import { setupBriefs } from './briefs.js?v=41';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=41';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=42';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=42';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=42';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=42';
+import { clarificationUI } from './clarification.js?v=42';
+import { setupReviews } from './reviews.js?v=42';
+import { setupBriefs } from './briefs.js?v=42';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=42';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -183,7 +183,15 @@ async function saveClarification(mutations, next) {
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
 let navigation = emptyNavigation();
-const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal, showDialog, save: async mutations => {
+const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal, showDialog,
+  edit: record => {
+    if (editing && (key(editing) !== key(record) || editing.version !== record.version) && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields)) {
+      showDialog($('editor')); error('Finish saving this edit before editing another record. Your draft is still here.');
+      edit.elements.title.focus(); return;
+    }
+    openEditor(record);
+  },
+  clarify: record => clarification.open(record), addAction: addContextItem, save: async mutations => {
   const owner = accountId, generation = accountGeneration;
   if (!owner) throw new Error('Sign in to resume this review.');
   const saved = await transact(owner, local => {

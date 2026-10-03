@@ -1,5 +1,5 @@
-import { key, projected } from './inbox-store.js?v=41';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=41';
+import { key, projected } from './inbox-store.js?v=42';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=42';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -10,7 +10,7 @@ export function reviewHistory(session, records) {
     .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }))];
 }
 
-export function setupReviews({ current, save, journal, showDialog, records: scopedRecords }) {
+export function setupReviews({ current, save, journal, showDialog, edit, clarify, addAction, records: scopedRecords }) {
   let active = null, selected = null, displayed, busy = false;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
   const message = value => { $('reviewError').textContent = value; };
@@ -61,8 +61,27 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');
     $('reviewOriginal').textContent = target?.originalText || '';
     const failed = state.queue.some(entry => entry.failure);
+    const unavailable = busy || failed || !target || target.deleted;
+    $('reviewEdit').disabled = unavailable;
+    $('reviewClarify').hidden = target?.type !== 'item' || target.status === 'reference';
+    $('reviewClarify').disabled = unavailable;
+    $('reviewProject').hidden = unavailable || target.type !== 'project';
+    $('reviewAddAction').disabled = unavailable;
+    const actions = !unavailable && target.type === 'project' ? Object.values(records).filter(record => record.type === 'item' && !record.deleted && record.projectId === target.id && !['completed', 'dropped', 'reference'].includes(record.status)) : [];
+    const nextCount = actions.filter(record => record.status === 'next').length;
+    $('reviewProjectSummary').textContent = nextCount ? `${nextCount} next action${nextCount === 1 ? '' : 's'}. Other unfinished actions are shown too.` : 'No next actions. Add one or edit an unfinished action below.';
+    $('reviewProjectActions').replaceChildren(...actions.map(record => {
+      const row = document.createElement('li'), button = document.createElement('button');
+      button.type = 'button'; button.textContent = `${record.title} (${record.status})`;
+      button.setAttribute('aria-label', `Edit ${record.title}`);
+      button.dataset.focusKey = `review:${key(record)}:edit`;
+      button.onclick = () => void perform(() => inspect(edit, record));
+      row.append(button); return row;
+    }));
     $('reviewRetain').disabled = busy || failed || !target || target.deleted || !!done(session, index);
     $('reviewDrop').disabled = $('reviewDeferSave').disabled = $('reviewRetain').disabled || target?.type !== 'item';
+    $('reviewComplete').disabled = $('reviewDrop').disabled || target?.status === 'completed';
+    $('reviewNext').disabled = $('reviewDrop').disabled || target?.status === 'next';
     $('reviewUnavailable').hidden = !ref || target && !target.deleted;
     $('reviewUnavailable').disabled = busy || failed || !!done(session, index);
     $('reviewUndo').disabled = busy || failed || !previous || ['undo', 'unavailable'].includes(previous.choice) || !target || target.deleted || target.version !== previous.recordVersion + 1;
@@ -104,6 +123,17 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
     if (!current()) return;
     active = id; selected = null; render(); await journal();
   }
+  async function inspect(action, target = displayed?.target) {
+    if (!displayed || !target) return;
+    const sessionId = displayed.session.id;
+    selected = displayed.index;
+    if (!await journal()) throw new Error('Could not save your review position. Your draft is kept.');
+    if (!$('reviews').open) return;
+    const state = current(), records = state && (scopedRecords ? scopedRecords() : projected(state));
+    const latest = records?.[key(target)];
+    if (active !== sessionId || !records?.[`review:${sessionId}`] || !latest || latest.deleted || state.queue.some(entry => entry.failure)) throw new Error('This review or record changed. Inspect the latest state before continuing.');
+    action(latest);
+  }
   async function decide(choice) {
     if (!displayed) return;
     const { session, target, index } = displayed;
@@ -112,6 +142,8 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
     let fields;
     if (choice === 'retain') fields = { title: target.title };
     if (choice === 'drop') fields = { status: 'dropped' };
+    if (choice === 'complete') fields = { status: 'completed' };
+    if (choice === 'next') fields = { status: 'next' };
     if (choice === 'defer') {
       const day = $('reviewDefer').value;
       if (!day) throw new Error('Choose a calendar date to defer this item.');
@@ -144,9 +176,12 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
   $('reviewSessions').onchange = () => { active = $('reviewSessions').value; selected = null; message(''); render(); void journal(); };
   $('reviewRecord').onchange = () => { selected = Number($('reviewRecord').value); message(''); render(); void journal(); };
   $('reviewDefer').oninput = () => void journal();
-  for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
+  $('reviewEdit').onclick = () => void perform(() => inspect(edit));
+  $('reviewClarify').onclick = () => void perform(() => inspect(clarify));
+  $('reviewAddAction').onclick = () => void perform(() => inspect(addAction));
+  for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewComplete', 'complete'], ['reviewNext', 'next'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
   return { render, draft,
     restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
-    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
+    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
   };
 }

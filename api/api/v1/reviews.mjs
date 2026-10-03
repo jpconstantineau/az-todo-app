@@ -31,7 +31,7 @@ export function reviewFields(action, input) {
   for (const decision of input.decisions) {
     object(decision, ['index', 'choice', 'recordVersion', 'before', 'after'], 'decision');
     if (!Number.isSafeInteger(decision.index) || decision.index < 0 || !Number.isSafeInteger(decision.recordVersion) || decision.recordVersion < 0 ||
-        !['retain', 'drop', 'defer', 'unavailable', 'undo'].includes(decision.choice)) fail('Invalid review decision.');
+        !['retain', 'drop', 'defer', 'complete', 'next', 'unavailable', 'undo'].includes(decision.choice)) fail('Invalid review decision.');
     for (const name of ['before', 'after']) {
       object(decision[name], workflowFields, name);
       if (JSON.stringify(decision[name]).length > 6000) fail('Review decision is too large.');
@@ -45,7 +45,7 @@ export function reviewDecisionFields(action, input) {
   identifier(input.reviewId, 'reviewId');
   if (!Number.isSafeInteger(input.sequence) || input.sequence < 1 || !Number.isSafeInteger(input.index) || input.index < 0 ||
       !Number.isSafeInteger(input.recordVersion) || input.recordVersion < 0 ||
-      !['retain', 'drop', 'defer', 'unavailable', 'undo'].includes(input.choice)) fail('Invalid review decision.');
+      !['retain', 'drop', 'defer', 'complete', 'next', 'unavailable', 'undo'].includes(input.choice)) fail('Invalid review decision.');
   for (const name of ['before', 'changes']) object(input[name], workflowFields, name);
   return structuredClone(input);
 }
@@ -110,6 +110,8 @@ async function validateDecision(record, decision, prior, mutations, records, rea
     expected = ref.type === 'project' || prior.choice === 'retain' ? { title: target.title } : prior.before;
   } else if (ref.type !== 'item') fail('Review project actions individually; projects support retain.');
   else if (decision.choice === 'drop') expected = { status: 'dropped' };
+  else if (decision.choice === 'complete') expected = { status: 'completed' };
+  else if (decision.choice === 'next') expected = { status: 'next' };
   else {
     const day = calendarDate(mutation.fields.startDate, 'Deferred until');
     if (!day) fail('Choose a date to defer this item.');

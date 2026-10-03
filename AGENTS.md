@@ -16,6 +16,9 @@ correct change that satisfies the request. Explicit user requirements take prior
   `npx getdesign@latest add hashicorp` at the repository root. Review the diff if
   reinstalling, since the command may replace local design customizations.
 - Inspect the working tree before editing and preserve unrelated user changes.
+- For browser saves, sync, account changes, navigation/focus, offline shell work,
+  related tests, or CI diagnosis, read and apply the repository's
+  [az-todo-ci skill](.agents/skills/az-todo-ci/SKILL.md).
 
 ## Understand before simplifying
 
