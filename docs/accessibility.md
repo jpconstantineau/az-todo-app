@@ -2,7 +2,7 @@
 
 Issue #16 remains open for the full pilot flow and real assistive-technology
 verification. This change covers the current capture, editing, clarification,
-list/project/defaults, review-dialog focus, navigation and device-export controls.
+list/project/defaults, review decisions, brief revisions, navigation and export controls.
 
 ## Focus and announcements
 
@@ -23,8 +23,15 @@ list/project/defaults, review-dialog focus, navigation and device-export control
   when another dialog has already opened and closed.
 - Clarification focuses each question as it advances. Invalid acceptance keeps
   focus on the initiating control and exposes an alert. Answers remain editable.
+- Starting a review or saving a decision focuses the displayed record heading,
+  with review progress as its description (including empty/completed reviews).
+  Saving, accepting or rejecting a brief focuses its revision status. Validation
+  failures return focus to the initiating control. Storage failures close the
+  dialog, return to its opener and expose the existing recovery copy. A delayed save
+  does not take focus back after the user closes the dialog or moves elsewhere.
 - Draft and sync live regions change only when their message changes. Repeated
   typing or unchanged refreshes no longer replace identical announcement text.
+  The same rule applies to brief revision status and review progress.
   A verified account name is refreshed without briefly announcing a neutral
   label on every sync; failed/mismatched profiles still fall back to the neutral
   label, and logout/account changes still clear identity.
@@ -32,13 +39,13 @@ list/project/defaults, review-dialog focus, navigation and device-export control
   no forced timer. The existing 44px control targets, visible focus outlines,
   native modal behavior, responsive layout and light/dark colors are retained.
 
-Shell v14 includes these changes, clarification from v11 and reviews from v12.
+Shell v25 includes the review/brief focus and announcement fixes.
 Deploy the compatible API first. As before, updates wait for old tabs to close;
 no forced activation, storage reset or outbox rewrite is introduced.
 
 ## Reproducible automated checks
 
-From `api/` with Node 24+ and Playwright Chromium installed, run `npm test`.
+From `api/` with Node 22.x and Playwright Chromium installed, run `npm test`.
 Use `PLAYWRIGHT_CHANNEL=msedge` for installed Edge instead. Tests run production
 client code with real browser IndexedDB; the API storage is an in-memory fixture.
 
@@ -47,12 +54,14 @@ client code with real browser IndexedDB; the API storage is an in-memory fixture
 | Duplicate titles, renamed tasks, background refresh, Complete/Reopen, filtered-away row | `accessibility.test.mjs` checks the actual active element after keyboard actions. |
 | Save/Escape, list/project/defaults/clarification return focus, invalid clarification, export | `accessibility.test.mjs` checks native dialogs, question focus and a downloaded JSON export. |
 | Unchanged announcements vs new saves | `accessibility.test.mjs` observes live-region DOM mutations; actual spoken output requires the manual checks below. |
+| Daily/weekly start, empty review, retain/drop/undo, brief save/accept/export and failed saves | `accessibility.test.mjs` uses Tab/Enter to reach actions and checks focus on the result or failed control. |
+| Delayed save after closing a review or moving to brief help | `accessibility.test.mjs` delays IndexedDB completion delivery and verifies later focus is preserved. |
 | Account rename, timeout, delayed responses, switching and logout | `account-sync.test.mjs` retains identity/isolation coverage. |
 | 320px reflow, enlarged text, shortened viewport, dialog containment and touch targets | Existing `navigation.test.mjs` and `design.test.mjs`. |
 | Text and focus contrast in both themes | `design.test.mjs`: at least 4.5:1 text and 3:1 control borders/focus on tested surface tokens. |
 | Offline reopen and shell update with pending saves/drafts | Existing `inbox.test.mjs` and `pwa.test.mjs`. |
 
-Local verification date: October 2, 2026 (America/Regina), Windows, Node 26.7.0.
+Local verification date: October 3, 2026 (America/Regina), Windows, Node 26.7.0.
 The PR records the tested commit, browser version and full-suite result. These
 automated checks do not certify spoken announcements, physical touch targets,
 real browser zoom or phone keyboard behavior.
@@ -74,6 +83,8 @@ defect. Include:
 4. Test 200% browser zoom and 320 CSS pixels; on a physical phone show its software
    keyboard and confirm Save remains reachable. Check reduced-motion preference
    and forced colors. The current flows introduce no animated transitions.
-5. Verify the full daily/weekly review flow with assistive technology, then extend
-   to accepted briefs when available. Review-dialog focus is covered here; full
-   spoken-flow accessibility is not established by this change.
+5. Verify the full daily/weekly review flow, including empty reviews, decisions,
+   undo and completion; then save/accept/reject/export specific brief revisions.
+   Check the result focus and failed-save recovery, and that unchanged background
+   sync/typing does not repeat progress or revision status. Full spoken-flow
+   accessibility is not established by these automated checks.

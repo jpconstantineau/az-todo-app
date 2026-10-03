@@ -51,8 +51,9 @@ export function setupBriefs({ records, save, journal, showDialog }) {
   }
   function refresh() {
     const record = selected(), changed = dirty();
-    $('briefState').textContent = changed ? 'Edited draft — save a new revision before accepting.' : record ?
+    const stateText = changed ? 'Edited draft — save a new revision before accepting.' : record ?
       `${record.status} · revision ${record.id} · ${record.localState || 'Server-confirmed'}` : 'Unaccepted template draft — review and save a revision.';
+    if ($('briefState').textContent !== stateText) $('briefState').textContent = stateText;
     $('briefAccept').disabled = $('briefReject').disabled = busy || !record || changed || record.status !== 'draft';
     $('briefExport').disabled = busy || !record || changed;
   }
@@ -66,7 +67,8 @@ export function setupBriefs({ records, save, journal, showDialog }) {
   async function commit(status) {
     if (busy || !active) return;
     if (!form.reportValidity()) return;
-    const current = active, record = selected(), values = content();
+    const current = active, record = selected(), values = content(), focused = document.activeElement;
+    let focusTarget = focused;
     busy = true;
     for (const control of dialog.querySelectorAll('button, select, textarea')) control.disabled = true;
     try {
@@ -83,12 +85,13 @@ export function setupBriefs({ records, save, journal, showDialog }) {
       const next = { ...current, selectedId: mutation.id, content: values, baseline: structuredClone(values), open: true };
       await save(mutation, next);
       if (active !== current) return;
-      active = next; draw(); error('');
+      active = next; draw(); error(''); focusTarget = $('briefState');
     } catch (failure) { if (active === current) error(failure.message); }
     finally {
       busy = false;
       for (const control of dialog.querySelectorAll('button, select, textarea')) control.disabled = false;
       if (active) refresh();
+      if (dialog.open && active && (document.activeElement === document.body || document.activeElement === focused)) focusTarget.focus();
     }
   }
   form.addEventListener('input', () => { refresh(); void journal(); });
