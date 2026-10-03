@@ -9,6 +9,19 @@ version changes are made. The owner reset legacy production data before cutover,
 so the migration tool below remains available for archived data rather than being
 a prerequisite for this empty-database release.
 
+## Reviewed capture provenance (#24)
+
+Item creates may now include optional immutable `capture` metadata for reviewed
+free-form capture: `{ id, capturedUtc, timeZone, notes }`. The ID is an ordinary
+v1 identifier, `capturedUtc` is a canonical UTC timestamp, `timeZone` a valid IANA
+timezone (up to 100 characters), and notes preserve up to 4,000 original
+characters. Updates cannot change this metadata or `originalText`. Items from
+one accepted batch share the capture ID and exact source, retaining their own
+stable item IDs. These fields are data, never an ownership authority. Existing
+records need no backfill. Deploy the additive API before the v25 shell; an older
+API rejects these creates visibly and preserves the outbox. See
+[local capture](local-capture.md) for client review and limits.
+
 ## Recoverable deletion (#13)
 
 An operation mutation may use `action: "restore"` for an `item`, `list` or

@@ -15,6 +15,10 @@
 #offlineStatus:empty { display: none; }
 .save-bar { padding: var(--space-3) 0; }
 #captureOptions { border-top: var(--border-width) solid var(--border); }
+#captureReviewItems fieldset { min-width: 0; margin-block: var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
+#captureReviewItems .actions { margin-top: var(--space-3); }
+#captureListPermission { display: flex; align-items: center; gap: var(--space-2); }
+#captureAILists { width: 20px; height: 20px; min-height: 20px; flex: 0 0 20px; margin: 0; }
 #editor button { margin-top: var(--space-3); }
 @media (max-width: 1023px) {
   .inbox-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); margin: var(--space-4) 0; }

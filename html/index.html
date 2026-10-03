@@ -70,6 +70,22 @@
           <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
         </details>
       </form>
+      <details id="localCapture">
+        <summary>Turn free-form thoughts into tasks</summary>
+        <p>Choose local AI for English suggestions, or review manually. AI may need a browser model download. Your text stays on this device during inference; accepted tasks sync to your account.</p>
+        <p>Suggestions use the text and notes above. Review their fields here before saving; other manual capture settings are not applied.</p>
+        <label id="captureListPermission"><input type="checkbox" id="captureAILists"> Include my existing list names in the local prompt</label>
+        <div class="actions"><button id="captureSuggest" type="button" disabled>Suggest tasks</button><button id="captureSuggestCancel" type="button" hidden>Cancel suggestion</button><button id="captureManualReview" type="button">Review tasks manually</button></div>
+        <p id="captureAIStatus" role="status"></p>
+        <form id="captureReview" hidden>
+          <p class="eyebrow">Review before saving</p><h3 id="captureReviewHeading" tabindex="-1">Suggested tasks</h3>
+          <p>Every field is an unaccepted suggestion. Correct uncertain facts, remove unwanted tasks, or merge with the previous task. To split a task, add another and move its text. Original text is retained with every saved task.</p>
+          <p id="captureMoment"></p>
+          <details><summary>Exact original capture</summary><pre id="captureOriginal"></pre></details>
+          <div id="captureReviewItems"></div>
+          <div class="actions"><button id="captureAdd" type="button">Add task</button><button id="captureAccept" type="submit">Accept and save tasks on device</button><button id="captureReturn" type="button">Discard suggestions and return to original</button></div>
+        </form>
+      </details>
     </section>
     <section class="card" id="failure" hidden aria-labelledby="failureHeading">
       <h2 id="failureHeading">A save needs attention</h2><p id="failureMessage"></p>

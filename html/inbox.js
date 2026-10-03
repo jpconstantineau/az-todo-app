@@ -4,6 +4,8 @@ import { deviceExport, accountExport, readableExport } from './inbox-export.js?v
 import { clarificationUI } from './clarification.js?v=25';
 import { setupReviews } from './reviews.js?v=25';
 import { setupBriefs } from './briefs.js?v=25';
+import { setupLocalCapture } from './local-capture.js?v=25';
+import { extractionMutations } from './capture-extraction.js?v=25';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -43,6 +45,27 @@ const briefs = setupBriefs({ records: () => accountId ? projected(state) : {}, j
   state = saved; render(); broadcast(); void sync();
 } });
 const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, showDialog });
+const localCapture = setupLocalCapture({
+  source: () => accountId ? { text: originalInput ?? capture.elements.text.value, notes: capture.elements.body.value } : null,
+  lists: () => accountId ? Object.values(projected(state)).filter(record => record.type === 'list' && !record.deleted) : [],
+  journal,
+  save: async submitted => {
+    const owner = accountId, generation = accountGeneration;
+    if (!owner) throw new Error('Sign in to save these tasks.');
+    const saved = await transact(owner, local => {
+      if (JSON.stringify(local.draft.extraction) !== JSON.stringify(submitted)) throw new Error('This capture changed in another tab. Reload to review the saved draft before accepting.');
+      if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before accepting this batch.');
+      const records = projected(local);
+      if (submitted.items.some(item => records[`item:${item.id}`])) throw new Error('This batch was already saved. Reload to see its tasks.');
+      enqueue(local, owner, extractionMutations(submitted, records));
+      local.draft.extraction = null;
+      local.draft.capture = {};
+    }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
+    if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save stays with its original account.');
+    state = saved; capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+    clearError(); render(); broadcast(); void sync();
+  }
+});
 async function saveClarification(mutations, next) {
   const owner = accountId;
   if (!owner) return false;
@@ -118,7 +141,7 @@ function captureDraft() {
 function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
-    defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
+    defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(), extraction: localCapture.snapshot(),
     day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft() };
 }
 function storageFailure(failure) {
@@ -136,12 +159,13 @@ function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
 }
 async function journal() {
-  if (!accountId) return;
+  if (!accountId) return false;
   const owner = accountId, snapshot = draft();
   try {
     const saved = await transact(owner, local => { local.draft = snapshot; });
     if (owner === accountId) { state = saved; statusText('draftStatus', 'Draft saved on device'); statusText('clarifyDraftStatus', 'Draft saved on device; not accepted.'); }
-  } catch (failure) { if (owner === accountId) storageFailure(failure); }
+    return owner === accountId;
+  } catch (failure) { if (owner === accountId) storageFailure(failure); return false; }
 }
 function options(select, lists, first, keepMissing = false) {
   const selected = select.value;
@@ -154,6 +178,7 @@ function restoreDraft() {
   const saved = state.draft;
   fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
+  localCapture.restore(saved.extraction);
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
   // Preserve the former review filter when upgrading an existing device draft.
@@ -387,13 +412,14 @@ async function updateRecord(record, fields, close = false) {
   broadcast(); void sync();
 }
 
-capture.addEventListener('input', () => { void journal(); });
+capture.addEventListener('input', () => { localCapture.changed(); void journal(); });
 edit.addEventListener('input', () => { void journal(); });
 capture.elements.listId.addEventListener('change', refreshOptions);
 edit.elements.listId.addEventListener('change', refreshOptions);
 capture.addEventListener('submit', event => {
   event.preventDefault();
-  if (saving || !accountId) return;
+  if (saving || !accountId || localCapture.snapshot()?.items) return;
+  localCapture.cancel();
   saving = true; capture.querySelector('[type=submit]').disabled = true;
   void (async () => {
     const owner = accountId, submitted = captureDraft();
@@ -406,12 +432,13 @@ capture.addEventListener('submit', event => {
       }
       const saved = await transact(owner, local => {
         enqueue(local, owner, mutations);
-        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) local.draft.capture = {};
+        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) { local.draft.capture = {}; local.draft.extraction = null; }
       });
       if (owner !== accountId) return;
       state = saved;
       if (JSON.stringify(captureDraft()) === JSON.stringify(submitted)) {
         capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+        localCapture.reset();
       }
       clearError(); statusText('draftStatus', 'Saved on device');
       render(); capture.elements.text.focus(); broadcast(); void sync();
@@ -668,6 +695,7 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  localCapture.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();
   $('exportStatus').textContent = '';
