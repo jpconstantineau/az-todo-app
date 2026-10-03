@@ -95,9 +95,11 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.setViewportSize({ width: 320, height: 900 });
+  await page.waitForFunction(() => !document.querySelector('#appMenu').open);
 
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
+    await page.waitForFunction(() => document.querySelector('#appMenu').open === (innerWidth >= 768));
     await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
     assert.ok(await page.locator('#defaultsEditor').evaluate(el => el.matches(':modal')));
     await fits(); await shot('native-defaults-' + width);
@@ -107,6 +109,9 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     await showView(page, 'capture'); await page.locator('#captureOptions summary').click();
   }
   await page.setViewportSize({ width: 320, height: 900 });
+  // matchMedia's change handler runs asynchronously after the viewport changes.
+  // Wait for mobile collapse before a user click reopens the utility menu.
+  await page.waitForFunction(() => !document.querySelector('#appMenu').open);
 
   // Measure resolved semantic colors, not just literal token values.
   function luminance(rgb) {
