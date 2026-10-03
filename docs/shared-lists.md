@@ -102,3 +102,21 @@ installed Edge; 229 combined tests passed after integrating main's workspace and
 capture-review PRs. The focused shared-list/security checks were also rerun after
 the final input-validation and offline account-pause checks. Shell v30 covers
 upgrades from v3 through v29. `git diff --check` passed.
+
+## Shared-item keyboard navigation (#16)
+
+Complete and Reopen keep focus on the same item's action, even when two items
+have identical titles. Background refresh preserves the focused item and action;
+closing or saving the editor returns to that item's Edit button after a rename.
+Deleting/restoring an item moves focus to the list heading because the original
+action has left its section. If access disappears, the list selector is the
+fallback. Disabled actions use the heading while a save is pending; after
+confirmation, focus returns only if the user has not moved to another control.
+Account changes discard the old focus target.
+
+`api/test/shared-keyboard.test.mjs` covers keyboard-only complete/reopen/edit,
+duplicate titles, remote rename/deletion, modal draft retention, delayed refresh,
+offline acknowledgement and account changes. Shell v33 versions the shared
+module URL as well as the existing module graph, so an older worker cannot serve
+a stale shared module to the new page. Browser automation does not replace the
+screen-reader and physical-device verification still required by #16/#17.

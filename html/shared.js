@@ -1,10 +1,10 @@
-import { transact } from './inbox-store.js?v=32';
+import { transact } from './inbox-store.js?v=33';
 
 const $ = id => document.getElementById(id);
 const rights = ['view', 'add', 'edit', 'complete', 'delete'];
 const fresh = () => ({ lists: {}, directory: [], drafts: {}, selected: '', pending: null });
 let accountId, state = fresh(), generation = 0, syncing = false, working = false, cursor, editItem, editorOpener;
-let invitation;
+let invitation, pendingFocus;
 const message = (id, value) => { if ($(id).textContent !== value) $(id).textContent = value; };
 async function offlineReady() {
   const worker = navigator.serviceWorker?.controller;
@@ -12,7 +12,7 @@ async function offlineReady() {
   const channel = new MessageChannel();
   channel.port1.onmessage = event => {
     channel.port1.close();
-    message('sharedOffline', event.data === 'todo-inbox-shell-v32' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
+    message('sharedOffline', event.data === 'todo-inbox-shell-v33' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
   };
   worker.postMessage('shell-version', [channel.port2]);
 }
@@ -24,7 +24,7 @@ if ('serviceWorker' in navigator) {
 const current = () => state.lists[state.selected];
 const can = permission => !working && !syncing && !state.pending && !current()?.deleted && current()?.permissions.includes(permission);
 function clearAccount() {
-  generation++; accountId = null; state = fresh(); invitation = null; editItem = null;
+  generation++; accountId = null; state = fresh(); invitation = null; editItem = null; editorOpener = null; pendingFocus = null;
   $('sharedMain').hidden = true; $('sharedEditor').close(); $('sharedItems').replaceChildren(); $('sharedDeleted').replaceChildren();
   $('sharedMembers').replaceChildren(); $('sharedInvitations').replaceChildren(); $('sharedSelect').replaceChildren();
   $('sharedTitle').textContent = ''; $('sharedAccess').textContent = ''; $('pendingText').textContent = '';
@@ -83,11 +83,27 @@ function restoreInputs() {
   $('addShared').elements.title.value = state.drafts[state.selected]?.add || '';
   $('createShared').elements.title.value = state.createTitle || '';
 }
+function itemFocus(element) {
+  const row = element.closest('[data-item-id]');
+  return row && element.dataset.itemAction ? { listId: state.selected, id: row.dataset.itemId, action: element.dataset.itemAction } : null;
+}
+function restoreItemFocus(target) {
+  pendingFocus = null;
+  if (!accountId || target.listId !== state.selected) return;
+  const control = [...document.querySelectorAll('[data-item-id] button')].find(element =>
+    element.closest('[data-item-id]').dataset.itemId === target.id && element.dataset.itemAction === target.action);
+  const destination = control && !control.disabled && control.checkVisibility() ? control : current() ? $('sharedTitle') : $('sharedSelect');
+  destination.focus();
+  // Keep the intended action through busy renders, unless the user moves elsewhere.
+  if (control?.disabled && control.checkVisibility()) pendingFocus = { ...target, anchor: destination };
+}
 function render() {
   if (!accountId) return;
   $('sharedMain').setAttribute('aria-busy', String(working || syncing));
   $('sharedExport').disabled = working;
   const list = current(), focused = document.activeElement;
+  const target = itemFocus(focused) || (pendingFocus?.anchor === focused ? pendingFocus : null);
+  pendingFocus = null;
   const entries = new Map(state.directory.map(item => [item.id, item]));
   for (const item of Object.values(state.lists)) entries.set(item.id, item);
   $('sharedSelect').replaceChildren(new Option('Choose a list', ''), ...[...entries.values()].map(item => new Option(`${item.title}${item.deleted ? ' (deleted)' : ''}`, item.id)));
@@ -104,7 +120,10 @@ function render() {
   for (const id of ['createShared', 'joinShared']) $(id).querySelector('button').disabled = working || syncing || !!state.pending;
   $('retryShared').disabled = $('reviewShared').disabled = $('discardShared').disabled = working || syncing;
   message('sharedStatus', !navigator.onLine ? 'Offline — showing the last saved copy. Permissions are checked again when you reconnect.' : state.pending ? 'An action is saved on this device and needs confirmation.' : 'Shared device copy ready. Refresh to check for changes.');
-  if (!list) return;
+  if (!list) {
+    if (target || $('sharedContent').contains(focused)) $('sharedSelect').focus();
+    return;
+  }
   $('sharedTitle').textContent = list.title;
   $('sharedAccess').textContent = list.deleted ? 'Deleted. Only the owner can restore this list.' : `${list.owner ? 'You own this list.' : 'Your permissions: ' + list.permissions.join(', ') + '.'} Revision ${list.revision}.`;
   $('addShared').hidden = !list.permissions.includes('add') || list.deleted;
@@ -112,17 +131,19 @@ function render() {
   for (const [deleted, target] of [[false, 'sharedItems'], [true, 'sharedDeleted']]) {
     $(target).replaceChildren(...list.items.filter(item => item.deleted === deleted).map(item => {
       const article = document.createElement('article'), title = document.createElement('h3'), actions = document.createElement('div'); actions.className = 'actions';
+      article.dataset.itemId = item.id;
       title.textContent = `${item.completed ? '✓ ' : ''}${item.title}`;
       if (deleted) actions.append(button('Restore ' + item.title, () => save('restoreItem', { id: item.id }), !can('delete')));
       else {
         actions.append(button((item.completed ? 'Reopen ' : 'Complete ') + item.title, () => save('complete', { id: item.id, completed: !item.completed }), !can('complete')));
         actions.append(button('Edit ' + item.title, () => {
-          editItem = { ...item, listId: list.id, revision: list.revision }; editorOpener = document.activeElement;
+          editItem = { ...item, listId: list.id, revision: list.revision }; editorOpener = { listId: list.id, id: item.id, action: 'edit' };
           $('editShared').elements.title.value = state.drafts[list.id]?.edit?.id === item.id ? state.drafts[list.id].edit.title : item.title;
           $('sharedEditor').showModal(); $('editShared').elements.title.focus();
         }, !can('edit')));
         actions.append(button('Delete ' + item.title, () => { if (confirm(`Delete “${item.title}”? It can be restored from Deleted items.`)) return save('delete', { id: item.id }); }, !can('delete')));
       }
+      [...actions.children].forEach((control, index) => { control.dataset.itemAction = deleted ? 'restore' : ['complete', 'edit', 'delete'][index]; });
       article.append(title, actions); return article;
     }));
     if (!$(target).childElementCount) $(target).textContent = deleted ? 'No deleted items.' : 'No items yet.';
@@ -145,7 +166,10 @@ function render() {
       button('Remove ' + member.name, () => { if (confirm(`Remove ${member.name} from this list? Previously downloaded copies cannot be erased.`)) return save('revoke', { accountId: member.accountId }); }, working || !!state.pending));
     return form;
   }));
-  if (focused !== document.body && !focused.isConnected && !document.querySelector('dialog[open]')) $('sharedTitle').focus();
+  if (!document.querySelector('dialog[open]')) {
+    if (target) restoreItemFocus(target);
+    else if (focused !== document.body && !focused.isConnected) $('sharedTitle').focus();
+  }
 }
 async function directory(more = false) {
   const result = await request('shared/lists' + (more && cursor ? '?cursor=' + encodeURIComponent(cursor) : ''));
@@ -241,7 +265,10 @@ form('editShared', async () => {
 form('renameShared', () => save('rename', { title: $('renameShared').elements.title.value }));
 form('inviteShared', () => save('invite', { id: crypto.randomUUID(), token: crypto.randomUUID() + crypto.randomUUID(), permissions: selectedRights($('invitePermissions')) }));
 $('closeSharedEdit').onclick = () => $('sharedEditor').close();
-$('sharedEditor').addEventListener('close', () => { if (editorOpener?.isConnected) editorOpener.focus(); else if (accountId && current()) $('sharedTitle').focus(); });
+$('sharedEditor').addEventListener('close', () => {
+  // A delayed close event must not override a later focus choice or account change.
+  if (editorOpener && (document.activeElement === document.body || $('sharedEditor').contains(document.activeElement))) restoreItemFocus(editorOpener);
+});
 $('createShared').oninput = () => void local(data => { data.createTitle = $('createShared').elements.title.value; }).catch(error => message('sharedError', 'Draft not saved: ' + error.message));
 $('addShared').oninput = () => {
   const id = state.selected, value = $('addShared').elements.title.value;

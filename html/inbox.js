@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=32';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=32';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=32';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=32';
-import { clarificationUI } from './clarification.js?v=32';
-import { setupReviews } from './reviews.js?v=32';
-import { setupBriefs } from './briefs.js?v=32';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=32';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=33';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=33';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=33';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=33';
+import { clarificationUI } from './clarification.js?v=33';
+import { setupReviews } from './reviews.js?v=33';
+import { setupBriefs } from './briefs.js?v=33';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=33';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
