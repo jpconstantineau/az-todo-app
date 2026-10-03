@@ -73,3 +73,5 @@
   .task-heading .editable-title { padding-left: 0; }
   .workspace-nav a { padding-inline: var(--space-2); }
 }
+
+.workspace-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

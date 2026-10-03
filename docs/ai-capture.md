@@ -21,7 +21,7 @@ by another inference. If Capture changes, acceptance is blocked until that revie
 is discarded and the new text processed. Manual one-item-per-line capture and
 split preview remain available when AI is disabled, missing, cancelled or failing.
 
-The automatic preference belongs to this account's device draft. Reload and
+The automatic preference belongs to this workspace's draft in the account's device copy. Reload and
 reconnect do not themselves run inference; the next edit triggers it when enabled.
 Account changes cancel generation and hide its content. Suggestions are English
 only, using matching language/modality options and session cleanup shared with
@@ -29,7 +29,7 @@ clarification guidance. See the [Chrome Prompt API](https://developer.chrome.com
 No external inference service, API key or task-text logging is introduced. The
 prompt contains this capture, its notes and the captured clock. Existing list
 names/IDs are included only after enabling **Include my existing list names in
-local AI suggestions**. This preference persists per account on this device;
+local AI suggestions**. This preference persists per workspace and account on this device;
 changing it cancels an in-flight attempt. An explicitly selected destination is
 still applied locally even without sending list names to the model.
 Accepted tasks still use ordinary cloud synchronization.
@@ -108,9 +108,12 @@ quality. The follow-up to PR #64 keeps its API/provenance/draft format and adds
 manual batch review, list-context permission and the merge control to the same
 flow. No parallel capture UI or second capture metadata format is shipped.
 
-Conflict-resolution verification on October 3, 2026: integrated main at
-`ad15b50` (PRs #63 and #64), retained its capture and PWA update behavior, and
-advanced the shell to v28. All **211 Node/Playwright checks passed** on Windows
-with Node 26.7.0 and Edge 154.0.4258.53, including shell upgrades through v27.
-The 13 focused capture checks also passed after the final merge-note formatting
-change. Phone/desktop screenshots were refreshed; `git diff --check` passed.
+Integration verification on October 3, 2026: integrated main at `897e91c`
+(including PR #66 workspaces), retained its capture and PWA update behavior, and
+advanced the shell to v29. All **220 Node/Playwright checks passed** on Windows
+with Node 26.7.0 and Playwright Chromium, including shell upgrades through v28
+and offline manual review across workspace switches. The CI storage-recovery
+test race was reproduced in Chromium and fixed by waiting for the corrected
+draft to persist and the current failed save to close its dialog before reading
+recovery text. Phone/desktop screenshots cover the capture controls;
+`git diff --check` passed.

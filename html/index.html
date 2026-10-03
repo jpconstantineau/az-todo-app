@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=28" defer></script>
+  <script src="/pwa.js?v=29" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=28"></script>
+  <script type="module" src="/inbox.js?v=29"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -57,11 +57,21 @@
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>
+    <div class="toolbar"><label>Workspace<select id="workspaceSelect" aria-describedby="workspaceStatus"></select></label><button id="manageWorkspaces" type="button">Manage workspaces</button></div>
+    <p id="workspaceStatus" role="status" class="muted"></p>
+    <dialog id="workspaceManager" class="side-panel" aria-labelledby="workspaceHeading">
+      <p class="eyebrow">Organize</p><h2 id="workspaceHeading">Workspaces</h2>
+      <p>Keep work, family and volunteering separate. Personal holds existing work. Defaults and exports cover your whole account.</p>
+      <form id="createWorkspace"><label>New workspace name<input name="title" required maxlength="200"></label><button type="submit">Create workspace</button></form>
+      <p id="workspaceError" role="alert"></p><div id="workspaceEntries"></div>
+      <p>Archive makes a workspace read-only. Delete hides the whole workspace and blocks edits; its records, drafts and history stay stored and can be restored here. Neither action erases exports or backups.</p>
+      <button id="closeWorkspaces" type="button">Close workspaces</button>
+    </dialog>
     <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists" aria-label="List Workspace">Lists</a></nav>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
       <p class="eyebrow">Capture</p><h2 id="captureHeading">Capture first</h2>
-      <form id="capture">
+      <form id="capture"><fieldset id="captureWorkspaceFields" class="workspace-fields">
         <label for="captureText">What do you need to remember?</label>
         <textarea id="captureText" name="text" rows="8" maxlength="16000" required aria-describedby="captureHelp" placeholder="Get it out of your head. Write your items here."></textarea>
         <div class="save-bar"><button type="submit">Save on device</button><span id="draftStatus" role="status"></span></div>
@@ -74,7 +84,7 @@
           <button id="previewSplit" type="button">Preview comma / semicolon split</button>
           <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
         </details>
-      </form>
+      </fieldset></form>
       <details id="captureAI"><summary>Free-form task review and local AI</summary>
         <p>Review tasks manually without AI, or enable local suggestions after you pause typing. AI is English only, on this device; the browser may download a model. Saved tasks still sync to your cloud account. Review is always required.</p>
         <label><input id="extractAuto" type="checkbox"> Automatically suggest with local AI</label>
@@ -150,6 +160,7 @@
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
         <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
+        <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span class="muted">Moving clears list and project links; the original text and item history move with it.</span></label>
         <label id="editListLabel">List <select name="listId"></select></label>
         <details id="editAdvanced"><summary>Task details</summary><div id="editFields"></div></details>
         <details><summary>Original capture</summary><pre id="original"></pre></details>

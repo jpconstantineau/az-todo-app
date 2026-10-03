@@ -15,6 +15,7 @@ flowchart LR
 ```
 
 - [Capture, Your Work and List Workspace navigation](docs/navigation.md)
+- [Separate workspaces, offline drafts, archive and recovery](docs/workspaces.md)
 - [Task flow and parity verification](docs/task-flow.md)
 - [Optional projects and planned-day views](docs/projects.md)
 - [Release checklist, runtime and paid-pilot decision](docs/release-readiness.md)

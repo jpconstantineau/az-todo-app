@@ -1,5 +1,5 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel } from './local-guidance.js?v=28';
+import { modelOptions, destroyModel } from './local-guidance.js?v=29';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -282,6 +282,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   };
   return {
     changed,
+    suspend() { cancel(); $('extractionReview').close(); },
     snapshot: () => ({ draft: structuredClone(draft), clock, sourceText, enabled, includeLists }),
     restore(value) { cancel(); draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); },
     reset(keepEnabled = false) { cancel(); draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; $('extractReview').hidden = true; status('Optional local AI. Manual capture always works.'); },
