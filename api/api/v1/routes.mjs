@@ -75,3 +75,13 @@ route("changes", "GET", async (req, accountId) => {
   if (!limit) throw new ValidationError("limit must be between 1 and 50.");
   return json(await changes(accountId, after, limit));
 });
+route("export", "GET", async (req, accountId) => {
+  requireAccount(req.query.get("accountId"), accountId);
+  const after = number(req.query.get("after"), 0, Number.MAX_SAFE_INTEGER);
+  const through = number(req.query.get("through"), undefined, Number.MAX_SAFE_INTEGER);
+  const limit = number(req.query.get("limit"), 50, 50);
+  if (!limit || (after > 0 && through === undefined)) throw new ValidationError("Export needs limit 1–50 and the original through cutoff when resuming.");
+  const page = await changes(accountId, after, limit, through);
+  // Replay immutable history up to one cutoff, never page mutable current records.
+  return json({ ...page, ...(after === 0 ? { legacyDefaults: await legacyDefaults(accountId) } : {}) });
+});

@@ -440,3 +440,26 @@ one version-checked operation; retries do not duplicate decisions, and conflicts
 apply neither edit. The server validates exact prior/next states and guards undo
 against subsequent edits. `dropped` is a retained, editable item status, not a
 tombstone. See [review behavior, contract and recovery limits](reviews.md).
+
+## Read-only account export
+
+`GET /api/v1/export?accountId=...&after=0&limit=50` returns an ordinary bounded
+change page and immutable `legacyDefaults` on the first page. Capture `highWater`
+and supply it as `through` on every continuation, with `after=nextAfter`.
+`after > 0` requires `through`; both are safe non-negative integers and `limit`
+is 1–50. The returned `highWater` stays at that cutoff and `hasMore` indicates
+remaining entries through it, even when new writes advance the account state.
+An empty account or `through=0` returns an empty snapshot. Every page requires
+the authenticated account match and inherits private/no-store API headers.
+
+Replay committed entries in sequence, replacing snapshots by type/id; conflict
+entries advance the cursor without applying proposals. Never omit tombstones.
+The existing immutable history and account partition provide the snapshot, with
+no new documents, writes or sync protocol changes. A cutoff beyond visible
+history returns `409 snapshot_unavailable`, an `after` beyond the cutoff returns
+`409 cursor_ahead`, and a missing intermediate entry returns `503 history_gap`.
+Do not publish a partial export on any error. A reset/restored database must not
+reuse history sequences with different contents; the existing migration and
+rollback restrictions apply. Real Cosmos consistency remains a deployment gate.
+
+See [export formats, browser bounds and recovery limits](device-export.md).

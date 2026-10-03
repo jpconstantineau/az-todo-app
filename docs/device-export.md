@@ -1,4 +1,4 @@
-# Portable device exports (issue #13)
+# Portable device and server exports (issue #13)
 
 Choose **Portable JSON** or **Readable text** beside **Export device copy**.
 Export includes all records cached for the current account, regardless of the
@@ -9,6 +9,50 @@ This is a **device copy**, not a complete server backup. Choose **Sync now** fir
 when online, and resolve failed saves if you want a confirmed snapshot. Even then,
 another device can commit more changes after this device's last pull. The export
 records that pull's cursor; it does not claim a global point-in-time snapshot.
+
+## Complete server record copy
+
+Choose **Export server copy** in Menu, using the same JSON/text selector. This
+reads committed v1 records for the authenticated account from all devices, even
+records this browser has never synced. It ignores view filters and does not
+submit pending saves, read or modify IndexedDB, or change a sync cursor. Keep a
+device copy as well for local drafts and unacknowledged work.
+
+The first page pins the account's visible history sequence. Every subsequent
+page uses that cutoff; replaying immutable entries reconstructs each record's
+latest version at that sequence. Concurrent edits, creations and deletions above
+the cutoff are excluded. This is a logical history snapshot, not a wall-clock
+timestamp guarantee or an Azure database backup. The deployed consistency and
+history invariants in [the API contract](data-api-v1.md) still apply.
+
+`todo-account.json` uses `format: "az-todo-account-export"`, `formatVersion: 1`,
+`scope: "account"`, and `source: "server-history"`. `state.after` is the fixed
+cutoff. `state.records` preserves all record fields, originals, relationships,
+settings, clarification progress, reviews and every separately stored brief
+revision/decision, including tombstones. Immutable migrated legacy defaults are
+included separately. Queue and draft fields are empty: they never imply that
+local work was saved on the server. `exportedAt` records export completion.
+
+The export is a portable current-record copy. It excludes older overwritten
+record versions, rejected conflict proposals, receipt hashes, Cosmos metadata,
+legacy migration archives beyond defaults, auth-provider information and Azure
+backups. Tombstones retain their stored content under the existing retention
+policy; exporting them does not restore them. No server purge, account erasure,
+live restore or additional undo behavior is introduced.
+
+`todo-account.txt` labels the cutoff and renders live/deleted snapshots and brief
+acceptance in plain text. The same validation/round-trip CLI below accepts either
+JSON format, preserves unknown fields with warnings, and refuses overwrites.
+Neither format can be replayed into a live account by this tool.
+
+Each request reads at most 50 history entries with the existing roughly 1 MB
+page bound (one whole oversized entry is allowed), and times out after 15 seconds.
+Progress and **Cancel export** remain available. Offline, expired sessions,
+account changes, missing history and invalid pages fail without a partial file.
+Retry starts a fresh cutoff. The browser stops after 50 MiB of serialized history
+responses; larger accounts need an operator-assisted export or a future streaming
+implementation. This bounds work even when many old edits collapse to few records.
+Downloaded copies remain outside the app after sign-out or deletion.
 
 ## Contents and compatibility
 
@@ -58,7 +102,7 @@ node scripts/validate-device-export.mjs todo-device-recovery.json
 node scripts/validate-device-export.mjs todo-device-recovery.json roundtrip.json
 ```
 
-The first command validates the envelope, record identities/owners, cursor,
+The first command validates either envelope, record identities/owners, cursor,
 operation identities/versions, and receipt/conflict ownership. It reports counts
 and unsupported fields/types without intentionally printing task bodies. The
 second command serializes the validated contents to a **new** file; it refuses
@@ -93,6 +137,25 @@ Clarification, review progress and brief revisions are now supported by the devi
 export and its validator. Pending deletes project as inactive, and stale queued
 edits cannot reactivate a local or server tombstone. The original queued intent
 remains available for conflict review and export; the confirmed snapshot is never
-rewritten by projection. Full server export,
-undo/retention, live restore, account erasure and backup purge remain open under
-#13 and its dependencies. There is no new deletion or resurrection path here.
+rewritten by projection.
+
+Server-copy checks cover fixed-cutoff paging during concurrent writes, tombstones,
+conflicts, empty accounts, account isolation, malformed/gapped pages, bounded
+work, JSON round-trip, cancellation, expiry, offline failure and delayed responses
+after account switching. Browser checks confirm remote-only work appears without
+changing device data and inspect 320/390/1440px layouts. Shell v22 includes main's
+status filters and deletion fix and upgrades from v3–v21 without discarding local data. These tests
+use the in-memory Cosmos substitute; deployed Cosmos/authentication, physical
+device downloads and assistive technology remain unverified.
+
+On October 2, 2026, all 128 tests passed on Windows with Node 26.7.0 and
+Playwright Edge (`PLAYWRIGHT_CHANNEL=msedge`, `npm test` in `api/`), based on main
+at `2a62689` including PRs #51 and #52. [Layout screenshots](design/account-export/) use
+the browser test's optional `EXPORT_SCREENSHOTS` output directory. The export
+browser cases block service workers to inject request failures; the separate
+PWA suite verifies shell delivery, cache boundaries and upgrades.
+
+This delivers device and server record exports for #13, including current
+clarification/review progress and brief revisions. General edit/delete undo,
+retention/purge, live restore, account erasure and backup handling remain open.
+The export reads confirmed server history and does not expose offline deletion.

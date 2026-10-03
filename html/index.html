@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=21" defer></script>
+  <script src="/pwa.js?v=22" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=21"></script>
+  <script type="module" src="/inbox.js?v=22"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -19,8 +19,10 @@
     <details id="appMenu" class="responsive-menu" open><summary aria-label="Menu" title="Menu">☰</summary>
       <div class="menu-content">
         <nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a href="/help.html" target="_blank" rel="noopener">Help <span class="sr-only">(opens in a new tab)</span></a><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a><button id="signOut" hidden>Sign out</button></nav>
-        <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="openReviews" type="button">Daily / weekly review</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="userDefaults">User defaults</button></div>
-        <p id="exportHelp" class="muted">Device copy only; sync first for newer changes. JSON includes recovery data.</p></div>
+        <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="openReviews" type="button">Daily / weekly review</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button><button id="userDefaults">User defaults</button></div>
+        <p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p>
+        <p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p>
+        <p id="exportStatus" role="status" class="muted"></p></div>
       </div>
     </details>
   </header>

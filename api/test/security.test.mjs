@@ -140,7 +140,8 @@ test("all read routes isolate accounts and never initialize data", async t => {
   const f = await fixture(t); seed();
   const reads = {
     "v1/session": "v1/session", "v1/records": "v1/records?accountId=alice&type=item&id=alice-item",
-    "v1/receipts": "v1/receipts?accountId=alice&operationId=seed", "v1/changes": "v1/changes?accountId=alice", health: "health"
+    "v1/receipts": "v1/receipts?accountId=alice&operationId=seed", "v1/changes": "v1/changes?accountId=alice",
+    "v1/export": "v1/export?accountId=alice", health: "health"
   };
   const before = structuredClone(documents);
   for (const route of routes.keys()) {
