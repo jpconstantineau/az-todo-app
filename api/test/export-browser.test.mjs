@@ -83,8 +83,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
     window.pendingExport = document.querySelector('#export').onclick();
   });
   await page.waitForFunction(() => !!window.releaseExport);
-  user = 'bob';
-  const bobChanges = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/changes' && response.ok()); await context.setOffline(false);
+  user = 'bob'; await context.setOffline(false);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now', exact: true }));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await page.locator('#workspace').waitFor();
