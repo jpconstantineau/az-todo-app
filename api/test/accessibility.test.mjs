@@ -28,12 +28,132 @@ async function capture(page, text) {
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
 }
 const expectFocus = (page, selector) => page.waitForFunction(selector => document.activeElement.matches(selector), selector);
+async function keyboardActivate(page, selector) {
+  for (let i = 0; i < 80; i++) {
+    if (await page.locator(selector).evaluate(control => control === document.activeElement)) {
+      await page.keyboard.press('Enter'); return;
+    }
+    await page.keyboard.press('Tab');
+  }
+  assert.fail(`Keyboard could not reach ${selector}`);
+}
 async function refresh(page) {
   // Same-account background refresh, without clicking a different control.
   await page.evaluate(() => {
     const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
   });
 }
+
+test('accessibility: review decisions and brief revisions keep a keyboard path to their results', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'Insurance\nPolicy');
+  await keyboardActivate(page, '#openReviews');
+  await keyboardActivate(page, '#startDaily');
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
+  await expectFocus(page, '#reviewTitle');
+  await keyboardActivate(page, '#startWeekly');
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2'));
+  await expectFocus(page, '#reviewTitle');
+  await keyboardActivate(page, '#reviewDeferSave');
+  await page.waitForFunction(() => document.querySelector('#reviewError').textContent.includes('Choose a calendar date'));
+  await expectFocus(page, '#reviewDeferSave');
+  await keyboardActivate(page, '#reviewRetain');
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
+  await expectFocus(page, '#reviewTitle');
+  assert.equal(await page.locator('#reviewTitle').textContent(), 'Policy');
+  await keyboardActivate(page, '#reviewDrop');
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
+  await expectFocus(page, '#reviewTitle');
+  await keyboardActivate(page, '#reviewUndo');
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
+  await expectFocus(page, '#reviewTitle');
+  await page.keyboard.press('Escape'); await expectFocus(page, '#openReviews');
+  await keyboardActivate(page, 'a[href="#work"]');
+  await expectFocus(page, '#itemsHeading');
+  const menu = page.locator('[aria-label="More actions for Insurance"]');
+  if (await menu.isVisible()) await keyboardActivate(page, '[aria-label="More actions for Insurance"]');
+  await keyboardActivate(page, '[aria-label="Brief Insurance"]');
+  await expectFocus(page, '#briefHeading');
+  await keyboardActivate(page, '#briefForm [type=submit]');
+  await page.waitForFunction(() => !!document.querySelector('#briefRevisions').value);
+  await expectFocus(page, '#briefState');
+  await keyboardActivate(page, '#briefForm [type=submit]');
+  await page.waitForFunction(() => document.querySelector('#briefError').textContent.includes('Edit the content'));
+  await expectFocus(page, '#briefForm [type=submit]');
+  await keyboardActivate(page, '#briefAccept');
+  await page.waitForFunction(() => document.querySelector('#briefState').textContent.startsWith('accepted'));
+  await expectFocus(page, '#briefState');
+  const download = page.waitForEvent('download');
+  await keyboardActivate(page, '#briefExport');
+  assert.match((await download).suggestedFilename(), /unconfirmed\.txt$/);
+  await expectFocus(page, '#briefExport');
+  await page.keyboard.press('Escape');
+  await expectFocus(page, '[aria-label="Brief Insurance"]');
+});
+
+test('accessibility: delayed review and brief saves preserve a later focus choice', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'Insurance');
+  await page.evaluate(() => {
+    // Delay delivery of one committed IndexedDB transaction, without mocking
+    // the application save or changing when the actual data becomes durable.
+    const descriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', { ...descriptor, set(callback) {
+      const delay = this.mode === 'readwrite' && window.delaySave;
+      if (delay) window.delaySave = false;
+      descriptor.set.call(this, delay ? function (event) { window.releaseSave = () => callback.call(this, event); } : callback);
+    } });
+  });
+  await keyboardActivate(page, '#openReviews');
+  await page.evaluate(() => { window.delaySave = true; });
+  await keyboardActivate(page, '#startWeekly');
+  await page.waitForFunction(() => !!window.releaseSave);
+  await keyboardActivate(page, '#closeReviews');
+  await expectFocus(page, '#openReviews');
+  await page.evaluate(() => { releaseSave(); window.releaseSave = null; });
+  await page.waitForFunction(() => !document.querySelector('#startWeekly').disabled);
+  await expectFocus(page, '#openReviews');
+  await keyboardActivate(page, 'a[href="#work"]');
+  await keyboardActivate(page, '[aria-label="Brief Insurance"]');
+  await page.evaluate(() => { window.delaySave = true; });
+  await keyboardActivate(page, '#briefForm [type=submit]');
+  await page.waitForFunction(() => !!window.releaseSave);
+  await page.keyboard.press('Tab');
+  await expectFocus(page, '#briefs a');
+  await page.evaluate(() => { releaseSave(); window.releaseSave = null; });
+  await page.waitForFunction(() => !document.querySelector('#briefForm [type=submit]').disabled);
+  await expectFocus(page, '#briefs a');
+});
+
+test('accessibility: brief storage errors return focus and unchanged review/brief status stays quiet', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'Insurance');
+  await keyboardActivate(page, '#openReviews');
+  await keyboardActivate(page, '#startWeekly');
+  await expectFocus(page, '#reviewTitle');
+  await page.keyboard.press('Escape');
+  await keyboardActivate(page, 'a[href="#work"]');
+  await keyboardActivate(page, '[aria-label="Brief Insurance"]');
+  await page.locator('#briefForm [name=outcome]').fill('Coverage');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.brief?.content.outcome === 'Coverage');
+  await page.evaluate(() => {
+    window.announcements = [];
+    for (const id of ['briefState', 'reviewProgress']) new MutationObserver(() => announcements.push(id)).observe(document.getElementById(id), { childList: true, subtree: true, characterData: true });
+  });
+  await page.locator('#briefForm [name=outcome]').fill('Coverage in place');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
+  await page.evaluate(() => { window.oldRow = document.querySelector('#items article'); });
+  await refresh(page);
+  await page.waitForFunction(() => !window.oldRow.isConnected);
+  assert.deepEqual(await page.evaluate(() => announcements), []);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }; });
+  await keyboardActivate(page, '#briefForm [type=submit]');
+  await page.waitForFunction(() => document.querySelector('#briefError').textContent.includes('Quota exceeded'));
+  await expectFocus(page, '[aria-label="Brief Insurance"]');
+  assert.equal(await page.locator('#briefs').isVisible(), false);
+  assert.match(await page.locator('#recoveryText').inputValue(), /Coverage in place/);
+  assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Coverage in place');
+});
 
 test('accessibility: keyboard actions and editor return focus survive background row replacement and renaming', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
