@@ -20,6 +20,7 @@ flowchart LR
 - [Request security and deployed verification gates](docs/request-security.md)
 - [Versioned API, conflict handling and migration tooling](docs/data-api-v1.md)
 - [Offline inbox, upgrade and release procedure](docs/durable-inbox.md)
+- [TaskGem browser handoff protocol and extension integration](docs/extension-handoff.md)
 - [Portable device and server exports, and round-trip validation](docs/device-export.md)
 - [Waiting, deferred work, dates and undo](docs/workflow-states.md)
 - [Resumable daily and weekly reviews](docs/reviews.md)
