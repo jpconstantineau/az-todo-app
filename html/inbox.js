@@ -1,10 +1,10 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=26';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=26';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=26';
-import { clarificationUI } from './clarification.js?v=26';
-import { setupReviews } from './reviews.js?v=26';
-import { setupBriefs } from './briefs.js?v=26';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=26';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=27';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=27';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=27';
+import { clarificationUI } from './clarification.js?v=27';
+import { setupReviews } from './reviews.js?v=27';
+import { setupBriefs } from './briefs.js?v=27';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=27';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');

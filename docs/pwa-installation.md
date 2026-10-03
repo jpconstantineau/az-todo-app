@@ -50,6 +50,30 @@ hosting or prove deployed headers.
 
 ## Safe shell updates
 
+### Check or retry without closing your work
+
+In **Preferences → App updates**, choose **Check for updates** while online.
+The result appears in Preferences: checking, downloading, up to date, ready to
+apply, or unable to finish. Offline checks explain how to retry after reconnecting;
+browsers without service-worker support show a limitation instead of the button.
+A failed initial registration can also be retried here without reloading.
+
+The check does not reload the page or apply an update while app windows are open.
+When an update is ready, wait for the draft's **saved on device** confirmation,
+then close every app tab/window and reopen. The same instruction remains visible
+outside Preferences. Repeated checks cannot force activation or clear drafts,
+pending operations, or caches. If the check fails or exceeds 30 seconds, it
+reenables retry; the browser may still finish a download and announce readiness.
+Keyboard focus stays on the button during a check, and other controls remain usable.
+
+Shell v26 delivers these controls through fresh module URLs. Local Playwright
+checks cover unchanged versions, offline checks, duplicate activation, request
+failure, timeout/late completion, retry after failed initial registration, and
+unsupported browsers. The real local service-worker test retries a failed asset
+download through the button and verifies the waiting worker, saved draft and exact
+outbox contents. Upgrade checks include v24 and v25. Physical-device and deployed update
+verification remain release gates below.
+
 Shell v16 caches only the public root/index/bookmark shell, local scripts/styles,
 manifest and icons. It never caches API/auth responses, task data or arbitrary
 navigation URLs. Root/index navigation query parameters map to the public shell
