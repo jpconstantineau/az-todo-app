@@ -58,13 +58,24 @@ export function fieldsFor(type, action, input) {
     return { defaults: validateDefaults(input.defaults) };
   }
   const shared = ["title", "description"];
-  const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText"];
+  const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const itemFields = ["listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome"] : ["defaults"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
-    if (key === "defaults") result[key] = validateDefaults(value);
+    if (key === "captureId") result[key] = identifier(value, key);
+    else if (key === "capturedAt") {
+      if (!value) throw new ValidationError('capturedAt is required.');
+      result[key] = utcDate(exactText(value, 24, key));
+    }
+    else if (key === "captureTimeZone") {
+      exactText(value, 100, key);
+      try { new Intl.DateTimeFormat('en', { timeZone: value }); }
+      catch { throw new ValidationError('captureTimeZone must be a supported timezone.'); }
+      result[key] = value;
+    }
+    else if (key === "defaults") result[key] = validateDefaults(value);
     else if (key === "title") {
       result[key] = exactText(value, 200, key);
       if (!value.trim()) throw new ValidationError("title is required.");

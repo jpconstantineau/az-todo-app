@@ -1,9 +1,10 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=26';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=26';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=26';
-import { clarificationUI } from './clarification.js?v=26';
-import { setupReviews } from './reviews.js?v=26';
-import { setupBriefs } from './briefs.js?v=26';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=27';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=27';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=27';
+import { clarificationUI } from './clarification.js?v=27';
+import { setupReviews } from './reviews.js?v=27';
+import { setupBriefs } from './briefs.js?v=27';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=27';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -12,6 +13,27 @@ let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGenera
 let defaultsEditing = null;
 let exportController;
 const dialogOpeners = new Map();
+const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
+  current: () => accountId ? { ...captureDraft(), accountId, lists: Object.values(projected(state)).filter(record => record.type === 'list' && !record.deleted).map(({ id, title }) => ({ id, title })) } : null,
+  save: async submitted => {
+    const owner = accountId, generation = accountGeneration;
+    if (!owner) throw new Error('Sign in to accept these suggestions.');
+    if (JSON.stringify(captureDraft()) !== JSON.stringify(submitted.inputCapture)) throw new Error('Capture changed. Your reviewed suggestions are kept; return to capture before starting a new review.');
+    const saved = await transact(owner, local => {
+      if (JSON.stringify(local.draft.extraction?.draft) !== JSON.stringify(submitted) || JSON.stringify(local.draft.capture) !== JSON.stringify(submitted.inputCapture)) throw new Error('This capture changed in another tab. Reload to inspect the saved draft.');
+      const records = projected(local);
+      // Stable task IDs survive reviewed edits. A stale tab cannot accept twice,
+      // even after the operation is acknowledged or an accepted task is deleted.
+      if (Object.values(records).some(record => record.captureId === submitted.id)) throw new Error('This capture was already accepted. Reload to see its tasks.');
+      if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before accepting this batch.');
+      enqueue(local, owner, extractionMutations(submitted, records));
+      local.draft.extraction = { ...local.draft.extraction, draft: null, clock: null, sourceText: '' }; local.draft.capture = {};
+    });
+    if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the batch remains with its original account.');
+    state = saved; capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+    clearError(); render(); broadcast(); void sync();
+  }
+});
 const mobile = matchMedia('(max-width: 767px)');
 function responsiveMenus() {
   document.querySelectorAll('.responsive-menu').forEach(menu => {
@@ -119,7 +141,7 @@ function draft() {
   return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
-    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft() };
+    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -131,17 +153,19 @@ function storageFailure(failure) {
   $('reviews').close();
   clarification.close();
   briefs.close();
+  extraction.close();
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
 }
 async function journal() {
-  if (!accountId) return;
+  if (!accountId) return false;
   const owner = accountId, snapshot = draft();
   try {
     const saved = await transact(owner, local => { local.draft = snapshot; });
     if (owner === accountId) { state = saved; statusText('draftStatus', 'Draft saved on device'); statusText('clarifyDraftStatus', 'Draft saved on device; not accepted.'); }
-  } catch (failure) { if (owner === accountId) storageFailure(failure); }
+    return owner === accountId;
+  } catch (failure) { if (owner === accountId) storageFailure(failure); return false; }
 }
 function options(select, lists, first, keepMissing = false) {
   const selected = select.value;
@@ -154,6 +178,7 @@ function restoreDraft() {
   const saved = state.draft;
   fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
+  extraction.restore(saved.extraction);
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
   // Preserve the former review filter when upgrading an existing device draft.
@@ -387,13 +412,14 @@ async function updateRecord(record, fields, close = false) {
   broadcast(); void sync();
 }
 
-capture.addEventListener('input', () => { void journal(); });
+capture.addEventListener('input', () => { extraction.changed(); void journal(); });
 edit.addEventListener('input', () => { void journal(); });
 capture.elements.listId.addEventListener('change', refreshOptions);
 edit.elements.listId.addEventListener('change', refreshOptions);
 capture.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || !accountId) return;
+  if (extraction.snapshot().draft) { error('A suggested batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
   saving = true; capture.querySelector('[type=submit]').disabled = true;
   void (async () => {
     const owner = accountId, submitted = captureDraft();
@@ -406,12 +432,13 @@ capture.addEventListener('submit', event => {
       }
       const saved = await transact(owner, local => {
         enqueue(local, owner, mutations);
-        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) local.draft.capture = {};
+        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) { local.draft.capture = {}; local.draft.extraction = { enabled: local.draft.extraction?.enabled === true }; }
       });
       if (owner !== accountId) return;
       state = saved;
       if (JSON.stringify(captureDraft()) === JSON.stringify(submitted)) {
         capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+        extraction.reset(true);
       }
       clearError(); statusText('draftStatus', 'Saved on device');
       render(); capture.elements.text.focus(); broadcast(); void sync();
@@ -507,7 +534,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs'), $('deletedRecords')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs'), $('deletedRecords'), $('extractionReview')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -668,6 +695,7 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  extraction.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();
   $('exportStatus').textContent = '';
