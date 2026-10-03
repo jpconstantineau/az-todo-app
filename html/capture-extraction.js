@@ -150,7 +150,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
         const label = document.createElement('label'); label.textContent = labelText;
         const input = document.createElement(name === 'description' ? 'textarea' : name === 'listId' ? 'select' : 'input'); input.name = name;
         if (name === 'listId') {
-          input.append(new Option('Inbox (no list)', ''), ...(current()?.lists || []).map(list => new Option(list.title, list.id)));
+          input.append(new Option('No list', ''), ...(current()?.lists || []).map(list => new Option(list.title, list.id)));
           if (item.listId && ![...input.options].some(option => option.value === item.listId)) input.add(new Option('Unavailable list — choose another', item.listId));
         } else if (name === 'dueDate') { input.type = 'date'; input.min = '0001-01-01'; input.max = '9999-12-31'; }
         else if (name === 'dueTime') input.type = 'time';

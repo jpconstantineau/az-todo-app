@@ -66,7 +66,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
     await page.locator('#statusFilter').selectOption('');
   }
   await page.locator('#view').selectOption('inbox');
-  assert.equal(await page.locator('#items article').count(), 3);
+  assert.equal(await page.locator('#items article').count(), 1);
   await page.locator('#statusFilter').selectOption('completed');
   assert.equal(await page.locator('#items article').count(), 0, 'completed filter still respects the inbox');
   await page.locator('#view').selectOption('project:project');
@@ -107,6 +107,91 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
   await showView(page, 'work');
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   assert.equal(await page.locator('#items article').count(), 0);
+});
+
+test('navigation: unprocessed inbox spans lists while No list preserves filing and offline task identity', { timeout: 90000 }, async t => {
+  const { page, context, url, setUser } = await setup(t, '#work');
+  const response = await fetch(`${url}/api/v1/operations`, {
+    method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
+      { type: 'workspace', id: 'other', action: 'create', expectedVersion: 0, fields: { title: 'Other workspace' } },
+      { type: 'list', id: 'list', action: 'create', expectedVersion: 0, fields: { title: 'Errands' } },
+      { type: 'project', id: 'project', action: 'create', expectedVersion: 0, fields: { title: 'Launch', outcome: 'Ready' } },
+      ...[
+        ['filed', { status: 'inbox', listId: 'list', projectId: 'project', originalText: 'Original filed capture' }],
+        ['unfiled', { status: 'inbox' }],
+        ['next', { status: 'next' }],
+        ['waiting', { status: 'waiting', waitingOn: 'Alex' }],
+        ['someday', { status: 'someday' }],
+        ['completed', { status: 'completed' }],
+        ['dropped', { status: 'dropped' }],
+        ['other-inbox', { status: 'inbox', workspaceId: 'other' }]
+      ].map(([id, fields]) => ({ type: 'item', id, action: 'create', expectedVersion: 0, fields: { title: id, ...fields } }))
+    ] })
+  });
+  assert.equal(response.status, 200, await response.text());
+  await clickControl(page.locator('#sync'));
+  await page.getByRole('button', { name: 'Edit filed', exact: true }).waitFor();
+  const rows = () => page.locator('#items article').evaluateAll(items => items.map(item => item.dataset.id).sort());
+  const before = structuredClone(documents);
+  await page.locator('#view').selectOption({ label: 'Inbox (unprocessed)' });
+  assert.equal(await page.locator('#statusFilter').inputValue(), '', 'Inbox needs no second status selection');
+  assert.deepEqual(await rows(), ['filed', 'unfiled']);
+  await page.locator('#statusFilter').selectOption('@all');
+  assert.deepEqual(await rows(), ['filed', 'unfiled'], 'processed statuses never enter Inbox, even with All statuses');
+  await page.locator('#view').selectOption({ label: 'No list' });
+  assert.deepEqual(await rows(), ['completed', 'dropped', 'next', 'someday', 'unfiled', 'waiting']);
+  assert.deepEqual(documents, before, 'views do not migrate or rewrite records');
+  await context.setOffline(true);
+  await page.locator('#view').selectOption('inbox');
+  await page.getByRole('button', { name: 'Edit filed', exact: true }).click();
+  await page.locator('#edit [name=listId]').selectOption({ label: 'No list' });
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  assert.deepEqual(await rows(), ['filed', 'unfiled'], 'filing alone never processes a capture');
+  await page.getByRole('button', { name: 'Edit unfiled', exact: true }).click();
+  await page.locator('#editAdvanced').evaluate(el => { el.open = true; });
+  await page.locator('#edit [name=status]').selectOption('next');
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  assert.deepEqual(await rows(), ['filed'], 'processing removes an item without assigning a list');
+  // Clarification and ordinary editing must use the same Inbox membership rule.
+  await clickControl(page.getByRole('button', { name: 'Clarify filed', exact: true, includeHidden: true }));
+  for (let step = 0; step < 3; step++) {
+    await page.locator('#clarifySkip').click();
+    await page.waitForFunction(step => document.querySelector('#clarifyHeading').textContent.includes(`Question ${step + 2} of 4`), step);
+  }
+  await page.locator('#clarifyForm [name=status]').selectOption('next');
+  await page.locator('#clarifyAccept').click();
+  await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent.includes('complete'));
+  await page.locator('#clarifyStop').click();
+  assert.deepEqual(await rows(), []);
+  assert.match(await page.locator('#items').innerText(), /No unprocessed captures/);
+  await page.locator('#view').selectOption('unfiled');
+  assert.ok((await rows()).includes('filed'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.work.view === 'unfiled');
+  const queued = (await local(page)).queue;
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#view').inputValue(), 'unfiled');
+  assert.ok((await rows()).includes('filed'));
+  assert.deepEqual((await local(page)).queue, queued);
+  await page.locator('#view').selectOption('inbox'); assert.deepEqual(await rows(), []);
+  await page.locator('#workspaceSelect').selectOption('other');
+  await page.getByRole('button', { name: 'Edit other-inbox', exact: true }).waitFor();
+  await page.locator('#view').selectOption('inbox'); assert.deepEqual(await rows(), ['other-inbox']);
+  await page.locator('#workspaceSelect').selectOption('personal');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).selectedWorkspace === 'personal');
+  assert.deepEqual(await rows(), []);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+  const items = documents.filter(doc => doc.record?.type === 'item').map(doc => doc.record);
+  assert.equal(items.length, 8);
+  const filed = items.find(item => item.id === 'filed');
+  assert.equal(filed.status, 'next'); assert.equal(filed.listId, null);
+  assert.equal(filed.projectId, 'project'); assert.equal(filed.originalText, 'Original filed capture');
+  assert.equal(items.find(item => item.id === 'unfiled').status, 'next');
+  setUser('bob'); await page.reload(); await page.locator('#workspace').waitFor();
+  await showView(page, 'work'); await page.locator('#view').selectOption('inbox');
+  assert.deepEqual(await rows(), [], 'Inbox never crosses accounts');
 });
 
 test('navigation: new lists open only on request and resume the same draft after online and offline reloads', { timeout: 90000 }, async t => {
@@ -218,6 +303,9 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   assert.equal(await page.locator('#items article').count(), 1);
   await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).click();
+  await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor({ state: 'detached' });
+  assert.equal(await page.getByRole('button', { name: 'Reopen Milk', exact: true }).count(), 0, 'completed work leaves Inbox');
+  await page.locator('#view').selectOption('unfiled');
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
   await showView(page, 'capture');
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsubmitted capture');
