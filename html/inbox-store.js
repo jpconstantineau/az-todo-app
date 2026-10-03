@@ -1,4 +1,5 @@
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=27';
+import { workspaceOf } from './workspaces.js?v=29';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=29';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -68,7 +69,20 @@ export function projected(state) {
 export function enqueue(state, accountId, mutations) {
   if (!mutations.length || mutations.length > 20) throw new Error('Save 1–20 items at a time (19 with a new list).');
   const records = projected(state);
+  const proposed = { ...records };
+  for (const mutation of mutations) proposed[key(mutation)] = { ...records[key(mutation)], ...mutation.fields, ...mutation, deleted: mutation.action === 'delete' };
   for (const mutation of mutations) {
+    if (!['workspace', 'settings'].includes(mutation.type)) {
+      const record = proposed[key(mutation)], old = records[key(mutation)];
+      for (const member of [record, ...(old ? [old] : [])]) {
+        const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];
+        if (id !== 'personal' && (!workspace || workspace.deleted || workspace.archived)) throw new Error('This workspace is unavailable or archived. Restore or unarchive it before saving.');
+      }
+      if (mutation.type === 'item') for (const type of ['list', 'project']) {
+        const parent = proposed[type + ':' + record[type + 'Id']];
+        if (parent && workspaceOf(parent, proposed) !== workspaceOf(record, proposed)) throw new Error('Clear list and project links before moving to another workspace.');
+      }
+    }
     if (mutation.type === 'item' && mutation.action !== 'delete') {
       const old = records[key(mutation)];
       validateWorkflow({ ...old, ...mutation.fields }, old, mutation.fields);
@@ -86,7 +100,7 @@ export function enqueue(state, accountId, mutations) {
 
 // One editor save per account on this device; the outbox and inverse commit together.
 export function rememberEdit(state, record, fields, now = Date.now()) {
-  const empty = { title: '', description: '', outcome: '', status: 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [] };
+  const empty = { workspaceId: 'personal', title: '', description: '', outcome: '', status: 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [] };
   state.undoEdit = {
     type: record.type, id: record.id, title: record.title, expectedVersion: record.version + 1,
     operationId: state.queue.at(-1).operation.operationId, expiresAt: now + 7 * 24 * 60 * 60 * 1000,

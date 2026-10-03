@@ -154,8 +154,13 @@ test('browser undo stays account-bound, survives server confirmation and recheck
   await edit(page); await confirmed(page);
   const recovery = (await local(page)).undoEdit;
   assert.ok(recovery);
+  const bobPull = page.waitForResponse(response => response.url().includes('/api/v1/changes?') && new URL(response.url()).searchParams.get('accountId') === 'bob');
   setUser('bob'); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  // Session metadata commits before Bob's pull; switching the fixture user early
+  // can reject that still-running request and hide the controls for Alice's sync.
+  await (await bobPull).finished();
+  await page.locator('#menuDeviceTools').waitFor();
   assert.equal(await page.locator('#undoEdit').isDisabled(), true);
   assert.doesNotMatch(await page.locator('#undoEditStatus').textContent(), /Original/);
   setUser('alice'); await clickControl(page.locator('#sync')); await confirmed(page);

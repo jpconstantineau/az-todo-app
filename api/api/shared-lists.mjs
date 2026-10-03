@@ -40,7 +40,7 @@ function operation(raw) {
   identifier(raw.listId); identifier(raw.operationId);
   if (!Number.isSafeInteger(raw.expectedRevision) || raw.expectedRevision < 0) fail('expectedRevision must be a non-negative integer.');
   const keys = { create: ['title'], rename: ['title'], add: ['id', 'title'], edit: ['id', 'title'], complete: ['id', 'completed'], delete: ['id'], restoreItem: ['id'], invite: ['id', 'token', 'permissions'], cancelInvite: ['id'], join: ['token'], permissions: ['accountId', 'permissions'], revoke: ['accountId'], deleteList: [], restoreList: [] };
-  if (!keys[raw.action]) fail('Unsupported shared-list action.');
+  if (!Object.hasOwn(keys, raw.action)) fail('Unsupported shared-list action.');
   object(raw.fields, keys[raw.action], 'fields');
   if (keys[raw.action].some(key => !(key in raw.fields))) fail('Missing required field.');
   const f = raw.fields;
