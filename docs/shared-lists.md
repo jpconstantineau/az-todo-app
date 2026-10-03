@@ -96,3 +96,9 @@ export and 320/390/1440px light/dark layouts. Screenshots are in
 tests with the existing in-memory Cosmos substitute. Real SWA accounts,
 production Cosmos concurrency/query costs, physical phones and assistive
 technology remain deployment validation gates under #42/#17.
+
+Local verification on October 3, 2026: Windows, Node 26.7.0, Playwright with
+installed Edge; 229 combined tests passed after integrating main's workspace and
+capture-review PRs. The focused shared-list/security checks were also rerun after
+the final input-validation and offline account-pause checks. Shell v30 covers
+upgrades from v3 through v29. `git diff --check` passed.

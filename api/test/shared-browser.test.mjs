@@ -75,7 +75,10 @@ test('shared lists browser: create, invite, constrained member, offline conflict
   alice = 'eve'; await page.locator('#sharedRefresh').click(); await page.locator('#sharedSignIn').waitFor();
   assert.equal(await page.locator('#sharedMain').isVisible(), false);
   assert.equal(await page.locator('#addShared input').inputValue(), '');
-  alice = 'alice'; await page.reload(); await page.locator('#sharedMain').waitFor();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).paused === true);
+  await owner.setOffline(true); await page.reload(); await page.locator('#sharedSignIn').waitFor();
+  assert.equal(await page.locator('#sharedMain').isVisible(), false, 'known account mismatch also pauses offline reopening');
+  alice = 'alice'; await owner.setOffline(false); await page.reload(); await page.locator('#sharedMain').waitFor();
   assert.equal(await page.locator('#addShared input').inputValue(), 'Alice private draft');
   assert.deepEqual(errors, []);
 });

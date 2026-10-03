@@ -28,10 +28,11 @@ The test harness injects principals deliberately; it is not an authentication pr
 
 Every route registers through `shared/http.mjs`. All methods other than GET, HEAD,
 and OPTIONS require authentication and `checkCsrf` before the handler can write.
-`GET /api/app` returns 410 without storage access. Every non-v1 mutation, including
-`settings/ensure`, is permanently rejected with 409 after authentication and CSRF
-checks. The native static shell contains the sign-in link. All data writes, including
-user/list defaults, use the guarded JSON operations endpoint.
+`GET /api/app` returns 410 without storage access. Retired mutations, including
+`settings/ensure`, are permanently rejected with 409 after authentication and CSRF
+checks. The native static shell contains the sign-in link. Private data writes,
+including user/list defaults, use `/api/v1/operations`; shared shopping/family
+lists use `/api/shared/operations` with the same guard and additional list permissions.
 
 Set the **server-side** SWA application setting `APP_ORIGIN` to the exact public
 origins permitted in that environment, for example `https://todo.jpto.dev`.
@@ -60,11 +61,19 @@ allowance or extension authentication mechanism is introduced here.
 
 ## Ownership, inputs, and responses
 
-Every query binds the authenticated `UserID`; point replacements include the full
+Every private v1 query binds the authenticated `UserID`; point replacements include the full
 `[accountId, "sync", "v1"]` partition key. Destination lists and item/list pairs are looked up
 within that owner. Foreign and nonexistent references return the same 404.
 Submitted `userId`, `UserID`, `ObjectID`, and `ObjectType` cannot choose an account
 or partition. List and item creation construct these values on the server.
+
+[Shared lists](shared-lists.md) use a separate list partition. Only the creator or
+an explicitly invited member can read a list. All mutations check current grants
+in the same ETag-controlled transaction as the change and its receipt. Revocation
+blocks later reads/writes, including stale offline actions. Shared records cannot
+link or grant access to private workspaces/projects. Directory pages bind the
+verified account; invitation codes are single-use, expire, and are hashed at rest
+on the server. Revocation cannot erase already-downloaded device copies.
 
 Titles are limited to 200 characters, descriptions to 4000, record/operation IDs to 128, and option
 values (including configurable statuses) to 64. Defaults accept at most 200

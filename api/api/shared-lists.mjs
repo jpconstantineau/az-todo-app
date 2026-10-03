@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { app } from './shared/http.mjs';
 import { getClientPrincipal } from './shared/auth.mjs';
 import { container } from './shared/db.mjs';
-import { ValidationError } from './shared/validate.mjs';
+import { ValidationError, text as validateText } from './shared/validate.mjs';
 import { identifier, object, digest, bytes } from './v1/contract.mjs';
 import { ApiError } from './v1/store.mjs';
 
@@ -12,6 +12,7 @@ const partition = id => [`shared:${id}`, 'shared-list', 'v1'];
 const hash = token => createHash('sha256').update(token).digest('hex');
 const fail = message => { throw new ValidationError(message); };
 const text = (value, max) => {
+  validateText(value, max);
   if (typeof value !== 'string' || !value.trim() || value.length > max) fail(`Enter 1–${max} characters.`);
   return value;
 };

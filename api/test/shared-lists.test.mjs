@@ -53,6 +53,7 @@ test('shared lists: each permission is enforced server-side and private data nev
   const invalid = f.op('edit', { id: 'milk', title: 'x', ownerId: 'bob', projectId: 'private' }, f.revision());
   assert.equal((await f.post(invalid)).status, 400);
   assert.equal((await f.act('permissions', { accountId: 'bob', permissions: ['edit'] })).status, 400);
+  assert.equal((await f.act('rename', { title: 'Unsupported\u0000text' })).status, 400);
 });
 
 test('shared lists: single-use invitations, cancellation, expiry, revocation and deletion/restore', async t => {

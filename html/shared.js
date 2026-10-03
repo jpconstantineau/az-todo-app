@@ -47,6 +47,9 @@ async function request(path, body) {
   if (owner !== accountId || epoch !== generation) throw new Error('Account changed while the request was running.');
   if (response.status === 401 || value.error === 'account_mismatch' || value.accountId && owner && value.accountId !== owner) {
     clearAccount(); $('sharedSignIn').hidden = false;
+    try { await transact(null, saved => { saved.paused = true; }); }
+    catch { throw new Error('Could not record the account pause on this device. Keep this browser profile private; its offline copy may still be available.'); }
+    channel.postMessage('changed');
     throw new Error('Sign in to the original account to resume. Its pending work stays on this device.');
   }
   if (!response.ok) throw Object.assign(new Error(value.message || 'Could not reach shared lists. Pending work is kept.'), { status: response.status, code: value.error });
@@ -58,6 +61,7 @@ async function verify() {
   if (!accountId) {
     accountId = session.accountId; await local();
     await transact(null, saved => { saved.accountId = accountId; saved.paused = false; });
+    channel.postMessage('changed');
   }
   $('sharedSignIn').hidden = true; $('sharedMain').hidden = false;
 }
