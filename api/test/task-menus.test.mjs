@@ -9,7 +9,8 @@ const synced = page => page.waitForFunction(() => document.querySelector('#syncS
 
 test('task menus stay compact at every width and retain keyboard focus, recovery and immediate undo', { timeout: 90000 }, async t => {
   documents.length = 0;
-  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  let user = 'alice';
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage(), errors = [];
@@ -72,6 +73,10 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
   await page.locator('#statusFilter').selectOption('');
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).click();
+  await page.locator('#undoTaskChange').waitFor(); await synced(page);
+  assert.equal(await page.locator('#recentTaskChange').isVisible(), true, 'server confirmation preserves immediate undo');
+  await page.locator('#undoTaskChange').click(); await synced(page);
   // A rejected save remains visible on its task, and cannot offer a misleading undo.
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Complete Bread', exact: true }).click();
@@ -94,5 +99,10 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.locator('#discard').click();
   await page.locator('#failure').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#recentTaskChange').isVisible(), false, 'discarding a conflict cannot revive stale immediate undo');
+  await page.getByRole('button', { name: `Complete ${longTitle}`, exact: true }).click();
+  await page.locator('#undoTaskChange').waitFor();
+  user = null; await context.setOffline(false); // Reconnection automatically checks the session.
+  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#recentTaskChangeStatus').textContent(), '', 'expired sessions clear private undo text');
   assert.deepEqual(errors, []);
 });

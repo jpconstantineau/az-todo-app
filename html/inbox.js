@@ -912,6 +912,7 @@ function hideAccount() {
   $('connectionLabel').textContent = 'Account & device status'; delete $('connection').dataset.state;
   $('menuDeviceTools').hidden = true;
   $('undoEdit').disabled = true; $('undoEditStatus').textContent = '';
+  recentTaskChange = null; $('recentTaskChange').hidden = true; $('recentTaskChangeStatus').textContent = '';
   accountGeneration++;
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
