@@ -297,8 +297,12 @@ test('manual review storage failures retain source and corrections without queui
   await page.evaluate(() => { IDBObjectStore.prototype.put = originalPut; });
   await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
   await page.locator('#extractionItems [name=title]').fill('Keep this correction');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.extraction?.draft?.items[0].title === 'Keep this correction');
   await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
-  await page.locator('#extractAccept').click(); await page.locator('#recovery').waitFor();
+  await page.locator('#extractAccept').click();
+  // Recovery is already visible from the first failure; wait for this save to fail.
+  await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  assert.match(await page.locator('#extractionError').textContent(), /Full/);
   assert.match(await page.locator('#recoveryText').inputValue(), /Keep this correction/);
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0);
