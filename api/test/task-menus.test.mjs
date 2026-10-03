@@ -1,0 +1,112 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+import { chromium } from 'playwright';
+import { documents, startServer } from './harness.mjs';
+import { showView, clickControl } from './navigation-helper.mjs';
+
+const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+
+test('task menus stay compact at every width and retain keyboard focus, recovery and immediate undo', { timeout: 90000 }, async t => {
+  documents.length = 0;
+  let user = 'alice';
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(server.url); await page.locator('#workspace').waitFor(); await synced(page);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
+  const longTitle = 'Plan the garage shelving with measurements, materials, delivery and enough room for every tool '.repeat(2).trim();
+  await page.locator('#captureText').fill([longTitle, 'Milk', 'Bread'].join('\n'));
+  await page.locator('#capture [type=submit]').click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await synced(page);
+  await showView(page, 'work');
+  const cards = page.locator('#items article'), menu = cards.first().locator('.task-menu'), summary = menu.locator('summary');
+  assert.equal(await cards.count(), 3);
+  assert.ok((await cards.locator('.record-state').allTextContents()).every(text => !text.includes('Server-confirmed')));
+  if (process.env.TASK_MENU_SCREENSHOTS) await mkdir(process.env.TASK_MENU_SCREENSHOTS, { recursive: true });
+  for (const width of [767, 768, 936, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.locator('.task-menu[open]').count(), 0);
+    assert.equal(await cards.locator('button:visible').count(), 6, 'only title and completion buttons are exposed');
+    assert.equal(await cards.locator('summary:visible').count(), 3);
+    assert.ok(await summary.evaluate(el => el.getBoundingClientRect().height >= 44));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await summary.focus(); await page.keyboard.press('Enter');
+    assert.equal(await page.locator('.task-menu[open]').count(), 1);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Clarify');
+    await page.evaluate(() => { window.beforeRefresh = document.activeElement; const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close(); });
+    await page.waitForFunction(() => !window.beforeRefresh.isConnected);
+    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Clarify');
+    await page.keyboard.press('Escape');
+    assert.equal(await menu.evaluate(el => el.open), false);
+    assert.equal(await summary.evaluate(el => el === document.activeElement), true);
+    if (process.env.TASK_MENU_SCREENSHOTS) await page.screenshot({ path: `${process.env.TASK_MENU_SCREENSHOTS}/tasks-${width}.png`, fullPage: true });
+  }
+  await summary.click();
+  await page.setViewportSize({ width: 767, height: 900 });
+  await page.setViewportSize({ width: 936, height: 900 });
+  assert.equal(await page.locator('.task-menu[open]').count(), 1, 'resizing preserves only the chosen menu');
+  await menu.getByRole('button', { name: `Brief ${longTitle}`, exact: true }).click();
+  await page.locator('#closeBriefs').click();
+  assert.equal(await menu.getByRole('button', { name: `Brief ${longTitle}`, exact: true }).evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('Escape');
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Complete Milk', exact: true }).click();
+  await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('#undoTaskChange').waitFor();
+  assert.match(await page.locator('#recentTaskChangeStatus').textContent(), /Completed “Milk”/);
+  await page.locator('#undoTaskChange').click();
+  await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
+  assert.equal(await page.locator('#recentTaskChange').isVisible(), false);
+  assert.match(await cards.filter({ hasText: 'Milk' }).locator('.record-state').textContent(), /pending/);
+  assert.equal(await cards.locator('button:visible').count(), 6, 'historical Undo stays in the menu');
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Undo state change Milk', exact: true }));
+  await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('#statusFilter').selectOption('completed');
+  await page.getByRole('button', { name: 'Reopen Milk', exact: true }).click();
+  await page.locator('#undoTaskChange').waitFor();
+  assert.match(await page.locator('#recentTaskChangeStatus').textContent(), /Reopened “Milk”/);
+  await page.locator('#undoTaskChange').click();
+  await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
+  await page.locator('#statusFilter').selectOption('');
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).click();
+  await page.locator('#undoTaskChange').waitFor(); await synced(page);
+  assert.equal(await page.locator('#recentTaskChange').isVisible(), true, 'server confirmation preserves immediate undo');
+  await page.locator('#undoTaskChange').click();
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).waitFor(); await synced(page);
+  // A rejected save stays on its task even when a later offline change is queued.
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).click();
+  await page.locator('#undoTaskChange').waitFor();
+  await page.locator('#statusFilter').selectOption('@all');
+  await page.getByRole('button', { name: 'Reopen Bread', exact: true }).click();
+  await page.getByRole('button', { name: 'Complete Bread', exact: true }).waitFor();
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js');
+    await transact('alice', local => {
+      const entry = local.queue[0], mutation = entry.operation.mutations[0];
+      entry.failure = 'Conflict — inspect the server version';
+      // A concurrent server edit may have the same version as our optimistic save.
+      local.records['item:' + mutation.id].version = mutation.expectedVersion + 1;
+    });
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  });
+  await page.locator('#failure').waitFor();
+  await page.locator('#statusFilter').selectOption('@all');
+  assert.match(await cards.filter({ hasText: 'Bread' }).locator('.record-state').textContent(), /Failed — needs attention/);
+  assert.equal(await page.locator('#recentTaskChange').isVisible(), false);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#discard').click();
+  await page.locator('#failure').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#recentTaskChange').isVisible(), false, 'discarding a conflict cannot revive stale immediate undo');
+  await page.getByRole('button', { name: `Complete ${longTitle}`, exact: true }).click();
+  await page.locator('#undoTaskChange').waitFor();
+  user = null; await context.setOffline(false); // Reconnection automatically checks the session.
+  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#recentTaskChangeStatus').textContent(), '', 'expired sessions clear private undo text');
+  assert.deepEqual(errors, []);
+});

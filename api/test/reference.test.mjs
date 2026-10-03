@@ -85,7 +85,7 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed();
   await page.locator('#statusFilter').selectOption('next');
-  await clickControl(page.getByRole('button', { name: 'Undo state change Printer paper specification', exact: true }));
+  await clickControl(page.getByRole('button', { name: 'Undo state change Printer paper specification', exact: true, includeHidden: true }));
   await page.locator('#items article[data-id=printer]').waitFor({ state: 'detached' }); await confirmed();
   assert.equal(item().status, 'reference'); assert.equal(item().originalText, original);
 });
