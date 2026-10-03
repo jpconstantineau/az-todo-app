@@ -351,6 +351,12 @@ contention becomes significant; do not silently prune retry receipts/tombstones.
 
 ## Migration and rollback rehearsal
 
+For live storage protocol checks (receipt replay, conflicts, account partitions,
+tombstones, paging and transactional rollback), run the
+[isolated Cosmos rehearsal](cosmos-rehearsal.md). It creates a fresh temporary
+database and records its results; it does not replace the migration/backup
+procedure below or certify deployed authentication.
+
 The offline tool never connects to Azure. Its inputs/outputs contain private data;
 keep them outside Git with the same access controls as a backup. It refuses to
 overwrite output files. It accepts `{formatVersion:1, documents:[...]}` containing

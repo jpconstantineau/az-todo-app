@@ -5,7 +5,8 @@
   "main": "api/index.mjs",
   "scripts": {
     "test": "node --experimental-test-module-mocks --test test/*.test.mjs",
-    "test:contracts": "node --experimental-test-module-mocks --test test/contracts.test.mjs"
+    "test:contracts": "node --experimental-test-module-mocks --test test/contracts.test.mjs",
+    "test:cosmos": "node scripts/rehearse-cosmos.mjs"
   },
   "engines": {
     "node": "22.x"

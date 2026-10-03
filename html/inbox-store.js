@@ -1,4 +1,4 @@
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=23';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=24';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -81,6 +81,34 @@ export function enqueue(state, accountId, mutations) {
     throw new Error('The device queue is full (100 saves or 5 MiB). Sync or export pending work before adding more.');
   }
   state.queue.push({ operation });
+  if (state.undoEdit && mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
+}
+
+// One editor save per account on this device; the outbox and inverse commit together.
+export function rememberEdit(state, record, fields, now = Date.now()) {
+  const empty = { title: '', description: '', outcome: '', status: 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [] };
+  state.undoEdit = {
+    type: record.type, id: record.id, title: record.title, expectedVersion: record.version + 1,
+    operationId: state.queue.at(-1).operation.operationId, expiresAt: now + 7 * 24 * 60 * 60 * 1000,
+    fields: Object.fromEntries(Object.keys(fields).map(name => [name, structuredClone(record[name] ?? empty[name] ?? null)]))
+  };
+}
+
+export function canUndoEdit(state, now = Date.now()) {
+  const undo = state.undoEdit;
+  if (!undo || now >= undo.expiresAt || state.queue.some(entry => entry.failure)) return false;
+  const record = projected(state)[key(undo)];
+  return !!record && !record.deleted && record.version === undo.expectedVersion &&
+    (state.records[key(undo)]?.version ?? 0) <= undo.expectedVersion;
+}
+
+export function undoEdit(state, accountId, operationId, now = Date.now()) {
+  if (state.undoEdit?.operationId !== operationId || !canUndoEdit(state, now)) {
+    throw new Error('This edit can no longer be undone. It expired, the record changed, or a save needs attention.');
+  }
+  const { type, id, expectedVersion, fields } = state.undoEdit;
+  enqueue(state, accountId, [{ type, id, action: 'update', expectedVersion, fields: structuredClone(fields) }]);
+  delete state.undoEdit;
 }
 
 export function applyReceipt(state, receipt, accountId) {
@@ -89,12 +117,15 @@ export function applyReceipt(state, receipt, accountId) {
   }
   for (const record of receipt.records) {
     if (record.accountId !== accountId) throw new Error('Account mismatch in response.');
+    if (state.undoEdit && key(record) === key(state.undoEdit) &&
+        (record.version > state.undoEdit.expectedVersion || record.version === state.undoEdit.expectedVersion && receipt.operationId !== state.undoEdit.operationId)) delete state.undoEdit;
     if ((state.records[key(record)]?.version ?? 0) < record.version) state.records[key(record)] = record;
   }
   const index = state.queue.findIndex(entry => entry.operation.operationId === receipt.operationId);
   if (index < 0) return;
   if (receipt.status === 'committed') state.queue.splice(index, 1);
   else {
+    if (state.undoEdit && state.queue[index].operation.mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
     state.queue[index].failure = 'Another edit or deletion conflicts with this save. Review both versions.';
     state.queue[index].receipt = receipt;
     for (const conflict of receipt.conflicts) {

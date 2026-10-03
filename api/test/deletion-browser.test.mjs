@@ -43,13 +43,16 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
 
   await showView(page, 'lists'); await page.locator('#view').selectOption('list');
   await page.getByRole('button', { name: 'Delete list: Groceries', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Move or delete'));
   assert.match(await page.locator('#error').textContent(), /Move or delete/);
   assert.equal((await local(page)).queue.length, 0);
   await clickControl(page.getByRole('button', { name: 'Delete item: Milk', exact: true, includeHidden: true }));
+  await page.getByRole('button', { name: 'Delete item: Milk', exact: true }).waitFor({ state: 'hidden' });
   await confirmed(page);
   await other.setOffline(false); await clickControl(second.locator('#sync')); await second.locator('#failure').waitFor();
   assert.match(await second.locator('#comparison').textContent(), /Keep this offline text/);
   assert.equal(await second.locator('#items article').count(), 0);
+  assert.equal((await local(second)).undoEdit, undefined, 'remote deletion invalidates edit undo');
   await second.locator('#discard').click(); await confirmed(second);
 
   await context.setOffline(true);
@@ -70,7 +73,7 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   await page.getByRole('button', { name: 'Restore project: Breakfast', exact: true }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Restore item: Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Restore item: Milk', exact: true }).waitFor({ state: 'hidden' });
-  assert.equal(await page.locator('#deletedRecords').evaluate(dialog => dialog.contains(document.activeElement)), true);
+  await page.waitForFunction(() => document.querySelector('#deletedRecords').contains(document.activeElement));
   await page.locator('#closeDeleted').click(); await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'work'); await page.locator('#view').selectOption('all');
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).waitFor();
@@ -83,6 +86,7 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   assert.equal(documents.filter(doc => doc.kind === 'record' && doc.record.type === 'item').length, 1);
 
   await clickControl(page.getByRole('button', { name: 'Delete item: Milk', exact: true, includeHidden: true }));
+  await page.getByRole('button', { name: 'Delete item: Milk', exact: true }).waitFor({ state: 'hidden' });
   await confirmed(page); await trash(page);
   for (const theme of ['dark', 'light']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
