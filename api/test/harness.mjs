@@ -1,7 +1,8 @@
 import { mock } from "node:test";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { app, HttpRequest, HttpResponse } from "@azure/functions";
+import functions from "@azure/functions";
+const { app, HttpRequest, HttpResponse } = functions;
 
 // Only storage and function registration are replaced. The production entry point,
 // handlers, auth parsing, validation and Azure HTTP types execute as-is.
