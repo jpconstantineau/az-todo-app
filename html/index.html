@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=25" defer></script>
+  <script src="/pwa.js?v=26" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=25"></script>
+  <script type="module" src="/inbox.js?v=26"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -42,6 +42,11 @@
         <p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p>
         <p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p>
       </details>
+    </section>
+    <section aria-labelledby="updatesHeading"><p class="eyebrow">App updates</p><h2 id="updatesHeading">Keep To-Do ready</h2>
+      <button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button>
+      <p id="checkAppUpdateStatus" role="status"></p>
+      <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
   <details id="connection"><summary><span id="connectionLabel" role="status">Account &amp; device status</span><span id="offlineBadge" role="status"></span></summary>
     <p id="sessionStatus" role="status">Checking account…</p>

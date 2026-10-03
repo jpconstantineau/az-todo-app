@@ -63,18 +63,29 @@
     document.getElementById('offlineBadge').textContent = ready ? '' : ' · ⚠ Offline setup';
   }
   const update = document.getElementById('appUpdateStatus');
+  const check = document.getElementById('checkAppUpdate');
+  const checkStatus = document.getElementById('checkAppUpdateStatus');
+  function updateStatus(text) {
+    update.textContent = text;
+    checkStatus.textContent = text;
+  }
   if (!('serviceWorker' in navigator)) {
     offlineStatus('This browser cannot reopen the inbox offline. Keep this page open or reconnect to reopen it.');
+    check.hidden = true;
+    checkStatus.textContent = 'App update checks are unavailable in this browser. Reopen online to load the latest app.';
     return;
   }
   const waiting = () => {
-    update.textContent = 'An app update is ready. Wait for your draft to be saved on device, then close all app tabs and app windows and reopen. Pending saves stay on this device.';
+    updateStatus('An app update is ready. Wait for your draft to be saved on device, then close all app tabs and app windows and reopen. Pending saves stay on this device.');
   };
   const failed = () => {
-    update.textContent = 'The app update could not finish. Your current app and saved work remain available. Reopen online to retry.';
+    updateStatus('The app update could not finish. Your saved work stays on this device. Use Check for updates in Preferences to retry online.');
   };
+  const notReady = () => offlineStatus('Offline reopening is not ready. Retry online with Check for updates in Preferences. If an update is ready, save your work on device, close all app tabs and app windows, then reopen.');
+  let registration;
   offlineStatus('Preparing offline reopening… Keep this page open until ready.');
-  navigator.serviceWorker.register('/inbox-sw.js', { updateViaCache: 'none' }).then(async registration => {
+  async function register() {
+    registration = await navigator.serviceWorker.register('/inbox-sw.js', { updateViaCache: 'none' });
     function watchWorker() {
       const worker = registration.installing;
       if (!worker) return;
@@ -82,25 +93,76 @@
         if (worker.state === 'installed' && registration.active && registration.waiting) waiting();
         if (worker.state === 'redundant') {
           if (registration.active) failed();
-          else offlineStatus('Offline reopening is not ready. Reopen online to retry; keep a copy of any unsynced work.');
+          else offlineStatus('Offline reopening is not ready. Retry online with Check for updates in Preferences; keep a copy of any unsynced work.');
         }
       });
     }
     registration.addEventListener('updatefound', watchWorker);
     watchWorker();
     if (registration.active && registration.waiting) waiting();
+    void verifyOfflineReady().catch(notReady);
+    return registration;
+  }
+  async function verifyOfflineReady() {
     await navigator.serviceWorker.ready;
     await new Promise((resolve, reject) => {
       const reply = new MessageChannel();
       const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
       reply.port1.onmessage = event => {
         clearTimeout(timeout); reply.port1.close();
-        if (event.data === 'todo-inbox-shell-v25') resolve(); else reject(new Error('Old shell is still active'));
+        if (event.data === 'todo-inbox-shell-v26') resolve(); else reject(new Error('Old shell is still active'));
       };
       (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
     });
     offlineStatus('Ready to reopen this inbox offline.', true);
-  }).catch(() => {
-    offlineStatus('Offline reopening is not ready. Save your work on device, close all app tabs and app windows, then reopen online to finish the update.');
+  }
+  check.addEventListener('click', async () => {
+    if (check.disabled || check.getAttribute('aria-disabled') === 'true') return;
+    if (registration?.waiting) { waiting(); return; }
+    if (!navigator.onLine) {
+      checkStatus.textContent = 'You are offline. Reconnect, then choose Check for updates. Your saved work stays on this device.';
+      return;
+    }
+    // Keep keyboard focus while a check runs; repeated activation is ignored above.
+    check.setAttribute('aria-disabled', 'true');
+    checkStatus.textContent = 'Checking for app updates…';
+    let timeout, worker, changed, finished = false;
+    try {
+      await Promise.race([
+        (async () => {
+          const current = registration?.active || registration?.installing || registration?.waiting ? registration : await register();
+          if (finished) return;
+          await current.update();
+          if (finished) return;
+          worker = current.installing;
+          if (worker) {
+            checkStatus.textContent = 'Downloading app update… You can keep working.';
+            await new Promise((resolve, reject) => {
+              changed = () => {
+                if (['installed', 'activating', 'activated'].includes(worker.state)) resolve();
+                else if (worker.state === 'redundant') reject(new Error('Update failed'));
+              };
+              worker.addEventListener('statechange', changed);
+              changed();
+            });
+          }
+        })(),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Update timed out')), 30000); })
+      ]);
+      if (registration.waiting) waiting();
+      else {
+        update.textContent = '';
+        checkStatus.textContent = registration.active ? 'To-Do is up to date.' : 'Offline setup is finishing. Keep this page open until ready.';
+      }
+    } catch {
+      if (registration?.waiting) waiting();
+      else failed();
+    } finally {
+      finished = true;
+      clearTimeout(timeout);
+      if (worker && changed) worker.removeEventListener('statechange', changed);
+      check.removeAttribute('aria-disabled');
+    }
   });
+  void register().catch(notReady).finally(() => { check.disabled = false; });
 })();
