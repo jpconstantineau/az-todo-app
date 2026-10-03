@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=22';
+import { readableBrief } from './briefs.js?v=23';
 const knownTypes = ['item', 'list', 'project', 'settings', 'clarification', 'review', 'brief'];
 const recordFields = ['id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText',
@@ -30,7 +30,7 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
-  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'legacyDefaults'], 'state');
+  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'legacyDefaults', 'undoEdit'], 'state');
   function record(entry, path) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
@@ -158,6 +158,7 @@ export function readableExport(value) {
   }
   lines.push('', 'CURRENT FORM DRAFT (not submitted)', JSON.stringify(value.draft, null, 2),
     '', 'SAVED DEVICE DRAFT (may differ from current form)', JSON.stringify(value.state.draft, null, 2));
+  if (value.state.undoEdit) lines.push('', 'LAST DEVICE EDIT RECOVERY (not a restore instruction)', JSON.stringify(value.state.undoEdit, null, 2));
   if (value.state.defaultSettings || value.state.legacyDefaults) lines.push('', 'CACHED DEFAULTS',
     JSON.stringify({ defaultSettings: value.state.defaultSettings, legacyDefaults: value.state.legacyDefaults }, null, 2));
   return lines.join('\n') + '\n';

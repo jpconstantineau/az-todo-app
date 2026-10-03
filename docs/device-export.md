@@ -56,6 +56,56 @@ Downloaded copies remain outside the app after sign-out or deletion.
 
 ## Contents and compatibility
 
+### Undo the latest editor save
+
+**Menu → Edit recovery → Undo last edit** restores the changed fields from the
+latest item, list or project editor save in this browser profile and account.
+The inverse patch and original save are journaled in the same IndexedDB
+transaction. Reload, offline reopening and server acknowledgement retain it.
+There is one recovery slot per account, replaced by the next editor save.
+Creation and the separate defaults, clarification, review and brief workflows
+are excluded; their existing recovery controls remain available.
+
+Undo is available for seven days from the device save, using the device clock,
+and only while the edited record's observed version remains unchanged. Another
+local mutation of that record, a conflicting receipt, a newer remote version or
+deletion invalidates it. Failed saves block undo until resolved. The click checks
+the latest account transaction again, so another tab cannot replace the recovery
+slot between display and submission. No background expiry timer is needed:
+eligibility is checked on rendering and at submission.
+
+Undo queues a new ordinary update with a new operation ID and the edited record's
+expected version. It restores only the fields changed by that editor save;
+original captures, source metadata and unsaved form drafts remain intact. Missing
+optional values are restored using the API's empty/null representation. There is
+no redo. If another device edited or deleted the record, or changed a referenced
+list/project, normal server validation and conflict handling apply. Historic
+invalid values may also need manual recovery rather than a now-invalid update.
+The proposed inverse stays recoverable in a rejected outbox entry and export.
+
+The undo window is a device convenience, **not a server erasure/retention policy**.
+An undo queued during the window may sync later. The recovery entry is not sent
+to other devices, but the resulting update syncs normally. An expired entry may
+remain in local storage until replacement/invalidation; device JSON and readable
+exports include it. Server copies exclude device recovery metadata. Downloaded
+exports, server change history, receipts and backups are not purged by expiry.
+Clearing site storage removes this device's recovery slot and pending undo saves.
+
+Shell v23 introduces this additive account-state field without a database or API
+migration. Earlier clients can still submit normal updates; any same-record
+version change makes recovery unavailable. The upgrade suite covers v3–v22.
+Focused checks cover all three record types, expiry, acknowledgement, invalidation,
+offline reload and sync, drafts, account switching, stale deletion conflicts and
+export preservation. [Layout screenshots](design/edit-undo/) cover 320/390/1440px
+in both appearances. Real SWA/Cosmos, physical devices and screen readers remain
+unverified.
+
+On October 2, 2026, all **153 tests passed**, none skipped, in an isolated Windows
+worktree with Node **22.23.3** and Playwright Chromium **153.0.8010.12**. This run
+includes main at `c897130` (PRs #54 and #55), the final undo conflict checks, and
+shell upgrades through v22. Run from `api/` with Node 22:
+`node --experimental-test-module-mocks --test test/*.test.mjs`.
+
 `todo-device-recovery.json` uses `format: "az-todo-device-export"` and
 `formatVersion: 1`. The existing recovery fields `accountId`, `state` and `draft`
 are retained. Additional metadata records `exportedAt`, `scope: "device"` and
@@ -156,6 +206,6 @@ browser cases block service workers to inject request failures; the separate
 PWA suite verifies shell delivery, cache boundaries and upgrades.
 
 This delivers device and server record exports for #13, including current
-clarification/review progress and brief revisions. General edit/delete undo,
+clarification/review progress and brief revisions, plus device editor undo. Delete undo,
 retention/purge, live restore, account erasure and backup handling remain open.
 The export reads confirmed server history and does not expose offline deletion.
