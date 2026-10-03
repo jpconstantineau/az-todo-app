@@ -168,17 +168,25 @@ export async function rehearse({ origin, cookies, backendOrigin = null, report, 
         { origin: 'https://foreign.invalid', referer: origin + '/' },
         { origin, 'sec-fetch-site': 'cross-site' }, { origin, 'sec-fetch-site': 'same-site' },
         { 'HX-Request': 'true', 'x-forwarded-host': new URL(origin).host }];
-      for (const route of ['v1/operations', ...retired]) {
+      for (const route of ['v1/operations', 'shared/operations', ...retired]) {
         for (const headers of invalid) {
           const body = operation(account, [mutation]);
-          const reply = await call(route, { account, headers, body: route === 'v1/operations' ? body : {} });
-          expect(reply, 403, route === 'v1/operations' ? 'untrusted_origin' : undefined);
+          const shared = { accountId: account.id, listId: id, operationId: randomUUID(), expectedRevision: 0,
+            action: 'add', fields: { id: randomUUID(), title: 'Rejected origin probe' } };
+          const reply = await call(route, { account, headers, body: route === 'v1/operations' ? body : route === 'shared/operations' ? shared : {} });
+          expect(reply, 403, retired.includes(route) ? undefined : 'untrusted_origin');
           if (route === 'v1/operations') expect(await call('v1/receipts?' + new URLSearchParams({ accountId: account.id, operationId: body.operationId }), { account }), 404, 'receipt_not_found');
         }
-        if (route !== 'v1/operations') expect(await call(route, { account, headers: { origin }, body: {} }), 409);
+        if (retired.includes(route)) expect(await call(route, { account, headers: { origin }, body: {} }), 409);
       }
       expect(await read(account, 'item', id), 404, 'record_not_found');
       assert.equal(expect(await history(), 200).highWater, before);
+    });
+    await check('shared-list reads identify the authenticated account and deny unavailable lists', async () => {
+      for (const account of accounts) {
+        assert.equal(expect(await call('shared/lists', { account }), 200).accountId, account.id);
+        expect(await call('shared/list?id=' + randomUUID(), { account }), 403, 'shared_access_denied');
+      }
     });
     await check('foreign account reads, exports, receipts and writes fail in both directions', async () => {
       for (const account of accounts) {

@@ -129,7 +129,7 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
   const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v31')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/capture-extraction.js?v=31', '/workspaces.js', '/workspaces.js?v=31', '/briefs.js', '/briefs.js?v=31', '/help.html', '/local-guidance.js?v=31', '/clarification.js', '/clarification.js?v=31', '/reviews.js', '/reviews.js?v=31', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=31', '/inbox-store.js?v=31', '/inbox-fields.js?v=31', '/pwa.js?v=31', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=31'].sort());
+  assert.deepEqual(cached.sort(), ['/shared.html', '/shared.js', '/shared.css', '/capture-extraction.js?v=31', '/workspaces.js', '/workspaces.js?v=31', '/briefs.js', '/briefs.js?v=31', '/help.html', '/local-guidance.js?v=31', '/clarification.js', '/clarification.js?v=31', '/reviews.js', '/reviews.js?v=31', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=31', '/inbox-store.js?v=31', '/inbox-fields.js?v=31', '/pwa.js?v=31', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=31'].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -300,7 +300,7 @@ test('retired shell explains recovery and every legacy mutation stays read-only'
     assert.match(await response.text(), /durable inbox/);
     const { routes } = await import('./harness.mjs');
     for (const route of routes.keys()) {
-      if (!route.startsWith('POST ') || route.includes('/v1/')) continue;
+      if (!route.startsWith('POST ') || /\/(v1|shared)\//.test(route)) continue;
       const rejected = await fetch(`${server.url}${route.slice(5)}`, { method: 'POST', headers: { origin: server.url } });
       assert.equal(rejected.status, 409, route);
       assert.match(await rejected.text(), /durable inbox/);

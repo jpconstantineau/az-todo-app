@@ -55,6 +55,8 @@ const container = {
         const value = literal.startsWith("@") ? params[literal] : literal === "false" ? false : literal.slice(1, -1);
         return op === "=" ? actual === value : op === ">" ? actual > value : actual <= value;
       }));
+      if (query.includes('ARRAY_CONTAINS(c.members')) rows = documents.filter(doc => doc.kind === 'shared-list' &&
+        (doc.ownerId === params['@u'] || !doc.deleted && doc.members.some(member => member.accountId === params['@u'])));
       if (config.partitionKey) rows = rows.filter(d => [d.UserID, d.ObjectType, d.ObjectID].every((v, i) => v === config.partitionKey[i]));
       const order = query.match(/ORDER BY c\.(\w+) (ASC|DESC)/);
       if (order) rows.sort((a, b) => (typeof a[order[1]] === "number" ? a[order[1]] - b[order[1]] : String(a[order[1]] || "").localeCompare(String(b[order[1]] || ""))) * (order[2] === "DESC" ? -1 : 1));
@@ -122,7 +124,7 @@ export async function startServer({ browserUser = false, assetContents = () => u
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"] };
-        for (const name of ['capture-extraction.js', 'workspaces.js', 'handoff.html', 'handoff.js', 'handoff-protocol.js', 'theme.js', 'pwa.js', 'help.html', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'local-guidance.js', 'briefs.js', 'inbox-sw.js']) {
+        for (const name of ['shared.html', 'shared.js', 'shared.css', 'capture-extraction.js', 'workspaces.js', 'handoff.html', 'handoff.js', 'handoff-protocol.js', 'theme.js', 'pwa.js', 'help.html', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'local-guidance.js', 'briefs.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
         assets["/manifest.json"] = ["manifest.json", "application/json"];
