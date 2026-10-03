@@ -6,6 +6,10 @@ suite runs the same scenarios with the existing in-memory storage substitute and
 tests the runner's resource lifecycle and failure reporting. Those local results
 do not count as a real Cosmos pass.
 
+For the separate opt-in RU/latency/contention workload, add `--measure` before
+`--isolated-account`; see [workload measurements and evidence limits](cosmos-measurements.md).
+Both modes use the same isolated target lifecycle. Run them separately.
+
 ## Target and invocation
 
 Use a **disposable Cosmos DB for NoSQL account**, with exactly one write region,
