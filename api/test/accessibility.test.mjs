@@ -31,7 +31,11 @@ const expectFocus = (page, selector) => page.waitForFunction(selector => documen
 async function keyboardActivate(page, selector) {
   // Open the task disclosure using the keyboard before reaching its actions.
   const summaries = await page.locator(selector).locator('xpath=ancestor::details[contains(@class, "task-menu") and not(@open)]/summary').all();
-  for (const summary of summaries) { await summary.focus(); await page.keyboard.press('Enter'); }
+  for (const summary of summaries) {
+    // Keyboard navigation may return before hashchange reveals the task panel.
+    await summary.waitFor({ state: 'visible' });
+    await summary.focus(); await page.keyboard.press('Enter');
+  }
   for (let i = 0; i < 80; i++) {
     if (await page.locator(selector).evaluate(control => control === document.activeElement)) {
       await page.keyboard.press('Enter'); return;
