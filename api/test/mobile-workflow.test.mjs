@@ -20,7 +20,8 @@ test('mobile workflow: compact menus, title editing, focus, offline help and rec
   assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
   assert.equal(await page.locator('#connection').evaluate(el => el.open), false);
   assert.equal(await page.locator('#export').isVisible(), false);
-  assert.equal(await page.locator('#workspace button:visible').count(), 1, 'capture exposes only Save initially');
+  assert.equal(await page.locator('#capture button:visible').count(), 1, 'capture exposes only Save initially');
+  assert.deepEqual(await page.locator('#workspace button:visible').allTextContents(), ['Manage workspaces', 'Save on device']);
   await page.locator('#appMenu > summary').focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.locator('#export').isVisible(), true);

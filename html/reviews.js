@@ -1,19 +1,19 @@
-import { key, projected } from './inbox-store.js?v=27';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=27';
+import { key, projected } from './inbox-store.js?v=28';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=28';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
 const latest = (session, index) => [...session.decisions].reverse().find(entry => entry.index === index);
 const done = (session, index) => { const decision = latest(session, index); return decision && decision.choice !== 'undo'; };
 
-export function setupReviews({ current, save, journal, showDialog }) {
+export function setupReviews({ current, save, journal, showDialog, records: scopedRecords }) {
   let active = null, selected = null, displayed, busy = false;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
   const message = value => { $('reviewError').textContent = value; };
   function render() {
     const state = current();
     if (!state) return;
-    const records = projected(state), sessions = Object.values(records).filter(record => record.type === 'review' && !record.deleted);
+    const records = scopedRecords ? scopedRecords() : projected(state), sessions = Object.values(records).filter(record => record.type === 'review' && !record.deleted);
     const select = $('reviewSessions');
     select.replaceChildren(new Option('Choose a saved review', ''), ...sessions.map(session => new Option(`${session.reviewKind} · ${session.reviewDay} · ${session.included.filter((_, i) => done(session, i)).length}/${session.included.length}`, session.id)));
     select.value = active || '';
@@ -69,7 +69,7 @@ export function setupReviews({ current, save, journal, showDialog }) {
     const state = current();
     if (!state || state.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before starting a review.');
     const day = localDate(new Date().toISOString()).slice(0, 10);
-    const included = Object.values(projected(state)).filter(record => !record.deleted && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped'].includes(record.status) &&
+    const included = Object.values(scopedRecords ? scopedRecords() : projected(state)).filter(record => !record.deleted && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped'].includes(record.status) &&
       (reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record) || record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) <= Date.now())))
       .map(({ type, id }) => ({ type, id }));
     if (included.length > 200) throw new Error('This review exceeds 200 records. Complete or drop inactive work before starting; no records have been omitted.');
