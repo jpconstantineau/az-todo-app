@@ -8,7 +8,7 @@ choose a state and dates; ordinary lists and custom statuses continue to work.
 | --- | --- |
 | Inbox | Captured without a required classification. |
 | Next | Ready to act; `nextAction` is derived as true only for this state. |
-| Waiting | Enter who/what is awaited and a review date or timed review cue. |
+| Waiting | Enter who/what is awaited. A review date or timed review cue is optional. |
 | Deferred | Enter a start date or time. The item becomes ready for review then. |
 | Completed | Complete preserves the preceding status, dependency and dates. Reopen restores that status. |
 | Custom | Configured and historic values remain available; no automatic reinterpretation. |
@@ -20,6 +20,13 @@ at the stored instant for timed values. Refresh, reopen, focus the app, or chang
 a filter to update the view, including offline. An idle page has no timer or
 background notification. Review and choose Next, a new date, or completion;
 the clock never silently changes status, deadlines or planned days.
+
+Undated waiting work stays visible in the Waiting filter and weekly reviews.
+It does not become Ready for review or enter a daily review solely because it is
+waiting; an independent deadline or planned day can still include it. Capture,
+editing and clarification all allow a dependency without a follow-up date (#72).
+Existing review dates remain intact unless explicitly edited. To remove a cue,
+clear it in the ordinary item editor; a blank clarification date keeps it.
 
 Invalid state changes explain the missing information and keep the editor and
 draft. The API validates the resulting record inside the existing atomic commit,

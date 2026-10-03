@@ -50,6 +50,23 @@ test('clarification API validates separate proposals, ownership, atomic decision
   assert.equal(record('item').deleted, true);
 });
 
+test('waiting clarification accepts no new date and preserves existing calendar or timed cues', async t => {
+  documents.length = 0;
+  const server = await startServer(); t.after(server.close);
+  for (const [id, cue] of Object.entries({ undated: {}, calendar: { reviewDate: '2026-10-05' }, timed: { reviewDateUtc: '2026-10-05T18:00:00.000Z' } })) {
+    let session = initial();
+    for (let step = 0; step < 3; step++) session = decision(session, emptyProposal(), 'skipped').session;
+    const created = await post(server.url, [{ ...mutation('item', 0, { title: 'Get approval', ...cue }), id }]);
+    assert.equal(created.status, 200);
+    const accepted = decision(session, { ...emptyProposal(), status: 'waiting', waitingOn: 'Alex' }, 'accepted');
+    const saved = await post(server.url, [{ ...mutation('clarification', 0, accepted.session), id }, { ...mutation('item', 1, accepted.fields), id }]);
+    assert.equal(saved.status, 200);
+    const item = saved.body.records.find(record => record.type === 'item');
+    assert.equal(item.status, 'waiting'); assert.equal(item.waitingOn, 'Alex');
+    assert.equal(item.reviewDate ?? null, cue.reviewDate || null); assert.equal(item.reviewDateUtc, cue.reviewDateUtc || null);
+  }
+});
+
 test('clarification rules keep unknowns explicit and reject invented facts or invalid state', () => {
   const skipped = decision(initial(), emptyProposal(), 'skipped');
   assert.deepEqual(skipped.session.answers.outcome, { decision: 'skipped', value: null });
@@ -66,6 +83,14 @@ test('clarification rules keep unknowns explicit and reject invented facts or in
   session = decision(session, { ...emptyProposal(), text: 'None known' }, 'accepted').session;
   assert.equal(session.answers.missingFacts.value, 'None known');
   assert.throws(() => decision(session, { ...emptyProposal(), status: 'waiting' }, 'accepted'), /Waiting needs/);
+  const waiting = decision(session, { ...emptyProposal(), status: 'waiting', waitingOn: 'Broker' }, 'accepted');
+  assert.deepEqual(waiting.fields, { status: 'waiting', waitingOn: 'Broker' }, 'omitting a review date preserves any existing cue');
+  assert.equal(clarificationFields(waiting.session).answers.disposition.value.reviewDate, '');
+  assert.throws(() => clarificationFields({ ...waiting.session, answers: { ...waiting.session.answers,
+    disposition: { decision: 'accepted', value: { ...waiting.session.answers.disposition.value, waitingOn: '   ' } } } }), /Waiting needs/);
+  const dated = decision(session, { ...emptyProposal(), status: 'waiting', waitingOn: 'Broker', reviewDate: '2026-10-05' }, 'accepted');
+  assert.deepEqual(dated.fields, { status: 'waiting', waitingOn: 'Broker', reviewDate: '2026-10-05', reviewDateUtc: null });
+  assert.equal(clarificationFields(dated.session).step, 4);
   assert.throws(() => decision(session, { ...emptyProposal(), status: 'deferred' }, 'accepted'), /Deferred needs/);
   const deferred = decision(session, { ...emptyProposal(), status: 'deferred', startDate: '2026-10-05' }, 'accepted');
   assert.deepEqual(deferred.fields, { status: 'deferred', startDate: '2026-10-05', startDateUtc: null });
@@ -126,7 +151,6 @@ test('clarification browser: no AI, offline stop/reload/resume, editable proposa
   await page.locator('#clarifyAccept').click(); await page.locator('#clarifyError').waitFor();
   assert.match(await page.locator('#clarifyError').textContent(), /Waiting needs/);
   await page.locator('#clarifyForm [name=waitingOn]').fill('Broker');
-  await page.locator('#clarifyForm [name=reviewDate]').fill('2026-10-05');
   await page.locator('#clarifyAccept').click(); await question(page, 4);
   assert.match(await page.locator('#clarifyAnswers').textContent(), /Unknown — skipped/);
   assert.equal(await page.locator('#clarifyOriginal').textContent(), 'sort out insurance');
@@ -134,6 +158,7 @@ test('clarification browser: no AI, offline stop/reload/resume, editable proposa
   await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   assert.equal(record('item').title, 'Call the insurer'); assert.equal(record('item').status, 'waiting');
   assert.equal(record('item').originalText, 'sort out insurance'); assert.equal(record('item').waitingOn, 'Broker');
+  assert.equal(record('item').reviewDate ?? null, null); assert.equal(record('item').reviewDateUtc, null);
   assert.equal(record('clarification').step, 4);
   assert.equal(documents.filter(doc => doc.kind === 'record').length, 2);
   const state = await local(page), exported = deviceExport('alice', state, state.draft);

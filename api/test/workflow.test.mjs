@@ -26,7 +26,10 @@ test('workflow API: atomic validation, waiting/deferred, completion, undo and st
   assert.equal(documents.length, 0, 'invalid capture commits neither record nor receipt');
   assert.equal((await save({ title: 'Get approval', status: 'next', dueDate: '2026-11-02' })).status, 200);
   assert.equal(record.nextAction, true);
-  assert.equal((await save({ status: 'waiting', waitingOn: 'Alex' })).status, 400);
+  assert.equal((await save({ status: 'waiting', waitingOn: '   ' })).status, 400);
+  assert.equal((await save({ status: 'waiting', waitingOn: 'Alex' })).status, 200);
+  assert.equal(record.reviewDate ?? null, null); assert.equal(record.reviewDateUtc, null);
+  assert.equal((await save({ reviewDate: '2026-02-30' })).status, 400);
   assert.equal((await save({ status: 'waiting', waitingOn: 'Alex', reviewDate: '2026-10-05' })).status, 200);
   const waiting = structuredClone(record);
   assert.equal(record.nextAction, false);
@@ -62,11 +65,62 @@ test('workflow API: atomic validation, waiting/deferred, completion, undo and st
   assert.equal(record.status, 'historic'); assert.equal(record.nextAction, false);
 });
 
+test('undated waiting capture and edits survive offline reload, weekly retain/undo and reconnect', { timeout: 60000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
+  await context.setOffline(true);
+  await page.locator('#captureText').fill('Get the quote');
+  await page.locator('#captureOptions summary').click();
+  await page.locator('#capture [name=status]').selectOption('waiting');
+  await page.locator('#capture [name=waitingOn]').fill('Alex');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('#captureText').value);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('waiting');
+  assert.equal(await page.locator('#items article').count(), 1);
+  assert.match(await page.locator('#items').innerText(), /Waiting for: Alex/);
+  await page.getByRole('button', { name: 'Edit Get the quote', exact: true }).click();
+  await page.locator('#editAdvanced summary').click();
+  assert.equal(await page.locator('#edit [name=reviewDate]').inputValue(), '');
+  assert.equal(await page.locator('#edit [name=reviewDateUtc]').inputValue(), '');
+  await page.locator('#edit [name=waitingOn]').fill('Alex — sample quote');
+  await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  await page.locator('#statusFilter').selectOption('@review-ready');
+  assert.equal(await page.locator('#items article').count(), 0);
+  await clickControl(page.locator('#openReviews'));
+  await page.locator('#startDaily').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
+  await page.locator('#startWeekly').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 1'));
+  assert.match(await page.locator('#reviewDetails').textContent(), /Alex — sample quote/);
+  await page.locator('#reviewRetain').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 1'));
+  await page.locator('#reviewUndo').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 1'));
+  await page.locator('#closeReviews').click();
+  await context.setOffline(false); await clickControl(page.locator('#sync'));
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  const item = documents.find(doc => doc.kind === 'record' && doc.record.type === 'item').record;
+  assert.equal(item.status, 'waiting'); assert.equal(item.waitingOn, 'Alex — sample quote');
+  assert.equal(item.reviewDate, null); assert.equal(item.reviewDateUtc, null);
+  assert.equal(item.originalText, 'Get the quote');
+  const weekly = documents.find(doc => doc.kind === 'record' && doc.record.reviewKind === 'weekly').record;
+  assert.deepEqual(weekly.decisions.map(entry => entry.choice), ['retain', 'undo']);
+  assert.deepEqual(errors, []);
+});
+
 test('workflow projection validates before journaling and preserves offline undo metadata', () => {
   const state = { records: { 'item:a': { type: 'item', id: 'a', version: 1, status: 'next', nextAction: true, dueDate: '2026-10-20' } }, queue: [] };
   const save = fields => enqueue(state, 'alice', [{ type: 'item', id: 'a', action: 'update', expectedVersion: projected(state)['item:a'].version, fields }]);
   assert.throws(() => save({ status: 'waiting' }), /Waiting needs/); assert.equal(state.queue.length, 0);
-  save({ status: 'waiting', waitingOn: 'Permit', reviewDate: '2026-10-03' });
+  save({ status: 'waiting', waitingOn: 'Permit' });
   assert.equal(projected(state)['item:a'].nextAction, false);
   save({ status: 'completed' });
   assert.equal(projected(state)['item:a'].statusBeforeCompletion, 'waiting');
@@ -78,6 +132,7 @@ test('workflow projection validates before journaling and preserves offline undo
   save(projected(state)['item:a'].workflowBeforeTransition);
   const item = projected(state)['item:a'];
   assert.equal(item.status, 'waiting'); assert.equal(item.waitingOn, 'Permit');
+  assert.equal(item.reviewDate ?? null, null); assert.equal(item.reviewDateUtc ?? null, null);
   assert.equal(item.startDate, null); assert.equal(item.dueDate, '2026-10-20');
 });
 
@@ -95,6 +150,9 @@ test('calendar dates, explicit DST offsets, ready-for-review rules and unchanged
   assert.equal(reviewReady({ status: 'deferred', startDate: '2026-10-05' }, now), true);
   assert.equal(reviewReady({ status: 'deferred', startDate: '2026-10-06' }, now), false);
   assert.equal(reviewReady({ status: 'waiting', reviewDateUtc: now.toISOString() }, now), true);
+  assert.equal(reviewReady({ status: 'waiting', waitingOn: 'Alex' }, now), false);
+  assert.equal(reviewReady({ status: 'waiting', reviewDate: '2026-10-06' }, now), false);
+  assert.equal(reviewReady({ status: 'waiting', reviewDate: '2026-10-05' }, now), true);
   assert.equal(reviewReady({ status: 'completed', reviewDate: '2026-10-01' }, now), false);
 });
 
