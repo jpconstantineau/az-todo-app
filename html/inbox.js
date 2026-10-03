@@ -192,10 +192,24 @@ function render() {
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'all';
   filters.view = $('view').value;
   refreshOptions();
-  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status)])];
-  options($('statusFilter'), statuses.map(status => ({ id: status, title: status === 'completed' ? 'Completed' : status })), [['', 'Incomplete items'], ['@all', 'All statuses'], ['@review-ready', 'Ready for review']]);
+  filters.statuses = Array.isArray(filters.statuses) ? filters.statuses.filter(status => typeof status === 'string') : [];
+  const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status), ...filters.statuses])];
+  options($('statusFilter'), statuses.map(status => ({ id: status, title: status === 'completed' ? 'Completed' : status })), [['', 'Incomplete items'], ['@all', 'All statuses'], ['@review-ready', 'Ready for review'], ['@include', 'Include statuses…'], ['@exclude', 'Exclude statuses…']]);
   $('statusFilter').value = [...$('statusFilter').options].some(option => option.value === filters.status) ? filters.status : '';
   filters.status = $('statusFilter').value;
+  const customStatuses = ['@include', '@exclude'].includes(filters.status);
+  $('statusSelection').hidden = !customStatuses;
+  $('statusSelectionLegend').textContent = filters.status === '@exclude' ? 'Hide selected statuses' : 'Show selected statuses';
+  $('statusSelectionHelp').textContent = filters.status === '@exclude'
+    ? 'Hide items matching any checked status. With none checked, show all statuses.'
+    : 'Show items matching any checked status. With none checked, show no items.';
+  $('statusChoices').replaceChildren(...(customStatuses ? statuses.map(status => {
+    const label = document.createElement('label'), input = document.createElement('input');
+    input.type = 'checkbox'; input.value = status; input.checked = filters.statuses.includes(status);
+    input.dataset.focusKey = `status-filter:${status}`;
+    label.append(input, document.createTextNode(status === 'completed' ? 'Completed' : status));
+    return label;
+  }) : []));
   statusText('syncStatus', state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
   connectionStatus();
   $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Defaults', () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`)]));
@@ -208,7 +222,10 @@ function render() {
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
     if (!filters.status && record.status === 'completed') return false;
-    if (filters.status && filters.status !== '@all' && (filters.status === '@review-ready' ? !reviewReady(record) : record.status !== filters.status)) return false;
+    if (customStatuses) {
+      const selected = filters.statuses.includes(record.status);
+      if (filters.status === '@include' ? !selected : selected) return false;
+    } else if (filters.status && filters.status !== '@all' && (filters.status === '@review-ready' ? !reviewReady(record) : record.status !== filters.status)) return false;
     if (view === 'all') return true;
     if (view === 'inbox') return !record.listId;
     if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
@@ -443,8 +460,11 @@ for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('cla
     }
   });
 }
-$('view').onchange = $('day').onchange = $('statusFilter').onchange = () => {
-  navigation[destination === 'lists' ? 'lists' : 'work'] = { view: $('view').value, status: $('statusFilter').value };
+$('view').onchange = $('day').onchange = $('statusFilter').onchange = $('statusChoices').onchange = () => {
+  navigation[destination === 'lists' ? 'lists' : 'work'] = {
+    view: $('view').value, status: $('statusFilter').value,
+    statuses: [...$('statusChoices').querySelectorAll('input:checked')].map(input => input.value)
+  };
   render(); void journal();
 };
 $('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
@@ -558,6 +578,7 @@ function hideAccount() {
   navigation = emptyNavigation();
   $('view').replaceChildren(new Option('All items', 'all'));
   $('statusFilter').replaceChildren(new Option('Incomplete items', ''));
+  $('statusSelection').hidden = true; $('statusChoices').replaceChildren();
   $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
   $('syncStatus').textContent = ''; clearError();
   $('connectionLabel').textContent = 'Account & device status'; delete $('connection').dataset.state;

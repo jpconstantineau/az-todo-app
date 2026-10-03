@@ -49,6 +49,26 @@ On link activation and back/forward, focus moves to the destination heading (Cap
 
 ## Integration and verification
 
+### Include and exclude status filters (issue #49)
+
+In either Your Work or List Workspace, choose **Include statuses…** to show items
+matching any checked status, or **Exclude statuses…** to hide those statuses.
+Built-in and custom statuses are available. No checkboxes selected means no items
+for Include, and all statuses for Exclude. For example, exclude Completed and
+dropped to focus on unfinished, retained work. The Incomplete items default and
+single-status, All statuses and Ready for review presets remain available.
+
+The list/project/day scope still applies. Each destination saves its own mode and
+selection in the account's device draft for navigation and offline reload. Filter
+changes do not queue task edits. Account switching clears the displayed choices.
+
+The browser regression in `api/test/status-filters.test.mjs` covers both modes,
+empty selections, custom status text, scopes, keyboard focus, independent
+destination preferences, offline reload, account isolation and 320/390/1440px
+layout. Shell v20 delivers the controls to installed clients, with upgrade checks
+preserving drafts and exact queued operations from shells v3–v19. These are local
+automated Edge checks; physical-device and screen-reader checks remain unverified.
+
 ### Completed task visibility (issue #43)
 
 Your Work and List Workspace default to **Incomplete items**, hiding completed
