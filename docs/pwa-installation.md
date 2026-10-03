@@ -66,12 +66,12 @@ pending operations, or caches. If the check fails or exceeds 30 seconds, it
 reenables retry; the browser may still finish a download and announce readiness.
 Keyboard focus stays on the button during a check, and other controls remain usable.
 
-Shell v25 delivers these controls through fresh module URLs. Local Playwright
+Shell v26 delivers these controls through fresh module URLs. Local Playwright
 checks cover unchanged versions, offline checks, duplicate activation, request
 failure, timeout/late completion, retry after failed initial registration, and
 unsupported browsers. The real local service-worker test retries a failed asset
 download through the button and verifies the waiting worker, saved draft and exact
-outbox contents. Upgrade checks include v24. Physical-device and deployed update
+outbox contents. Upgrade checks include v24 and v25. Physical-device and deployed update
 verification remain release gates below.
 
 Shell v16 caches only the public root/index/bookmark shell, local scripts/styles,
