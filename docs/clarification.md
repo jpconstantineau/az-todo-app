@@ -16,7 +16,9 @@ styles from `DESIGN.md`. It asks one question at a time:
 3. What information is missing? Supply the unknowns or explicitly enter
    “None known”. Skipping means unknown, never an inferred answer.
 4. What happens next? Explicitly keep the existing state, choose Next, wait
-   for a named person/dependency with a review date, or defer until a date.
+   for a named person/dependency with an optional review date, or defer until a date.
+   A blank waiting review date preserves any existing calendar or timed cue;
+   use the item editor to clear one. Undated waiting work stays in weekly reviews.
    The last two use the existing workflow validation and calendar-date semantics.
    Deadline, planned day, project and list membership remain intact.
 
