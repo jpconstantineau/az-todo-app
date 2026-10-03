@@ -89,8 +89,10 @@ while preserving the current capture draft and ignoring the selected filters.
 Export tests use the shared asynchronous browser-state wait helper from main.
 Real-device download UX and deployed Azure data behavior are unverified.
 
-This delivers the independently implementable export portion of #13. Clarification
-and review progress and accepted brief revisions are not implemented yet; future fields are
-retained and reported, not certified as supported workflows. Full server export,
+Clarification, review progress and brief revisions are now supported by the device
+export and its validator. Pending deletes project as inactive, and stale queued
+edits cannot reactivate a local or server tombstone. The original queued intent
+remains available for conflict review and export; the confirmed snapshot is never
+rewritten by projection. Full server export,
 undo/retention, live restore, account erasure and backup purge remain open under
 #13 and its dependencies. There is no new deletion or resurrection path here.

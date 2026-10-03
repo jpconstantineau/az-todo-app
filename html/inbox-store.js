@@ -1,4 +1,4 @@
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=19';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=21';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -41,10 +41,12 @@ export function projected(state) {
     for (const mutation of entry.operation.mutations) {
       const id = key(mutation);
       const previous = records[id];
+      // Tombstones stay inactive; stale intent remains in the queue for recovery.
+      if (previous?.deleted) continue;
       records[id] = { ...records[id], ...mutation.fields, type: mutation.type, id: mutation.id,
         ...(mutation.type === 'item' && mutation.fields?.status === 'completed' && previous?.status !== 'completed'
           ? { statusBeforeCompletion: previous?.status || 'inbox' } : {}),
-        version: mutation.expectedVersion + 1, deleted: false,
+        version: mutation.expectedVersion + 1, deleted: mutation.action === 'delete',
         localState: entry.failure ? 'Failed — needs attention' : 'Saved on device — pending' };
       if (mutation.type === 'item') {
         records[id].nextAction = records[id].status === 'next';
