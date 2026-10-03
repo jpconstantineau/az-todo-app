@@ -1,4 +1,4 @@
-import { localGuidance } from './local-guidance.js?v=34';
+import { localGuidance } from './local-guidance.js?v=35';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [
@@ -17,11 +17,11 @@ export function decision(session, proposal, choice) {
     if (name === 'disposition') {
       const { status, waitingOn, reviewDate, startDate } = proposal;
       if (!['keep', 'next', 'waiting', 'deferred'].includes(status)) throw new Error('Choose what should happen next, or skip.');
-      if (status === 'waiting' && (!waitingOn.trim() || !reviewDate)) throw new Error('Waiting needs who/what you await and a review date.');
+      if (status === 'waiting' && !waitingOn.trim()) throw new Error('Waiting needs who/what you await.');
       if (status === 'deferred' && !startDate) throw new Error('Deferred needs a start date.');
       value = { status, waitingOn: status === 'waiting' ? waitingOn : '', reviewDate: status === 'waiting' ? reviewDate : '', startDate: status === 'deferred' ? startDate : '' };
       if (status !== 'keep') fields = { status,
-        ...(status === 'waiting' ? { waitingOn, reviewDate, reviewDateUtc: null } : {}),
+        ...(status === 'waiting' ? { waitingOn, ...(reviewDate ? { reviewDate, reviewDateUtc: null } : {}) } : {}),
         ...(status === 'deferred' ? { startDate, startDateUtc: null } : {}) };
     } else {
       value = proposal.text;

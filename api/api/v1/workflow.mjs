@@ -15,8 +15,8 @@ export function applyWorkflow(record, old, fields = {}) {
   const changed = workflowFields.some(key => key in fields && (fields[key] ?? null) !== (old?.[key] ?? null));
   // Historic incomplete states stay editable; an explicit workflow edit must repair them.
   if (!old || changed) {
-    if (record.status === 'waiting' && (!record.waitingOn?.trim() || !(record.reviewDate || record.reviewDateUtc))) {
-      throw new ValidationError('Waiting needs who/what you are waiting for and a review date.');
+    if (record.status === 'waiting' && !record.waitingOn?.trim()) {
+      throw new ValidationError('Waiting needs who/what you are waiting for.');
     }
     if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) {
       throw new ValidationError('Deferred needs a start date; it becomes ready for review on that date.');

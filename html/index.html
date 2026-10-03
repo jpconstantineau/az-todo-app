@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=34" defer></script>
+  <script src="/pwa.js?v=35" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=34"></script>
+  <script type="module" src="/inbox.js?v=35"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -188,7 +188,7 @@
         <div id="clarifyDisposition" hidden>
           <label>Next state <select name="status"><option value="">Choose or skip</option><option value="keep">Keep current state</option><option value="next">Next action</option><option value="waiting">Waiting</option><option value="deferred">Deferred</option></select></label>
           <label>Waiting for (person or dependency) <input name="waitingOn" maxlength="4000"></label>
-          <label>Review waiting work on <input name="reviewDate" type="date" min="0001-01-01" max="9999-12-31"></label>
+          <label>Review waiting work on (optional; leave blank to keep any existing date) <input name="reviewDate" type="date" min="0001-01-01" max="9999-12-31"></label>
           <label>Defer until <input name="startDate" type="date" min="0001-01-01" max="9999-12-31"></label>
         </div>
         <div class="actions"><button id="clarifyAccept" type="submit">Accept answer</button><button id="clarifySkip" type="button">Skip question</button><button id="clarifySave" type="button">Save proposal without accepting</button><button id="clarifyStop" type="button">Stop for now</button></div>

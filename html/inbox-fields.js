@@ -16,7 +16,7 @@ export function matchesExecutionFilters(record, filters) {
 
 export function validateWorkflow(record, old, fields = record) {
   if (!old || workflowFields.some(key => key in fields && (fields[key] ?? null) !== (old[key] ?? null))) {
-    if (record.status === 'waiting' && (!record.waitingOn?.trim() || !(record.reviewDate || record.reviewDateUtc))) throw new Error('Waiting needs who/what you are waiting for and a review date.');
+    if (record.status === 'waiting' && !record.waitingOn?.trim()) throw new Error('Waiting needs who/what you are waiting for.');
     if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) throw new Error('Deferred needs a start date; it becomes ready for review on that date.');
     const prefix = record.status === 'waiting' ? 'review' : record.status === 'deferred' ? 'start' : null;
     if (prefix) taskFields({ [`${prefix}Date`]: record[`${prefix}Date`], [`${prefix}DateUtc`]: record[`${prefix}DateUtc`] });
@@ -90,7 +90,7 @@ export function taskFields(values, initial = null) {
 }
 export function addTaskControls(container) {
   container.classList.add('form-grid');
-  for (const [name, title] of [['projectId', 'Project (optional)'], ['plannedDay', 'Planned day (not a deadline)'], ['status', 'Status'], ['waitingOn', 'Waiting for (person or dependency)'], ['dueDate', 'Deadline (calendar date)'], ['dueLocal', 'Deadline time (local; repeated DST hour uses first occurrence)'], ['startDate', 'Deferred until (calendar date)'], ['startDateUtc', 'Or deferred until (ISO time with offset)'], ['reviewDate', 'Review on (calendar date)'], ['reviewDateUtc', 'Or review on (ISO time with offset)'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses')]) {
+  for (const [name, title] of [['projectId', 'Project (optional)'], ['plannedDay', 'Planned day (not a deadline)'], ['status', 'Status'], ['waitingOn', 'Waiting for (person or dependency)'], ['dueDate', 'Deadline (calendar date)'], ['dueLocal', 'Deadline time (local; repeated DST hour uses first occurrence)'], ['startDate', 'Deferred until (calendar date)'], ['startDateUtc', 'Or deferred until (ISO time with offset)'], ['reviewDate', 'Review on (optional calendar date)'], ['reviewDateUtc', 'Or review on (optional ISO time with offset)'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses')]) {
     const label = document.createElement('label'); label.textContent = title;
     const input = document.createElement(['status', 'projectId'].includes(name) || name in optionFields ? 'select' : 'input'); input.name = name;
     if (name === 'dueLocal') input.type = 'datetime-local';
@@ -101,7 +101,7 @@ export function addTaskControls(container) {
     label.append(input); container.append(label);
   }
   const help = document.createElement('p'); help.className = 'muted';
-  help.textContent = 'Choose a calendar date or a timed value for each purpose. Waiting needs a dependency and review date. Deferred work appears in Ready for review from its start date on your next refresh; choose Next when ready. Neither changes your deadline or planned day.';
+  help.textContent = 'Choose a calendar date or a timed value for each purpose. Waiting needs a dependency; its review date is optional. Undated waiting work stays in Waiting and weekly reviews. Deferred work appears in Ready for review from its start date on your next refresh; choose Next when ready. Neither changes your deadline or planned day.';
   container.append(help);
 }
 export function refreshTaskOptions(form, defaults) {

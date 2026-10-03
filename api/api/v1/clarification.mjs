@@ -42,6 +42,6 @@ function disposition(value, draft = false) {
     if (typeof date !== 'string') fail('Choose a valid clarification calendar date.');
     if (date) calendarDate(date, name);
   }
-  if (!draft && value.status === 'waiting' && (!value.waitingOn.trim() || !value.reviewDate)) fail('Waiting needs a dependency and review date.');
+  if (!draft && value.status === 'waiting' && !value.waitingOn.trim()) fail('Waiting needs a dependency.');
   if (!draft && value.status === 'deferred' && !value.startDate) fail('Deferred needs a start date.');
 }
