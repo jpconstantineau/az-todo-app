@@ -1,8 +1,9 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v29';
-const ASSETS = ['/capture-extraction.js?v=29', '/workspaces.js', '/workspaces.js?v=29', '/local-guidance.js?v=29', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=29', '/reviews.js?v=29', '/pwa.js?v=29', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const CACHE = 'todo-inbox-shell-v30';
+const ASSETS = ['/capture-extraction.js?v=30', '/workspaces.js', '/workspaces.js?v=30', '/local-guidance.js?v=30', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=30', '/reviews.js?v=30', '/pwa.js?v=30', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 // Fresh module URLs bypass older workers' exact asset allowlists.
-ASSETS.push('/inbox.js?v=29', '/inbox-store.js?v=29', '/inbox-fields.js?v=29', '/inbox-export.js?v=29', '/briefs.js', '/briefs.js?v=29', '/help.html');
+ASSETS.push('/inbox.js?v=30', '/inbox-store.js?v=30', '/inbox-fields.js?v=30', '/inbox-export.js?v=30', '/briefs.js', '/briefs.js?v=30', '/help.html');
+ASSETS.push('/shared.html', '/shared.js', '/shared.css');
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
@@ -15,7 +16,7 @@ self.addEventListener('message', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  const navigation = event.request.mode === 'navigate' && ['/', '/index.html', '/inbox.html', '/help.html'].includes(url.pathname);
+  const navigation = event.request.mode === 'navigate' && ['/', '/index.html', '/inbox.html', '/help.html', '/shared.html'].includes(url.pathname);
   if (!navigation && !ASSETS.includes(url.pathname + url.search)) return;
   event.respondWith(caches.open(CACHE).then(cache => cache.match(navigation ? url.pathname : event.request).then(cached => cached || fetch(event.request))));
 });
