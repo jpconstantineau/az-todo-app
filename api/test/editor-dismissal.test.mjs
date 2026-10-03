@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { showView } from './navigation-helper.mjs';
@@ -79,6 +80,22 @@ test('dismissed and unchanged saved editors stay closed for items, lists and pro
   assert.deepEqual(documents, before, 'inspection and unchanged saves never write task records');
 });
 
+test('failed draft discard keeps recoverable text and the persisted draft', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await open(page, 'item'); await page.locator('#edit [name=description]').fill('Keep on storage failure');
+  await page.locator('#cancelEdit').click(); await closedAndJournaled(page);
+  const before = (await local(page)).draft.edit;
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#discardEdit').click();
+  await page.locator('#recovery').waitFor();
+  assert.match(await page.locator('#recoveryText').inputValue(), /Keep on storage failure/);
+  assert.deepEqual((await local(page)).draft.edit, before);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  await page.locator('#resumeEdit').click();
+  assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Keep on storage failure');
+});
+
 test('dismissed unsaved text can be resumed or discarded offline and stays in its account and workspace', { timeout: 90000 }, async t => {
   const { page, context, server, setUser } = await setup(t);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Separate capture');
@@ -88,6 +105,16 @@ test('dismissed unsaved text can be resumed or discarded offline and stays in it
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#editor').isVisible(), false);
   assert.match(await page.locator('#savedEditStatus').innerText(), /Unfinished item edit/);
+  for (const width of [320, 400, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    assert.ok(await page.locator('#savedEdit button').evaluateAll(buttons => buttons.every(button => button.getBoundingClientRect().height >= 44)));
+    if (process.env.EDITOR_SCREENSHOTS) {
+      await mkdir(process.env.EDITOR_SCREENSHOTS, { recursive: true });
+      await page.locator('#savedEdit').screenshot({ path: `${process.env.EDITOR_SCREENSHOTS}/saved-edit-${width}.png` });
+    }
+  }
+  await page.setViewportSize({ width: 400, height: 844 });
   await page.locator('#resumeEdit').focus(); await page.keyboard.press('Enter');
   assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Private unfinished text');
   assert.equal(await page.locator('#edit [name=title]').evaluate(el => el === document.activeElement), true);
