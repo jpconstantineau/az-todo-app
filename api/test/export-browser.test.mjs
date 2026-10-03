@@ -183,12 +183,17 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   });
   await page.locator('#accountExport').click(); await intercepted;
   user = 'bob';
+  const bobChanges = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/changes' && response.ok());
   await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await held.route.fulfill({ response: held.response });
   await page.unroute(pattern);
   await page.waitForFunction(() => !document.querySelector('#accountExport').disabled);
   assert.equal(downloads.length, 0);
+  // The stored account changes before its controls return and sync requests finish.
+  // Let Bob's change request finish before simulating a separate sign-out.
+  await bobChanges;
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' && !document.querySelector('#menuDeviceTools').hidden);
   user = null;
   await clickControl(page.locator('#accountExport'));
   await page.waitForFunction(() => document.querySelector('#workspace').hidden);
