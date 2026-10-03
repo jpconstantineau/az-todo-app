@@ -7,6 +7,7 @@ import { workflowSnapshot } from '../api/v1/reviews.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { mkdir } from 'node:fs/promises';
 import { deviceExport, validateDeviceExport } from '../../html/inbox-export.js';
+import { reviewHistory } from '../../html/reviews.js';
 
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
@@ -110,7 +111,7 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   await page.locator('#reviewDrop').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
   await page.locator('#closeReviews').click(); await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
-  assert.deepEqual(session.decisions.map(d => d.choice), ['retain', 'defer', 'undo', 'drop']);
+  assert.deepEqual(reviewHistory(session, Object.fromEntries(records().map(r => [`${r.type}:${r.id}`, r]))).map(d => d.choice), ['retain', 'defer', 'undo', 'drop']);
   const retained = records().find(r => r.id === session.included[0].id);
   assert.equal(retained.status, 'inbox'); assert.equal(retained.startDate ?? null, null);
   const second = await browser.newContext(); const other = await second.newPage();
@@ -186,5 +187,5 @@ test('review cues include projects and waiting work; competing devices and delet
   assert.equal(await other.locator('#reviewDrop').isDisabled(), true);
   await other.locator('#reviewRetain').focus(); await other.keyboard.press('Enter');
   await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('3 of 5')); await confirmed(other);
-  assert.equal(records().find(r => r.type === 'review' && r.id === session.id).decisions.length, 3);
+  assert.equal(records().find(r => r.type === 'review' && r.id === session.id).decisionCount, 3);
 });

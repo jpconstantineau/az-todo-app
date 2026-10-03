@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ValidationError, text, cleanTag, utcDate } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { calendarDate } from "./workflow.mjs";
-import { reviewFields } from "./reviews.mjs";
+import { reviewFields, reviewDecisionFields } from "./reviews.mjs";
 import { clarificationFields } from "./clarification.mjs";
 import { briefFields } from "./briefs.mjs";
 
@@ -32,7 +32,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "brief"].includes(value)) throw new ValidationError("type must be workspace, list, item, project, settings, clarification, review or brief.");
+  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "brief"].includes(value)) throw new ValidationError("type must be workspace, list, item, project, settings, clarification, review, reviewDecision or brief.");
   return value;
 }
 function exactText(value, max, field) {
@@ -50,6 +50,7 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (type === 'reviewDecision') return reviewDecisionFields(action, input);
   if (type === 'workspace') {
     object(input, ['title', 'archived'], 'fields');
     const result = {};
