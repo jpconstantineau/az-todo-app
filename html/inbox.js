@@ -1,9 +1,9 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations } from './inbox-store.js?v=22';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=22';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=22';
-import { clarificationUI } from './clarification.js?v=22';
-import { setupReviews } from './reviews.js?v=22';
-import { setupBriefs } from './briefs.js?v=22';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=23';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=23';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=23';
+import { clarificationUI } from './clarification.js?v=23';
+import { setupReviews } from './reviews.js?v=23';
+import { setupBriefs } from './briefs.js?v=23';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -182,6 +182,12 @@ function render() {
   const records = Object.values(projected(state)).filter(record => !record.deleted);
   const lists = records.filter(record => record.type === 'list');
   const projects = records.filter(record => record.type === 'project');
+  const undoAvailable = canUndoEdit(state);
+  $('undoEdit').disabled = !undoAvailable;
+  statusText('undoEditStatus', state.undoEdit
+    ? undoAvailable ? `Undo edit to “${state.undoEdit.title}” until ${new Date(state.undoEdit.expiresAt).toLocaleString()}.`
+      : 'The last edit expired, its record changed, or a save needs attention.'
+    : 'No editor save to undo on this device.');
   options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
   options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
   options(capture.elements.projectId, projects, [['', 'No project']], true);
@@ -326,6 +332,7 @@ async function updateRecord(record, fields, close = false) {
       const current = projected(local)[key(record)];
       if (record.version !== 0 && (!current || current.deleted || current.version !== record.version)) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
       enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }]);
+      if (close && current && record.version > 0) rememberEdit(local, current, fields);
       if (close) local.draft.edit = null;
     });
     if (owner === accountId) state = saved;
@@ -396,6 +403,14 @@ $('previewSplit').onclick = () => {
   $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
 };
 $('cancelEdit').onclick = () => $('editor').close();
+$('undoEdit').onclick = guard(async () => {
+  const owner = accountId, generation = accountGeneration, operationId = state?.undoEdit?.operationId;
+  if (!owner || !operationId) return;
+  const saved = await transact(owner, local => undoEdit(local, owner, operationId));
+  if (owner !== accountId || generation !== accountGeneration) return;
+  state = saved; clearError(); render(); broadcast(); void sync();
+  statusText('undoEditStatus', 'Undo saved on device. Sync to confirm it on the server.');
+});
 $('editor').addEventListener('close', () => { if (editing) void journal(); });
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
 function focusDestination() {
@@ -622,6 +637,7 @@ function hideAccount() {
   $('syncStatus').textContent = ''; clearError();
   $('connectionLabel').textContent = 'Account & device status'; delete $('connection').dataset.state;
   $('menuDeviceTools').hidden = true;
+  $('undoEdit').disabled = true; $('undoEditStatus').textContent = '';
   accountGeneration++;
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
@@ -771,6 +787,7 @@ $('discard').onclick = guard(async () => {
   const saved = await transact(owner, local => {
     if (local.queue[0]?.operation.operationId !== id || !local.queue[0].failure) throw new Error('Queue changed; review it again.');
     local.queue.shift();
+    if (local.undoEdit?.operationId === id) delete local.undoEdit;
   });
   if (owner !== accountId) return;
   state = saved;
