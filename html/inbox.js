@@ -1,9 +1,9 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=23';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=23';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=23';
-import { clarificationUI } from './clarification.js?v=23';
-import { setupReviews } from './reviews.js?v=23';
-import { setupBriefs } from './briefs.js?v=23';
+import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=24';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=24';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=24';
+import { clarificationUI } from './clarification.js?v=24';
+import { setupReviews } from './reviews.js?v=24';
+import { setupBriefs } from './briefs.js?v=24';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -105,6 +105,7 @@ function error(message, kind = 'local') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
   if ($('editor').open) { $('editError').hidden = false; statusText('editError', message); }
   if ($('defaultsEditor').open) { $('defaultsError').hidden = false; statusText('defaultsError', message); }
+  if ($('deletedRecords').open) statusText('deletedError', message);
   connectionStatus();
 }
 function clearError(kind) {
@@ -219,13 +220,13 @@ function render() {
   }) : []));
   statusText('syncStatus', state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
   connectionStatus();
-  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Defaults', () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`)]));
+  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Defaults', () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
   const view = $('view').value;
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
   $('projectOutcome').hidden = !project;
   $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
-  $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`)] : []));
+  $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
     if (!filters.status && record.status === 'completed') return false;
@@ -261,7 +262,7 @@ function render() {
     menu.open = !mobile.matches || expandedActions.has(key(record));
     const summary = document.createElement('summary'); summary.textContent = '•••'; summary.setAttribute('aria-label', `More actions for ${record.title}`); summary.title = 'More actions'; summary.dataset.focusKey = `${key(record)}:more`;
     actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
-      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
+      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`), deleteButton(record));
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
     menu.append(summary, actions);
     const heading = document.createElement('div'); heading.className = 'task-heading'; heading.append(title, complete, menu);
@@ -284,8 +285,51 @@ function render() {
   }
   reviews.render();
   briefs.render();
+  renderDeleted();
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
+function deleteButton(record) {
+  return button('Delete', async () => {
+    if (confirm(`Delete “${record.title}”? You can restore it from Menu → Deleted records. Its text and history remain stored; there is no automatic purge.`)) await changeDeletion(record, 'delete');
+  }, `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
+}
+function renderDeleted() {
+  statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
+  const deleted = Object.values(projected(state)).filter(record => record.deleted && ['item', 'list', 'project'].includes(record.type));
+  $('deletedItems').replaceChildren(...deleted.map(record => {
+    const article = document.createElement('article'), title = document.createElement('h3'), status = document.createElement('p');
+    title.textContent = `${record.type}: ${record.title}`;
+    status.textContent = record.localState || 'Deletion server-confirmed';
+    article.append(title, status, button('Restore', () => changeDeletion(record, 'restore'), `Restore ${record.type}: ${record.title}`, `${key(record)}:restore`));
+    return article;
+  }));
+  if (!deleted.length) $('deletedItems').textContent = 'No deleted items, lists or projects on this device. Sync to retrieve changes from other devices.';
+}
+async function changeDeletion(record, action) {
+  const owner = accountId, generation = accountGeneration;
+  if (!owner) return;
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before deleting or restoring records.');
+    const records = projected(local), current = records[key(record)];
+    if (!current || current.version !== record.version || !!current.deleted !== (action === 'restore')) throw new Error('This record changed. Review its latest state before trying again.');
+    if (action === 'delete' && ['list', 'project'].includes(record.type) && Object.values(records).some(item => item.type === 'item' && !item.deleted && item[record.type === 'list' ? 'listId' : 'projectId'] === record.id)) {
+      throw new Error(`Move or delete this ${record.type}'s items before deleting the ${record.type}.`);
+    }
+    if (action === 'restore' && record.type === 'item') {
+      for (const type of ['list', 'project']) {
+        const id = current[`${type}Id`], parent = records[`${type}:${id}`];
+        if (id && (!parent || parent.deleted)) throw new Error(`Restore this item's ${type} first, then restore the item.`);
+      }
+    }
+    enqueue(local, owner, [{ type: record.type, id: record.id, action, expectedVersion: record.version }]);
+  });
+  if (owner !== accountId || generation !== accountGeneration) return;
+  state = saved; clearError(); statusText('deletedError', ''); render();
+  statusText('deletedStatus', `${action === 'delete' ? 'Deletion' : 'Restore'} saved on device — pending server confirmation.`);
+  broadcast(); void sync();
+}
+$('openDeleted').onclick = () => { statusText('deletedError', ''); statusText('deletedStatus', ''); renderDeleted(); showDialog($('deletedRecords')); };
+$('closeDeleted').onclick = () => $('deletedRecords').close();
 function titleButton(record, label = `Edit ${record.title}`) {
   const control = button(record.title, () => openEditor(record), label, `${key(record)}:edit`);
   control.className = 'editable-title'; control.title = 'Edit title and details'; return control;
@@ -463,7 +507,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs'), $('deletedRecords')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -624,6 +668,7 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();
   $('exportStatus').textContent = '';
   reviews.reset();
