@@ -9,6 +9,24 @@ const stateFor = value => ({ records: { [`${value.type}:${value.id}`]: value }, 
 const mutation = (value, action, fields) => ({ type: value.type, id: value.id, action,
   expectedVersion: value.version, ...(fields ? { fields } : {}) });
 
+test('only a matching explicit restore projects a tombstone active and survives export/reload', () => {
+  const original = record(), state = stateFor(original);
+  enqueue(state, 'alice', [mutation(original, 'delete')]);
+  const deleted = projected(state)['item:one'];
+  enqueue(state, 'alice', [mutation(deleted, 'restore')]);
+  const restored = projected(state)['item:one'];
+  assert.equal(restored.deleted, false); assert.equal(restored.deletedUtc, null); assert.equal(restored.version, 3);
+  assert.equal(restored.originalText, original.originalText);
+  assert.deepEqual(projected(JSON.parse(JSON.stringify(deviceExport('alice', state, {}).state))), projected(state));
+  const tombstone = { ...original, version: 4, deleted: true };
+  state.records['item:one'] = tombstone;
+  assert.deepEqual(projected(state)['item:one'], tombstone, 'a later server delete blocks the earlier restore');
+  state.queue = [];
+  enqueue(state, 'alice', [mutation(tombstone, 'restore')]);
+  state.queue[0].failure = 'Rejected restore';
+  assert.deepEqual(projected(state)['item:one'], tombstone, 'failed restore remains inactive');
+});
+
 test('queued deletions stay inactive across serialization, acknowledgement and discard for every deletable type', () => {
   for (const type of ['item', 'list', 'project', 'clarification', 'review', 'brief']) {
     const original = record(type), state = stateFor(original), id = `${type}:one`;

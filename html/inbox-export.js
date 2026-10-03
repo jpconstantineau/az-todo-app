@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=22';
+import { readableBrief } from './briefs.js?v=23';
 const knownTypes = ['item', 'list', 'project', 'settings', 'clarification', 'review', 'brief'];
 const recordFields = ['id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText',
@@ -51,9 +51,9 @@ function validateExport(value, server = false) {
     require(Array.isArray(operation.mutations) && operation.mutations.length > 0, `${path}: mutations are required.`);
     for (const mutation of operation.mutations) {
       require(object(mutation) && typeof mutation.id === 'string' && typeof mutation.type === 'string' &&
-        ['create', 'update', 'delete'].includes(mutation.action) && Number.isSafeInteger(mutation.expectedVersion) &&
+        ['create', 'update', 'delete', 'restore'].includes(mutation.action) && Number.isSafeInteger(mutation.expectedVersion) &&
         (mutation.action === 'create' ? mutation.expectedVersion === 0 : mutation.expectedVersion > 0) &&
-        (mutation.action === 'delete' ? mutation.fields === undefined : object(mutation.fields)), `${path}: malformed mutation.`);
+        (['delete', 'restore'].includes(mutation.action) ? mutation.fields === undefined : object(mutation.fields)), `${path}: malformed mutation.`);
       if (!knownTypes.includes(mutation.type)) warnings.push(`${path}: mutation type ${mutation.type} preserved, interpretation unsupported`);
       if (mutation.fields) unknown(mutation.fields, recordFields, `${path}.fields`);
       unknown(mutation, ['id', 'type', 'action', 'expectedVersion', 'fields'], `${path}.mutation`);

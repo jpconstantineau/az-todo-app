@@ -43,7 +43,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const current = await Promise.all(input.mutations.map(m => read(accountId, recordId(m.type, m.id))));
     const conflicts = input.mutations.flatMap((proposed, i) => {
       const record = current[i]?.record ?? null;
-      return (record?.deleted || (record?.version ?? 0) !== proposed.expectedVersion)
+      return ((proposed.action === "restore" ? !record?.deleted : record?.deleted) || (record?.version ?? 0) !== proposed.expectedVersion)
         ? [{ proposed, current: record }] : [];
     });
     const sequence = (state?.sequence ?? 0) + 1;

@@ -9,6 +9,20 @@ version changes are made. The owner reset legacy production data before cutover,
 so the migration tool below remains available for archived data rather than being
 a prerequisite for this empty-database release.
 
+## Recoverable deletion (#13)
+
+An operation mutation may use `action: "restore"` for an `item`, `list` or
+`project`, with its exact positive tombstone `expectedVersion` and no `fields`.
+Restoring an active/missing record or an old tombstone version returns a durable
+conflict. Successful restore increments the version, clears `deleted` and
+`deletedUtc`, and retains stored content and identity. Existing relationship
+validation requires active parents; restore the list/project before its items.
+Account state, restored record, receipt and change commit in the same batch.
+Retrying an operation ID returns its original receipt even after later deletion;
+only newer versions replace client snapshots. Ordinary create/update/delete
+operations still cannot mutate tombstones. No purge/expiry or partition migration
+is introduced. See [retention and client recovery](device-export.md#recoverable-record-deletion).
+
 ## Partition decision (issue #27)
 
 The additive [workflow contract](workflow-states.md) defines waiting/deferred
@@ -250,8 +264,8 @@ fields, text and all supplied values are significant.
 For deletion, send `action:"delete"` with an expected version and no `fields`.
 The record remains as a versioned tombstone, including its text. Updates and
 creates using the deleted identity return conflicts, even when a client supplies
-the tombstone's latest version. Explicit recovery to a new ID is future client
-work; there is no undelete or purge endpoint in v1. A list must already be empty
+the tombstone's latest version. Explicit `restore` of its exact version recovers
+an item, list or project; there is no purge endpoint. A list must already be empty
 before deletion: first acknowledge moves/deletes of its items in a separate
 operation. This avoids accidental cascades and preserves account-owned references.
 
@@ -273,7 +287,7 @@ the records; retries return the original acknowledgement, even if later edits
 have changed the records. Different content under a stored operation ID returns
 409 `operation_reused`. Do not interpret an old receipt as the current record.
 
-A version mismatch or deleted identity commits **no proposed record changes**.
+A version mismatch or a deleted identity without explicit restore commits **no proposed record changes**.
 Instead it durably records `status:"conflict"`, an empty `records` array, the whole
 operation's `proposed` mutations, and `conflicts` pairing the conflicting mutations
 with current committed snapshots. Even non-conflicting edits in the rejected

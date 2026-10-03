@@ -118,16 +118,18 @@ export function validateOperation(input) {
     const id = identifier(mutation.id);
     if (seen.has(recordId(type, id))) throw new ValidationError("A record may occur only once per operation.");
     seen.add(recordId(type, id));
-    if (!["create", "update", "delete"].includes(mutation.action)) throw new ValidationError("action must be create, update or delete.");
+    if (!["create", "update", "delete", "restore"].includes(mutation.action)) throw new ValidationError("action must be create, update, delete or restore.");
     const { action, expectedVersion } = mutation;
+    if (action === "restore" && !["item", "list", "project"].includes(type)) throw new ValidationError("Only items, lists and projects can be restored.");
     if (type === "settings" && (id !== "settings" || action === "delete")) {
       throw new ValidationError("Use the settings identity and create/update to save or reset defaults.");
     }
     if (!Number.isSafeInteger(expectedVersion) || (action === "create" ? expectedVersion !== 0 : expectedVersion < 1)) {
-      throw new ValidationError("expectedVersion must be 0 for create, or the last observed positive version for update/delete.");
+      throw new ValidationError("expectedVersion must be 0 for create, or the last observed positive version for update/delete/restore.");
     }
-    if (action === "delete" && mutation.fields !== undefined) throw new ValidationError("delete cannot include fields.");
-    return { type, id, action, expectedVersion, ...(action !== "delete" ? { fields: fieldsFor(type, action, mutation.fields) } : {}) };
+    const fieldless = ["delete", "restore"].includes(action);
+    if (fieldless && mutation.fields !== undefined) throw new ValidationError(`${action} cannot include fields.`);
+    return { type, id, action, expectedVersion, ...(!fieldless ? { fields: fieldsFor(type, action, mutation.fields) } : {}) };
   });
   return { ...input, mutations };
 }

@@ -37,8 +37,8 @@ The export is a portable current-record copy. It excludes older overwritten
 record versions, rejected conflict proposals, receipt hashes, Cosmos metadata,
 legacy migration archives beyond defaults, auth-provider information and Azure
 backups. Tombstones retain their stored content under the existing retention
-policy; exporting them does not restore them. No server purge, account erasure,
-live restore or additional undo behavior is introduced.
+policy; exporting them does not restore them. No server purge or account erasure
+is performed by export.
 
 `todo-account.txt` labels the cutoff and renders live/deleted snapshots and brief
 acceptance in plain text. The same validation/round-trip CLI below accepts either
@@ -155,7 +155,52 @@ the browser test's optional `EXPORT_SCREENSHOTS` output directory. The export
 browser cases block service workers to inject request failures; the separate
 PWA suite verifies shell delivery, cache boundaries and upgrades.
 
-This delivers device and server record exports for #13, including current
-clarification/review progress and brief revisions. General edit/delete undo,
-retention/purge, live restore, account erasure and backup handling remain open.
-The export reads confirmed server history and does not expose offline deletion.
+## Recoverable record deletion
+
+Choose **Delete** in an item's actions or beside the selected list/project.
+Confirm the named record. Only empty lists/projects can be deleted: move or delete
+their active items first. Deletion is journaled on device, works offline, and
+survives reload. **Menu → Deleted records** shows deleted items, lists and projects
+and offers **Restore**, including while a deletion is still queued offline.
+Restore a deleted parent list/project before restoring its items. Record identity,
+original text, links, attributes and relationships stay intact.
+
+There is **no automatic purge and no recovery deadline** in this implementation.
+Deletion hides a record from active views; its text remains in the tombstone,
+receipts and change history. Associated clarification, reviews and brief revisions
+remain stored and exported. Restoring a source does not rewrite their historical
+versions or decisions. Downloads, other devices and Azure backups are not erased.
+This is recoverable deletion, not account erasure or a promise of permanent removal.
+
+Restore is a distinct version-checked operation, never a create/update against a
+tombstone. Stale offline writes and old restores cannot resurrect a later deletion.
+A failed delete/restore blocks the queue and preserves its intent for export;
+review the server version and explicitly remove the rejected save before retrying.
+No later queued edits are silently rebased. Other devices observe deletion and
+restoration at their next foreground sync, not through server push.
+
+Existing drafts are retained when their record is deleted. Saving an old editor
+draft requires explicit comparison with the latest record; it cannot recreate a
+deleted source. Device exports retain queued `restore` operations; JSON validation
+and the round-trip harness preserve them. Old clients can read restored records,
+but must upgrade before validating exports containing the new operation. Deploy
+the API support before the new shell; rolling back the API rejects restores and
+keeps queued intent for recovery rather than silently rewriting it.
+
+`v1.test.mjs`, `delete-projection.test.mjs` and `deletion-browser.test.mjs` cover
+restore validation, account isolation, lost acknowledgements, stale versions,
+transaction failure, parent deletion races, export/reload, independent-client
+conflicts, offline delete/restore and 320/390/1440px light/dark layouts. These use
+the in-memory storage substitute. Deployed Cosmos/authentication, physical devices
+and screen-reader behavior remain release gates. Shell v23 includes the recovery
+view and upgrades from v3–v22 without resetting IndexedDB.
+
+Local verification on October 2, 2026 (Windows, Node 26.7.0, Playwright Edge):
+`npm test` in `api/` passed 149/150 tests. The sole failure was Windows `spawn EPERM`
+starting Chromium for the existing unpacked-extension test; rerunning that exact
+test outside the sandbox passed (1/1), covering all 150 tests across both runs.
+The [recovery screenshots](design/deletion/) show the light/dark layouts.
+CI remains responsible for the configured Node 22 Linux run.
+
+Account erasure, permanent purge and backup-erasure/restore policy remain open
+under #13; this change covers recoverable item/list/project deletion only.

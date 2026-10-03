@@ -28,6 +28,64 @@ const edit = (operationId, id, expectedVersion, fields, action = "update", type 
 });
 const records = () => documents.filter(d => d.kind === "record").map(d => d.record);
 
+test('explicit restore retains identity/content, retries safely and rejects stale or foreign intent', async t => {
+  const f = await fixture(t);
+  await f.post(capture);
+  const original = (await f.get('item', 'milk')).body.record;
+  assert.equal((await f.post(edit('restore-active', 'milk', 1, undefined, 'restore'))).status, 409);
+  assert.equal((await f.post(edit('restore-missing', 'missing', 1, undefined, 'restore'))).status, 409);
+  const deleted = await f.post(edit('delete-for-restore', 'milk', 1, undefined, 'delete'));
+  assert.equal(deleted.status, 200);
+  assert.equal((await f.post(edit('restore-with-fields', 'milk', 2, { title: 'Injected' }, 'restore'))).status, 400);
+  assert.equal((await f.post(edit('restore-stale', 'milk', 1, undefined, 'restore'))).status, 409);
+  for (const type of ['settings', 'brief', 'review', 'clarification']) {
+    assert.equal((await f.post(edit('restore-' + type, type, 2, undefined, 'restore', type))).status, 400);
+  }
+  const foreign = { ...edit('foreign-restore', 'milk', 2, undefined, 'restore'), accountId: 'bob' };
+  assert.equal((await f.post(foreign, { user: 'bob' })).status, 409);
+  assert.equal((await f.post(foreign)).body.error, 'account_mismatch');
+  const restore = edit('restore-milk', 'milk', 2, undefined, 'restore');
+  faults.loseBatchResponse = true;
+  assert.equal((await f.post(restore)).status, 503);
+  const restored = await f.post(restore);
+  assert.equal(restored.status, 200);
+  assert.deepEqual(await f.post(restore), restored);
+  const { version, updatedUtc, ...content } = restored.body.records[0];
+  const { version: oldVersion, updatedUtc: oldUpdated, ...before } = original;
+  assert.equal(version, 3); assert.deepEqual(content, before);
+  assert.equal((await f.post(edit('old-offline-edit', 'milk', 1, { title: 'Stale' }))).status, 409);
+  assert.equal((await f.post(edit('delete-again', 'milk', 3, undefined, 'delete'))).status, 200);
+  assert.deepEqual(await f.post(restore), restored, 'old receipt cannot undo a later delete');
+  assert.equal((await f.get('item', 'milk')).body.record.deleted, true);
+  assert.equal((await f.post(edit('stale-restore-again', 'milk', 2, undefined, 'restore'))).status, 409);
+  const feed = (await f.request('changes?accountId=alice&after=0&limit=50')).body;
+  assert.ok(feed.entries.some(entry => entry.records.some(record => record.id === 'milk' && record.version === 3 && !record.deleted)));
+});
+
+test('restore validates deleted parents and concurrent list membership without partial writes', async t => {
+  const f = await fixture(t);
+  await f.post(capture); await f.post(projectCapture);
+  for (const [id, version] of [['milk', 2], ['bread', 1], ['eggs', 1]]) {
+    assert.equal((await f.post(edit('delete-' + id, id, version, undefined, 'delete'))).status, 200);
+  }
+  for (const [type, id] of [['list', 'groceries'], ['project', 'breakfast']]) {
+    assert.equal((await f.post(edit('delete-' + type, id, 1, undefined, 'delete', type))).status, 200);
+  }
+  const restore = edit('restore-linked', 'milk', 3, undefined, 'restore');
+  assert.equal((await f.post(restore)).body.error, 'list_not_found');
+  assert.equal((await f.post(edit('restore-list', 'groceries', 2, undefined, 'restore', 'list'))).status, 200);
+  assert.equal((await f.post(restore)).body.error, 'project_not_found');
+  assert.equal((await f.post(edit('restore-project', 'breakfast', 2, undefined, 'restore', 'project'))).status, 200);
+  faults.batchIndex = 2;
+  assert.equal((await f.post(restore)).status, 503);
+  assert.equal((await f.get('item', 'milk')).body.record.deleted, true);
+  const results = await Promise.all([f.post(restore), f.post(edit('delete-list-race', 'groceries', 3, undefined, 'delete', 'list'))]);
+  assert.equal(results.filter(result => result.status === 200).length, 1);
+  const item = (await f.get('item', 'milk')).body.record;
+  const list = (await f.get('list', 'groceries')).body.record;
+  assert.ok(item.deleted || !list.deleted, 'no live item can reference a deleted list');
+});
+
 test("projects link canonical actions atomically, preserve capture and keep optional relationships independent", async t => {
   const f = await fixture(t);
   await f.post(capture);

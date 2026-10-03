@@ -1,4 +1,4 @@
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=22';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=23';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -41,12 +41,15 @@ export function projected(state) {
     for (const mutation of entry.operation.mutations) {
       const id = key(mutation);
       const previous = records[id];
-      // Tombstones stay inactive; stale intent remains in the queue for recovery.
-      if (previous?.deleted) continue;
+      // Only explicit restore of this exact tombstone can reactivate a record.
+      if (mutation.action === 'restore'
+        ? !previous?.deleted || previous.version !== mutation.expectedVersion || entry.failure
+        : previous?.deleted) continue;
       records[id] = { ...records[id], ...mutation.fields, type: mutation.type, id: mutation.id,
         ...(mutation.type === 'item' && mutation.fields?.status === 'completed' && previous?.status !== 'completed'
           ? { statusBeforeCompletion: previous?.status || 'inbox' } : {}),
         version: mutation.expectedVersion + 1, deleted: mutation.action === 'delete',
+        ...(mutation.action === 'restore' ? { deletedUtc: null } : {}),
         localState: entry.failure ? 'Failed — needs attention' : 'Saved on device — pending' };
       if (mutation.type === 'item') {
         records[id].nextAction = records[id].status === 'next';
