@@ -117,6 +117,46 @@ test('workspaces: archive, delete, offline recovery and responsive management pr
       await page.screenshot({ path: `${process.env.WORKSPACE_SCREENSHOTS}/workspaces-${width}.png`, fullPage: true });
     }
   }
+  await page.locator('#manageWorkspaces').click();
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    for (const width of [320, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.ok(await page.locator('#workspaceManager').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth));
+      if (process.env.WORKSPACE_SCREENSHOTS) await page.screenshot({ path: `${process.env.WORKSPACE_SCREENSHOTS}/manager-${theme}-${width}.png` });
+    }
+  }
+  await page.locator('#closeWorkspaces').click();
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
   assert.equal(documents.find(row => row.kind === 'record' && row.record.type === 'item').record.title, 'Preserved report');
+});
+
+test('workspaces: another device deletes a workspace while offline capture keeps its rejected intent for recovery', { timeout: 60000 }, async t => {
+  const { page, context, server } = await setup(t);
+  const work = await createSpace(page, 'Work'); await switchTo(page, work); await synced(page);
+  const saved = Object.values((await local(page)).records).find(record => record.type === 'workspace');
+  await context.setOffline(true); await capture(page, 'Recover this offline report');
+  const intent = (await local(page)).queue[0].operation;
+  const deleted = await fetch(server.url + '/api/v1/operations', {
+    method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'other-device-delete',
+      mutations: [{ type: 'workspace', id: work, action: 'delete', expectedVersion: saved.version }] })
+  });
+  assert.equal(deleted.status, 200);
+  await context.setOffline(false);
+  await page.locator('#failure').waitFor();
+  const retained = await local(page);
+  assert.deepEqual(retained.queue[0].operation, intent);
+  assert.match(retained.queue[0].failure, /workspace.*unavailable or archived/i);
+  assert.equal(documents.filter(row => row.kind === 'record' && row.record.type === 'item').length, 0);
+  assert.equal(await page.locator('#capture').isVisible(), false);
+  await switchTo(page, 'personal'); await capture(page, 'Unrelated Personal work');
+  assert.equal((await local(page)).queue.length, 2, 'blocked queue preserves later work without assigning it to the deleted space');
+  const copy = await page.evaluate(async () => {
+    const { deviceExport, readableExport } = await import('/inbox-export.js');
+    const state = await (await import('/inbox-store.js')).transact('alice');
+    return readableExport(deviceExport('alice', state, {}));
+  });
+  assert.match(copy, /Recover this offline report/);
+  assert.match(copy, /Unrelated Personal work/);
 });

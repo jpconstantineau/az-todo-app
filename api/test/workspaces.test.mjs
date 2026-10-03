@@ -1,18 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { documents, faults, startServer } from './harness.mjs';
-import { workspaceOf, workspaceRecords } from '../../html/workspaces.js';
+import { workspaceOf, workspaceRecords, workspaceDraft } from '../../html/workspaces.js';
 
 async function setup(t) {
   documents.length = 0;
-  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  let user = 'alice';
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
   let operation = 0;
   const post = async (mutations, extra = {}) => {
     const body = { apiVersion: 1, accountId: 'alice', operationId: `workspace-op-${++operation}`, mutations, ...extra };
     const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return { status: response.status, body: await response.json() };
   };
-  return { post, server };
+  return { post, server, setUser: value => { user = value; } };
 }
 const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
 const change = (type, id, expectedVersion, fields, action = 'update') => ({ type, id, action, expectedVersion, ...(fields ? { fields } : {}) });
@@ -43,7 +44,7 @@ test('workspaces: atomic archive/delete gates all records, preserves history, an
 });
 
 test('workspaces: membership, review scope, foreign IDs, item moves and legacy Personal are validated', async t => {
-  const { post } = await setup(t);
+  const { post, setUser } = await setup(t);
   await post([create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' })]);
   await post([create('list', 'list', { title: 'Work list', workspaceId: 'work' }), create('project', 'project', { title: 'Project', outcome: 'Done', workspaceId: 'work' })]);
   for (const fields of [{ workspaceId: 'missing' }, { listId: 'list' }, { projectId: 'project', workspaceId: 'family' }]) {
@@ -63,4 +64,33 @@ test('workspaces: membership, review scope, foreign IDs, item moves and legacy P
   records['workspace:family'].deleted = true;
   assert.deepEqual(workspaceRecords(records, 'family'), {});
   assert.equal((await post([create('item', 'foreign', { title: 'Other account', workspaceId: 'work' })], { accountId: 'bob' })).status, 409);
+  setUser('bob');
+  assert.equal((await post([create('item', 'foreign', { title: 'Other account', workspaceId: 'work' })], { accountId: 'bob' })).status, 400);
+  assert.equal((await post([change('workspace', 'work', 1, { archived: true })], { accountId: 'bob' })).status, 409);
+  const state = { draft: { capture: { text: 'Legacy' } } };
+  assert.equal(workspaceDraft(state, 'personal'), state.draft);
+  workspaceDraft(state, '__proto__').capture = { text: 'Safe workspace ID' };
+  assert.equal(Object.prototype.capture, undefined);
+  assert.equal(workspaceDraft(structuredClone(state), '__proto__').capture.text, 'Safe workspace ID');
+});
+
+test('workspaces: concurrent archive and capture serialize; frozen workspace rejects derived history changes', async t => {
+  const { post } = await setup(t);
+  await post([create('workspace', 'work', { title: 'Work' }), create('item', 'task', { title: 'Report', workspaceId: 'work' })]);
+  const content = Object.fromEntries(['outcome', 'context', 'scope', 'exclusions', 'nextAction', 'acceptanceChecks', 'missingInformation'].map(name => [name, 'Supplied text']));
+  await post([create('brief', 'brief', { subjectType: 'item', subjectId: 'task', sourceVersion: 1, previousBriefId: null, content, status: 'draft' })]);
+  const [archived, capture] = await Promise.all([
+    post([change('workspace', 'work', 1, { archived: true })]),
+    post([create('item', 'racing', { title: 'Racing capture', workspaceId: 'work' })])
+  ]);
+  assert.equal(archived.status, 200);
+  assert.ok([200, 400].includes(capture.status));
+  if (capture.status === 200) assert.ok(capture.body.sequence < archived.body.sequence);
+  const count = documents.length;
+  assert.equal((await post([change('brief', 'brief', 1, { status: 'accepted' })])).status, 400);
+  assert.equal((await post([create('review', 'review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [], decisions: [], workspaceId: 'work' })])).status, 400);
+  assert.equal(documents.length, count, 'rejected derived writes leave no partial records or receipts');
+  for (const fields of [{ title: '' }, { title: 'x'.repeat(201) }, { title: 'Valid', archived: 'yes' }, { title: 'Valid', surprise: true }]) {
+    assert.equal((await post([create('workspace', 'invalid', fields)])).status, 400);
+  }
 });

@@ -213,7 +213,7 @@ function captureDraft() {
   return { ...formValues(capture), ...(originalInput === undefined ? {} : { original: originalInput }) };
 }
 function draft() {
-  return { capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
+  return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: editing ? { ...editing, fields: formValues(edit) } : null,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
     day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft() };
@@ -796,6 +796,7 @@ function hideAccount() {
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
   selectedWorkspace = PERSONAL; $('workspaceSelect').replaceChildren(); $('workspaceManager').close(); $('workspaceEntries').replaceChildren();
+  $('createWorkspace').reset(); $('workspaceError').textContent = $('workspaceStatus').textContent = '';
   accountId = null; state = undefined; editing = null; originalInput = undefined;
   clarification.hide();
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
