@@ -128,8 +128,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v30')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/shared.html', '/shared.js', '/shared.css', '/capture-extraction.js?v=30', '/workspaces.js', '/workspaces.js?v=30', '/briefs.js', '/briefs.js?v=30', '/help.html', '/local-guidance.js?v=30', '/clarification.js', '/clarification.js?v=30', '/reviews.js', '/reviews.js?v=30', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=30', '/inbox-store.js?v=30', '/inbox-fields.js?v=30', '/pwa.js?v=30', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=30'].sort());
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v31')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual(cached.sort(), ['/shared.html', '/shared.js', '/shared.js?v=31', '/shared.css', '/capture-extraction.js?v=31', '/workspaces.js', '/workspaces.js?v=31', '/briefs.js', '/briefs.js?v=31', '/help.html', '/local-guidance.js?v=31', '/clarification.js', '/clarification.js?v=31', '/reviews.js', '/reviews.js?v=31', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=31', '/inbox-store.js?v=31', '/inbox-fields.js?v=31', '/pwa.js?v=31', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=31'].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -357,11 +357,12 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
+for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
   documents.length = 0;
   let oldWorker = true, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
     const paths = ['/inbox.js', '/inbox-store.js', '/inbox-fields.js',
+      ...(${oldVersion} >= 30 ? ['/shared.js'] : []),
       ...(${oldVersion} >= 4 ? ['/inbox.js?v=${oldVersion}', '/inbox-store.js?v=${oldVersion}', '/inbox-fields.js?v=${oldVersion}'] : [])];
     self.addEventListener('install', event => event.waitUntil(caches.open('todo-inbox-shell-v${oldVersion}').then(async cache => {
       for (const path of paths) await cache.put(path, new Response('throw new Error("mixed old module")', { headers: { 'content-type': 'text/javascript' } }));
@@ -381,14 +382,19 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 1
   await page.evaluate(() => navigator.serviceWorker.ready);
   await capture(page, 'Old queued item');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Old unsubmitted draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=30')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
-  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=30')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=31')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=31')).transact('alice'));
   assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
+  if (oldVersion === 30) {
+    // v30 cached shared.js without a version. The new page must bypass that copy.
+    await page.goto(server.url + '/shared.html'); await page.locator('#sharedMain').waitFor();
+    await page.goto(server.url); await page.locator('#workspace').waitFor();
+  }
   oldWorker = false; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
   assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=30')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=31')).transact('alice'))).queue, before.queue);
   rejectUpgrade = false;
   const nextWorker = context.waitForEvent('serviceworker');
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
@@ -396,7 +402,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 1
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=30')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=31')).transact('alice'))).queue, before.queue);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
   await page.close();
   // Closing a tab and releasing its worker client are asynchronous in Chromium.
