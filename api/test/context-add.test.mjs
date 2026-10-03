@@ -96,8 +96,8 @@ test('context add: offline list/project creation keeps Capture and editor drafts
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.ok(await page.locator('#editor').evaluate(el => el.scrollWidth <= el.clientWidth));
+    if (process.env.CONTEXT_ADD_SCREENSHOT) await page.screenshot({ path: `${process.env.CONTEXT_ADD_SCREENSHOT}-${width}.png` });
   }
-  if (process.env.CONTEXT_ADD_SCREENSHOT) await page.screenshot({ path: process.env.CONTEXT_ADD_SCREENSHOT });
 });
 
 test('context add: workspace changes keep pending additions isolated and archived workspaces stay read-only', { timeout: 60000 }, async t => {

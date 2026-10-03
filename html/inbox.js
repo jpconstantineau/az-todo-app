@@ -421,7 +421,7 @@ function render() {
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
     ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
     : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
-    : context ? `No items match this view. Use ${project ? 'Add next action' : 'Add item'} to add work here, or change the filters.`
+    : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
     : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   $('failure').hidden = !failed;
@@ -508,6 +508,7 @@ function addContextItem(target) {
     listId: target.type === 'list' ? target.id : null,
     projectId: target.type === 'project' ? target.id : null,
     status: target.type === 'project' ? 'next' : 'inbox' });
+  $('createdDestination').replaceChildren();
 }
 function openEditor(record, focus = true, show = true) {
   if (editing?.id === record.id && editing.type === record.type && editing.version === record.version) {
@@ -696,7 +697,7 @@ function workspace(focus = true) {
   }
   document.title = (destination === 'capture' ? 'Capture' : listMode ? 'List Workspace' : 'Your Work') + ' · To-Do';
   render();
-  if (focus) { focusDestination(); void journal(); }
+  if (focus) { $('createdDestination').replaceChildren(); focusDestination(); void journal(); }
 }
 addEventListener('hashchange', () => workspace());
 for (const link of document.querySelectorAll('.workspace-nav a')) {
@@ -722,6 +723,7 @@ for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('cla
   });
 }
 $('view').onchange = $('day').onchange = $('statusFilter').onchange = $('statusChoices').onchange = $('executionFilters').onchange = () => {
+  $('createdDestination').replaceChildren();
   navigation[destination === 'lists' ? 'lists' : 'work'] = {
     view: $('view').value, status: $('statusFilter').value,
     statuses: [...$('statusChoices').querySelectorAll('input:checked')].map(input => input.value),
