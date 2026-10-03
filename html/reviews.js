@@ -1,5 +1,5 @@
-import { key, projected } from './inbox-store.js?v=24';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=24';
+import { key, projected } from './inbox-store.js?v=25';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=25';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -24,7 +24,8 @@ export function setupReviews({ current, save, journal, showDialog }) {
     const index = selected ?? (remaining < 0 ? 0 : remaining);
     const ref = session.included[index], target = ref ? records[key(ref)] : null;
     const previous = latest(session, index);
-    $('reviewProgress').textContent = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${remaining < 0 ? ' Review complete.' : ''}`;
+    const progress = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${remaining < 0 ? ' Review complete.' : ''}`;
+    if ($('reviewProgress').textContent !== progress) $('reviewProgress').textContent = progress;
     $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
     $('reviewRecord').value = String(index);
     $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
@@ -48,12 +49,21 @@ export function setupReviews({ current, save, journal, showDialog }) {
   }
   async function perform(action) {
     if (busy) return;
+    const focused = document.activeElement;
+    let succeeded = false;
     busy = true; message('');
     const controls = ['reviewSessions', 'reviewRecord', 'startDaily', 'startWeekly'];
     for (const id of controls) $(id).disabled = true;
-    try { await action(); }
+    try { await action(); succeeded = true; }
     catch (error) { message(error.message); }
-    finally { busy = false; for (const id of controls) $(id).disabled = false; render(); }
+    finally {
+      busy = false; for (const id of controls) $(id).disabled = false; render();
+      // Disabling a saving control can drop focus to body. Do not take focus
+      // back if the user closed the dialog or moved to another control.
+      if ($('reviews').open && (document.activeElement === document.body || document.activeElement === focused)) {
+        (succeeded || focused.disabled ? $('reviewTitle') : focused).focus();
+      }
+    }
   }
   async function start(reviewKind) {
     const state = current();
