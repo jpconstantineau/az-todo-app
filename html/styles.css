@@ -63,7 +63,7 @@ button:active, .button:active { background: var(--selected); }
 .button.primary, .inbox-page button[type="submit"] { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .button.primary:hover:not(:focus-visible), .inbox-page button[type="submit"]:hover:not(:focus-visible) { outline: var(--border-width) solid var(--ink); outline-offset: 2px; }
 .button.text { background: transparent; color: var(--link); border-color: transparent; }
-button:disabled, input:disabled, select:disabled, textarea:disabled { opacity: var(--disabled-opacity); cursor: not-allowed; }
+button:disabled, button[aria-disabled="true"], input:disabled, select:disabled, textarea:disabled { opacity: var(--disabled-opacity); cursor: not-allowed; }
 :focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 3px; }
 summary { min-height: var(--target); padding: var(--space-3) 0; cursor: pointer; font-size: var(--text-sm); font-weight: var(--weight-emphasis); }
 details { min-width: 0; }
