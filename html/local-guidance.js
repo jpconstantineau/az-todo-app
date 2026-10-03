@@ -1,5 +1,7 @@
 // Optional inference has no record/outbox access. Only reviewed text leaves this panel.
-const options = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] };
+export const modelOptions = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] };
+export function destroyModel(model) { try { model?.destroy(); } catch { /* Aborted sessions may already be destroyed. */ } }
+const options = modelOptions;
 export function validateSuggestion(raw, limit) {
   if (typeof raw !== 'string' || raw.length > 24000) throw new Error('Invalid suggestion');
   const value = JSON.parse(raw);
@@ -12,7 +14,7 @@ export function localGuidance({ context, use }) {
   const panel = $('localGuidance'), status = $('guidanceStatus'), start = $('guidanceStart'), cancel = $('guidanceCancel'), preview = $('guidancePreview'), apply = $('guidanceUse');
   let generation = 0, controller, session, readiness = 'unavailable', suggestion = '';
   const message = text => { if (status.textContent !== text) status.textContent = text; };
-  function destroy(model) { try { model?.destroy(); } catch { /* Aborted sessions may already be destroyed. */ } }
+  const destroy = destroyModel;
   function reset() {
     generation++; controller?.abort(); controller = null;
     destroy(session); session = null;

@@ -122,7 +122,7 @@ export async function startServer({ browserUser = false, assetContents = () => u
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"] };
-        for (const name of ['workspaces.js', 'handoff.html', 'handoff.js', 'handoff-protocol.js', 'theme.js', 'pwa.js', 'help.html', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'local-guidance.js', 'briefs.js', 'inbox-sw.js']) {
+        for (const name of ['capture-extraction.js', 'workspaces.js', 'handoff.html', 'handoff.js', 'handoff-protocol.js', 'theme.js', 'pwa.js', 'help.html', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'local-guidance.js', 'briefs.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
         assets["/manifest.json"] = ["manifest.json", "application/json"];

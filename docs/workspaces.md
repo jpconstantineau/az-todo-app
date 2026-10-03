@@ -12,7 +12,7 @@ Personal remains available as the default destination for old clients and browse
 handoffs; it cannot be renamed, archived or deleted. Create a named workspace for
 work that should later be archived as a whole.
 
-Each workspace keeps its own capture, editor, clarification, brief and review
+Each workspace keeps its own capture, editor, clarification, brief, AI-suggestion and review
 drafts, list selection and filters on this device. Switching saves the current
 draft before displaying the destination. Offline reload remembers the last
 selected workspace. Same-profile tabs share each workspace's draft slot, as they
@@ -74,7 +74,7 @@ to hide the collection. Authenticated account exports and sync still include
 retained records. Workspaces organize one owner's data; they are not separate
 accounts or a cross-user access-control/sharing system.
 
-Deploy the compatible API before the client. Shell v27 versions and caches the
+Deploy the compatible API before the client. Shell v28 versions and caches the
 entire module graph, including workspaces.js, while keeping existing queues and
 drafts. Older open clients do not understand workspace filtering and may display
 the owner's records together; close all app tabs/windows to activate the update

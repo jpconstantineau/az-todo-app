@@ -8,11 +8,17 @@ import { showView, clickControl } from './navigation-helper.mjs';
 
 const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-async function setup(t) {
+async function setup(t, ai = false) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  if (ai) await context.addInitScript(() => {
+    globalThis.LanguageModel = {
+      availability: async () => 'available',
+      create: async () => ({ destroy() {}, prompt: () => new Promise(resolve => { window.finishWorkspaceAI = resolve; }) })
+    };
+  });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await synced(page);
@@ -78,6 +84,32 @@ test('workspaces: offline drafts, filters, capture, reviews, moves, reload and a
   await page.waitForFunction(() => document.querySelector('#workspaceSelect').options.length === 1);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   assert.equal(await page.locator('#workspaceSelect').inputValue(), 'personal');
+});
+
+test('workspaces: AI capture cancels on switching and restored reviewed batches keep their original workspace', { timeout: 60000 }, async t => {
+  const { page } = await setup(t, true);
+  const work = await createSpace(page, 'Work'), family = await createSpace(page, 'Family');
+  await switchTo(page, work);
+  await page.locator('#captureText').fill('Write report');
+  await page.locator('#captureAI summary').click();
+  await page.locator('#extractStart').click();
+  await page.waitForFunction(() => typeof finishWorkspaceAI === 'function');
+  await switchTo(page, family); await page.locator('#captureText').fill('Write report');
+  const result = JSON.stringify({ items: [{ title: 'Write report', description: '', listId: '', priority: '', context: '', area: '', dueDate: '', dueTime: '', evidence: 'Write report', uncertainty: '' }], notes: '' });
+  await page.evaluate(async result => { finishWorkspaceAI(result); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); }, result);
+  assert.equal(await page.locator('#extractReview').isVisible(), false, 'same text in another workspace cannot receive the late result');
+  await switchTo(page, work);
+  await page.evaluate(() => { window.finishWorkspaceAI = null; });
+  await page.locator('#extractStart').click(); await page.waitForFunction(() => typeof finishWorkspaceAI === 'function');
+  await page.evaluate(result => finishWorkspaceAI(result), result);
+  await page.locator('#extractionReview').waitFor(); await page.locator('#extractClose').click();
+  await switchTo(page, family); assert.equal(await page.locator('#extractReview').isVisible(), false);
+  await switchTo(page, work); await page.locator('#extractReview').click();
+  await page.locator('#extractAccept').click(); await page.waitForFunction(() => !document.querySelector('#extractionReview').open);
+  await synced(page);
+  const items = documents.filter(row => row.kind === 'record' && row.record.type === 'item');
+  assert.equal(items.length, 1); assert.equal(items[0].record.workspaceId, work);
+  assert.equal((await local(page)).workspaceDrafts[family].capture.text, 'Write report');
 });
 
 test('workspaces: archive, delete, offline recovery and responsive management preserve all contents', { timeout: 90000 }, async t => {
