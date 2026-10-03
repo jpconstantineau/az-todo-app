@@ -7,7 +7,7 @@ app.http("misc-health", {
   handler: async () => {
     return new Response("OK", {
       status: 200,
-      headers: { "content-type": "text/plain; charset=utf-8" }
+      headers: { "content-type": "text/plain; charset=utf-8", "x-node-version": process.version }
     });
   }
 });
