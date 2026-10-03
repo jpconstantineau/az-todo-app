@@ -9,7 +9,7 @@ deadlines (including timed deadlines later today), and waiting/deferred items re
 for review. Deadlines use the device's local calendar day, including daylight-saving
 changes; timed waiting/deferred cues still use the current instant. Weekly reviews
 include all active items (including inbox, waiting and deferred) and project outcomes.
-Completed and dropped items are excluded from new sessions. Projects can be
+Completed, dropped and reference items are excluded from new sessions. Projects can be
 retained; review their canonical actions individually to drop or defer them.
 
 A session freezes the included record identities available on this device.

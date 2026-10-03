@@ -125,7 +125,7 @@ test('direct clarification skips only unanswered questions and accepts simple di
   assert.deepEqual(direct.session.answers.nextAction, { decision: 'skipped', value: null });
   assert.deepEqual(clarificationFields(direct.session), direct.session);
   assert.throws(() => decision(initial(), { ...emptyProposal(), text: 'Keep my draft' }, 'disposition'), /wording is still here/);
-  for (const status of ['next', 'someday', 'completed', 'dropped']) {
+  for (const status of ['next', 'someday', 'reference', 'completed', 'dropped']) {
     const id = `direct-${status}`;
     assert.equal((await post(server.url, [{ ...mutation('item', 0, { title: id, originalText: 'Original capture' }), id }])).status, 200);
     const result = decision(decision(initial(), emptyProposal(), 'disposition').session, { ...emptyProposal(), status }, 'accepted');

@@ -38,6 +38,8 @@ for (const [timezoneId, instant] of [
         'planned-tomorrow': { plannedDay: day, dueDateUtc: tomorrow.toISOString() },
         completed: { status: 'completed', dueDateUtc: later },
         dropped: { status: 'dropped', dueDateUtc: yesterday },
+        'reference-later': { status: 'reference', dueDateUtc: later, plannedDay: day },
+        'reference-overdue': { status: 'reference', dueDateUtc: yesterday },
         deleted: { dueDateUtc: later },
         'waiting-later': { status: 'waiting', waitingOn: 'Supplier', reviewDateUtc: later },
         'deferred-later': { status: 'deferred', startDateUtc: later },
@@ -57,7 +59,7 @@ for (const [timezoneId, instant] of [
         body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations }) });
       assert.equal(response.status, 200, await response.text());
     };
-    await post(mutations);
+    for (let start = 0; start < mutations.length; start += 20) await post(mutations.slice(start, start + 20));
     await post([{ type: 'item', id: 'deleted', action: 'delete', expectedVersion: 1 }]);
     await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
     await clickControl(page.locator('#openReviews')); await page.locator('#startDaily').click();

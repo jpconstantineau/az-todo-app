@@ -10,8 +10,20 @@ choose a state and dates; ordinary lists and custom statuses continue to work.
 | Next | Ready to act; `nextAction` is derived as true only for this state. |
 | Waiting | Enter who/what is awaited. A review date or timed review cue is optional. |
 | Deferred | Enter a start date or time. The item becomes ready for review then. |
+| Reference | Non-actionable information, kept with its original capture and editable notes. No project, dates, brief or AI required. |
 | Completed | Complete preserves the preceding status, dependency and dates. Reopen restores that status. |
 | Custom | Configured and historic values remain available; no automatic reinterpretation. |
+
+To file reference material, choose **Reference (non-actionable)** in Task details
+or Clarify's disposition (the earlier questions can be skipped). Find it under
+Your Work → All items → Status → reference, or All statuses; the same filters
+work within its list or project. Reference stays out of the default Incomplete
+items filter, Inbox, planned-day view, and newly started daily/weekly reviews,
+even if it retains an old date. Existing saved review inventories and history
+remain unchanged. Reference rows offer editing, deletion and state undo without
+Complete, Clarify or Brief. Use the editor to return it to Inbox or Next if it
+becomes actionable. Filing preserves its identity, text, links and other fields,
+and uses the same offline queue, version checks and conflict recovery as edits.
 
 Waiting and deferred records remain visible in All statuses. **Ready for review**
 shows waiting records whose review cue has arrived and deferred records whose
