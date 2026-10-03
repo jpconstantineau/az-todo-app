@@ -191,4 +191,4 @@ retain their task-specific labels.
 
 Regression coverage: task-menus.test.mjs verifies 767/768/936/1440px layouts, long
 titles, multiple rows, keyboard/dialog focus, resizing, completion/reopening undo,
-offline pending saves and failure visibility. The PWA shell advances to v38.
+offline pending saves and failure visibility. The PWA shell advances to v39.
