@@ -1,5 +1,5 @@
-import { key, projected } from './inbox-store.js?v=38';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=38';
+import { key, projected } from './inbox-store.js?v=39';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=39';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -68,9 +68,11 @@ export function setupReviews({ current, save, journal, showDialog, records: scop
   async function start(reviewKind) {
     const state = current();
     if (!state || state.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before starting a review.');
-    const day = localDate(new Date().toISOString()).slice(0, 10);
+    const now = new Date(), day = localDate(now.toISOString()).slice(0, 10);
+    // Local midnight, rather than 24 hours later, also handles daylight-saving days.
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
     const included = Object.values(scopedRecords ? scopedRecords() : projected(state)).filter(record => !record.deleted && (reviewKind === 'weekly' && record.type === 'project' || record.type === 'item' && !['completed', 'dropped', 'reference'].includes(record.status) &&
-      (reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record) || record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) <= Date.now())))
+      (reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) || record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow)))
       .map(({ type, id }) => ({ type, id }));
     if (included.length > 200) throw new Error('This review exceeds 200 records. Complete or drop inactive work before starting; no records have been omitted.');
     const id = crypto.randomUUID();

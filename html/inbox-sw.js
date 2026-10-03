@@ -1,9 +1,9 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v38';
-const ASSETS = ['/capture-extraction.js?v=38', '/workspaces.js', '/workspaces.js?v=38', '/local-guidance.js?v=38', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=38', '/reviews.js?v=38', '/pwa.js?v=38', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const CACHE = 'todo-inbox-shell-v39';
+const ASSETS = ['/capture-extraction.js?v=39', '/workspaces.js', '/workspaces.js?v=39', '/local-guidance.js?v=39', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=39', '/reviews.js?v=39', '/pwa.js?v=39', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 // Fresh module URLs bypass older workers' exact asset allowlists.
-ASSETS.push('/inbox.js?v=38', '/inbox-store.js?v=38', '/inbox-fields.js?v=38', '/inbox-export.js?v=38', '/briefs.js', '/briefs.js?v=38', '/help.html');
-ASSETS.push('/shared.html', '/shared.js', '/shared.js?v=38', '/shared.css');
+ASSETS.push('/inbox.js?v=39', '/inbox-store.js?v=39', '/inbox-fields.js?v=39', '/inbox-export.js?v=39', '/briefs.js', '/briefs.js?v=39', '/help.html');
+ASSETS.push('/shared.html', '/shared.js', '/shared.js?v=39', '/shared.css');
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });

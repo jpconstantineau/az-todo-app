@@ -31,6 +31,10 @@ Reproduce the focused checks from the repository root with
 Set `PLAYWRIGHT_CHANNEL=msedge` to use installed Edge, and optionally set
 `REFERENCE_SCREENSHOTS` to an output directory to regenerate the images.
 
-Shell v38 delivers the updated UI and worker handshake together. Deploy the
+Shell v39 delivers the updated UI and worker handshake together. Deploy the
 compatible API with the client. Existing saved review inventories remain frozen;
 new sessions exclude reference material. No data migration is needed.
+
+PR #89 merged during implementation. Its whole-local-day deadline inclusion and
+timezone/DST regressions are preserved, with added cases proving that reference
+stays excluded even with today's planned day and timed or overdue deadlines.

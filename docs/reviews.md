@@ -5,9 +5,10 @@ panel uses native buttons, selects and date input. Escape or **Stop and close
 review** returns to the workspace. No timer, AI or prior clarification is required.
 
 Daily reviews include active next actions, today's planned items, overdue/due
-deadlines, and waiting/deferred items ready for review. Calendar dates use the
-device's local day; timestamp cues use the current instant. Weekly reviews include
-all active items (including inbox, waiting and deferred) and project outcomes.
+deadlines (including timed deadlines later today), and waiting/deferred items ready
+for review. Deadlines use the device's local calendar day, including daylight-saving
+changes; timed waiting/deferred cues still use the current instant. Weekly reviews
+include all active items (including inbox, waiting and deferred) and project outcomes.
 Completed, dropped and reference items are excluded from new sessions. Projects can be
 retained; review their canonical actions individually to drop or defer them.
 
@@ -79,7 +80,10 @@ Run `npm test --prefix api` with Node 24+ and Playwright Chromium, or
 rollback, duplicate delivery, immutable history, paired edits, version conflicts,
 undo limits, foreign references, concurrent decisions, deletion acknowledgement,
 empty reviews, offline reload, second-device resume, dropped-state recovery and
-account switching. Layout checks cover 320/390/768/1440/2560 CSS pixels.
+account switching. `api/test/daily-review-deadlines.test.mjs` verifies whole-day
+deadline inclusion, local midnight boundaries, spring/fall DST transitions,
+unchanged waiting/deferred cues, and offline review resumption. Layout checks
+cover 320/390/768/1440/2560 CSS pixels.
 
 Local verification on 2026-10-02 uses Windows, Node 26.7.0 and headless Edge with
 the existing in-memory Cosmos substitute and simulated authenticated accounts.
