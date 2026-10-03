@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=31';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=31';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=31';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=31';
-import { clarificationUI } from './clarification.js?v=31';
-import { setupReviews } from './reviews.js?v=31';
-import { setupBriefs } from './briefs.js?v=31';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=31';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=32';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=32';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=32';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=32';
+import { clarificationUI } from './clarification.js?v=32';
+import { setupReviews } from './reviews.js?v=32';
+import { setupBriefs } from './briefs.js?v=32';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=32';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -541,6 +541,7 @@ capture.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || switchingWorkspace || !accountId || workspaceReadOnly()) return;
   if (extraction.snapshot().draft) { error('A suggested batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
+  const focused = document.activeElement;
   saving = true; capture.querySelector('[type=submit]').disabled = true;
   void (async () => {
     const owner = accountId, submitted = captureDraft();
@@ -562,7 +563,10 @@ capture.addEventListener('submit', event => {
         extraction.reset(true);
       }
       clearError(); statusText('draftStatus', 'Saved on device');
-      render(); capture.elements.text.focus(); broadcast(); void sync();
+      render();
+      if (destination === 'capture' && !document.querySelector('dialog[open]') &&
+          (document.activeElement === document.body || document.activeElement === focused)) capture.elements.text.focus();
+      broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
     finally { saving = false; capture.querySelector('[type=submit]').disabled = false; }
   })();

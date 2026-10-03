@@ -23,6 +23,12 @@ list/project/defaults, review decisions, brief revisions, navigation and export 
   when another dialog has already opened and closed.
 - Clarification focuses each question as it advances. Invalid acceptance keeps
   focus on the initiating control and exposes an alert. Answers remain editable.
+- Capture saves return to the text box for quick-add only while focus remains on
+  the initiating control. A delayed save preserves a later control, navigation or
+  modal choice. Manual and explicit AI task reviews follow the same rule: results
+  remain under **Review saved suggestions** when the user moves elsewhere.
+  Opening a review focuses its heading and instructions; Escape returns to its
+  initiating button. AI failures restore that button only when focus has not moved.
 - The workspace manager keeps keyboard focus on the same workspace action
   across background refreshes and renames, including duplicate names.
   Archive/Unarchive retains focus on the toggle; Delete/Restore focuses that
@@ -48,6 +54,7 @@ list/project/defaults, review decisions, brief revisions, navigation and export 
 Shell v25 includes the review/brief focus and announcement fixes.
 Shell v31 adds workspace-manager focus and delayed-create protection with fresh
 module URLs, so an older active worker cannot serve a mixed module graph.
+Shell v32 adds capture-save and task-review focus handling with fresh module URLs.
 Deploy the compatible API first. As before, updates wait for old tabs to close;
 no forced activation, storage reset or outbox rewrite is introduced.
 
@@ -63,6 +70,7 @@ client code with real browser IndexedDB; the API storage is an in-memory fixture
 | Save/Escape, list/project/defaults/clarification return focus, invalid clarification, export | `accessibility.test.mjs` checks native dialogs, question focus and a downloaded JSON export. |
 | Unchanged announcements vs new saves | `accessibility.test.mjs` observes live-region DOM mutations; actual spoken output requires the manual checks below. |
 | Daily/weekly start, empty review, retain/drop/undo, brief save/accept/export and failed saves | `accessibility.test.mjs` uses Tab/Enter to reach actions and checks focus on the result or failed control. |
+| Delayed capture saves and manual/AI review, result headings and Escape | `accessibility.test.mjs` and `capture-extraction.test.mjs` check the actual active element, retained input and deferred review availability. Local AI is mocked. |
 | Delayed save after closing a review or moving to brief help | `accessibility.test.mjs` delays IndexedDB completion delivery and verifies later focus is preserved. |
 | Workspace refresh/rename, archive/unarchive, delete/restore and delayed create | `workspace-accessibility.test.mjs` checks keyboard focus, status descriptions, duplicate names and preservation of subsequent input. |
 | Account rename, timeout, delayed responses, switching and logout | `account-sync.test.mjs` retains identity/isolation coverage. |

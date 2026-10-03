@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, faults, startServer } from './harness.mjs';
-import { clickControl } from './navigation-helper.mjs';
+import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { captureClock, capturedTime, validateExtraction, extractionMutations } from '../../html/capture-extraction.js';
 import { fieldsFor } from '../api/v1/contract.mjs';
@@ -198,6 +198,45 @@ test('failed persistence never passes capture to inference or loses its recovery
   assert.equal(await page.evaluate(() => aiCalls.prompts.length), 0);
   assert.match(await page.locator('#recoveryText').inputValue(), /Call Sam tomorrow/);
   assert.equal(records().length, 0);
+});
+
+test('explicit AI completion preserves navigation and a later capture control, with keyboard review on demand', { timeout: 30000 }, async t => {
+  const { page } = await setup(t, { delay: true });
+  await page.locator('#captureText').fill(source);
+  await page.locator('#extractStart').click();
+  await page.waitForFunction(() => !!window.finishAI);
+  await showView(page, 'work');
+  await page.evaluate(raw => finishAI(raw), output());
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.startsWith('Suggestions saved'));
+  assert.equal(await page.locator('#extractionReview').evaluate(dialog => dialog.open), false);
+  assert.equal(await page.locator('#itemsHeading').evaluate(el => el === document.activeElement), true);
+  await showView(page, 'capture');
+  await page.locator('#extractReview').focus(); await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.activeElement.id === 'extractionHeading');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement.id === 'extractReview');
+  await page.locator('#extractReview').click(); await page.locator('#extractOriginal').click();
+  await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  await page.locator('#extractStart').click();
+  await page.waitForFunction(() => aiCalls.prompts.length === 2);
+  await page.locator('#captureText').focus();
+  await page.evaluate(raw => finishAI(raw), output());
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.startsWith('Suggestions saved'));
+  assert.equal(await page.locator('#extractionReview').evaluate(dialog => dialog.open), false);
+  assert.equal(await page.locator('#captureText').evaluate(el => el === document.activeElement), true);
+});
+
+test('explicit AI success and failure retain the initiating keyboard control', { timeout: 30000 }, async t => {
+  const { page } = await setup(t, { fail: true });
+  await page.locator('#captureText').fill(source);
+  await page.locator('#extractStart').focus(); await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent === 'Model failed');
+  await page.waitForFunction(() => document.activeElement.id === 'extractStart');
+  await page.evaluate(() => { aiMode.fail = false; });
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.activeElement.id === 'extractionHeading');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement.id === 'extractStart');
 });
 
 test('manual batch review works without AI, retains offline corrections and accepts once', { timeout: 60000 }, async t => {
