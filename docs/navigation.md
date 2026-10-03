@@ -1,5 +1,18 @@
 # Workspace navigation — issue 26
 
+## Add work in context — issue 76
+
+Select a list in Lists or Your Work and choose **Add item**, or select a project
+and choose **Add next action**. The existing editor preselects that destination;
+project additions start as next actions. Title is enough to save. New lists and
+projects also offer an immediate add button after creation.
+
+Global Capture keeps its own draft and destination choices. If an editor draft
+has changed, adding in context reopens it for saving before another item is
+started. Additions use the normal account/workspace draft and outbox, so offline
+reload, validation, conflicts and stable item identity work as for other saves.
+Archived workspaces remain read-only. `context-add.test.mjs` covers these flows.
+
 ## Mobile workflow update — issue 45
 
 Below 768 CSS pixels, **Menu** (☰) expands account/preferences, Help, sync,
