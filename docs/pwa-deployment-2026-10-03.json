@@ -1,0 +1,88 @@
+{
+  "origin": "https://todo.jpto.dev",
+  "checkedAt": "2026-10-03T12:55:07.729Z",
+  "status": "PASS",
+  "checks": [
+    {
+      "path": "/",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "text/html",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "2ae5d608290724acc66eb0dd5c533f0e90f585e975465a75bb511b1ab5dc5c4d",
+      "actualSha256": "2ae5d608290724acc66eb0dd5c533f0e90f585e975465a75bb511b1ab5dc5c4d"
+    },
+    {
+      "path": "/inbox.html",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "text/html",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "6fd0056644db05f0af814b636938bb88bbd8c82a0d900c0bff59f1a1d86a3dc5",
+      "actualSha256": "6fd0056644db05f0af814b636938bb88bbd8c82a0d900c0bff59f1a1d86a3dc5"
+    },
+    {
+      "path": "/manifest.json",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "application/json",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "426ea61449537c442ccaa2395e9e182693a6f4d455eb2f9ab71ae1b5dffd96cb",
+      "actualSha256": "426ea61449537c442ccaa2395e9e182693a6f4d455eb2f9ab71ae1b5dffd96cb"
+    },
+    {
+      "path": "/icons/icon-192.png",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "image/png",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "c953936e53ad3a4663209e40310b4d1e7a98e7fbd59a077b65ea9470aed3f516",
+      "actualSha256": "c953936e53ad3a4663209e40310b4d1e7a98e7fbd59a077b65ea9470aed3f516"
+    },
+    {
+      "path": "/icons/icon-512.png",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "image/png",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "d4872e9c9873602b6b57c47df9746cf7c763ee8b371ed9061e300a5666fedbbc",
+      "actualSha256": "d4872e9c9873602b6b57c47df9746cf7c763ee8b371ed9061e300a5666fedbbc"
+    },
+    {
+      "path": "/icons/apple-touch-icon.png",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "image/png",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "a5c031b8a7a383614b0c5695ad4d5d5e15ddcfa66fab00dc9a23039512b1b517",
+      "actualSha256": "a5c031b8a7a383614b0c5695ad4d5d5e15ddcfa66fab00dc9a23039512b1b517"
+    },
+    {
+      "path": "/inbox-sw.js",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 200,
+      "contentType": "text/javascript",
+      "contentSecurityPolicy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "expectedSha256": "bf7134fc7983a2ca9287350aface9dd8d2e53b567d19ac49cc239ab31b4bbe27",
+      "actualSha256": "bf7134fc7983a2ca9287350aface9dd8d2e53b567d19ac49cc239ab31b4bbe27"
+    },
+    {
+      "path": "/icons/pwa-verification-missing-fe226e5a-a4fc-44d3-925e-0c19b9ad2aa7.png",
+      "status": "PASS",
+      "failures": [],
+      "httpStatus": 404,
+      "contentType": "text/html"
+    }
+  ],
+  "nodeVersion": "v26.7.0",
+  "platform": "win32",
+  "sourceCommit": "71b0269b692566d1d51ebb5bf63f00c0f69c8852",
+  "sourceDirty": false
+}
