@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=24" defer></script>
+  <script src="/pwa.js?v=25" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=24"></script>
+  <script type="module" src="/inbox.js?v=25"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -70,6 +70,12 @@
           <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
         </details>
       </form>
+      <details id="captureAI"><summary>Automatic local AI suggestions</summary>
+        <p>Enable to suggest tasks after you pause typing. English only, on this device; the browser may download a model. Saved tasks still sync to your cloud account. Review is always required.</p>
+        <label><input id="extractAuto" type="checkbox"> Automatically suggest with local AI</label>
+        <p id="extractionStatus" role="status">Optional local AI. Manual capture always works.</p>
+        <div class="actions"><button id="extractStart" type="button">Suggest tasks now</button><button id="extractCancel" type="button" hidden>Cancel suggestions</button><button id="extractReview" type="button" hidden>Review saved suggestions</button></div>
+      </details>
     </section>
     <section class="card" id="failure" hidden aria-labelledby="failureHeading">
       <h2 id="failureHeading">A save needs attention</h2><p id="failureMessage"></p>
@@ -92,6 +98,17 @@
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
     </section>
     </div>
+    <dialog class="side-panel" id="extractionReview" aria-labelledby="extractionHeading">
+      <p class="eyebrow">Review capture</p><h2 id="extractionHeading">Suggested tasks</h2>
+      <p>These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, copy the notes into one task and remove the other.</p>
+      <p id="extractionClock"></p><details><summary>Exact original capture</summary><pre id="extractionOriginal"></pre></details>
+      <p id="extractionNotes"></p><p>Original text is retained on every accepted task, including notes that are not tasks.</p>
+      <p id="extractionError" role="alert"></p>
+      <form id="extractionForm"><div id="extractionItems"></div>
+        <div class="actions"><button id="extractAdd" type="button">Add task</button><button id="extractAccept" type="submit">Accept all tasks on device</button></div>
+      </form>
+      <div class="actions"><button id="extractClose" type="button">Stop and keep review</button><button id="extractOriginal" type="button">Discard suggestions and return to capture</button></div>
+    </dialog>
     <dialog class="side-panel" id="deletedRecords" aria-labelledby="deletedHeading">
       <p class="eyebrow">Recovery</p><h2 id="deletedHeading">Deleted records</h2>
       <p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p>
