@@ -19,7 +19,7 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   const longTitle = 'Plan the garage shelving with measurements, materials, delivery and enough room for every tool '.repeat(2).trim();
   await page.locator('#captureText').fill([longTitle, 'Milk', 'Bread'].join('\n'));
-  await page.locator('#capture [type=submit]').click();
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await synced(page);
   await showView(page, 'work');
   const cards = page.locator('#items article'), menu = cards.first().locator('.task-menu'), summary = menu.locator('summary');

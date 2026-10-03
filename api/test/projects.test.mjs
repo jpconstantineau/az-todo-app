@@ -37,7 +37,8 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.locator('#editor').waitFor({ state: 'hidden' });
   const projectId = (await local(page)).queue[0].operation.mutations[0].id;
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
-  await page.locator('#editAdvanced summary').click();
+  await page.locator('#edit .task-dates > summary').click();
+  await page.locator('#edit .task-metadata > summary').click();
   await page.locator('#edit [name=projectId]').selectOption(projectId);
   await page.locator('#edit [name=plannedDay]').fill('2026-10-05');
   await page.locator('#edit [name=areas]').selectOption('Personal');
@@ -84,7 +85,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   assert.equal(await other.locator('#edit [name=dueLocal]').inputValue(), '2026-10-07T11:00');
   await other.getByRole('button', { name: 'Close editor', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export device copy', exact: true }).click();
+  await clickControl(page.getByRole('button', { name: 'Export device copy', exact: true, includeHidden: true }));
   const download = await downloadPromise;
   const exported = JSON.parse(await readFile(await download.path(), 'utf8'));
   assert.equal(Object.values(exported.state.records).filter(r => r.type === 'item').length, 1);

@@ -77,6 +77,7 @@
   }
   const waiting = () => {
     updateStatus('An app update is ready. Wait for your draft to be saved on device, then close all app tabs and app windows and reopen. Pending saves stay on this device.');
+    update.textContent = 'An app update is ready. Open Menu → Preferences for details.';
   };
   const failed = () => {
     updateStatus('The app update could not finish. Your saved work stays on this device. Use Check for updates in Preferences to retry online.');

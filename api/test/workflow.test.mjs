@@ -77,7 +77,7 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await page.locator('#captureText').fill('Get the quote');
-  await page.locator('#captureOptions summary').click();
+  await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=status]').selectOption('waiting');
   await page.locator('#capture [name=waitingOn]').fill('Alex');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
@@ -87,9 +87,9 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
   assert.equal(await page.locator('#items article').count(), 1);
   assert.match(await page.locator('#items').innerText(), /Waiting for: Alex/);
   await page.getByRole('button', { name: 'Edit Get the quote', exact: true }).click();
-  await page.locator('#editAdvanced summary').click();
   assert.equal(await page.locator('#edit [name=reviewDate]').inputValue(), '');
   assert.equal(await page.locator('#edit [name=reviewDateUtc]').inputValue(), '');
+  await page.locator('#edit .task-dates > summary').click();
   await page.locator('#edit [name=waitingOn]').fill('Alex — sample quote');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
@@ -174,7 +174,6 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await context.setOffline(true);
   await showView(page, 'work');
   await page.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
-  await page.locator('#editAdvanced summary').click();
   await page.locator('#edit [name=status]').selectOption('waiting');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.waitForFunction(() => !document.querySelector('#editError').hidden);
@@ -202,7 +201,6 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.reload(); await page.getByRole('button', { name: 'Complete Get approval', exact: true }).waitFor();
   assert.match(await page.locator('#items').innerText(), /Waiting for: Alex/);
   await page.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
-  if (!await page.locator('#editAdvanced').getAttribute('open')) await page.locator('#editAdvanced summary').click();
   await page.locator('#edit [name=status]').selectOption('deferred');
   await page.locator('#edit [name=startDate]').fill('2020-01-02');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });

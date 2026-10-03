@@ -40,7 +40,7 @@ async function local(page) {
 async function capture(page, text, newList) {
   await showView(page, 'capture'); await page.locator('#captureText').fill(text);
   if (newList) {
-    if (!await page.locator('#captureOptions').getAttribute('open')) await page.locator('#captureOptions summary').click();
+    if (!await page.locator('#captureOptions').getAttribute('open')) await page.locator('#captureOptions > summary').click();
     await page.locator('[name=newList]').fill(newList);
   }
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
@@ -249,7 +249,7 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await showView(page, 'capture'); await page.locator('#captureText').fill('milk, bread; eggs');
-  await showView(page, 'capture'); await page.locator('#captureOptions summary').click();
+  await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   await page.locator('#previewSplit').click();
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
@@ -266,7 +266,7 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   await Promise.all([capture(page, 'Tab one'), capture(second, 'Tab two')]);
   assert.equal((await local(page)).queue.length, 3);
   await context.setOffline(false);
-  await Promise.all([page.getByRole('button', { name: 'Sync now' }).click(), second.getByRole('button', { name: 'Sync now' }).click()]);
+  await Promise.all([clickControl(page.getByRole('button', { name: 'Sync now', includeHidden: true })), clickControl(second.getByRole('button', { name: 'Sync now', includeHidden: true }))]);
   await confirmed(page); await confirmed(second);
   assert.equal(records().length, 5);
   assert.equal(documents.filter(doc => doc.kind === 'receipt').length, 3);

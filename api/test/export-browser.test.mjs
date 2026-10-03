@@ -10,6 +10,7 @@ import { validateDeviceExport, validateAccountExport } from '../../html/inbox-ex
 
 async function download(page, format = 'json') {
   await openMenu(page);
+  await clickControl(page.locator('#exportFormat'));
   await page.locator('#exportFormat').selectOption(format);
   const pending = page.waitForEvent('download');
   await clickControl(page.locator('#export'));
@@ -128,7 +129,8 @@ test('server download includes unsynced remote records, excludes local drafts, a
   assert.deepEqual(before.records, {});
   await openMenu(page);
   for (const format of ['json', 'text']) {
-    await page.locator('#exportFormat').selectOption(format);
+    await clickControl(page.locator('#exportFormat'));
+  await page.locator('#exportFormat').selectOption(format);
     const pending = page.waitForEvent('download');
     await page.locator('#accountExport').click();
     const file = await pending, text = await readFile(await file.path(), 'utf8');

@@ -3,7 +3,7 @@
 .toolbar { margin-bottom: var(--space-3); }
 .inbox-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-items: start; margin: var(--space-6) 0; }
 .inbox-grid > * { min-width: 0; }
-#captureText { min-height: clamp(200px, 32dvh, 400px); }
+#captureText { min-height: 120px; }
 .workspace-nav [aria-current="page"] { border-color: var(--link); background: var(--selected); box-shadow: inset 0 -3px var(--link); text-decoration: underline; text-underline-offset: 4px; }
 .inbox-page article { background: var(--surface-raised); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); padding: var(--space-4); margin-top: var(--space-3); overflow-wrap: anywhere; }
 .inbox-page article .notes { font-size: var(--text-sm); color: var(--muted); }
@@ -30,7 +30,7 @@
 }
 
 .workspace-nav { align-items: stretch; }
-.workspace-nav a { flex: 1; text-align: center; min-width: 0; }
+.workspace-nav > * { flex: 1 1 0; text-align: center; min-width: 0; }
 #listTools { margin-block: var(--space-4); }
 #statusSelection { min-width: 0; margin: var(--space-3) 0; padding: var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
 #statusChoices { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
@@ -43,7 +43,20 @@
 
 /* Native disclosures keep secondary actions out of the active workflow. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.responsive-menu > summary { display: none; }
+.inbox-page .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); padding-bottom: var(--space-2); }
+.app-header h1 { font-size: var(--text-heading); margin: 0; }
+#appMenu { display: contents; }
+.responsive-menu > summary { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: var(--space-2); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); cursor: pointer; }
+.responsive-menu > summary::-webkit-details-marker { display: none; }
+#appMenu .menu-content { grid-column: 1 / -1; padding: var(--space-4); background: var(--surface); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
+#appMenu:not([open]) > .menu-content { display: none; }
+.workspace-switcher label { display: flex; align-items: center; gap: var(--space-3); margin: 0; min-width: 0; }
+.workspace-switcher select { width: auto; min-width: 0; max-width: 100%; }
+#workspaceStatus:empty { display: none; }
+#editor[open] { display: flex; flex-direction: column; overflow: hidden; }
+#edit { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.edit-scroll { overflow-y: auto; min-height: 0; padding: var(--space-1); scroll-padding-block: var(--space-3); }
+.editor-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); border-top: var(--border-width) solid var(--border); background: var(--surface); }
 .menu-content { max-width: 760px; }
 .menu-content .device-tools { margin-block: var(--space-3); }
 #connection { margin-block: var(--space-2); font-size: var(--text-sm); }
@@ -65,16 +78,9 @@
 .task-menu > summary::-webkit-details-marker { display: none; }
 .task-heading .editable-title { padding-left: 0; }
 @media (max-width: 767px) {
-  .inbox-page .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
-  .app-header h1 { font-size: var(--text-heading); }
-  #appMenu { display: contents; }
-  .responsive-menu > summary { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: var(--space-2); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); cursor: pointer; }
-  .responsive-menu > summary::-webkit-details-marker { display: none; }
-  #appMenu > summary { font-size: 24px; }
-  #appMenu .menu-content { grid-column: 1 / -1; padding: var(--space-4); background: var(--surface); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
-  #appMenu:not([open]) > .menu-content { display: none; }
+  #editor { height: 92dvh; }
   .menu-content .device-tools { align-items: stretch; }
-  .workspace-nav a { padding-inline: var(--space-2); }
+  .workspace-nav > * { padding-inline: var(--space-2); }
 }
 
 .workspace-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

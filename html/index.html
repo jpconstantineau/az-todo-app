@@ -15,15 +15,18 @@
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
-  <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Your workspace</h1></div>
-    <details id="appMenu" class="responsive-menu" open><summary aria-label="Menu" title="Menu">☰</summary>
+  <header class="app-header"><h1>To-Do</h1>
+    <details id="appMenu" class="responsive-menu"><summary aria-label="Menu" title="Menu">☰ Menu</summary>
       <div class="menu-content">
         <nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a href="/help.html" target="_blank" rel="noopener">Help <span class="sr-only">(opens in a new tab)</span></a><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a><button id="signOut" hidden>Sign out</button></nav>
-        <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="openReviews" type="button">Daily / weekly review</button><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button><button id="userDefaults">User defaults</button></div>
+        <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="manageWorkspaces" type="button">Manage workspaces</button><button id="userDefaults">User defaults</button></div>
         <button id="openDeleted" type="button">Deleted records</button><a class="button" href="/shared.html">Shared lists</a>
+        <details id="exportTools"><summary>Export</summary>
+        <div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div>
         <p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p>
         <p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p>
         <p id="exportStatus" role="status" class="muted"></p>
+        </details>
         <details><summary>Edit recovery</summary>
           <button id="undoEdit" type="button" disabled aria-describedby="undoEditHelp undoEditStatus">Undo last edit</button>
           <p id="undoEditStatus" role="status" class="muted"></p>
@@ -57,7 +60,7 @@
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>
-    <div class="toolbar"><label>Workspace<select id="workspaceSelect" aria-describedby="workspaceStatus"></select></label><button id="manageWorkspaces" type="button">Manage workspaces</button></div>
+    <div class="toolbar workspace-switcher"><label>Workspace<select id="workspaceSelect" aria-describedby="workspaceStatus"></select></label></div>
     <p id="workspaceStatus" role="status" class="muted"></p>
     <dialog id="workspaceManager" class="side-panel" aria-labelledby="workspaceHeading">
       <p class="eyebrow">Organize</p><h2 id="workspaceHeading">Workspaces</h2>
@@ -67,22 +70,23 @@
       <p>Archive makes a workspace read-only. Delete hides the whole workspace and blocks edits; its records, drafts and history stay stored and can be restored here. Neither action erases exports or backups.</p>
       <button id="closeWorkspaces" type="button">Close workspaces</button>
     </dialog>
-    <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists" aria-label="List Workspace">Lists</a></nav>
+    <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists" aria-label="List Workspace">Lists</a><button id="openReviews" type="button">Review</button></nav>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
-      <p class="eyebrow">Capture</p><h2 id="captureHeading">Capture first</h2>
+      <h2 id="captureHeading" class="sr-only">Capture</h2>
       <form id="capture"><fieldset id="captureWorkspaceFields" class="workspace-fields">
         <label for="captureText">What do you need to remember?</label>
-        <textarea id="captureText" name="text" rows="8" maxlength="16000" required aria-describedby="captureHelp" placeholder="Get it out of your head. Write your items here."></textarea>
+        <textarea id="captureText" name="text" rows="4" maxlength="16000" required aria-describedby="captureHelp" placeholder="Get it out of your head. Write your items here."></textarea>
         <div class="save-bar"><button type="submit">Save on device</button><span id="draftStatus" role="status"></span></div>
         <p id="captureHelp">One item per line. Ctrl/⌘ + Enter saves.</p>
-        <details id="captureOptions"><summary>Notes, list, or split a sentence</summary>
+        <details id="captureOptions"><summary>Notes, list, project, or status</summary>
           <label>Notes <textarea name="body" rows="2" maxlength="4000"></textarea></label>
           <label>Existing list <select name="listId"><option value="">No list</option></select></label>
           <label>Or create a list <input name="newList" maxlength="200" placeholder="e.g. Groceries"></label>
           <div id="captureFields"></div>
           <button id="previewSplit" type="button">Preview comma / semicolon split</button>
           <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
+          <div class="save-bar"><button type="submit">Save capture on device</button></div>
         </details>
       </fieldset></form>
       <details id="captureAI"><summary>Free-form task review and local AI</summary>
@@ -170,14 +174,16 @@
       <p class="eyebrow">Update</p><h2 id="editHeading">Edit</h2>
       <p id="editError" role="alert" hidden></p>
       <form id="edit">
+        <div class="edit-scroll">
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
         <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
         <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span class="muted">Moving clears list and project links; the original text and item history move with it.</span></label>
         <label id="editListLabel">List <select name="listId"></select></label>
-        <details id="editAdvanced"><summary>Task details</summary><div id="editFields"></div></details>
+        <div id="editAdvanced"><div id="editFields"></div></div>
         <details><summary>Original capture</summary><pre id="original"></pre></details>
-        <button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button>
+        </div>
+        <div class="editor-actions"><button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button></div>
       </form>
     </dialog>
     <dialog class="side-panel" id="clarifier" aria-labelledby="clarifyHeading">

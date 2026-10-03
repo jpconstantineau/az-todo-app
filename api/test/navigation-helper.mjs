@@ -15,7 +15,9 @@ export async function clickControl(control) {
   // Open outer disclosures before inner ones, using real clicks rather than
   // bypassing visibility/actionability checks on the requested control.
   await control.waitFor({ state: 'attached' });
-  const summaries = await control.locator('xpath=ancestor::details[not(@open)]/summary').all();
-  for (const summary of summaries) await summary.click();
+  const summaries = await control.locator('xpath=ancestor::details/summary').all();
+  for (const summary of summaries) {
+    if (!await summary.evaluate(el => el.parentElement.open)) await summary.click();
+  }
   await control.click();
 }
