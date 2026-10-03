@@ -1,5 +1,40 @@
 # Workspace navigation — issue 26
 
+## Mobile workflow update — issue 45
+
+Below 768 CSS pixels, **Menu** (☰) expands account/preferences, Help, sync,
+reviews, export and defaults. The three destinations stay directly reachable;
+the visible **Lists** label retains the accessible name **List Workspace**.
+The compact status disclosure uses text, a symbol and color for confirmed,
+pending, offline or failed saves. Expand it for account and offline-readiness
+details. Update instructions, errors, failed-save comparisons and storage
+recovery remain in the workspace.
+
+Task/list/project titles now open the existing text editor directly, retaining
+its account-bound draft, validation, conflict handling and focus restoration.
+Tasks keep a named completion/reopen icon; mobile Clarify, Brief and undo actions
+live in a three-dot disclosure. Expanded actions survive background refreshes.
+Escape closes a focused disclosure and returns focus to its summary. Desktop
+utility/action disclosures are expanded; resizing to mobile collapses them.
+
+General instructions live in the app's **Help** page, opened in a separate tab
+to preserve the current workflow. Shell v19 caches Help for offline use, updates
+the full module graph and verifies upgrades from v3–v18 without changing stored
+drafts or queued intents. No API, data schema or dependency changes are needed.
+
+`api/test/mobile-workflow.test.mjs` checks the mobile menu, title editing,
+background-refresh focus, offline Help, retained drafts, visible storage-error
+recovery, 44px controls and overflow at 320/390/1440px in both themes. Existing
+browser checks open disclosures through real clicks before using utility actions.
+Generate [screenshots](design/mobile-workflow/) with `MOBILE_SCREENSHOTS=docs/design/mobile-workflow`
+and run that test with the repository's Node test command. Physical phones and
+screen readers remain release verification gates; browser emulation is not a
+claim that those checks passed.
+
+[Phone work view](design/mobile-workflow/work-dark-390.png) ·
+[Narrow capture](design/mobile-workflow/capture-light-320.png) ·
+[Desktop work view](design/mobile-workflow/work-light-1440.png).
+
 ## Design decision before implementation
 
 Use three native links, /#capture, /#work and /#lists. Links provide ordinary keyboard navigation, opening in another tab and browser history without a router or extra server routes. The current link has aria-current=page, an underline and a border. The existing HashiCorp-derived tokens, native forms and responsive panels remain the design reference.

@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +24,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     }
   }
   async function appearance(value, target = page) {
-    await target.getByRole('button', { name: 'Preferences', exact: true }).click();
+    await clickControl(target.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
     await target.locator('[data-appearance]').selectOption(value);
     await target.getByRole('button', { name: 'Close preferences', exact: true }).click();
   }
@@ -97,7 +98,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
 
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+    await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
     assert.ok(await page.locator('#defaultsEditor').evaluate(el => el.matches(':modal')));
     await fits(); await shot('native-defaults-' + width);
     await page.getByRole('button', { name: 'Close defaults', exact: true }).click();

@@ -1,3 +1,4 @@
+import { clickControl, openMenu } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -48,7 +49,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
     ] })
   });
   assert.equal(response.status, 200, await response.text());
-  await page.locator('#sync').click();
+  await clickControl(page.locator('#sync'));
   // An empty outbox is already "server-confirmed" before the change feed arrives.
   await page.getByRole('button', { name: 'Complete Next task', exact: true }).waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
@@ -96,7 +97,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
   await page.getByRole('button', { name: 'Reopen Next task', exact: true }).waitFor({ state: 'detached' });
   await page.locator('#statusFilter').selectOption('');
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Next task']);
-  await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const records = documents.filter(doc => doc.record?.type === 'item').map(doc => doc.record);
   assert.equal(records.length, 5, 'filtering and reopening never clone or delete tasks');
   assert.equal(records.find(record => record.id === 'next').status, 'next');
@@ -145,14 +146,14 @@ test('navigation: new lists open only on request and resume the same draft after
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
   assert.equal((await local(page)).queue[0].operation.mutations[0].id, id);
-  await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   assert.equal(documents.filter(doc => doc.record?.type === 'list').length, 1);
   await page.locator('#newList').click();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), '');
   await page.locator('#edit [name=title]').fill('Alice private list draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Alice private list draft');
   await page.locator('#cancelEdit').click();
-  setUser('bob'); await page.locator('#sync').click();
+  setUser('bob'); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await showView(page, 'lists'); await page.locator('#newList').click();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), '');
@@ -220,7 +221,7 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
   await showView(page, 'capture');
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsubmitted capture');
-  await context.setOffline(false); await page.locator('#sync').click(); await confirmed(page);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const records = documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
   assert.equal(records.length, 3);
   assert.equal(records.find(record => record.title === 'Milk').description, 'Keep this editor draft');
@@ -250,6 +251,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
     await showView(page, view);
     assert.ok(await page.locator('#failure').isVisible());
     assert.ok(await page.locator('#discard').isVisible());
+    await openMenu(page);
     assert.ok(await page.locator('#sync').isVisible());
     assert.ok(await page.locator('#export').isVisible());
     assert.match(await page.locator('#comparison').textContent(), /Rejected private task/);
@@ -272,14 +274,14 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   await page.reload(); await page.locator('#workspace').waitFor(); await showView(page, 'lists');
   assert.equal(await page.locator('#view').inputValue(), '');
   assert.match(await page.locator('#items').innerText(), /No lists yet/);
-  setUser('bob'); await context.setOffline(false); await page.locator('#sync').click();
+  setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   assert.doesNotMatch(await page.locator('body').innerText(), /Private list|Private task|Rejected private task|Recover this draft/);
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   assert.equal(await page.locator('#failure').isVisible(), false);
   await showView(page, 'lists'); assert.equal(await page.locator('#view').inputValue(), '');
-  setUser(null); await page.locator('#sync').click(); await page.locator('#workspace').waitFor({ state: 'hidden' });
+  setUser(null); await clickControl(page.locator('#sync')); await page.locator('#workspace').waitFor({ state: 'hidden' });
   await page.evaluate(() => { location.hash = 'work'; });
   assert.equal(await page.locator('.work-panel').isVisible(), false);
 });
@@ -298,7 +300,7 @@ test('navigation: keyboard links, responsive layout and appearance across all th
   const shots = process.env.NAVIGATION_SCREENSHOTS;
   if (shots) await mkdir(shots, { recursive: true });
   for (const theme of ['dark', 'light']) {
-    await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+    await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
     await page.locator('[data-appearance]').selectOption(theme);
     await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
     for (const width of [320, 390, 768, 1440, 2560]) {

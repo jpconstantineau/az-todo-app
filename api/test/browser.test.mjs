@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
@@ -17,7 +18,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
-  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.locator('#defaultsForm [name=contexts]').fill('@Kitchen\n@Shop');
   await page.locator('#defaultsForm [name=statuses]').fill('next\nwaiting\ncustom');
   await page.getByRole('button', { name: 'Save defaults on device' }).click();
@@ -60,14 +61,14 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#editAdvanced summary').click(); await page.locator('#edit [name=dueLocal]').fill('');
   await page.locator('#edit [name=title]').fill('Milk');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.locator('#defaultsForm [name=contexts]').fill('@Offline');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'lists'); await page.locator('#view').selectOption({ label: 'Groceries' }); await page.getByRole('button', { name: 'Defaults: Groceries', exact: true }).click();
   await page.getByRole('button', { name: 'Copy user defaults', exact: true }).click();
   assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Offline');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');
@@ -76,7 +77,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsaved after settings');
   await showView(page, 'work');
   assert.match(await page.locator('#items').innerText(), /custom/);
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   item = records().find(r => r.type === 'item'); assert.equal(item.title, 'Milk'); assert.equal(item.status, 'custom');
   assert.equal(item.dueDateUtc, null); assert.deepEqual(item.contexts, ['@Kitchen', '@Shop']);
   assert.equal(item.originalText, '<img src=x onerror=alert(1)>');

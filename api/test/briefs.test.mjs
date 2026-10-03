@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -94,7 +95,7 @@ async function setup(t) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage(); await page.goto(server.url + '/#work'); await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  await page.getByRole('button', { name: 'Brief Call the insurer', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Call the insurer', exact: true }));
   return { page, context, browser, url: server.url, setUser: value => { user = value; } };
 }
 async function download(page) {
@@ -116,8 +117,8 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   await page.locator('#briefAccept').click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 2);
   assert.match(await download(page), /UNCONFIRMED REVISION/);
-  await context.setOffline(false); await page.locator('#closeBriefs').click(); await page.locator('#sync').click(); await confirmedRevision(page, 'accepted');
-  await page.getByRole('button', { name: 'Brief Call the insurer', exact: true }).click();
+  await context.setOffline(false); await page.locator('#closeBriefs').click(); await clickControl(page.locator('#sync')); await confirmedRevision(page, 'accepted');
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Call the insurer', exact: true }));
   const first = await page.locator('#briefRevisions').inputValue();
   assert.match(await download(page), /ACCEPTED REVISION/);
   await page.locator('#briefForm [name=outcome]').fill('Changed scope');
@@ -143,12 +144,12 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   await page.locator('#closeBriefs').click();
   await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Brief Call the insurer');
   await post(url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Launch complete' })]);
-  await page.locator('#sync').click();
+  await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js')).transact('alice')).records['project:launch']);
   await page.locator('#view').selectOption('project:launch');
-  await page.getByRole('button', { name: 'Brief Launch', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Launch', exact: true }));
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Launch complete');
-  await page.locator('#closeBriefs').click(); setUser('bob'); await page.locator('#sync').click(); await confirmed(page);
+  await page.locator('#closeBriefs').click(); setUser('bob'); await clickControl(page.locator('#sync')); await confirmed(page);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob' && !document.querySelector('#workspace').hidden);
   assert.equal(await page.locator('#briefOriginal').textContent(), '');
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), '');
@@ -162,11 +163,11 @@ test('brief browser: competing decisions and storage failure retain recoverable 
   await context.setOffline(true); await page.locator('#briefAccept').click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 1);
   assert.equal((await post(url, [mutation('brief', id, 1, { status: 'rejected' })])).status, 200);
-  await page.locator('#closeBriefs').click(); await context.setOffline(false); await page.locator('#sync').click(); await page.locator('#failure').waitFor();
+  await page.locator('#closeBriefs').click(); await context.setOffline(false); await clickControl(page.locator('#sync')); await page.locator('#failure').waitFor();
   assert.equal(record(id).status, 'rejected'); assert.equal((await local(page)).queue.length, 1);
   assert.equal(await page.locator('#resolve').isVisible(), false);
   page.once('dialog', dialog => dialog.accept()); await page.locator('#discard').click(); await confirmed(page);
-  await page.getByRole('button', { name: 'Brief Call the insurer', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Call the insurer', exact: true }));
   await page.locator('#briefForm [name=outcome]').fill('Private recovery text');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.brief?.content.outcome === 'Private recovery text');
   await page.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }; });

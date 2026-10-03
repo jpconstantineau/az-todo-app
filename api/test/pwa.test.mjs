@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
@@ -30,7 +31,7 @@ test('PWA: installation is user-triggered, dismissal persists, and accepted/inst
   const { page, server } = await setup(t);
   await page.goto(server.url); await ready(page);
   assert.equal(await page.locator('#appUpdateStatus').textContent(), '');
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   assert.equal(await page.locator('#installApp').isVisible(), false);
   assert.equal(await offer(page), true);
   assert.equal(await page.evaluate(() => window.promptCalls || 0), 0);
@@ -39,13 +40,13 @@ test('PWA: installation is user-triggered, dismissal persists, and accepted/inst
   assert.equal(await page.locator('#installApp').isVisible(), false);
   assert.equal(await page.locator('#installHelp summary').evaluate(el => el === document.activeElement), true);
   await page.reload(); await ready(page);
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false, 'dismissal survives reload');
   assert.equal(await page.locator('#installHelp').isVisible(), true);
   await page.evaluate(() => localStorage.removeItem('todo-install-dismissed'));
   await page.reload(); await ready(page);
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   await offer(page, 'accepted');
   await page.getByRole('button', { name: 'Install app', exact: true }).click();
   assert.match(await page.locator('#installStatus').textContent(), /is installed/);
@@ -54,7 +55,7 @@ test('PWA: installation is user-triggered, dismissal persists, and accepted/inst
   assert.equal(await page.locator('#installApp').isVisible(), false);
   await page.reload(); await ready(page);
   await page.evaluate(() => dispatchEvent(new Event('appinstalled')));
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false);
 });
@@ -66,7 +67,7 @@ test('PWA: prompt failure and blocked preference storage leave capture and manua
   });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
   await page.locator('#captureText').fill('Keep my capture');
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   await offer(page, 'dismissed', true);
   await page.getByRole('button', { name: 'Install app', exact: true }).click();
   assert.match(await page.locator('#installStatus').textContent(), /could not open/);
@@ -84,7 +85,7 @@ test('PWA: iPhone guidance, standalone suppression and responsive preferences', 
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
   });
   await page.goto(server.url); await ready(page);
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   await page.locator('#installHelp summary').click();
   assert.match(await page.locator('#installInstructions').textContent(), /Safari.*Share.*Add to Home Screen/);
   const screenshots = process.env.PWA_SCREENSHOTS;
@@ -101,7 +102,7 @@ test('PWA: iPhone guidance, standalone suppression and responsive preferences', 
   }
   await context.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
   await page.reload(); await ready(page);
-  await page.getByRole('button', { name: 'Preferences', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false);
   assert.equal(await page.locator('#installHelp').isVisible(), false);
@@ -141,7 +142,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v18', 'shell-next');
+    const next = worker.replaceAll('shell-v19', 'shell-next');
     return version === 'failure' ? next.replace('ASSETS.push(', "ASSETS.push('/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -149,8 +150,8 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Draft across update');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).draft.capture.text === 'Draft across update');
-  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=18')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=19')).transact('alice')).draft.capture.text === 'Draft across update');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=19')).transact('alice'));
   const before = await local();
   assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
   version = 'failure';
@@ -167,5 +168,5 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v18')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v19')));
 });

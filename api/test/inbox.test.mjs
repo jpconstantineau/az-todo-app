@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
@@ -58,6 +59,7 @@ test('inbox: groceries capture, offline editing/moving/completion, original inpu
   await context.setOffline(true);
   await capture(page, '  milk\r\n\n bread\neggs  ', 'Groceries');
   assert.equal(await page.locator('#items article').count(), 3);
+  await page.locator('#connection > summary').click();
   assert.match(await page.locator('#syncStatus').innerText(), /1 save.*pending/);
   const queued = await local(page);
   assert.equal(queued.queue[0].operation.mutations.length, 4);
@@ -85,7 +87,7 @@ test('inbox: groceries capture, offline editing/moving/completion, original inpu
   assert.match(await page.locator('#items').innerText(), /Unsweetened/);
   assert.equal((await local(page)).queue.length, 5);
   await context.setOffline(false);
-  await page.getByRole('button', { name: 'Sync now' }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await confirmed(page);
   assert.equal(records().length, 4);
   const milk = records().find(record => record.title === 'Oat milk');
@@ -126,9 +128,9 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.equal((await local(page)).queue.length, 1);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v18')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/briefs.js', '/briefs.js?v=18', '/local-guidance.js?v=18', '/clarification.js', '/clarification.js?v=18', '/reviews.js', '/reviews.js?v=18', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=18', '/inbox-store.js?v=18', '/inbox-fields.js?v=18', '/pwa.js?v=18', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=18'].sort());
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v19')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual(cached.sort(), ['/briefs.js', '/briefs.js?v=19', '/help.html', '/local-guidance.js?v=19', '/clarification.js', '/clarification.js?v=19', '/reviews.js', '/reviews.js?v=19', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=19', '/inbox-store.js?v=19', '/inbox-fields.js?v=19', '/pwa.js?v=19', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=19'].sort());
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().length, 1);
 });
 
@@ -146,7 +148,7 @@ test('inbox: lost acknowledgement retains exact operation, foreground retry conf
   assert.equal(records().length, 1);
   assert.deepEqual((await local(page)).queue[0].operation, original);
   await page.unroute('**/api/v1/operations');
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().length, 1); assert.equal((await local(page)).queue.length, 0);
 });
 
@@ -156,14 +158,14 @@ test('inbox: switching accounts and expired login never display or upload anothe
   await showView(page, 'capture'); await page.locator('#captureText').fill('Alice unfinished');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Alice unfinished');
   setUser('bob'); await context.setOffline(false);
-  await page.getByRole('button', { name: 'Sync now' }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
   assert.doesNotMatch(await page.locator('body').innerText(), /Alice private|Alice unfinished/);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   await capture(page, 'Bob work'); await confirmed(page);
   assert.ok(records().every(record => record.accountId === 'bob'));
   assert.equal((await local(page)).queue.length, 1);
-  setUser(null); await page.getByRole('button', { name: 'Sync now' }).click();
+  setUser(null); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).paused);
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -187,7 +189,7 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await serverEdit(url, records()[0], { title: 'Desktop version' });
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click();
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.locator('#failure').waitFor();
   assert.match(await page.locator('#comparison').textContent(), /Phone version/);
   assert.match(await page.locator('#comparison').textContent(), /Desktop version/);
@@ -200,12 +202,12 @@ test('inbox: conflict comparison and explicit resolution; deleted records cannot
   await showView(page, 'work'); await page.getByRole('button', { name: 'Complete Phone version' }).click();
   await page.getByRole('button', { name: 'Reopen Phone version', includeHidden: true }).waitFor({ state: 'attached' });
   await serverEdit(url, records()[0], null, 'delete');
-  await context.setOffline(false); await page.getByRole('button', { name: 'Sync now' }).click();
+  await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.locator('#failure').waitFor();
   assert.equal(await page.locator('#resolve').isVisible(), false);
   assert.equal(records()[0].deleted, true);
   assert.equal((await local(page)).queue.length, 1);
-  const download = page.waitForEvent('download'); await page.locator('#export').click();
+  const download = page.waitForEvent('download'); await clickControl(page.locator('#export'));
   assert.equal((await download).suggestedFilename(), 'todo-device-recovery.json');
 });
 
@@ -353,7 +355,7 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
+for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
   documents.length = 0;
   let oldWorker = true, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
@@ -377,14 +379,14 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) 
   await page.evaluate(() => navigator.serviceWorker.ready);
   await capture(page, 'Old queued item');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Old unsubmitted draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
-  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=18')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=19')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=19')).transact('alice'));
   assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
   oldWorker = false; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
   assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=18')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=19')).transact('alice'))).queue, before.queue);
   rejectUpgrade = false;
   const nextWorker = context.waitForEvent('serviceworker');
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
@@ -392,7 +394,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) 
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=18')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=19')).transact('alice'))).queue, before.queue);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
   await page.close();
   // Closing a tab and releasing its worker client are asynchronous in Chromium.
@@ -409,7 +411,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) 
   await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Old queued item', includeHidden: true }).waitFor({ state: 'attached' });
   assert.deepEqual((await local(page)).queue, before.queue);
   rejectOperations = false; await context.setOffline(false);
-  await page.getByRole('button', { name: 'Sync now' }).click(); await confirmed(page);
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().filter(record => record.type === 'item').length, 1);
   assert.ok(documents.some(doc => doc.id === `receipt:${before.queue[0].operation.operationId}`), 'retry acknowledges the original intent');
   assert.deepEqual(errors, []);
@@ -417,7 +419,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) 
 
 test('defaults draft survives reload and failed storage remains recoverable; date conversion rejects DST gaps', { timeout: 90000 }, async t => {
   const { page } = await setup(t, { timezoneId: 'America/New_York' });
-  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.locator('#defaultsForm [name=contexts]').fill('@Draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.defaults?.values.contexts === '@Draft');
   await page.reload(); await page.locator('#defaultsEditor').waitFor();
@@ -441,29 +443,29 @@ test('defaults draft survives reload and failed storage remains recoverable; dat
 
 test('independent clients page through all work and resolve defaults conflicts without losing either proposal', { timeout: 90000 }, async t => {
   const { page, browser, url } = await setup(t);
-  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
   // More than one 50-entry change page, using real handlers and independent intents.
   for (let i = 0; i < 52; i++) await serverEdit(url, { type: 'item', id: 'paged-' + i, version: 0 }, { title: 'Page ' + i }, 'create');
   const otherContext = await browser.newContext(); t.after(() => otherContext.close());
   const other = await otherContext.newPage(); await other.goto(url); await other.locator('#workspace').waitFor();
   await other.waitForFunction(() => document.querySelectorAll('#items article').length === 52);
-  await other.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(other.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await other.locator('#defaultsForm [name=contexts]').fill('@Laptop');
   await otherContext.setOffline(true);
   await other.getByRole('button', { name: 'Save defaults on device' }).click(); await other.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   const pending = (await local(other)).queue[0].operation;
-  await page.getByRole('button', { name: 'User defaults', exact: true }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.locator('#defaultsForm [name=contexts]').fill('@Phone');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
-  await otherContext.setOffline(false); await other.getByRole('button', { name: 'Sync now' }).click(); await other.locator('#failure').waitFor();
+  await otherContext.setOffline(false); await clickControl(other.getByRole('button', { includeHidden: true, name: 'Sync now' })); await other.locator('#failure').waitFor();
   assert.match(await other.locator('#comparison').textContent(), /@Phone/); assert.match(await other.locator('#comparison').textContent(), /@Laptop/);
   other.once('dialog', dialog => dialog.accept()); await other.locator('#resolve').click(); await confirmed(other);
   const settings = records().find(record => record.type === 'settings'); assert.deepEqual(settings.defaults.contexts, ['@Laptop']);
   assert.equal(settings.version, 3);
   const originalReceipt = documents.find(doc => doc.id === 'receipt:' + pending.operationId).response;
   assert.equal(originalReceipt.status, 'conflict'); assert.deepEqual(originalReceipt.proposed[0].fields.defaults.contexts, ['@Laptop']);
-  await page.getByRole('button', { name: 'Sync now' }).click();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).records['settings:settings'].version === 3);
   assert.equal(await page.locator('#items article').count(), 52);
 });
