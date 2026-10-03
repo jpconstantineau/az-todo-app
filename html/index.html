@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=19" defer></script>
+  <script src="/pwa.js?v=20" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=19"></script>
+  <script type="module" src="/inbox.js?v=20"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -74,6 +74,11 @@
       <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (no list)</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
+      <fieldset id="statusSelection" hidden aria-describedby="statusSelectionHelp">
+        <legend id="statusSelectionLegend">Choose statuses</legend>
+        <p id="statusSelectionHelp" class="muted"></p>
+        <div id="statusChoices"></div>
+      </fieldset>
       <button id="newProject" type="button">New project</button>
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
