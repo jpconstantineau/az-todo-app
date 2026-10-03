@@ -90,6 +90,7 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.locator('#statusFilter').selectOption('@all');
   assert.match(await cards.filter({ hasText: 'Bread' }).locator('.record-state').textContent(), /Failed — needs attention/);
   assert.equal(await page.locator('#recentTaskChange').isVisible(), false);
+  page.once('dialog', dialog => dialog.accept());
   await page.locator('#discard').click();
   await page.locator('#failure').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#recentTaskChange').isVisible(), false, 'discarding a conflict cannot revive stale immediate undo');

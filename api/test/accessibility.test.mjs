@@ -287,6 +287,8 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await keyboardActivate(page, '[aria-label="Clarify Insurance"]');
   await expectFocus(page, '#clarifyQuestion');
   await page.keyboard.press('Tab');
+  await expectFocus(page, '#clarifyDirect');
+  await page.keyboard.press('Tab');
   await expectFocus(page, '#clarifyForm [name=text]');
   // Empty acceptance reports an error without losing the triggering control.
   await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
@@ -296,6 +298,7 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent === 'Question 2 of 4');
   await expectFocus(page, '#clarifyQuestion');
+  await page.keyboard.press('Tab'); await expectFocus(page, '#clarifyDirect');
   await page.keyboard.press('Tab'); await page.keyboard.type('Call insurer');
   await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent === 'Question 3 of 4');
