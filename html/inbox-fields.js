@@ -2,6 +2,18 @@ export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Ene
 export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
 
+export function matchesExecutionFilters(record, filters) {
+  if (filters.context === '@none' && record.contexts?.length) return false;
+  if (filters.context?.startsWith('context:') && !record.contexts?.includes(filters.context.slice(8))) return false;
+  // Custom estimates that cannot be compared stay visible alongside unspecified values.
+  const duration = /^(\d+(?:\.\d+)?)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$/i.exec(record.timeRequired?.trim() || '');
+  if (filters.minutes && duration && Number(duration[1]) * (/^h/i.test(duration[2]) ? 60 : 1) > Number(filters.minutes)) return false;
+  const levels = ['low', 'medium', 'high'];
+  const required = levels.indexOf(record.energy?.trim().toLowerCase());
+  const available = levels.indexOf(filters.energy);
+  return available < 0 || required <= available;
+}
+
 export function validateWorkflow(record, old, fields = record) {
   if (!old || workflowFields.some(key => key in fields && (fields[key] ?? null) !== (old[key] ?? null))) {
     if (record.status === 'waiting' && (!record.waitingOn?.trim() || !(record.reviewDate || record.reviewDateUtc))) throw new Error('Waiting needs who/what you are waiting for and a review date.');

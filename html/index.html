@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=33" defer></script>
+  <script src="/pwa.js?v=34" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=33"></script>
+  <script type="module" src="/inbox.js?v=34"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -109,6 +109,16 @@
         <p id="statusSelectionHelp" class="muted"></p>
         <div id="statusChoices"></div>
       </fieldset>
+      <details id="executionFilters">
+        <summary id="executionSummary">Context, time &amp; energy</summary>
+        <div class="execution-controls">
+          <label>Context <select id="contextFilter"><option value="">Any context</option></select></label>
+          <label>Available time <select id="timeFilter" aria-describedby="executionHelp"><option value="">Any duration</option><option value="5">Up to 5 minutes</option><option value="15">Up to 15 minutes</option><option value="30">Up to 30 minutes</option><option value="60">Up to 1 hour</option><option value="120">Up to 2 hours</option></select></label>
+          <label>Available energy <select id="energyFilter" aria-describedby="executionHelp"><option value="">Any energy</option><option value="low">Up to Low</option><option value="medium">Up to Medium</option><option value="high">Up to High</option></select></label>
+        </div>
+        <p id="executionHelp" class="muted">Time and energy limits keep tasks with missing or unrecognized estimates visible. Time compares minutes or hours (15m, 1h); energy compares Low, Medium and High. Context matches only the chosen context. Choose No context to find unclassified tasks.</p>
+        <button id="resetExecutionFilters" type="button">Reset context, time &amp; energy</button>
+      </details>
       <button id="newProject" type="button">New project</button>
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="items"></div>
