@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Import browser capture · To-Do</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/handoff.js"></script>
+</head>
+<body class="container">
+  <a class="skip-link" href="#handoff">Skip to import</a>
+  <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Import browser capture</h1></div><a href="/">Open workspace</a></header>
+  <main id="handoff" tabindex="-1">
+    <p>Review a capture saved in your TaskGem extension, then save it to your signed-in inbox. The extension keeps its copy until the server confirms the save.</p>
+    <p>This handoff needs an internet connection. Your usual phone and offline capture remain available in the workspace.</p>
+    <p id="handoffStatus" role="status">Open this page from TaskGem to choose a saved capture.</p>
+    <p id="handoffError" role="alert" hidden></p>
+    <a id="handoffSignIn" hidden>Sign in with GitHub</a>
+    <p id="handoffExtension"></p>
+    <button id="handoffPreview" type="button" disabled>Preview saved capture</button>
+    <section id="handoffCapture" class="card" aria-labelledby="handoffTitle" hidden>
+      <p class="eyebrow">Review before saving</p><h2 id="handoffTitle" tabindex="-1"></h2>
+      <p id="handoffAccount"></p>
+      <label>Notes<textarea id="handoffDescription" readonly rows="3"></textarea></label>
+      <label>Original capture<textarea id="handoffOriginal" readonly rows="5"></textarea></label>
+      <label>Selected text<textarea id="handoffSelection" readonly rows="4"></textarea></label>
+      <p id="handoffSourceTitle"></p><p><a id="handoffSource" target="_blank" rel="noopener noreferrer"></a></p>
+      <p>Import preserves this saved capture exactly. You can edit it in the workspace afterward.</p>
+      <div class="row"><button id="handoffSave" type="button">Save to my inbox</button><button id="handoffCancel" type="button">Cancel import</button></div>
+    </section>
+    <noscript>Enable JavaScript to import. Your saved capture remains in TaskGem.</noscript>
+  </main>
+</body>
+</html>
