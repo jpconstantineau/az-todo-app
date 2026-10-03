@@ -32,7 +32,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["list", "item", "project", "settings", "clarification", "review", "brief"].includes(value)) throw new ValidationError("type must be list, item, project, settings, clarification, review or brief.");
+  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "brief"].includes(value)) throw new ValidationError("type must be workspace, list, item, project, settings, clarification, review or brief.");
   return value;
 }
 function exactText(value, max, field) {
@@ -50,6 +50,24 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (type === 'workspace') {
+    object(input, ['title', 'archived'], 'fields');
+    const result = {};
+    if ('title' in input) {
+      result.title = exactText(input.title, 200, 'title');
+      if (!result.title.trim()) throw new ValidationError('Workspace title is required.');
+    }
+    if ('archived' in input) {
+      if (typeof input.archived !== 'boolean') throw new ValidationError('archived must be true or false.');
+      result.archived = input.archived;
+    }
+    if (action === 'create' && !result.title || !Object.keys(result).length) throw new ValidationError('Workspace title is required.');
+    return action === 'create' ? { archived: false, ...result } : result;
+  }
+  if (type === 'review' && action === 'create') {
+    const { workspaceId, ...fields } = input || {};
+    return { ...reviewFields(action, fields), ...(workspaceId === undefined ? {} : { workspaceId: identifier(workspaceId, 'workspaceId') }) };
+  }
   if (type === 'brief') return briefFields(action, input);
   if (type === 'review') return reviewFields(action, input);
   if (type === "clarification") return clarificationFields(input);
@@ -57,14 +75,15 @@ export function fieldsFor(type, action, input) {
     object(input, ["defaults"], "fields");
     return { defaults: validateDefaults(input.defaults) };
   }
-  const shared = ["title", "description"];
+  const shared = ["title", "description", ...(action === "create" || type === "item" ? ["workspaceId"] : [])];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText"];
   const itemFields = ["listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome"] : ["defaults"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
-    if (key === "defaults") result[key] = validateDefaults(value);
+    if (key === "workspaceId") result[key] = identifier(value, key);
+    else if (key === "defaults") result[key] = validateDefaults(value);
     else if (key === "title") {
       result[key] = exactText(value, 200, key);
       if (!value.trim()) throw new ValidationError("title is required.");
@@ -116,11 +135,12 @@ export function validateOperation(input) {
     object(mutation, ["type", "id", "action", "expectedVersion", "fields"], "mutation");
     const type = recordType(mutation.type);
     const id = identifier(mutation.id);
+    if (type === "workspace" && id === "personal") throw new ValidationError("Personal is the permanent default workspace.");
     if (seen.has(recordId(type, id))) throw new ValidationError("A record may occur only once per operation.");
     seen.add(recordId(type, id));
     if (!["create", "update", "delete", "restore"].includes(mutation.action)) throw new ValidationError("action must be create, update, delete or restore.");
     const { action, expectedVersion } = mutation;
-    if (action === "restore" && !["item", "list", "project"].includes(type)) throw new ValidationError("Only items, lists and projects can be restored.");
+    if (action === "restore" && !["item", "list", "project", "workspace"].includes(type)) throw new ValidationError("Only items, lists, projects and workspaces can be restored.");
     if (type === "settings" && (id !== "settings" || action === "delete")) {
       throw new ValidationError("Use the settings identity and create/update to save or reset defaults.");
     }

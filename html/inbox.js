@@ -1,9 +1,10 @@
-import { transact, key, projected, enqueue, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=24';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=24';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=24';
-import { clarificationUI } from './clarification.js?v=24';
-import { setupReviews } from './reviews.js?v=24';
-import { setupBriefs } from './briefs.js?v=24';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=27';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=27';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady } from './inbox-fields.js?v=27';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=27';
+import { clarificationUI } from './clarification.js?v=27';
+import { setupReviews } from './reviews.js?v=27';
+import { setupBriefs } from './briefs.js?v=27';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -11,6 +12,102 @@ let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null;
 let exportController;
+let selectedWorkspace = PERSONAL, switchingWorkspace = false;
+const scopedRecords = () => workspaceRecords(projected(state), selectedWorkspace);
+const currentDraft = local => workspaceDraft(local, selectedWorkspace);
+function availableWorkspaces() {
+  return [{ id: PERSONAL, type: 'workspace', title: 'Personal', version: 0 }, ...Object.values(projected(state)).filter(record => record.type === 'workspace' && !record.deleted)];
+}
+function renderWorkspaces() {
+  const spaces = availableWorkspaces();
+  options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
+  if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
+  $('workspaceSelect').value = selectedWorkspace;
+  statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Manage workspaces to unarchive or restore it. Drafts are kept.' : 'Capture, lists, projects and reviews belong to this workspace.');
+  const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
+  $('workspaceEntries').replaceChildren(...records.map(record => {
+    const article = document.createElement('article'), heading = document.createElement('h3'), status = document.createElement('p');
+    heading.textContent = record.title;
+    status.textContent = `${record.deleted ? 'Deleted' : record.archived ? 'Archived' : 'Active'} · ${record.localState || 'Server-confirmed'}`;
+    const action = (label, callback) => button(label, async () => {
+      try { await callback(); statusText('workspaceError', ''); }
+      catch (failure) { statusText('workspaceError', failure.message); }
+    }, `${label} workspace: ${record.title}`, `workspace:${record.id}:${label}`);
+    article.append(heading, status);
+    if (record.deleted) article.append(action('Restore', () => saveWorkspace(record, 'restore')));
+    else article.append(action('Rename', () => {
+      const title = prompt('Workspace name', record.title);
+      if (title !== null) return saveWorkspace(record, 'update', { title });
+    }), action(record.archived ? 'Unarchive' : 'Archive', () => saveWorkspace(record, 'update', { archived: !record.archived })),
+    action('Delete', () => {
+      if (confirm(`Delete workspace “${record.title}” and hide all of its work? Its contents and history stay stored. Restore it here to recover them.`)) return saveWorkspace(record, 'delete');
+    }));
+    return article;
+  }));
+}
+async function saveWorkspace(record, action, fields) {
+  const owner = accountId;
+  if (!owner) return;
+  if (fields?.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Workspace name must be 1–200 characters.');
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before changing a workspace.');
+    const current = projected(local)[key(record)];
+    if ((current?.version || 0) !== record.version) throw new Error('This workspace changed. Review its latest state and try again.');
+    queueMutations(local, owner, [{ type: 'workspace', id: record.id, action, expectedVersion: record.version, ...(fields ? { fields } : {}) }]);
+  });
+  if (owner !== accountId) return;
+  state = saved;
+  if (action === 'restore' && record.id === selectedWorkspace) { $('workspaceManager').close(); restoreDraft(); }
+  render(); broadcast(); void sync();
+}
+async function switchWorkspace(id) {
+  if (!accountId || id === selectedWorkspace) return;
+  if (saving || switchingWorkspace) { $('workspaceSelect').value = selectedWorkspace; throw new Error('Wait for the device save, then switch workspaces.'); }
+  if (!availableWorkspaces().some(space => space.id === id)) throw new Error('Workspace unavailable.');
+  const owner = accountId, old = selectedWorkspace, snapshot = draft();
+  switchingWorkspace = true;
+  try {
+    const saved = await transact(owner, local => {
+      if (!projected(local)['workspace:' + old]?.deleted) Object.assign(workspaceDraft(local, old), snapshot);
+      local.selectedWorkspace = id;
+    });
+    if (owner !== accountId) return;
+    editing = defaultsEditing = null;
+    $('editor').close(); $('defaultsEditor').close(); $('deletedRecords').close();
+    clarification.hide(); reviews.reset(); briefs.reset();
+    state = saved; selectedWorkspace = id;
+    render(); restoreDraft();
+    if (!document.querySelector('dialog[open]')) $('workspaceSelect').focus();
+  } catch (failure) { $('workspaceSelect').value = selectedWorkspace; storageFailure(failure); }
+  finally { switchingWorkspace = false; }
+}
+$('workspaceSelect').onchange = guard(() => switchWorkspace($('workspaceSelect').value));
+$('manageWorkspaces').onclick = () => { renderWorkspaces(); showDialog($('workspaceManager')); };
+$('closeWorkspaces').onclick = () => $('workspaceManager').close();
+$('createWorkspace').onsubmit = event => {
+  event.preventDefault();
+  const form = event.currentTarget, control = form.querySelector('button');
+  if (control.disabled) return;
+  control.disabled = true;
+  void saveWorkspace({ type: 'workspace', id: crypto.randomUUID(), version: 0 }, 'create', { title: form.elements.title.value }).then(() => {
+    form.reset(); statusText('workspaceError', ''); form.elements.title.focus();
+  }).catch(failure => statusText('workspaceError', failure.message)).finally(() => { control.disabled = false; });
+};
+edit.elements.workspaceId.onchange = () => {
+  const moving = edit.elements.workspaceId.value !== selectedWorkspace;
+  options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'Inbox (no list)']]);
+  options(edit.elements.projectId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'project' && !record.deleted), [['', 'No project']]);
+  if (moving) edit.elements.listId.value = edit.elements.projectId.value = '';
+  void journal();
+};
+function enqueue(local, owner, mutations) {
+  queueMutations(local, owner, mutations.map(mutation => mutation.action === 'create' && ['item', 'list', 'project', 'review'].includes(mutation.type)
+    ? { ...mutation, fields: { ...mutation.fields, workspaceId: mutation.fields.workspaceId || selectedWorkspace } } : mutation));
+}
+function workspaceReadOnly() {
+  const space = projected(state)['workspace:' + selectedWorkspace];
+  return selectedWorkspace !== PERSONAL && (!space || space.deleted || space.archived);
+}
 const dialogOpeners = new Map();
 const mobile = matchMedia('(max-width: 767px)');
 function responsiveMenus() {
@@ -29,7 +126,7 @@ document.addEventListener('keydown', event => {
     menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
   }
 });
-const briefs = setupBriefs({ records: () => accountId ? projected(state) : {}, journal, showDialog, save: async (mutation, next) => {
+const briefs = setupBriefs({ records: () => accountId ? scopedRecords() : {}, journal, showDialog, save: async (mutation, next) => {
   const owner = accountId, generation = accountGeneration;
   if (!owner) throw new Error('Sign in to save this brief.');
   const saved = await transact(owner, local => {
@@ -37,12 +134,12 @@ const briefs = setupBriefs({ records: () => accountId ? projected(state) : {}, j
     const records = projected(local), current = records[key(mutation)];
     if (current?.deleted || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This revision changed. Close and reopen the brief to review its latest state.');
     enqueue(local, owner, [mutation]);
-    local.draft.brief = next;
+    currentDraft(local).brief = next;
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save stays with its original account.');
   state = saved; render(); broadcast(); void sync();
 } });
-const clarification = clarificationUI({ records: () => projected(state), journal, save: saveClarification, showDialog });
+const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog });
 async function saveClarification(mutations, next) {
   const owner = accountId;
   if (!owner) return false;
@@ -54,7 +151,7 @@ async function saveClarification(mutations, next) {
       if (current?.deleted || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This item or clarification changed. Your draft is kept. Stop, export a copy, and reopen the latest clarification to compare.');
     }
     enqueue(local, owner, mutations);
-    local.draft.clarification = next;
+    currentDraft(local).clarification = next;
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
   if (owner !== accountId) return false;
   state = saved; render(); broadcast(); void sync(); return true;
@@ -62,7 +159,7 @@ async function saveClarification(mutations, next) {
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
 let navigation = emptyNavigation();
-const reviews = setupReviews({ current: () => accountId ? state : null, journal, showDialog, save: async mutations => {
+const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal, showDialog, save: async mutations => {
   const owner = accountId, generation = accountGeneration;
   if (!owner) throw new Error('Sign in to resume this review.');
   const saved = await transact(owner, local => {
@@ -136,10 +233,10 @@ function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
 }
 async function journal() {
-  if (!accountId) return;
+  if (!accountId || switchingWorkspace || projected(state)['workspace:' + selectedWorkspace]?.deleted) return;
   const owner = accountId, snapshot = draft();
   try {
-    const saved = await transact(owner, local => { local.draft = snapshot; });
+    const saved = await transact(owner, local => { Object.assign(currentDraft(local), snapshot); });
     if (owner === accountId) { state = saved; statusText('draftStatus', 'Draft saved on device'); statusText('clarifyDraftStatus', 'Draft saved on device; not accepted.'); }
   } catch (failure) { if (owner === accountId) storageFailure(failure); }
 }
@@ -151,7 +248,7 @@ function options(select, lists, first, keepMissing = false) {
 }
 function restoreDraft() {
   capture.reset(); edit.reset(); editing = null; originalInput = undefined;
-  const saved = state.draft;
+  const saved = projected(state)['workspace:' + selectedWorkspace]?.deleted ? {} : currentDraft(state);
   fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
   $('previewHelp').hidden = originalInput === undefined;
@@ -180,19 +277,21 @@ function render() {
   if (!accountId || !state) return;
   const focused = document.activeElement;
   const expandedActions = new Set([...document.querySelectorAll('.task-menu[open]')].map(menu => menu.dataset.recordKey));
-  const records = Object.values(projected(state)).filter(record => !record.deleted);
+  const records = Object.values(scopedRecords()).filter(record => !record.deleted);
   const lists = records.filter(record => record.type === 'list');
   const projects = records.filter(record => record.type === 'project');
-  const undoAvailable = canUndoEdit(state);
+  renderWorkspaces();
+  const undoAvailable = !workspaceReadOnly() && canUndoEdit(state) && workspaceOf(projected(state)[key(state.undoEdit)], projected(state)) === selectedWorkspace;
   $('undoEdit').disabled = !undoAvailable;
   statusText('undoEditStatus', state.undoEdit
     ? undoAvailable ? `Undo edit to “${state.undoEdit.title}” until ${new Date(state.undoEdit.expiresAt).toLocaleString()}.`
       : 'The last edit expired, its record changed, or a save needs attention.'
     : 'No editor save to undo on this device.');
   options(capture.elements.listId, lists, [['', 'Inbox (no list)']]);
-  options(edit.elements.listId, lists, [['', 'Inbox (no list)']]);
+  const moving = editing?.type === 'item' && edit.elements.workspaceId.value && edit.elements.workspaceId.value !== selectedWorkspace;
+  options(edit.elements.listId, moving ? [] : lists, [['', 'Inbox (no list)']]);
   options(capture.elements.projectId, projects, [['', 'No project']], true);
-  options(edit.elements.projectId, projects, [['', 'No project']], true);
+  options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
   const listMode = destination === 'lists';
   const filters = navigation[listMode ? 'lists' : 'work'];
   options($('view'), listMode ? lists : [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))],
@@ -286,6 +385,12 @@ function render() {
   reviews.render();
   briefs.render();
   renderDeleted();
+  const readOnly = workspaceReadOnly();
+  $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
+  if (readOnly) { $('editor').close(); $('defaultsEditor').close(); $('reviews').close(); clarification.close(); briefs.close(); }
+  $('captureWorkspaceFields').disabled = readOnly;
+  for (const id of ['newList', 'newProject', 'openReviews']) $(id).disabled = readOnly;
+  if (readOnly) document.querySelectorAll('#items button, #lists button, #projectActions button, #deletedItems button').forEach(control => { control.disabled = true; });
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
 function deleteButton(record) {
@@ -295,7 +400,7 @@ function deleteButton(record) {
 }
 function renderDeleted() {
   statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
-  const deleted = Object.values(projected(state)).filter(record => record.deleted && ['item', 'list', 'project'].includes(record.type));
+  const deleted = Object.values(scopedRecords()).filter(record => record.deleted && ['item', 'list', 'project'].includes(record.type));
   $('deletedItems').replaceChildren(...deleted.map(record => {
     const article = document.createElement('article'), title = document.createElement('h3'), status = document.createElement('p');
     title.textContent = `${record.type}: ${record.title}`;
@@ -346,6 +451,9 @@ function openEditor(record, focus = true, show = true) {
   edit.elements.title.value = fields.title;
   edit.elements.description.value = fields.description || '';
   edit.elements.listId.value = fields.listId || '';
+  options(edit.elements.workspaceId, availableWorkspaces().filter(space => !space.archived), []);
+  edit.elements.workspaceId.value = fields.workspaceId || selectedWorkspace;
+  $('editWorkspaceLabel').hidden = record.type !== 'item';
   refreshOptions();
   fillValues(edit, { ...fields, dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
   editing.initialFields ??= formValues(edit);
@@ -364,6 +472,7 @@ function openEditor(record, focus = true, show = true) {
 async function updateRecord(record, fields, close = false) {
   const owner = accountId;
   if (!owner) return;
+  if (workspaceReadOnly()) throw new Error('Unarchive this workspace before editing.');
   if (fields.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Title must be 1–200 characters.');
   if ((fields.description?.length ?? 0) > 4000) throw new Error('Notes must be at most 4,000 characters.');
   if (fields.outcome !== undefined && (!fields.outcome.trim() || fields.outcome.length > 4000)) throw new Error('Describe the desired outcome in 1–4,000 characters.');
@@ -377,7 +486,7 @@ async function updateRecord(record, fields, close = false) {
       if (record.version !== 0 && (!current || current.deleted || current.version !== record.version)) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
       enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }]);
       if (close && current && record.version > 0) rememberEdit(local, current, fields);
-      if (close) local.draft.edit = null;
+      if (close) currentDraft(local).edit = null;
     });
     if (owner === accountId) state = saved;
   } catch (failure) { if (owner === accountId) storageFailure(failure); return; }
@@ -393,7 +502,7 @@ capture.elements.listId.addEventListener('change', refreshOptions);
 edit.elements.listId.addEventListener('change', refreshOptions);
 capture.addEventListener('submit', event => {
   event.preventDefault();
-  if (saving || !accountId) return;
+  if (saving || switchingWorkspace || !accountId || workspaceReadOnly()) return;
   saving = true; capture.querySelector('[type=submit]').disabled = true;
   void (async () => {
     const owner = accountId, submitted = captureDraft();
@@ -406,7 +515,7 @@ capture.addEventListener('submit', event => {
       }
       const saved = await transact(owner, local => {
         enqueue(local, owner, mutations);
-        if (JSON.stringify(local.draft.capture) === JSON.stringify(submitted)) local.draft.capture = {};
+        if (JSON.stringify(currentDraft(local).capture) === JSON.stringify(submitted)) currentDraft(local).capture = {};
       });
       if (owner !== accountId) return;
       state = saved;
@@ -427,7 +536,7 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { listId: values.listId || null, ...taskFields(values, editing.initialFields) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
+      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.initialFields) {
       const initial = { ...editing.initialFields, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
@@ -464,7 +573,7 @@ function focusDestination() {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  (destination === 'capture' ? capture.elements.text : $('itemsHeading')).focus();
+  (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : $('itemsHeading')).focus();
 }
 function restoreFocus(control) {
   if (document.querySelector('dialog[open]')) { focusDestination(); return; }
@@ -507,7 +616,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs'), $('deletedRecords')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs'), $('deletedRecords'), $('workspaceManager')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -572,7 +681,7 @@ $('defaultsForm').addEventListener('submit', event => {
         const current = projected(local)[key(record)];
         if ((current?.version || 0) !== record.version) throw new Error('Defaults changed while editing. Copy your options and reopen the latest defaults to compare.');
         enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version ? 'update' : 'create', expectedVersion: record.version, fields: { defaults } }]);
-        local.draft.defaults = null;
+        currentDraft(local).defaults = null;
       });
       if (owner !== accountId) return;
       state = saved; defaultsEditing = null; $('defaultsEditor').close(); clearError(); render();
@@ -686,6 +795,7 @@ function hideAccount() {
   accountGeneration++;
   profileRequest++;
   $('sessionStatus').textContent = 'Your device inbox';
+  selectedWorkspace = PERSONAL; $('workspaceSelect').replaceChildren(); $('workspaceManager').close(); $('workspaceEntries').replaceChildren();
   accountId = null; state = undefined; editing = null; originalInput = undefined;
   clarification.hide();
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
@@ -729,7 +839,7 @@ async function session({ allowOffline = false } = {}) {
       if (identity.defaultSettings) { local.defaultSettings = identity.defaultSettings; local.legacyDefaults = identity.legacyDefaults; }
     });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
-    accountId = identity.accountId; state = saved;
+    accountId = identity.accountId; state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL;
     render(); $('workspace').hidden = false; restoreDraft(); broadcast();
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
