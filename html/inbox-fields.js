@@ -1,3 +1,4 @@
+import { refKey } from './collection-model.js?v=55';
 export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Energy', timeRequired: 'Time required', priority: 'Priority', statuses: 'Statuses' };
 export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
@@ -34,8 +35,8 @@ export function reviewReady(record, now = new Date()) {
 export function formValues(form) {
   // Read disabled controls too: recovery must retain a form during a pending save.
   const values = Object.fromEntries([...form.elements].filter(control => control.name).map(control => [control.name, control.value]));
-  for (const name of ['contexts', 'areas']) {
-    if (form.elements.namedItem(name)?.multiple) values[name] = [...form.elements.namedItem(name).selectedOptions].map(option => option.value);
+  for (const name of ['contexts', 'areas', 'collectionRefs']) {
+    if (form.elements.namedItem(name)?.multiple) values[name] = [...form.elements.namedItem(name).selectedOptions].map(option => name === 'collectionRefs' ? { type: option.value.split(':')[0], id: option.value.split(':')[1] } : option.value);
   }
   return values;
 }
@@ -44,8 +45,9 @@ export function fillValues(form, values) {
     const control = form.elements.namedItem(name);
     if (!control) continue;
     if (control.multiple) {
-      for (const entry of value || []) if (![...control.options].some(option => option.value === entry)) control.add(new Option(entry, entry));
-      for (const option of control.options) option.selected = (value || []).includes(option.value);
+      const selected = name === 'collectionRefs' ? (value || []).map(refKey) : value || [];
+      for (const entry of selected) if (![...control.options].some(option => option.value === entry)) control.add(new Option(entry, entry));
+      for (const option of control.options) option.selected = selected.includes(option.value);
     } else {
       if (control.tagName === 'SELECT' && value && ![...control.options].some(option => option.value === value)) control.add(new Option(value, value));
       control.value = value ?? '';

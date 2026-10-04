@@ -1,12 +1,14 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=54';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=54';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=54';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=54';
-import { clarificationUI } from './clarification.js?v=54';
-import { setupReviews } from './reviews.js?v=54';
-import { setupBriefs } from './briefs.js?v=54';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=54';
-import { setupAgentStatus } from './local-agent.js?v=54';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=55';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=55';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=55';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=55';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=55';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=55';
+import { clarificationUI } from './clarification.js?v=55';
+import { setupReviews } from './reviews.js?v=55';
+import { setupBriefs } from './briefs.js?v=55';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=55';
+import { setupAgentStatus } from './local-agent.js?v=55';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -113,7 +115,7 @@ edit.elements.workspaceId.onchange = () => {
   const moving = edit.elements.workspaceId.value !== selectedWorkspace;
   options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'No list']]);
   options(edit.elements.projectId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'project' && !record.deleted), [['', 'No project']]);
-  if (moving) edit.elements.listId.value = edit.elements.projectId.value = '';
+  if (moving) { edit.elements.listId.value = edit.elements.projectId.value = ''; pickerOptions(edit.elements.collectionRefs, {}, []); } else pickerOptions(edit.elements.collectionRefs, scopedRecords(), selectedRefs(edit.elements.collectionRefs));
   void journal();
 };
 function enqueue(local, owner, mutations) {
@@ -210,6 +212,28 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
   state = saved; clearError(); render(); broadcast(); void sync();
 } });
 addTaskControls($('captureFields')); addTaskControls($('editFields'));
+const editOrganizer = organizer($('editOrganizer'), {}, []);
+const primaryMemberships = document.createElement('details'), primarySummary = document.createElement('summary');
+primarySummary.textContent = 'Primary memberships (defaults and older apps)'; primaryMemberships.append(primarySummary, $('editListLabel'), edit.elements.projectId.closest('label')); $('editOrganizer').append(primaryMemberships);
+edit.elements.projectId.closest('label').firstChild.textContent = 'Primary project (optional)';
+editOrganizer.onchange = () => {
+  const fields = membershipFields(selectedRefs(editOrganizer), { listId: edit.elements.listId.value, projectId: edit.elements.projectId.value });
+  edit.elements.listId.value = fields.listId || ''; edit.elements.projectId.value = fields.projectId || ''; refreshOptions(); void journal();
+};
+for (const type of ['list', 'project']) edit.elements[type + 'Id'].addEventListener('change', () => {
+  const old = { ...editing?.initialFields, collectionRefs: selectedRefs(editOrganizer) };
+  const fields = { [type + 'Id']: edit.elements[type + 'Id'].value || null };
+  pickerOptions(editOrganizer, scopedRecords(), normalizeMembership({ ...old, ...fields }, old, fields).collectionRefs); void journal();
+});
+edit.elements.kind.replaceChildren(...Object.entries(collectionKinds).map(([kind, label]) => new Option(label, kind)));
+edit.elements.kind.onchange = () => {
+  if (!editing || editing.version) return;
+  editing.type = edit.elements.kind.value === 'project' ? 'project' : 'list';
+  $('editOutcomeLabel').hidden = editing.type !== 'project'; edit.elements.outcome.required = editing.type === 'project'; void journal();
+};
+capture.elements.status.closest('label').hidden = true;
+$('includeNested').onchange = () => { navigation.lists.nested = $('includeNested').checked; render(); void journal(); };
+
 for (const [name, title] of Object.entries(optionFields)) {
   const label = document.createElement('label'); label.textContent = title;
   const input = document.createElement('textarea'); input.name = name; input.rows = 3;
@@ -221,6 +245,63 @@ function refreshOptions() {
   refreshTaskOptions(capture, effectiveDefaults(capture.elements.listId.value));
   refreshTaskOptions(edit, effectiveDefaults(edit.elements.listId.value));
 }
+const utilityForm = $('collectionUtilityForm');
+function utilityDraft() {
+  return { ...formValues(utilityForm), entries: [...utilityForm.elements.entries.selectedOptions].map(option => option.value), next: utilityForm.elements.next.checked, source: utilityForm.dataset.source || '' };
+}
+function restoreUtility(saved = {}) {
+  utilityForm.reset(); utilityForm.dataset.source = saved.source || '';
+  for (const name of ['title', 'mode', 'tag', 'target']) if (saved[name] !== undefined) {
+    const input = utilityForm.elements[name];
+    if (input.tagName === 'SELECT' && ![...input.options].some(option => option.value === saved[name])) input.add(new Option(saved[name], saved[name]));
+    input.value = saved[name];
+  }
+  utilityForm.elements.next.checked = !!saved.next;
+  utilityForm.elements.entries.replaceChildren(...(saved.entries || []).map(id => new Option(id, id, true, true)));
+  statusText('collectionUtilityStatus', '');
+}
+function renderCollectionUtilities(context) {
+  const all = scopedRecords(), form = utilityForm, selected = utilityDraft();
+  $('checklistFields').hidden = form.elements.mode.value !== 'checklist'; $('areaMappingFields').hidden = form.elements.mode.value !== 'area';
+  const source = context && collectionKind(context) === 'reference' ? key(context) : '';
+  const entries = Object.values(all).filter(item => source && item.type === 'item' && !item.deleted && belongsTo(item, context));
+  form.elements.entries.replaceChildren(...entries.map(item => new Option(item.title, item.id, false, source === selected.source && selected.entries.includes(item.id))));
+  form.dataset.source = source;
+  const tags = [...new Set(Object.values(all).filter(item => item.type === 'item' && !item.deleted).flatMap(item => item.areas || []))];
+  options(form.elements.tag, tags.map(tag => ({ id: tag, title: tag })), [['', 'Choose an area tag']]);
+  options(form.elements.target, Object.values(all).filter(record => isCollection(record) && !record.deleted && collectionKind(record) === 'area').map(record => ({ id: key(record), title: record.title })), [['', 'Create a new Area']]);
+  form.querySelector('button').disabled = saving || workspaceReadOnly();
+}
+utilityForm.addEventListener('input', () => { void journal(); });
+utilityForm.elements.mode.onchange = () => { render(); void journal(); };
+utilityForm.onsubmit = event => {
+  event.preventDefault();
+  if (saving || !accountId || workspaceReadOnly()) return;
+  const owner = accountId, generation = accountGeneration, submitted = utilityDraft(), workspaceId = selectedWorkspace;
+  saving = true; utilityForm.querySelector('button').disabled = true;
+  void (async () => {
+    try {
+      let result;
+      const saved = await transact(owner, local => {
+        if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before organizing more items.');
+        const records = workspaceRecords(projected(local), workspaceId);
+        if (submitted.mode === 'checklist') {
+          const source = records[submitted.source];
+          if (!source) throw new Error('Choose a reference list first.');
+          const items = submitted.entries.map(id => records['item:' + id]);
+          if (items.some(item => !item)) throw new Error('An entry is unavailable. Select entries again.');
+          result = { mutations: checklistMutations(source, items, submitted.title, submitted.next), remaining: 0 };
+        } else result = areaMappingMutations(records, submitted.tag, submitted.target ? parseRef(submitted.target) : null, submitted.title, workspaceId);
+        enqueue(local, owner, result.mutations);
+        currentDraft(local).collectionUtility = result.ref ? { ...submitted, target: refKey(result.ref), title: '' } : { mode: 'checklist' };
+      });
+      if (owner !== accountId || generation !== accountGeneration) return;
+      state = saved; restoreUtility(currentDraft(state).collectionUtility); render(); broadcast(); void sync();
+      statusText('collectionUtilityStatus', submitted.mode === 'area' ? `Batch saved on device. ${result.remaining} item(s) remain; save again to continue.` : 'New checklist saved on device. The reference list is unchanged.');
+    } catch (failure) { if (owner === accountId) { statusText('collectionUtilityStatus', failure.message); void journal(); } }
+    finally { saving = false; if (owner === accountId) utilityForm.querySelector('button').disabled = workspaceReadOnly(); }
+  })();
+};
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
 function statusText(id, text) {
@@ -256,7 +337,7 @@ function draft() {
   return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: hasEditDraft() ? { ...editing, fields: formValues(edit) } : null, editOpen: $('editor').open,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
-    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
+    collectionUtility: utilityDraft(), day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -292,7 +373,7 @@ function restoreDraft() {
   const saved = projected(state)['workspace:' + selectedWorkspace]?.deleted ? {} : currentDraft(state);
   fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
-  extraction.restore(saved.extraction);
+  extraction.restore(saved.extraction); restoreUtility(saved.collectionUtility);
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
   // Preserve the former review filter when upgrading an existing device draft.
@@ -350,10 +431,14 @@ function render() {
   options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
   const listMode = destination === 'lists';
   const filters = navigation[listMode ? 'lists' : 'work'];
-  options($('view'), listMode ? lists : [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))],
+  options($('view'), [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(project => ({ id: `project:${project.id}`, title: collectionLabel(project) }))],
     listMode ? [['', 'Choose a list']] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'inbox';
   filters.view = $('view').value;
+  $('collectionBrowser').hidden = $('collectionUtilities').hidden = !listMode;
+  $('includeNested').checked = !!filters.nested;
+  if (listMode) drawOutline($('collectionOutline'), scopedRecords(), record => { navigation.lists.view = viewKey(record); render(); void journal(); });
+  if (editing?.type === 'item') pickerOptions(editOrganizer, moving ? {} : scopedRecords(), selectedRefs(editOrganizer));
   refreshOptions();
   filters.statuses = Array.isArray(filters.statuses) ? filters.statuses.filter(status => typeof status === 'string') : [];
   const statuses = [...new Set(['inbox', 'next', 'waiting', 'deferred', 'reference', 'completed', 'dropped', ...(userDefaults().statuses || []), ...lists.flatMap(list => list.defaults?.statuses || []), ...records.filter(record => record.type === 'item').map(record => record.status), ...filters.statuses])];
@@ -388,17 +473,20 @@ function render() {
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
   const context = project || lists.find(list => list.id === view);
+  $('collectionBreadcrumbs').textContent = context ? ancestry(context, scopedRecords()).reverse().map(ref => scopedRecords()[refKey(ref)]?.title || 'Unavailable parent').join(' / ') : 'Choose a list, project, area or role.';
+  $('collectionChildren').replaceChildren(...(listMode && context ? records.filter(record => isCollection(record) && record.parentRef && refKey(record.parentRef) === key(context)).map(child => button(collectionLabel(child), () => { navigation.lists.view = viewKey(child); render(); void journal(); }, `Open ${collectionLabel(child)}`, `child:${key(child)}`)) : []));
+  renderCollectionUtilities(context);
   $('addContextItem').hidden = !context;
   $('addContextItem').disabled = workspaceReadOnly();
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
-  $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome}` : '';
+  $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
     if (!matchesExecutionFilters(record, filters)) return false;
-    if (!filters.status && ['completed', 'reference'].includes(record.status)) return false;
+    if (collectionKind(context || { type: 'list' }) !== 'reference' && !filters.status && ['completed', 'reference'].includes(record.status)) return false;
     if (view === 'day' && record.status === 'reference') return false;
     if (customStatuses) {
       const selected = filters.statuses.includes(record.status);
@@ -406,17 +494,16 @@ function render() {
     } else if (filters.status && filters.status !== '@all' && (filters.status === '@review-ready' ? !reviewReady(record) : record.status !== filters.status)) return false;
     if (view === 'all') return true;
     if (view === 'inbox') return record.status === 'inbox';
-    if (view === 'unfiled') return !record.listId;
+    if (view === 'unfiled') return !memberships(record).some(ref => ref.type === 'list');
     if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
-    if (view.startsWith('project:')) return record.projectId === project?.id;
-    return record.listId === view;
+    return !!context && inCollection(record, context, scopedRecords(), listMode && !!filters.nested);
   }).map(record => {
     const article = document.createElement('article'); article.dataset.id = record.id;
     const title = document.createElement('h3'); title.append(titleButton(record));
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
     const metadata = document.createElement('p'); metadata.className = 'notes';
     metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, record.priority].filter(Boolean).join(' · ');
-    if (record.projectId) metadata.append(` · Project: ${projects.find(project => project.id === record.projectId)?.title || 'Unavailable project'}`);
+    for (const ref of memberships(record)) metadata.append(` · ${scopedRecords()[refKey(ref)] ? collectionLabel(scopedRecords()[refKey(ref)]) : 'Unavailable collection: ' + refKey(ref)}`);
     if (record.plannedDay) metadata.append(` · Planned: ${record.plannedDay}`);
     if (record.dueDateUtc) { const time = document.createElement('time'); time.dateTime = record.dueDateUtc; time.textContent = ` Due ${new Date(record.dueDateUtc).toLocaleString()}`; metadata.append(time); }
     for (const [name, label] of [['dueDate', 'Deadline'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on']]) {
@@ -453,7 +540,7 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'New history entries'], ['reviewId', 'Review'], ['choice', 'Decision'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisions', 'Decision history'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'New history entries'], ['reviewId', 'Review'], ['choice', 'Decision'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
@@ -468,7 +555,7 @@ function render() {
   options($('executeList'), lists, [['', 'Choose a list']]);
   $('executeList').value = lists.some(list => list.id === navigation.execute.view) ? navigation.execute.view : '';
   navigation.execute.view = $('executeList').value;
-  $('executeItems').replaceChildren(...records.filter(record => navigation.execute.view && record.type === 'item' && record.listId === navigation.execute.view && record.status !== 'completed').map(record => {
+  $('executeItems').replaceChildren(...records.filter(record => navigation.execute.view && record.type === 'item' && belongsTo(record, { type: 'list', id: navigation.execute.view }) && record.status !== 'completed').map(record => {
     const article = document.createElement('article'); article.className = 'execute-item'; article.dataset.id = record.id;
     const checkLabel = document.createElement('label'); checkLabel.className = 'execute-check';
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.disabled = readOnly;
@@ -517,12 +604,12 @@ async function changeDeletion(record, action) {
     if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before deleting or restoring records.');
     const records = projected(local), current = records[key(record)];
     if (!current || current.version !== record.version || !!current.deleted !== (action === 'restore')) throw new Error('This record changed. Review its latest state before trying again.');
-    if (action === 'delete' && ['list', 'project'].includes(record.type) && Object.values(records).some(item => item.type === 'item' && !item.deleted && item[record.type === 'list' ? 'listId' : 'projectId'] === record.id)) {
-      throw new Error(`Move or delete this ${record.type}'s items before deleting the ${record.type}.`);
+    if (action === 'delete' && ['list', 'project'].includes(record.type) && Object.values(records).some(item => collectionContents(item, record))) {
+      throw new Error(`Move or delete this ${record.type}'s items and unlink child collections before deleting it.`);
     }
     if (action === 'restore' && record.type === 'item') {
-      for (const type of ['list', 'project']) {
-        const id = current[`${type}Id`], parent = records[`${type}:${id}`];
+      for (const { type, id } of memberships(current)) {
+        const parent = records[`${type}:${id}`];
         if (id && (!parent || parent.deleted)) throw new Error(`Restore this item's ${type} first, then restore the item.`);
       }
     }
@@ -579,11 +666,19 @@ function openEditor(record, focus = true, show = true) {
   edit.elements.title.value = fields.title;
   edit.elements.description.value = fields.description || '';
   edit.elements.listId.value = fields.listId || '';
+  pickerOptions(editOrganizer, scopedRecords(), memberships(fields));
+  $('editOrganizer').hidden = record.type !== 'item';
+  $('editCollectionFields').hidden = !isCollection(record);
+  edit.elements.kind.value = collectionKind(record);
+  for (const option of edit.elements.kind.options) option.disabled = !!record.version && (record.type === 'project' ? option.value !== 'project' : option.value === 'project');
+  const parentOptions = Object.values(scopedRecords()).filter(candidate => isCollection(candidate) && !candidate.deleted && !ancestry(candidate, scopedRecords()).some(ref => refKey(ref) === key(record)));
+  options(edit.elements.parentRef, parentOptions.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']], true);
+  edit.elements.parentRef.value = fields.parentRef ? refKey(fields.parentRef) : '';
   options(edit.elements.workspaceId, availableWorkspaces().filter(space => !space.archived), []);
   edit.elements.workspaceId.value = fields.workspaceId || selectedWorkspace;
   $('editWorkspaceLabel').hidden = record.type !== 'item';
   refreshOptions();
-  fillValues(edit, { ...fields, dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
+  fillValues(edit, { ...fields, parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
   editing.initialFields ??= formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
   $('editListLabel').hidden = record.type !== 'item';
@@ -683,7 +778,7 @@ capture.addEventListener('submit', event => {
       const mutations = captureMutations(submitted);
       const details = taskFields(submitted);
       for (const mutation of mutations) {
-        if (mutation.type === 'item') Object.assign(mutation.fields, details);
+        if (mutation.type === 'item') Object.assign(mutation.fields, details, { status: 'inbox' });
         else mutation.fields.defaults = structuredClone(userDefaults());
       }
       const saved = await transact(owner, local => {
@@ -713,10 +808,10 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : editing.type === 'project' ? { outcome: values.outcome } : {}) };
+      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome } : { kind: values.kind }) }) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0 && editing.initialFields) {
-      const initial = { ...editing.initialFields, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
+      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { void discardEdit(); return; }
     }
@@ -987,6 +1082,7 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  restoreUtility(); utilityForm.elements.entries.replaceChildren(); utilityForm.elements.tag.replaceChildren(); utilityForm.elements.target.replaceChildren(); $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
   extraction.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();

@@ -1,5 +1,7 @@
-import { localGuidance } from './local-guidance.js?v=54';
-import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=54';
+import { organizer, selectedRefs, membershipFields } from './collections.js?v=55';
+import { memberships, refKey } from './collection-model.js?v=55';
+import { localGuidance } from './local-guidance.js?v=55';
+import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=55';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [
@@ -46,7 +48,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
   let active = null, busy = false;
   const branching = () => active?.session.flowVersion === 2;
   const values = () => branching() ? { ...active.proposal, ...Object.fromEntries([...form.elements]
-    .filter(input => input.name.startsWith('flow_') && (input.type !== 'radio' || input.checked)).map(input => [input.name.slice(5), input.value])) }
+    .filter(input => input.name.startsWith('flow_') && (input.type !== 'radio' || input.checked)).map(input => [input.name.slice(5), input.multiple ? selectedRefs(input) : input.value])) }
     : Object.fromEntries([...form.elements].filter(input => input.name && !input.name.startsWith('flow_')).map(input => [input.name, input.value]));
   const snapshot = () => active ? { ...structuredClone(active), proposal: values(), open: dialog.open } : null;
   const guidance = localGuidance({
@@ -100,7 +102,15 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     }
     if (step === 'organize') {
       field('text', 'Working title', null, 'text', 200);
-      field('listId', 'File in list (optional)', [['', 'No list'], ...destinations('list', p.listId)]);
+      const refs = p.collectionRefs || memberships(active.item);
+      const selection = organizer(container, records(), refs, 'flow_collectionRefs');
+      const primaryList = field('listId', 'Primary list (defaults)', [['', 'No list'], ...destinations('list', p.listId)]);
+      const primaryProject = field('projectId', 'Primary project', [['', 'No project'], ...destinations('project', p.projectId)]);
+      primaryList.closest('label').hidden = primaryProject.closest('label').hidden = true;
+      selection.onchange = () => {
+        const fields = membershipFields(selectedRefs(selection), { listId: primaryList.value, projectId: primaryProject.value });
+        primaryList.value = fields.listId || ''; primaryProject.value = fields.projectId || ''; void journal();
+      };
       field('notes', 'Missing information / clarification notes (optional)', null, 'textarea');
     }
     if (['summary', 'complete'].includes(step)) {
@@ -108,6 +118,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
       const name = (type, id) => id ? records()[`${type}:${id}`]?.title || 'Unavailable destination' : 'None';
       const summary = document.createElement('pre');
       summary.textContent = [d.choice === 'trash' ? 'Move the original item to Deleted. It can be restored.' : `Title: ${final.title}\nState: ${final.status}\nList: ${name('list', final.listId)}\nProject: ${answers.project?.choice === 'new' ? answers.project.projectTitle + '\nDesired outcome: ' + answers.project.outcome : name('project', final.projectId)}`,
+        `Organize in: ${memberships(final).map(ref => records()[refKey(ref)]?.title || 'Unavailable collection').join(', ') || 'None'}`,
         ...['waitingOn', 'plannedDay', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc', 'dueDate', 'dueDateUtc'].filter(key => final[key]).map(key => `${({ waitingOn: 'Waiting for', plannedDay: 'Planned day', startDate: 'Not before', startDateUtc: 'Not before (UTC)', reviewDate: 'Review date', reviewDateUtc: 'Review time (UTC)', dueDate: 'Deadline', dueDateUtc: 'Deadline (UTC)' })[key]}: ${final[key]}`), answers.organize?.notes ? `Clarification notes: ${answers.organize.notes}` : '', 'Original capture and existing item notes are preserved.'].filter(Boolean).join('\n');
       container.append(summary);
     }
@@ -167,6 +178,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
             edits = flowEdits(answers);
             if (answers.project?.choice === 'new') {
               edits.projectId = crypto.randomUUID();
+              if (edits.collectionRefs) edits.collectionRefs = [...edits.collectionRefs, { type: 'project', id: edits.projectId }];
               mutations.push({ type: 'project', id: edits.projectId, action: 'create', expectedVersion: 0, fields: { title: answers.project.projectTitle, outcome: answers.project.outcome, workspaceId: current.item.workspaceId || 'personal' } });
             }
           }

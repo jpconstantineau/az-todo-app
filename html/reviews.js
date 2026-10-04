@@ -1,5 +1,6 @@
-import { key, projected } from './inbox-store.js?v=54';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=54';
+import { belongsTo, memberships, refKey } from './collection-model.js?v=55';
+import { key, projected } from './inbox-store.js?v=55';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=55';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -56,7 +57,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewDetails').textContent = !ref ? 'This review is empty. Start another review after capturing work or changing your focus.' : !target || target.deleted
       ? 'This record was deleted or is unavailable. Acknowledge it to continue; it will not be recreated.'
       : [target.type === 'project' ? `Project outcome: ${target.outcome}` : `Status: ${target.status}`, target.description,
-        target.projectId ? `Project: ${records[`project:${target.projectId}`]?.title || 'Unavailable project'}` : '',
+        memberships(target).map(ref => `Membership: ${records[refKey(ref)]?.title || 'Unavailable collection'}`).join(' · '),
         ...['waitingOn', 'plannedDay', 'dueDate', 'dueDateUtc', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'].filter(name => target[name]).map(name => `${name}: ${target[name]}`),
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');
     $('reviewOriginal').textContent = target?.originalText || '';
@@ -67,7 +68,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewClarify').disabled = unavailable;
     $('reviewProject').hidden = unavailable || target.type !== 'project';
     $('reviewAddAction').disabled = unavailable;
-    const actions = !unavailable && target.type === 'project' ? Object.values(records).filter(record => record.type === 'item' && !record.deleted && record.projectId === target.id && !['completed', 'dropped', 'reference'].includes(record.status)) : [];
+    const actions = !unavailable && target.type === 'project' ? Object.values(records).filter(record => record.type === 'item' && !record.deleted && belongsTo(record, target) && !['completed', 'dropped', 'reference'].includes(record.status)) : [];
     const nextCount = actions.filter(record => record.status === 'next').length;
     $('reviewProjectSummary').textContent = nextCount ? `${nextCount} next action${nextCount === 1 ? '' : 's'}. Other unfinished actions are shown too.` : 'No next actions. Add one or edit an unfinished action below.';
     $('reviewProjectActions').replaceChildren(...actions.map(record => {

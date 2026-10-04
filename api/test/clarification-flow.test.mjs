@@ -32,7 +32,7 @@ function mutations(session, id = 'capture', version = 1) {
   if (session.answers.disposition.choice === 'trash') result.push({ type: 'item', id, action: 'delete', expectedVersion: version });
   else {
     const fields = flowEdits(session.answers);
-    if (session.answers.project?.choice === 'new') { fields.projectId = 'new-project'; result.push(create('project', 'new-project', { title: 'Insurance', outcome: 'Coverage in place' })); }
+    if (session.answers.project?.choice === 'new') { fields.projectId = 'new-project'; if (fields.collectionRefs) fields.collectionRefs = [...fields.collectionRefs, { type: 'project', id: 'new-project' }]; result.push(create('project', 'new-project', { title: 'Insurance', outcome: 'Coverage in place' })); }
     result.push({ type: 'item', id, action: 'update', expectedVersion: version, fields });
   }
   return result;

@@ -1,10 +1,11 @@
+import { belongsTo } from './collection-model.js?v=55';
 export const briefSections = [
   ['outcome', 'Desired outcome'], ['context', 'Context and supplied sources'], ['scope', 'Scope'],
   ['exclusions', 'Exclusions'], ['nextAction', 'Proposed next action'],
   ['acceptanceChecks', 'Acceptance checks'], ['missingInformation', 'Missing information (or explicitly None known)']
 ];
 
-export function templateBrief(subject, clarification) {
+export function templateBrief(subject, clarification, records = {}) {
   const accepted = name => clarification?.answers?.[name]?.decision === 'accepted' ? clarification.answers[name].value : '';
   const outcome = subject.outcome || accepted('outcome');
   const missing = [!outcome && 'Desired outcome is not yet specified.', 'Confirm scope, exclusions and acceptance checks.',
@@ -13,7 +14,7 @@ export function templateBrief(subject, clarification) {
     outcome: outcome || 'Unknown — describe what done looks like.',
     context: [subject.title, subject.description, subject.sourceTitle, subject.sourceUrl, ...(subject.referenceLinks || [])].filter(Boolean).join('\n'),
     scope: 'Unknown — specify what is included.', exclusions: 'Unknown — specify what is excluded, or explicitly None known.',
-    nextAction: subject.type === 'item' ? subject.title : 'Unknown — choose a concrete next action.',
+    nextAction: subject.type === 'item' ? subject.title : Object.values(records).filter(item => item.type === 'item' && !item.deleted && item.status === 'next' && belongsTo(item, subject)).map(item => item.title).join('\n') || 'Unknown — choose a concrete next action.',
     acceptanceChecks: 'Unknown — specify how the outcome will be checked.', missingInformation: missing.join('\n')
   };
 }
@@ -61,7 +62,7 @@ export function setupBriefs({ records, save, journal, showDialog }) {
     const all = records(), subject = all[`${active.subjectType}:${active.subjectId}`], record = all[`brief:${id}`];
     if (!subject || subject.deleted) throw new Error('Source unavailable. Your existing brief revisions remain in the device export.');
     active = { subjectType: subject.type, subjectId: subject.id, sourceVersion: record?.sourceVersion || subject.version,
-      selectedId: record?.id || null, content: record?.content || templateBrief(subject, all[`clarification:${subject.id}`]) };
+      selectedId: record?.id || null, content: record?.content || templateBrief(subject, all[`clarification:${subject.id}`], all) };
     active.baseline = structuredClone(active.content); draw(); error('');
   }
   async function commit(status) {

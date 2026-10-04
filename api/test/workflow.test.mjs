@@ -78,10 +78,15 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
   await context.setOffline(true);
   await page.locator('#captureText').fill('Get the quote');
   await page.locator('#captureOptions > summary').click();
-  await page.locator('#capture [name=status]').selectOption('waiting');
+  await page.locator('#capture .task-dates > summary').click();
   await page.locator('#capture [name=waitingOn]').fill('Alex');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('#captureText').value);
+  await showView(page, 'work');
+  await page.getByRole('button', { name: 'Edit Get the quote', exact: true }).click();
+  assert.equal(await page.locator('#edit [name=status]').inputValue(), 'inbox');
+  await page.locator('#edit [name=status]').selectOption('waiting');
+  await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'work'); await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('waiting');
   assert.equal(await page.locator('#items article').count(), 1);

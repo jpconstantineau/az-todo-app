@@ -37,7 +37,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#capture [name=listId]').selectOption(list.id);
   await showView(page, 'capture'); await page.locator('#captureText').fill('<img src=x onerror=alert(1)>');
   await page.locator('#capture [name=body]').fill('Two cartons');
-  await page.locator('#capture [name=status]').selectOption('custom');
+  assert.equal(await page.locator('#capture [name=status]').isVisible(), false);
   await page.locator('#capture .task-metadata > summary').click();
   await page.locator('#capture .task-dates > summary').click();
   await page.locator('#capture [name=contexts]').selectOption(['@Kitchen', '@Shop']);
@@ -49,6 +49,12 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   let item = records().find(r => r.type === 'item');
+  assert.equal(item.status, 'inbox', 'ordinary capture always needs clarification');
+  await showView(page, 'work');
+  await page.getByRole('button', { name: 'Edit ' + item.title, exact: true }).click();
+  await page.locator('#edit [name=status]').selectOption('custom');
+  await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
+  item = records().find(r => r.type === 'item');
   assert.equal(item.dueDateUtc, '2026-10-03T18:30:00.000Z'); assert.equal(item.status, 'custom');
   assert.deepEqual(item.contexts, ['@Kitchen', '@Shop']); assert.equal(item.priority, 'Urgent');
   assert.equal(await page.locator('#items img').count(), 0);

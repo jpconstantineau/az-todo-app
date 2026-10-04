@@ -1,3 +1,4 @@
+import { memberships, normalizeMembership } from './collection-model.js?v=55';
 // Branching clarification keeps task changes pending until the final confirmation.
 export const flowProposal = () => ({ text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: '' });
 export const newFlow = () => ({ flowVersion: 2, step: 'actionable', answers: {}, proposal: flowProposal() });
@@ -28,7 +29,7 @@ export function flowAnswer(step, p, answers) {
     if (p.choice === 'deferred' && !p.startDate) throw new Error('Choose a start date.');
     return { choice: p.choice, waitingOn: p.choice === 'waiting' ? p.waitingOn : '', reviewDate: ['waiting', 'someday'].includes(p.choice) ? p.reviewDate : '', startDate: p.choice === 'deferred' ? p.startDate : '', plannedDay: p.choice === 'planned' ? p.plannedDay : '' };
   }
-  if (step === 'organize') return { text: required(p.text, 200, 'Working title'), listId: p.listId, notes: p.notes };
+  if (step === 'organize') return { text: required(p.text, 200, 'Working title'), listId: p.listId, notes: p.notes, ...(p.collectionRefs ? { collectionRefs: p.collectionRefs, projectId: p.projectId } : {}) };
   throw new Error('This step cannot accept an answer.');
 }
 export function flowDecision(session, proposal, choice, item) {
@@ -43,14 +44,19 @@ export function flowDecision(session, proposal, choice, item) {
   const nextPath = flowPath(answers), step = nextPath[nextPath.indexOf(session.step) + 1];
   const next = flowProposal();
   if (step === 'project') next.choice = item.projectId ? 'keep' : '';
-  if (step === 'organize') Object.assign(next, { text: answers.nextAction || item.title, listId: item.listId || '' });
+  if (step === 'organize') {
+    const group = answers.project, patch = group?.choice === 'existing' ? { projectId: group.projectId } : ['none', 'new'].includes(group?.choice) ? { projectId: null } : {};
+    const organized = normalizeMembership({ ...item, ...patch }, item, patch);
+    Object.assign(next, { text: answers.nextAction || item.title, listId: organized.listId || '', projectId: organized.projectId || '', collectionRefs: memberships(organized) });
+  }
   return { flowVersion: 2, step, answers, proposal: next };
 }
 export function flowEdits(answers) {
   const d = answers.disposition, group = answers.project, organization = answers.organize;
   const fields = { title: organization.text, listId: organization.listId || null, status: d.choice === 'planned' ? 'next' : d.choice };
-  if (group?.choice === 'none') fields.projectId = null;
-  if (group?.choice === 'existing') fields.projectId = group.projectId;
+  if (organization.collectionRefs) Object.assign(fields, { collectionRefs: organization.collectionRefs, projectId: organization.projectId || null });
+  if (!organization.collectionRefs && group?.choice === 'none') fields.projectId = null;
+  if (!organization.collectionRefs && group?.choice === 'existing') fields.projectId = group.projectId;
   if (d.choice === 'waiting') Object.assign(fields, { waitingOn: d.waitingOn, ...(d.reviewDate ? { reviewDate: d.reviewDate, reviewDateUtc: null } : {}) });
   if (d.choice === 'someday') Object.assign(fields, { reviewDate: d.reviewDate || null, reviewDateUtc: null });
   if (d.choice === 'deferred') Object.assign(fields, { startDate: d.startDate, startDateUtc: null });

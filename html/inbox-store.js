@@ -1,5 +1,6 @@
-import { workspaceOf } from './workspaces.js?v=54';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=54';
+import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=55';
+import { workspaceOf } from './workspaces.js?v=55';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=55';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -53,6 +54,7 @@ export function projected(state) {
         ...(mutation.action === 'restore' ? { deletedUtc: null } : {}),
         localState: entry.failure || previous?.localState === 'Failed — needs attention' ? 'Failed — needs attention' : 'Saved on device — pending' };
       if (mutation.type === 'item') {
+        normalizeMembership(records[id], previous, mutation.fields);
         records[id].nextAction = records[id].status === 'next';
         if (records[id].status === 'completed' && previous?.status !== 'completed' && previous?.workflowBeforeTransition?.status === 'completed' &&
             workflowFields.every(name => (records[id][name] ?? null) === (previous.workflowBeforeTransition[name] ?? null))) records[id].statusBeforeCompletion = previous.completionBeforeTransition;
@@ -70,7 +72,10 @@ export function enqueue(state, accountId, mutations) {
   if (!mutations.length || mutations.length > 20) throw new Error('Save 1–20 items at a time (19 with a new list).');
   const records = projected(state);
   const proposed = { ...records };
-  for (const mutation of mutations) proposed[key(mutation)] = { ...records[key(mutation)], ...mutation.fields, ...mutation, deleted: mutation.action === 'delete' };
+  for (const mutation of mutations) {
+    proposed[key(mutation)] = { ...records[key(mutation)], ...mutation.fields, ...mutation, deleted: mutation.action === 'delete' };
+    if (mutation.type === 'item') normalizeMembership(proposed[key(mutation)], records[key(mutation)], mutation.fields);
+  }
   for (const mutation of mutations) {
     if (!['workspace', 'settings'].includes(mutation.type)) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
@@ -78,10 +83,14 @@ export function enqueue(state, accountId, mutations) {
         const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];
         if (id !== 'personal' && (!workspace || workspace.deleted || workspace.archived)) throw new Error('This workspace is unavailable or archived. Restore or unarchive it before saving.');
       }
-      if (mutation.type === 'item') for (const type of ['list', 'project']) {
-        const parent = proposed[type + ':' + record[type + 'Id']];
-        if (parent && workspaceOf(parent, proposed) !== workspaceOf(record, proposed)) throw new Error('Clear list and project links before moving to another workspace.');
-      }
+      if (!record.deleted) {
+        for (const ref of record.type === 'item' ? memberships(record) : record.parentRef ? [record.parentRef] : []) {
+          const parent = proposed[refKey(ref)];
+          if (!parent || parent.deleted) throw new Error('Destination collection is unavailable. Restore or remove its link.');
+          if (workspaceOf(parent, proposed) !== workspaceOf(record, proposed)) throw new Error('Clear collection memberships before moving to another workspace.');
+        }
+        if (isCollection(record) && record.parentRef && ancestry(record.parentRef, proposed).some(ref => refKey(ref) === key(record))) throw new Error('A collection cannot be its own ancestor.');
+      } else if (isCollection(record) && Object.values(proposed).some(child => collectionContents(child, record))) throw new Error('Move or unlink items and child collections before deleting this collection.');
     }
     if (mutation.type === 'item' && mutation.action !== 'delete') {
       const old = records[key(mutation)];
@@ -100,11 +109,11 @@ export function enqueue(state, accountId, mutations) {
 
 // One editor save per account on this device; the outbox and inverse commit together.
 export function rememberEdit(state, record, fields, now = Date.now()) {
-  const empty = { workspaceId: 'personal', title: '', description: '', outcome: '', status: 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [] };
+  const empty = { workspaceId: 'personal', title: '', description: '', outcome: '', status: 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [], collectionRefs: [], parentRef: null, kind: 'list' };
   state.undoEdit = {
     type: record.type, id: record.id, title: record.title, expectedVersion: record.version + 1,
     operationId: state.queue.at(-1).operation.operationId, expiresAt: now + 7 * 24 * 60 * 60 * 1000,
-    fields: Object.fromEntries(Object.keys(fields).map(name => [name, structuredClone(record[name] ?? empty[name] ?? null)]))
+    fields: Object.fromEntries(Object.keys(fields).map(name => [name, structuredClone(name === 'collectionRefs' ? memberships(record) : record[name] ?? empty[name] ?? null)]))
   };
 }
 

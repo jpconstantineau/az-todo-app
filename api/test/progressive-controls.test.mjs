@@ -43,10 +43,10 @@ test('progressive controls keep capture and editor actions reachable without exp
   await page.locator('#captureText').fill('Prepare the room');
   await page.locator('#captureOptions > summary').click();
   assert.equal(await page.locator('#capture button[type=submit]').count(), 1, 'capture has one Save button even with Notes open');
-  for (const name of ['listId', 'projectId', 'status']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), true);
+  for (const name of ['listId', 'projectId']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), true);
   for (const name of ['dueLocal', 'contexts']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), false);
   await page.locator('#capture [name=newList]').fill('Home');
-  await page.locator('#capture [name=status]').selectOption('next');
+  assert.equal(await page.locator('#capture [name=status]').isVisible(), false);
   await page.locator('#capture .task-dates > summary').click();
   await page.locator('#capture [name=dueDate]').fill('2026-12-01');
   await page.locator('#capture .task-dates > summary').click();
