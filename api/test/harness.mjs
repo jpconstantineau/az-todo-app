@@ -129,6 +129,7 @@ export async function startServer({ browserUser = false, assetContents = () => u
         }
         assets["/manifest.json"] = ["manifest.json", "application/json"];
         for (const name of ["icon-192.png", "icon-512.png", "apple-touch-icon.png"]) assets["/icons/" + name] = ["icons/" + name, "image/png"];
+        assets['/clarification-flow.js'] = ['clarification-flow.js', 'text/javascript'];
         const asset = assets[url.pathname];
         if (!asset) { res.writeHead(404); res.end("Not found"); return; }
         res.writeHead(200, { "content-type": asset[1] });
