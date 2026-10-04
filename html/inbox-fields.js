@@ -1,7 +1,9 @@
-import { refKey } from './collection-model.js?v=62';
+import { refKey } from './collection-model.js?v=63';
 export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Energy', timeRequired: 'Time required', priority: 'Priority', statuses: 'Statuses' };
 export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
+
+export const readyToExecute = record => !record.status || ['inbox', 'next'].includes(record.status);
 
 export function matchesExecutionFilters(record, filters) {
   if (filters.context === '@none' && record.contexts?.length) return false;
