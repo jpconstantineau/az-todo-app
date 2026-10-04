@@ -61,6 +61,8 @@ test('account label: verified name is text only; rename does not change ownershi
   });
   await open(page, url); await label(page, `Device inbox for ${name}`);
   assert.equal(await page.locator('#sessionStatus img').count(), 0);
+  assert.equal(await page.locator('#accountName').textContent(), name);
+  assert.equal(await page.locator('#accountName img').count(), 0);
   await capture(page, 'Milk'); await confirmed(page);
   assert.equal(records()[0].accountId, 'alice');
   const id = records()[0].id;
@@ -73,6 +75,7 @@ test('account label: verified name is text only; rename does not change ownershi
   assert.ok(cached.every(url => !url.includes('/.auth/') && !url.includes('/api/')));
   await context.setOffline(true); await page.reload();
   await page.locator('#workspace').waitFor(); await label(page, 'Your device inbox · Offline');
+  assert.equal(await page.locator('#accountName').textContent(), 'renamed-handle');
   assert.ok(requests > 0);
 });
 
@@ -108,9 +111,11 @@ test('account label: delayed previous-account responses and expiry cannot restor
   for (const route of pending) await route.fulfill({ json: { clientPrincipal: { userId: 'alice', userDetails: 'late-alice' } } });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await label(page, 'Device inbox for bob-handle');
+  assert.equal(await page.locator('#accountName').textContent(), 'bob-handle');
   setUser(null); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /bob-handle|late-alice/);
+  assert.equal(await page.locator('#accountName').textContent(), 'Welcome');
 });
 
 test('account label: timed-out profile keeps the neutral label and durable capture', { timeout: 30000 }, async t => {

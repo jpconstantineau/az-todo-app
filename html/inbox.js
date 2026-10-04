@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=43';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=43';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=43';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=43';
-import { clarificationUI } from './clarification.js?v=43';
-import { setupReviews } from './reviews.js?v=43';
-import { setupBriefs } from './briefs.js?v=43';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=43';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=44';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=44';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=44';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=44';
+import { clarificationUI } from './clarification.js?v=44';
+import { setupReviews } from './reviews.js?v=44';
+import { setupBriefs } from './briefs.js?v=44';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=44';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -24,6 +24,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : 'Your Work') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -227,8 +228,10 @@ function statusText(id, text) {
 function connectionStatus() {
   if (!accountId || !state) return;
   const needsAttention = state.queue.some(entry => entry.failure) || !$('error').hidden;
-  $('connection').dataset.state = needsAttention ? 'error' : state.queue.length || !navigator.onLine ? 'pending' : 'confirmed';
-  statusText('connectionLabel', needsAttention ? '⚠ Needs attention' : !navigator.onLine ? '○ Offline' : state.queue.length ? `◷ ${state.queue.length} pending` : '✓ Synced');
+  $('saveStatus').dataset.state = !navigator.onLine ? 'offline' : needsAttention ? 'error' : state.queue.length || syncing ? 'pending' : 'confirmed';
+  const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : 'Saved to cloud';
+  $('saveStatus').title = label;
+  statusText('connectionLabel', label);
 }
 function error(message, kind = 'local') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
@@ -764,7 +767,6 @@ function workspace(focus = true) {
     if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = (destination === 'capture' ? 'Capture' : listMode ? 'List Workspace' : 'Your Work') + ' · To-Do';
   render();
   if (focus) { $('createdDestination').replaceChildren(); focusDestination(); void journal(); }
 }
@@ -930,6 +932,7 @@ async function showAccountName(owner, generation, verified) {
   const requestId = ++profileRequest;
   const offline = navigator.onLine ? '' : ' · Offline';
   let label = `Your device inbox${offline}`;
+  statusText('accountName', state?.accountName || 'Your account');
   if (!verified) { statusText('sessionStatus', label); return; }
   try {
     const response = await fetch('/.auth/me', { credentials: 'same-origin', cache: 'no-store',
@@ -938,7 +941,13 @@ async function showAccountName(owner, generation, verified) {
     const principal = (await response.json())?.clientPrincipal;
     if (requestId !== profileRequest || generation !== accountGeneration || owner !== accountId) return;
     if (principal?.userId === owner && typeof principal.userDetails === 'string' && principal.userDetails.trim()) {
-      label = `Device inbox for ${principal.userDetails.trim()}${offline}`;
+      const name = principal.userDetails.trim();
+      label = `Device inbox for ${name}${offline}`;
+      statusText('accountName', name);
+      if (state.accountName !== name) {
+        const saved = await transact(owner, local => { local.accountName = name; });
+        if (requestId === profileRequest && generation === accountGeneration && owner === accountId) state = saved;
+      }
     }
   } catch { /* Display metadata must never block capture or synchronization. */ }
   finally {
@@ -962,7 +971,11 @@ function hideAccount() {
   $('executionFilters').open = false; $('executionSummary').textContent = 'Context, time & energy';
   $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
   $('syncStatus').textContent = ''; clearError();
-  $('connectionLabel').textContent = 'Account & device status'; delete $('connection').dataset.state;
+  $('connectionLabel').textContent = ''; $('saveStatus').hidden = true;
+  delete $('saveStatus').dataset.state; $('saveStatus').removeAttribute('title');
+  $('accountName').textContent = 'Welcome'; $('defaultWorkspace').hidden = false; $('workspaceSelect').hidden = true;
+  $('signedOut').hidden = false; $('loginStatus').textContent = 'Sign in to open your workspace.';
+  document.title = 'Capture · Personal';
   $('menuDeviceTools').hidden = true;
   $('undoEdit').disabled = true; $('undoEditStatus').textContent = '';
   recentTaskChange = null; $('recentTaskChange').hidden = true; $('recentTaskChangeStatus').textContent = '';
@@ -983,10 +996,9 @@ function hideAccount() {
 }
 async function pauseSession(message) {
   hideAccount();
-  $('connection').open = true;
   try { await transact(null, session => { session.paused = true; }); }
   catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.'); }
-  broadcast(); $('sessionStatus').textContent = message;
+  broadcast(); $('sessionStatus').textContent = message; $('loginStatus').textContent = message;
 }
 async function session({ allowOffline = false } = {}) {
   let generation = accountGeneration;
@@ -997,7 +1009,7 @@ async function session({ allowOffline = false } = {}) {
     verified = true;
   } catch (failure) {
     if (failure.status === 401 || failure.status === 403) {
-      await pauseSession('Sign in to the original account to resume. Its pending work is kept on this device.');
+      await pauseSession('Sign in to open your workspace.');
       throw failure;
     }
     if (!allowOffline || failure.status) throw failure;
@@ -1021,6 +1033,7 @@ async function session({ allowOffline = false } = {}) {
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
   $('menuDeviceTools').hidden = false;
+  $('signedOut').hidden = true; $('defaultWorkspace').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
   void showAccountName(accountId, generation, verified);
   return accountId;
 }
@@ -1028,6 +1041,7 @@ async function session({ allowOffline = false } = {}) {
 async function sync() {
   if (syncing || !navigator.onLine || document.hidden) return;
   syncing = true; clearTimeout(retryTimer);
+  connectionStatus();
   let continueSync = false;
   try {
     const owner = await session({ allowOffline: true });
@@ -1075,7 +1089,7 @@ async function sync() {
     retryDelay = 2000; clearError('sync'); broadcast();
   } catch (failure) {
     if ([401, 403].includes(failure.status) || failure.code === 'account_mismatch') {
-      await pauseSession('Session changed or expired. Sign in to the original account to resume its pending work.');
+      if (accountId) await pauseSession('Session changed or expired. Sign in to the original account to resume its pending work.');
     } else {
       error(`Sync paused: ${failure.message} Pending work stays on this device.`, 'sync');
       if (accountId) {
@@ -1088,6 +1102,7 @@ async function sync() {
     }
   } finally {
     syncing = false;
+    connectionStatus();
     if (continueSync) retryTimer = setTimeout(() => { void sync(); }, retryDelay);
   }
 }
@@ -1133,7 +1148,7 @@ $('signOut').onclick = guard(async () => {
 channel.onmessage = guard(async () => {
   const saved = await transact(null);
   if (saved.paused || (accountId && saved.accountId !== accountId)) {
-    hideAccount(); $('sessionStatus').textContent = 'Account changed in another tab. Sign in or reload to continue.';
+    hideAccount(); $('sessionStatus').textContent = $('loginStatus').textContent = 'Account changed in another tab. Sign in or reload to continue.';
   } else if (accountId) {
     const owner = accountId, savedState = await transact(owner);
     if (owner === accountId) { state = savedState; render(); }
@@ -1149,6 +1164,7 @@ addEventListener('focus', () => { render(); if (navigator.onLine) void sync(); }
 
 try {
   await session({ allowOffline: true });
-} catch (failure) { error(failure.message); }
+} catch (failure) { if (![401, 403].includes(failure.status)) error(failure.message); }
 syncing = false;
+connectionStatus();
 if (accountId) void sync();

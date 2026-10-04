@@ -17,7 +17,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   if (shots) await mkdir(shots, { recursive: true });
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === '✓ Synced');
+  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
   for (const width of [320, 400, 767, 768, 936, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => scrollTo(0, 0));

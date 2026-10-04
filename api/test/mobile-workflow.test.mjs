@@ -16,12 +16,12 @@ test('mobile workflow: compact menus, title editing, focus, offline help and rec
   await page.goto(server.url);
   await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === '✓ Synced');
+  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
   assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
   assert.equal(await page.locator('#connection').evaluate(el => el.open), false);
   assert.equal(await page.locator('#export').isVisible(), false);
   assert.equal(await page.locator('#capture button:visible').count(), 1, 'capture exposes only Save initially');
-  assert.deepEqual(await page.locator('#workspace button:visible').allTextContents(), ['Review', 'Save on device']);
+  assert.deepEqual(await page.locator('#workspace button:visible').evaluateAll(controls => controls.map(control => control.getAttribute('aria-label') || control.textContent)), ['Review', 'Save on device']);
   await page.locator('#appMenu > summary').focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.locator('#exportTools > summary').isVisible(), true);
@@ -30,7 +30,7 @@ test('mobile workflow: compact menus, title editing, focus, offline help and rec
   assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
   assert.equal(await page.locator('#appMenu > summary').evaluate(el => el === document.activeElement), true);
   await context.setOffline(true);
-  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent.includes('Offline'));
+  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Working offline');
   await page.locator('#captureText').fill('Milk');
   await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=newList]').fill('Groceries');
