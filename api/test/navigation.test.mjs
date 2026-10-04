@@ -76,11 +76,15 @@ test('navigation: reviews stay in a page card with history, editing, offline rel
 
 test('navigation: process selector defaults to Inbox, preserves a chosen list offline and falls back when it disappears', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t, '#work');
-  assert.equal(await page.locator('#itemsHeading').textContent(), 'Process and Organize');
-  assert.equal(await page.title(), 'Process and Organize · Personal');
-  assert.equal(await page.getByRole('combobox', { name: 'Your Work', exact: true }).inputValue(), 'inbox');
+  assert.equal(await page.locator('#itemsHeading').textContent(), 'Process');
+  assert.equal(await page.title(), 'Process · Personal');
+  assert.equal(await page.locator('#workEyebrow').isVisible(), false);
+  assert.equal(await page.locator('#viewLabel').getAttribute('class'), 'sr-only');
+  assert.equal(await page.locator('#executionFilters').isVisible(), false);
+  assert.equal(await page.getByRole('combobox', { name: 'View', exact: true }).inputValue(), 'inbox');
+  assert.equal(await page.locator('#view').evaluate(el => getComputedStyle(el).fontSize), await page.locator('#itemsHeading').evaluate(el => getComputedStyle(el).fontSize));
   assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
-  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process'], ['listWorkspace', 'List Workspace'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
     const link = page.getByRole('link', { name, exact: true });
     assert.equal(await link.getAttribute('id'), id);
     assert.equal(await link.getAttribute('title'), name);
@@ -97,12 +101,15 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
   assert.equal(await page.locator('#items article').count(), 0, 'processed work leaves the default Inbox');
-  await page.getByRole('combobox', { name: 'Your Work', exact: true }).selectOption(list.id);
+  await page.getByRole('combobox', { name: 'View', exact: true }).selectOption(list.id);
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
   await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.work.view === id, list.id);
+  await page.evaluate(async () => (await import('/inbox-store.js')).transact('alice', local => {
+    local.draft.navigation.work.context = 'context:Former filter';
+  }));
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), list.id);
-  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this'], 'old Process filters no longer hide work');
   await page.evaluate(async id => {
     await (await import('/inbox-store.js')).transact('alice', local => { local.records['list:' + id].deleted = true; });
   }, list.id);
@@ -217,6 +224,40 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   await page.locator('#executeList').selectOption('checklist');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Pack passport']);
   assert.equal(await page.locator('#executeFilterSummary').textContent(), 'Context, time & energy');
+});
+
+test('navigation: Execute offers existing collection kinds, including an Area without a Project', { timeout: 90000 }, async t => {
+  const { page, context, url } = await setup(t, '#execute');
+  const kinds = { area: 'Area', role: 'Role', initiative: 'Initiative', program: 'Program', reference: 'Reference list' };
+  assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Project', 'Checklist']);
+  const mutations = Object.entries(kinds).flatMap(([kind, title]) => [
+    { type: 'list', id: kind, action: 'create', expectedVersion: 0, fields: { title, kind } },
+    { type: 'item', id: `${kind}-task`, action: 'create', expectedVersion: 0,
+      fields: { title: `${title} task`, status: 'next', collectionRefs: [{ type: 'list', id: kind }] } }
+  ]);
+  const response = await fetch(url + '/api/v1/operations', { method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execute-other-kinds', mutations }) });
+  assert.equal(response.status, 200, await response.text());
+  await clickControl(page.locator('#sync'));
+  await page.locator('[data-execute-kind="reference"]').waitFor(); await confirmed(page);
+  assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Project', 'Checklist', ...Object.values(kinds)]);
+  for (const [kind, title] of Object.entries(kinds)) {
+    const control = page.locator(`[data-execute-kind="${kind}"]`);
+    await control.click();
+    assert.equal(await control.getAttribute('aria-pressed'), 'true');
+    await page.locator('#executeList').selectOption(kind);
+    assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [`${title} task`]);
+  }
+  const area = (await local(page)).records['item:area-task'];
+  assert.equal(area.projectId, null);
+  assert.deepEqual(area.collectionRefs, [{ type: 'list', id: 'area' }]);
+  await page.locator('[data-execute-kind="area"]').click();
+  await page.locator('#executeList').selectOption('area');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.execute.view === 'area');
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('[data-execute-kind="area"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#executeList').inputValue(), 'area');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Area task']);
 });
 
 test('navigation: Execute offers only ready work in every collection and opens excluded work for review', { timeout: 90000 }, async t => {

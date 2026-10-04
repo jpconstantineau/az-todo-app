@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=60';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=60';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=60';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=60';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=60';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=60';
-import { clarificationUI } from './clarification.js?v=60';
-import { setupReviews } from './reviews.js?v=60';
-import { setupBriefs } from './briefs.js?v=60';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=60';
-import { setupAgentStatus } from './local-agent.js?v=60';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=61';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=61';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=61';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=61';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=61';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=61';
+import { clarificationUI } from './clarification.js?v=61';
+import { setupReviews } from './reviews.js?v=61';
+import { setupBriefs } from './briefs.js?v=61';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=61';
+import { setupAgentStatus } from './local-agent.js?v=61';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -28,7 +28,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process and Organize') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -450,7 +450,7 @@ function render() {
     $(id).value = filters[field] || '';
     filters[field] = $(id).value;
   }
-  const executionCount = [filters.context, filters.minutes, filters.energy].filter(Boolean).length;
+  const executionCount = listMode ? [filters.context, filters.minutes, filters.energy].filter(Boolean).length : 0;
   $('executionSummary').textContent = `Context, time & energy${executionCount ? ` (${executionCount} active)` : ''}`;
   const customStatuses = ['@include', '@exclude'].includes(filters.status);
   $('statusSelection').hidden = !customStatuses;
@@ -484,7 +484,7 @@ function render() {
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
-    if (!matchesExecutionFilters(record, filters)) return false;
+    if (listMode && !matchesExecutionFilters(record, filters)) return false;
     if (collectionKind(context || { type: 'list' }) !== 'reference' && !filters.status && ['completed', 'reference'].includes(record.status)) return false;
     if (view === 'day' && record.status === 'reference') return false;
     if (customStatuses) {
@@ -552,8 +552,19 @@ function render() {
   renderEditorDraft();
   const readOnly = workspaceReadOnly();
   const execute = navigation.execute;
-  if (!['list', 'project', 'checklist'].includes(execute.kind)) execute.kind = 'list';
-  for (const control of document.querySelectorAll('[data-execute-kind]')) control.setAttribute('aria-pressed', String(control.dataset.executeKind === execute.kind));
+  const kinds = $('executeKinds');
+  const availableKinds = new Set(['list', 'project', 'checklist', ...lists.map(collectionKind)]);
+  for (const control of kinds.querySelectorAll('[data-execute-kind]')) {
+    if (!availableKinds.has(control.dataset.executeKind)) control.remove();
+  }
+  for (const [kind, label] of Object.entries(collectionKinds)) {
+    if (!availableKinds.has(kind) || kinds.querySelector(`[data-execute-kind="${kind}"]`)) continue;
+    const control = document.createElement('button');
+    control.type = 'button'; control.dataset.executeKind = kind; control.textContent = label;
+    kinds.append(control);
+  }
+  if (!availableKinds.has(execute.kind)) { execute.kind = 'list'; execute.view = ''; }
+  for (const control of kinds.querySelectorAll('[data-execute-kind]')) control.setAttribute('aria-pressed', String(control.dataset.executeKind === execute.kind));
   const executeCollections = (execute.kind === 'project' ? projects : lists.filter(list => collectionKind(list) === execute.kind));
   options($('executeList'), executeCollections.map(record => ({ id: viewKey(record), title: record.title })), [['', `Choose a ${execute.kind}`]]);
   $('executeList').value = executeCollections.some(record => viewKey(record) === execute.view) ? execute.view : '';
@@ -906,9 +917,12 @@ function workspace(focus = true) {
   $('execute').hidden = destination !== 'execute';
   $('listTools').hidden = !listMode;
   $('newProject').hidden = listMode;
-  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process and Organize';
-  $('workEyebrow').textContent = listMode ? 'Organize' : 'Your work';
-  $('viewLabel').textContent = listMode ? 'List' : 'Your Work';
+  document.querySelector('.work-panel').classList.toggle('process-mode', !listMode);
+  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process';
+  $('workEyebrow').hidden = !listMode;
+  $('viewLabel').textContent = listMode ? 'List' : 'View';
+  $('viewLabel').classList.toggle('sr-only', !listMode);
+  $('executionFilters').hidden = !listMode;
   for (const link of document.querySelectorAll('.workspace-nav a')) {
     if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -949,7 +963,9 @@ $('executeList').onchange = () => {
 $('inspectExecute').onclick = () => {
   Object.assign(navigation.lists, { view: navigation.execute.view, status: '@all', context: '', minutes: '', energy: '' });
 };
-for (const control of document.querySelectorAll('[data-execute-kind]')) control.onclick = () => {
+$('executeKinds').onclick = event => {
+  const control = event.target.closest('[data-execute-kind]');
+  if (!control) return;
   navigation.execute.kind = control.dataset.executeKind;
   navigation.execute.view = '';
   render(); void journal();

@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=60" defer></script>
+  <script src="/pwa.js?v=61" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=60"></script>
+  <script type="module" src="/inbox.js?v=61"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -73,7 +73,7 @@
     </dialog>
     <nav class="toolbar workspace-nav" aria-label="Workspace">
       <a class="button icon-button" id="quickFocus" href="#capture" aria-current="page" aria-label="Capture" title="Capture"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="8" rx="9" ry="5" transform="rotate(-15 12 8)"/><ellipse cx="7" cy="13" rx="2" ry="1.5"/><path d="M8 14.5c2 3 1 5-1 6"/></svg></a>
-      <a class="button icon-button" id="yourWork" href="#work" aria-label="Process and Organize" title="Process and Organize"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx=".5"/><path d="M12 8v5M5 16v-3h14v3"/><rect x="2" y="16" width="6" height="6" rx=".5"/><rect x="16" y="16" width="6" height="6" rx=".5"/></svg></a>
+      <a class="button icon-button" id="yourWork" href="#work" aria-label="Process" title="Process"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx=".5"/><path d="M12 8v5M5 16v-3h14v3"/><rect x="2" y="16" width="6" height="6" rx=".5"/><rect x="16" y="16" width="6" height="6" rx=".5"/></svg></a>
       <a class="button icon-button" id="listWorkspace" href="#lists" aria-label="List Workspace" title="List Workspace"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4-9 4-9-4Zm0 6 9 4 9-4M3 19l9 4 9-4"/></svg></a>
       <a class="button icon-button" id="doWork" href="#execute" aria-label="Do" title="Do"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="3" rx="1"/><path d="M8 3H6a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M7 9l1 1 2-2m3 1h4M7 14l1 1 2-2m3 1h4M7 19l1 1 2-2m3 1h4"/></svg></a>
       <a class="button icon-button" id="openReviews" href="#reviews" aria-label="Review" title="Review"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m15 15 7 7"/></svg></a>
@@ -117,9 +117,9 @@
       <button id="discard">Use server version for this save</button>
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
-      <p class="eyebrow" id="workEyebrow">Your work</p><h2 id="itemsHeading" tabindex="-1">Process and Organize</h2>
+      <p class="eyebrow" id="workEyebrow" hidden>Organize</p><h2 id="itemsHeading" tabindex="-1">Process</h2>
       <div id="collectionBrowser" hidden><details class="collection-outline"><summary>Browse lists and their children</summary><nav id="collectionOutline" aria-label="Collection outline"></nav></details><p id="collectionBreadcrumbs" class="muted"></p><div id="collectionChildren" class="actions"></div><label class="collection-check"><input id="includeNested" type="checkbox"> Include nested items</label></div>
-      <label><span id="viewLabel">Your Work</span> <select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
+      <label><span id="viewLabel" class="sr-only">View</span> <select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
       <fieldset id="statusSelection" hidden aria-describedby="statusSelectionHelp">
@@ -150,7 +150,7 @@
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
       <h2 id="executeHeading" tabindex="-1">Execute</h2>
-      <div class="actions execute-kinds" role="group" aria-label="Collection type">
+      <div class="actions execute-kinds" id="executeKinds" role="group" aria-label="Collection type">
         <button type="button" data-execute-kind="list" aria-pressed="true">List</button>
         <button type="button" data-execute-kind="project" aria-pressed="false">Project</button>
         <button type="button" data-execute-kind="checklist" aria-pressed="false">Checklist</button>
@@ -174,7 +174,7 @@
       <p><a href="/help.html#reviews" target="_blank" rel="noopener">Review help (new tab)</a></p>
       <fieldset id="reviewWorkspaceFields" class="workspace-fields">
       <label>Saved reviews<select id="reviewSessions"></select></label>
-      <p class="muted">Weekly reviews include active projects. Review someday / on hold projects separately when you choose. Completed projects remain available in Your Work.</p>
+      <p class="muted">Weekly reviews include active projects. Review someday / on hold projects separately when you choose. Completed projects remain available in Process.</p>
       <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button><button id="startSomeday" type="button">Review someday projects</button></div>
       <p id="reviewError" role="alert"></p>
       <section id="reviewBody" hidden>

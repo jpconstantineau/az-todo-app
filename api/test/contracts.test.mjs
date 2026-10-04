@@ -29,7 +29,7 @@ test('all rollout flag combinations keep legacy writes retired and v1 gating exp
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /type="module" src="\/inbox.js\?v=60"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=61"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   assert.match(await readFile(new URL('inbox.html', root), 'utf8'), /url=\//);
   for (const path of await readdir(root)) {
