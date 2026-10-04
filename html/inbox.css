@@ -70,7 +70,8 @@
 .agent-icon { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 .agent-unavailable { display: none; }
 .agent-status[data-state="unavailable"] .agent-unavailable { display: inline; }
-.capture-header { display: flex; justify-content: flex-end; margin-bottom: var(--space-2); }
+.capture-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.capture-header h2 { margin: 0; }
 .capture-header .icon-button { display: flex; align-items: center; justify-content: center; width: 44px; padding: var(--space-2); }
 #draftStatus:empty { display: none; }
 #appMenu { display: contents; }
