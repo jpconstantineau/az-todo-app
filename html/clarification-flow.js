@@ -1,4 +1,4 @@
-import { memberships, normalizeMembership } from './collection-model.js?v=56';
+import { memberships, normalizeMembership } from './collection-model.js?v=57';
 // Branching clarification keeps task changes pending until the final confirmation.
 export const flowProposal = () => ({ text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: '' });
 export const newFlow = () => ({ flowVersion: 2, step: 'actionable', answers: {}, proposal: flowProposal() });

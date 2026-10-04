@@ -1,6 +1,6 @@
-import { belongsTo, memberships, refKey } from './collection-model.js?v=56';
-import { key, projected } from './inbox-store.js?v=56';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=56';
+import { belongsTo, memberships, refKey } from './collection-model.js?v=57';
+import { key, projected } from './inbox-store.js?v=57';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=57';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -68,7 +68,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const failed = state.queue.some(entry => entry.failure);
     const unavailable = busy || failed || !target || target.deleted;
     $('reviewEdit').disabled = unavailable;
-    $('reviewClarify').hidden = target?.type !== 'item' || target.status === 'reference';
+    $('reviewClarify').hidden = target?.type !== 'item';
     $('reviewClarify').disabled = unavailable;
     $('reviewProject').hidden = unavailable || target.type !== 'project';
     $('reviewAddAction').disabled = unavailable;

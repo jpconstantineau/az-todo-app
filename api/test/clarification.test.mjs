@@ -178,6 +178,38 @@ test('direct clarification works offline, preserves wording, resumes and closes 
   assert.equal(record('clarification').answers.nextAction.decision, 'skipped');
 });
 
+test('completed legacy reference can restart its original questionnaire offline and save new answers', { timeout: 60000 }, async t => {
+  const { page, context } = await browserSetup(t);
+  await clickControl(page.getByRole('button', { name: 'Clarify sort out insurance', exact: true, includeHidden: true }));
+  assert.equal(await page.locator('#clarifyRestart').isVisible(), false);
+  await page.locator('#clarifyDirect').click(); await question(page, 3);
+  await page.locator('#clarifyForm [name=status]').selectOption('reference');
+  await page.locator('#clarifyAccept').click(); await question(page, 4); await confirmed(page);
+  const before = structuredClone(record('item')), version = record('clarification').version;
+  await page.locator('#clarifyStop').click(); await page.locator('#statusFilter').selectOption('reference');
+  await clickControl(page.getByRole('button', { name: 'Clarify sort out insurance', exact: true, includeHidden: true }));
+  await question(page, 4); await context.setOffline(true); await page.locator('#clarifyRestart').click(); await question(page, 0);
+  const pending = await local(page);
+  assert.equal(pending.queue.length, 1); assert.equal(pending.queue[0].operation.mutations.length, 1);
+  assert.equal(pending.queue[0].operation.mutations[0].expectedVersion, version);
+  assert.deepEqual(pending.queue[0].operation.mutations[0].fields, initial());
+  assert.deepEqual(record('item'), before);
+  await page.reload(); await page.locator('#clarifier').waitFor(); await question(page, 0);
+  assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), '');
+  assert.equal(await page.locator('#clarifyRestart').isVisible(), false);
+  await page.locator('#clarifyForm [name=text]').fill('Coverage renewed');
+  await page.locator('#clarifyAccept').click(); await question(page, 1);
+  await page.locator('#clarifyForm [name=text]').fill('Call for renewal');
+  await page.locator('#clarifyAccept').click(); await question(page, 2);
+  await page.locator('#clarifySkip').click(); await question(page, 3);
+  await page.locator('#clarifyForm [name=status]').selectOption('next');
+  await page.locator('#clarifyAccept').click(); await question(page, 4); await page.locator('#clarifyStop').click();
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+  assert.equal(record('item').title, 'Call for renewal'); assert.equal(record('item').status, 'next');
+  assert.equal(record('item').originalText, 'sort out insurance');
+  assert.equal(record('clarification').flowVersion, undefined); assert.equal(record('clarification').answers.outcome.value, 'Coverage renewed');
+});
+
 test('clarification browser: no AI, offline stop/reload/resume, editable proposals, explicit acceptance and original retention', { timeout: 60000 }, async t => {
   const { page, context, browser, url } = await browserSetup(t);
   assert.equal(await page.evaluate(() => typeof LanguageModel), 'undefined');
