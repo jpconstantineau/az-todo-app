@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=55';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=55';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=55';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=55';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=55';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=55';
-import { clarificationUI } from './clarification.js?v=55';
-import { setupReviews } from './reviews.js?v=55';
-import { setupBriefs } from './briefs.js?v=55';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=55';
-import { setupAgentStatus } from './local-agent.js?v=55';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=56';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=56';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=56';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=56';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=56';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=56';
+import { clarificationUI } from './clarification.js?v=56';
+import { setupReviews } from './reviews.js?v=56';
+import { setupBriefs } from './briefs.js?v=56';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=56';
+import { setupAgentStatus } from './local-agent.js?v=56';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -1082,6 +1082,8 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
+  $('appMenu').open = false; $('preferences').close();
   restoreUtility(); utilityForm.elements.entries.replaceChildren(); utilityForm.elements.tag.replaceChildren(); utilityForm.elements.target.replaceChildren(); $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
   extraction.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
@@ -1102,9 +1104,9 @@ function hideAccount() {
   $('syncStatus').textContent = ''; clearError();
   $('connectionLabel').textContent = ''; $('saveStatus').hidden = true;
   delete $('saveStatus').dataset.state; $('saveStatus').removeAttribute('title');
-  $('accountName').textContent = 'Welcome'; $('defaultWorkspace').hidden = false; $('workspaceSelect').hidden = true;
-  $('signedOut').hidden = false; $('loginStatus').textContent = 'Sign in to open your workspace.';
-  document.title = 'Capture · Personal';
+  $('accountName').textContent = 'Welcome'; $('workspaceSelect').hidden = true;
+  $('signedOut').hidden = false; $('loginStatus').textContent = 'Sign in to continue.';
+  document.title = 'Sign in';
   $('menuDeviceTools').hidden = true;
   $('undoEdit').disabled = true; $('undoEditStatus').textContent = '';
   recentTaskChange = null; $('recentTaskChange').hidden = true; $('recentTaskChangeStatus').textContent = '';
@@ -1127,7 +1129,7 @@ async function pauseSession(message) {
   hideAccount();
   try { await transact(null, session => { session.paused = true; }); }
   catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.'); }
-  broadcast(); $('sessionStatus').textContent = message; $('loginStatus').textContent = message;
+  broadcast(); $('sessionStatus').textContent = message;
 }
 async function session({ allowOffline = false } = {}) {
   let generation = accountGeneration;
@@ -1138,7 +1140,7 @@ async function session({ allowOffline = false } = {}) {
     verified = true;
   } catch (failure) {
     if (failure.status === 401 || failure.status === 403) {
-      await pauseSession('Sign in to open your workspace.');
+      await pauseSession('Sign in to continue.');
       throw failure;
     }
     if (!allowOffline || failure.status) throw failure;
@@ -1162,7 +1164,8 @@ async function session({ allowOffline = false } = {}) {
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
   $('menuDeviceTools').hidden = false;
-  $('signedOut').hidden = true; $('defaultWorkspace').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
+  $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
+  $('appHeader').hidden = false; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
   void showAccountName(accountId, generation, verified);
   return accountId;
 }

@@ -1,12 +1,12 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v55';
+const CACHE = 'todo-inbox-shell-v56';
 // The agent module is public shell code, without model downloads or user data.
-const ASSETS = ['/capture-extraction.js?v=55', '/workspaces.js', '/workspaces.js?v=55', '/local-guidance.js?v=55', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=55', '/reviews.js?v=55', '/pwa.js?v=55', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
-ASSETS.push('/collection-model.js', '/collection-model.js?v=55', '/collections.js', '/collections.js?v=55');
-ASSETS.push('/clarification-flow.js', '/clarification-flow.js?v=55');
+const ASSETS = ['/capture-extraction.js?v=56', '/workspaces.js', '/workspaces.js?v=56', '/local-guidance.js?v=56', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=56', '/reviews.js?v=56', '/pwa.js?v=56', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+ASSETS.push('/collection-model.js', '/collection-model.js?v=56', '/collections.js', '/collections.js?v=56');
+ASSETS.push('/clarification-flow.js', '/clarification-flow.js?v=56');
 // Fresh module URLs bypass older workers' exact asset allowlists.
-ASSETS.push('/inbox.js?v=55', '/inbox-store.js?v=55', '/inbox-fields.js?v=55', '/inbox-export.js?v=55', '/briefs.js', '/briefs.js?v=55', '/help.html');
-ASSETS.push('/shared.html', '/shared.js', '/shared.js?v=55', '/shared.css', '/local-agent.js?v=55');
+ASSETS.push('/inbox.js?v=56', '/inbox-store.js?v=56', '/inbox-fields.js?v=56', '/inbox-export.js?v=56', '/briefs.js', '/briefs.js?v=56', '/help.html');
+ASSETS.push('/shared.html', '/shared.js', '/shared.js?v=56', '/shared.css', '/local-agent.js?v=56');
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
