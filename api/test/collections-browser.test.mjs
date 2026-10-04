@@ -70,6 +70,20 @@ test('collections browser: reusable reference checklist and resumable area mappi
   await page.locator('#collectionUtilityForm [name=entries]').selectOption('passport');
   await page.locator('#collectionUtilityForm [name=title]').fill('November trip');
   await context.setOffline(true);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.collectionUtility?.title === 'November trip');
+  await page.evaluate(() => {
+    window.collectionPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      if (value?.queue?.some(entry => entry.operation.mutations.some(m => m.type === 'list' && m.fields?.title === 'November trip'))) throw new DOMException('Checklist quota failure', 'QuotaExceededError');
+      return window.collectionPut.call(this, value, ...args);
+    };
+  });
+  await page.getByRole('button', { name: 'Save collection action on device' }).click();
+  await page.waitForFunction(() => document.querySelector('#collectionUtilityStatus').textContent.includes('Checklist quota failure'));
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal(await page.locator('#collectionUtilityForm [name=title]').inputValue(), 'November trip');
+  assert.equal(await page.locator('#collectionUtilityForm [name=entries]').inputValue(), 'passport');
+  await page.evaluate(() => { IDBObjectStore.prototype.put = window.collectionPut; });
   await page.getByRole('button', { name: 'Save collection action on device' }).click();
   await page.waitForFunction(() => document.querySelector('#collectionUtilityStatus').textContent.includes('New checklist saved'));
   const state = await local(page), copies = state.queue.flatMap(entry => entry.operation.mutations).filter(m => m.type === 'item');

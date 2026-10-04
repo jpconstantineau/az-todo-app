@@ -278,7 +278,7 @@ utilityForm.onsubmit = event => {
   event.preventDefault();
   if (saving || !accountId || workspaceReadOnly()) return;
   const owner = accountId, generation = accountGeneration, submitted = utilityDraft(), workspaceId = selectedWorkspace;
-  saving = true; utilityForm.querySelector('button').disabled = true;
+  saving = true; const controls = [...utilityForm.elements]; controls.forEach(control => { control.disabled = true; });
   void (async () => {
     try {
       let result;
@@ -299,7 +299,7 @@ utilityForm.onsubmit = event => {
       state = saved; restoreUtility(currentDraft(state).collectionUtility); render(); broadcast(); void sync();
       statusText('collectionUtilityStatus', submitted.mode === 'area' ? `Batch saved on device. ${result.remaining} item(s) remain; save again to continue.` : 'New checklist saved on device. The reference list is unchanged.');
     } catch (failure) { if (owner === accountId) { statusText('collectionUtilityStatus', failure.message); void journal(); } }
-    finally { saving = false; if (owner === accountId) utilityForm.querySelector('button').disabled = workspaceReadOnly(); }
+    finally { saving = false; controls.forEach(control => { control.disabled = false; }); if (owner === accountId) utilityForm.querySelector('button').disabled = workspaceReadOnly(); }
   })();
 };
 const channel = new BroadcastChannel('todo-inbox');
