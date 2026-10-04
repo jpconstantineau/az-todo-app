@@ -113,6 +113,34 @@ test('v2 rejects partial, forged, stale, foreign and deleted decisions without o
   assert.equal(stored('project', 'new-project'), undefined);
 });
 
+test('completed v2 clarification restarts without item changes and requires a new atomic decision', async t => {
+  documents.length = 0; const server = await startServer(); t.after(server.close);
+  await post(server.url, [create('item', 'capture', { title: item.title, originalText: 'Untouched source', description: 'Keep notes', dueDate: '2026-10-09' })]);
+  assert.equal((await post(server.url, mutations(summary('reference')))).status, 200);
+  const before = structuredClone(stored('item'));
+  const restart = { type: 'clarification', id: 'capture', action: 'update', expectedVersion: 1, fields: newFlow() };
+  const reapply = mutations(summary('next'), 'capture', 2); reapply[0] = { ...reapply[0], action: 'update', expectedVersion: 1 };
+  assert.equal((await post(server.url, reapply)).status, 400, 'a completed decision must first be restarted');
+  assert.equal((await post(server.url, [restart, reapply[1]])).status, 400, 'restart cannot change the item');
+  assert.notEqual((await post(server.url, [restart], crypto.randomUUID(), 'bob')).status, 200);
+  const operationId = crypto.randomUUID(); faults.loseBatchResponse = true;
+  assert.equal((await post(server.url, [restart], operationId)).status, 503);
+  const result = await post(server.url, [restart], operationId);
+  assert.equal(result.status, 200);
+  assert.deepEqual(await post(server.url, [restart], operationId), result);
+  assert.deepEqual(stored('item'), before);
+  assert.equal(stored('clarification').version, 2); assert.equal(stored('clarification').step, 'actionable');
+  assert.deepEqual(stored('clarification').answers, {});
+  assert.equal((await post(server.url, [restart])).status, 409, 'a stale restart cannot erase newer progress');
+  reapply[0].expectedVersion = 2;
+  assert.equal((await post(server.url, reapply)).status, 200);
+  assert.equal(stored('item').status, 'next'); assert.equal(stored('item').version, 3);
+  assert.equal(stored('item').originalText, 'Untouched source'); assert.equal(stored('item').description, 'Keep notes');
+  assert.equal(stored('item').dueDate, '2026-10-09');
+  await post(server.url, [{ type: 'item', id: 'capture', action: 'delete', expectedVersion: 3 }]);
+  assert.equal((await post(server.url, [{ ...restart, expectedVersion: 3 }])).status, 404);
+});
+
 test('v2 lost acknowledgement replays one final decision, and flow versions cannot be reinterpreted', async t => {
   documents.length = 0; const server = await startServer(); t.after(server.close);
   await post(server.url, [create('item', 'capture', { title: item.title })]);
@@ -180,6 +208,68 @@ test('v2 reference skips action questions, journals offline, reloads, applies an
   assert.equal(stored('clarification').answers.nextAction, undefined);
   const state = await local(page);
   assert.deepEqual(validateDeviceExport(deviceExport('alice', state, state.draft)).warnings, []);
+});
+
+test('completed v2 reference can be clarified again offline, recovers a failed restart and resumes after reload', { timeout: 60000 }, async t => {
+  const { page, context } = await setup(t);
+  assert.equal(await page.locator('#clarifyRestart').isVisible(), false);
+  await page.locator('[name=flow_choice][value=no]').check(); await next(page, 'disposition');
+  await page.locator('[name=flow_choice]').selectOption('reference'); await next(page, 'organize');
+  await next(page, 'summary'); await next(page, 'complete'); await confirmed(page);
+  const before = structuredClone(stored('item')), version = stored('clarification').version;
+  await page.locator('#clarifyStop').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.open === false);
+  await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('reference');
+  await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
+  assert.equal(await page.locator('#clarifyQuestion').textContent(), 'Clarification complete');
+  for (const theme of ['light', 'dark']) for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 }); await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    assert.ok(await page.locator('#clarifier').evaluate(el => el.scrollWidth <= el.clientWidth));
+    if (process.env.CLARIFICATION_SCREENSHOTS) await page.screenshot({ path: `${process.env.CLARIFICATION_SCREENSHOTS}/clarify-again-${theme}-${width}.png` });
+  }
+  await context.setOffline(true);
+  await page.evaluate(() => {
+    window.originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      if (value?.queue?.some(entry => entry.operation.mutations.some(m => m.type === 'clarification' && m.fields.step === 'actionable'))) throw new DOMException('Full', 'QuotaExceededError');
+      return window.originalPut.call(this, value, ...args);
+    };
+  });
+  await page.locator('#clarifyRestart').click(); await page.locator('#recovery').waitFor();
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal(await page.locator('#clarifyQuestion').textContent(), 'Clarification complete');
+  assert.equal((await local(page)).records['clarification:capture'].step, 'complete');
+  await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.open === false);
+  await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
+  await page.locator('#clarifyRestart').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.session.step === 'actionable');
+  const pending = await local(page);
+  assert.equal(pending.queue.length, 1); assert.equal(pending.queue[0].operation.mutations.length, 1);
+  assert.equal(pending.queue[0].operation.mutations[0].expectedVersion, version);
+  assert.deepEqual(pending.queue[0].operation.mutations[0].fields, newFlow());
+  assert.deepEqual(stored('item'), before);
+  assert.equal(await page.locator('#clarifyRestart').isVisible(), false);
+  await page.reload(); await page.locator('#clarifier').waitFor();
+  assert.equal(await page.locator('#clarifyQuestion').textContent(), 'Is it actionable?');
+  assert.equal(await page.locator('#clarifyAnswers').textContent(), '');
+  await page.locator('[name=flow_choice][value=yes]').check(); await next(page, 'nextAction');
+  await page.locator('[name=flow_text]').fill('Order replacement paper');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.proposal.text === 'Order replacement paper');
+  await page.locator('#clarifyStop').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.open === false);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
+  assert.equal(await page.locator('[name=flow_text]').inputValue(), 'Order replacement paper');
+  await next(page, 'project'); await page.locator('[name=flow_choice]').selectOption('none'); await next(page, 'twoMinutes');
+  await page.locator('[name=flow_choice][value=no]').check(); await next(page, 'disposition');
+  await page.locator('[name=flow_choice]').selectOption('next'); await next(page, 'organize'); await next(page, 'summary');
+  assert.equal((await local(page)).queue.every(entry => entry.operation.mutations.every(m => m.type === 'clarification')), true);
+  await next(page, 'complete'); await page.locator('#clarifyStop').click();
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+  assert.equal(stored('item').title, 'Order replacement paper'); assert.equal(stored('item').status, 'next');
+  assert.equal(stored('item').version, before.version + 1); assert.equal(stored('item').originalText, 'Untouched source');
+  assert.equal(stored('clarification').answers.actionable, 'yes');
 });
 
 test('v2 creates a project only at Apply, handles Back, and explicitly confirms two-minute work', { timeout: 60000 }, async t => {

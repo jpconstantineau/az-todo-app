@@ -1,7 +1,7 @@
-import { organizer, selectedRefs, membershipFields } from './collections.js?v=55';
-import { memberships, refKey } from './collection-model.js?v=55';
-import { localGuidance } from './local-guidance.js?v=55';
-import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=55';
+import { organizer, selectedRefs, membershipFields } from './collections.js?v=56';
+import { memberships, refKey } from './collection-model.js?v=56';
+import { localGuidance } from './local-guidance.js?v=56';
+import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=56';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [
@@ -47,6 +47,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
   const dialog = $('clarifier'), form = $('clarifyForm');
   let active = null, busy = false;
   const branching = () => active?.session.flowVersion === 2;
+  const complete = () => [questions.length, 'complete'].includes(active?.session.step);
   const values = () => branching() ? { ...active.proposal, ...Object.fromEntries([...form.elements]
     .filter(input => input.name.startsWith('flow_') && (input.type !== 'radio' || input.checked)).map(input => [input.name.slice(5), input.multiple ? selectedRefs(input) : input.value])) }
     : Object.fromEntries([...form.elements].filter(input => input.name && !input.name.startsWith('flow_')).map(input => [input.name, input.value]));
@@ -65,7 +66,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     const labels = { actionable: 'Is it actionable?', nextAction: 'What is one concrete next action?', project: 'Does it require multiple steps, or belong to a project?', twoMinutes: 'Will it take less than two minutes?', disposition: answers.actionable === 'no' ? 'What should happen to this information?' : 'What happens to this action?', organize: 'Where does it belong?', summary: 'Review and apply your decision', complete: 'Clarification complete' };
     $('clarifyHeading').textContent = step === 'complete' ? labels.complete : answers.actionable === 'no' ? 'Clarify · Non-actionable' : answers.actionable === 'yes' ? 'Clarify · Actionable' : 'Clarify · What is it?';
     $('clarifyQuestion').textContent = labels[step];
-    $('clarifyHelp').textContent = step === 'twoMinutes' ? 'If yes, do it now. Confirm you have done it on the next step, or choose to do it later.' : step === 'project' ? 'For multi-step work, choose or create its project. For a single action, a project is optional. Stop for now if you have not decided.' : step === 'summary' ? 'Only Apply decision changes the item. Existing links and dates are retained unless shown as changed.' : 'Your answers remain a proposal until the final confirmation. Stop for now to keep your place.';
+    $('clarifyHelp').textContent = step === 'complete' ? 'Your decision has been applied. Clarify again starts a fresh pass; the current item stays saved until you apply another decision.' : step === 'twoMinutes' ? 'If yes, do it now. Confirm you have done it on the next step, or choose to do it later.' : step === 'project' ? 'For multi-step work, choose or create its project. For a single action, a project is optional. Stop for now if you have not decided.' : step === 'summary' ? 'Only Apply decision changes the item. Existing links and dates are retained unless shown as changed.' : 'Your answers remain a proposal until the final confirmation. Stop for now to keep your place.';
     function field(name, label, options, type = 'text', max = 4000) {
       const wrapper = document.createElement('label'); wrapper.textContent = label;
       const input = document.createElement(options ? 'select' : type === 'textarea' ? 'textarea' : 'input');
@@ -129,6 +130,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     $('clarifyAnswers').textContent = Object.entries(answers).map(([name, value]) => `${labels[name] || name}\n${typeof value === 'string' ? value : Object.entries(value).filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`).join('\n')}`).join('\n\n');
   }
   function draw() {
+    $('clarifyRestart').hidden = !complete();
     $('clarifyFlow').hidden = !branching(); $('clarifyBack').hidden = true;
     if (branching()) {
       $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
@@ -142,7 +144,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
     $('clarifyTask').textContent = `Current task: ${active.item.title}`;
     $('clarifyQuestion').textContent = question?.[1] || 'Your decisions';
-    $('clarifyHelp').textContent = question?.[2] || 'Accepted decisions are saved below. Ordinary editing remains available for the task.';
+    $('clarifyHelp').textContent = question?.[2] || 'Accepted decisions are saved below. Choose Clarify again to make new decisions using the current task.';
     $('clarifyTextLabel').hidden = !question || step === 3;
     $('clarifyDisposition').hidden = step !== 3;
     $('clarifyDirect').hidden = step >= 3;
@@ -159,7 +161,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     $('clarifyQuestion').focus();
   }
   async function commit(choice) {
-    if (busy || !active || active.session.step === questions.length || active.session.step === 'complete') return;
+    if (busy || !active || (complete() ? choice !== 'restart' : choice === 'restart')) return;
     guidance.hide();
     busy = true;
     const current = active, proposal = values(), focused = document.activeElement;
@@ -168,7 +170,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
       if (branching()) {
         if (choice === 'back' && !confirm('Go back and clear the preceding answer? Current unsaved wording will be discarded; task changes have not been applied.')) return;
         const applying = choice === 'accepted' && current.session.step === 'summary';
-        const session = applying ? { ...current.session, step: 'complete', proposal: flowProposal() } : choice ? flowDecision(current.session, proposal, choice, current.item) : { ...current.session, proposal };
+        const session = choice === 'restart' ? newFlow() : applying ? { ...current.session, step: 'complete', proposal: flowProposal() } : choice ? flowDecision(current.session, proposal, choice, current.item) : { ...current.session, proposal };
         const { flowVersion, step, answers } = session, fields = { flowVersion, step, answers, proposal: session.proposal };
         const mutations = [{ type: 'clarification', id: current.item.id, action: current.session.version ? 'update' : 'create', expectedVersion: current.session.version, fields }];
         let edits = null;
@@ -188,7 +190,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
         if (!await save(mutations, next) || active !== current) return;
         active = next; draw(); $('clarifyDraftStatus').textContent = 'Saved on device — pending server confirmation.'; return;
       }
-      const result = choice ? decision(current.session, proposal, choice) : { session: { ...current.session, proposal }, fields: null };
+      const result = choice === 'restart' ? { session: { step: 0, answers: {}, proposal: emptyProposal() }, fields: null } : choice ? decision(current.session, proposal, choice) : { session: { ...current.session, proposal }, fields: null };
       const { step, answers } = result.session;
       const fields = { step, answers, proposal: result.session.proposal };
       const mutations = [{ type: 'clarification', id: current.item.id, action: current.session.version ? 'update' : 'create', expectedVersion: current.session.version, fields }];
@@ -219,6 +221,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
   $('clarifyDirect').onclick = () => { void commit('disposition'); };
   $('clarifySave').onclick = () => { void commit(); };
   $('clarifyBack').onclick = () => { void commit('back'); };
+  $('clarifyRestart').onclick = () => { void commit('restart'); };
   $('clarifyStop').onclick = () => { guidance.hide(); dialog.close(); };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); else guidance.hide(); });
   dialog.addEventListener('close', () => { guidance.hide(); if (active) void journal(); });

@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=55';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=55';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=55';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=55';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=55';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=55';
-import { clarificationUI } from './clarification.js?v=55';
-import { setupReviews } from './reviews.js?v=55';
-import { setupBriefs } from './briefs.js?v=55';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=55';
-import { setupAgentStatus } from './local-agent.js?v=55';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=56';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=56';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=56';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=56';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=56';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=56';
+import { clarificationUI } from './clarification.js?v=56';
+import { setupReviews } from './reviews.js?v=56';
+import { setupBriefs } from './briefs.js?v=56';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=56';
+import { setupAgentStatus } from './local-agent.js?v=56';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -519,8 +519,8 @@ function render() {
     const menu = document.createElement('details'); menu.className = 'task-menu responsive-menu'; menu.dataset.recordKey = key(record);
     menu.open = expandedActions.has(key(record));
     const summary = document.createElement('summary'); summary.textContent = '•••'; summary.setAttribute('aria-label', `More actions for ${record.title}`); summary.title = 'More actions'; summary.dataset.focusKey = `${key(record)}:more`;
-    if (record.status !== 'reference') actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`),
-      button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
+    actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`));
+    if (record.status !== 'reference') actions.append(button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
     actions.append(deleteButton(record));
     if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
     menu.append(summary, actions);

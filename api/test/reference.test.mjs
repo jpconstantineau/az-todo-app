@@ -42,7 +42,8 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation?.work.status === 'reference');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.deepEqual(await rows(), ['printer']);
-  for (const name of ['Complete', 'Clarify', 'Brief']) assert.equal(await page.getByRole('button', { name: `${name} Printer paper specification`, exact: true, includeHidden: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Clarify Printer paper specification', exact: true, includeHidden: true }).count(), 1);
+  for (const name of ['Complete', 'Brief']) assert.equal(await page.getByRole('button', { name: `${name} Printer paper specification`, exact: true, includeHidden: true }).count(), 0);
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

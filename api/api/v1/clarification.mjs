@@ -95,7 +95,7 @@ export function validateClarification(record, old, mutations, item) {
   if (old && (old.flowVersion || 1) !== (record.flowVersion || 1)) fail('Keep this clarification in its original flow version.');
   if (record.flowVersion !== 2) return;
   if (record.deleted) fail('Clarification history cannot be deleted.');
-  if (old?.step === 'complete') fail('This clarification is already complete.');
+  if (old?.step === 'complete' && (record.step !== 'actionable' || mutations.length !== 1)) fail('Start a new clarification at the first question before applying another decision.');
   const mutation = mutations.find(m => m.type === 'item' && m.id === record.id);
   if (record.step !== 'complete') {
     if (mutation) fail('Apply task changes only with the final clarification decision.');

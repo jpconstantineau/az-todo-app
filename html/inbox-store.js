@@ -1,6 +1,6 @@
-import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=55';
-import { workspaceOf } from './workspaces.js?v=55';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=55';
+import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=56';
+import { workspaceOf } from './workspaces.js?v=56';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=56';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
