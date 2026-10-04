@@ -1,6 +1,6 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=64';
-import { beginModelWork, modelReadiness } from './local-agent.js?v=64';
+import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=65';
+import { beginModelWork, modelReadiness } from './local-agent.js?v=65';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -145,7 +145,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     const lists = current()?.lists || [], signature = JSON.stringify(lists);
     if (includeLists && signature !== listSource) cancel();
     listSource = signature;
-    const help = !includeLists ? 'List names are excluded. Choose a destination in Notes, list, or status.'
+    const help = !includeLists ? 'List names are excluded. Choose a destination in Notes, list, or context.'
       : lists.length ? 'Included names: ' + lists.map(list => list.title).join(', ') + '. AI may suggest a destination during task review; you choose before saving.'
       : 'No existing lists in this workspace. Create a list to include its name.';
     if ($('extractListsHelp').textContent !== help) $('extractListsHelp').textContent = help;

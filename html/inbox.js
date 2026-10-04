@@ -1,15 +1,15 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=64';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=64';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=64';
-import { collectionMoveMutations } from './workspace-move.js?v=64';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=64';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=64';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=64';
-import { clarificationUI } from './clarification.js?v=64';
-import { setupReviews } from './reviews.js?v=64';
-import { setupBriefs } from './briefs.js?v=64';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=64';
-import { setupAgentStatus } from './local-agent.js?v=64';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=65';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=65';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=65';
+import { collectionMoveMutations } from './workspace-move.js?v=65';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=65';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=65';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=65';
+import { clarificationUI } from './clarification.js?v=65';
+import { setupReviews } from './reviews.js?v=65';
+import { setupBriefs } from './briefs.js?v=65';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=65';
+import { setupAgentStatus } from './local-agent.js?v=65';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -218,6 +218,7 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
 addTaskControls($('captureFields')); addTaskControls($('editFields'));
 capture.elements.projectId.closest('label').remove();
 capture.elements.areas.closest('label').remove();
+$('captureOptions').insertBefore(capture.elements.contexts.closest('label'), $('previewSplit'));
 const editOrganizer = organizer($('editOrganizer'), {}, []);
 const primaryMemberships = document.createElement('details'), primarySummary = document.createElement('summary');
 primarySummary.textContent = 'Primary memberships (defaults and older apps)'; primaryMemberships.append(primarySummary, $('editListLabel'), edit.elements.projectId.closest('label')); $('editOrganizer').append(primaryMemberships);
