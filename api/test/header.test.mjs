@@ -39,7 +39,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=45')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=46')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -87,7 +87,7 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=45').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=46').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
@@ -132,6 +132,9 @@ test('header follows workspace selection and save state, then clears identity on
   assert.equal(await page.locator('#manageWorkspaces').isVisible(), false);
   for (const id of ['sessionStatus', 'offlineStatus', 'syncStatus']) assert.equal(await page.locator(`#${id}`).isVisible(), false);
   assert.equal(await page.locator('#capture > fieldset > label').innerText(), 'Capture items');
+  assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves.');
+  assert.equal(await page.locator('#captureHelp').getAttribute('class'), 'sr-only');
+  assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp');
   assert.equal(await page.locator('.capture-header button').innerText(), '');
   assert.ok((await page.locator('.capture-header button').boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
   await clickControl(page.locator('#manageWorkspaces'));
