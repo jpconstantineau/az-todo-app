@@ -27,7 +27,8 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
   const confirmed = () => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   const rows = () => page.locator('#items article').evaluateAll(items => items.map(item => item.dataset.id).sort());
-  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed();
+  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor();
+  await page.locator('#view').selectOption('all'); await confirmed();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Edit Printer paper specification', exact: true }).click();

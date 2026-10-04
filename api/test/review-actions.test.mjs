@@ -61,6 +61,7 @@ test('review actions edit, clarify and add project actions in place with offline
   documents.length = 0;
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
   await post(server.url, operation([
+    create('workspace', 'other', { title: 'Other' }),
     create('project', 'garage', { title: 'Garage', outcome: 'Ready for winter' }),
     create('item', 'shelf', { title: 'Sort shelf', status: 'next', projectId: 'garage' }),
     create('item', 'someday', { title: 'Build bench', status: 'someday', projectId: 'garage', dueDate: '2027-01-01' }),
@@ -148,6 +149,10 @@ test('review actions edit, clarify and add project actions in place with offline
     } });
   });
   await page.locator('#reviewEdit').click(); await page.waitForFunction(() => !!window.releaseReviewSave);
+  await page.locator('#appMenu > summary').click();
+  await page.locator('#workspaceSelect').selectOption('other');
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Wait for the device save'));
+  assert.equal(await page.locator('#workspaceSelect').inputValue(), 'personal');
   await page.locator('#closeReviews').click(); await page.evaluate(() => window.releaseReviewSave());
   await page.waitForFunction(() => !document.querySelector('#reviewSessions').disabled);
   assert.equal(await page.locator('#editor').isVisible(), false);

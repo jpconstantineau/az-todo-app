@@ -137,7 +137,7 @@ test('accessibility: review decisions and brief revisions keep a keyboard path t
   await keyboardActivate(page, '#reviewUndo');
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
   await expectFocus(page, '#reviewTitle');
-  await page.keyboard.press('Escape'); await expectFocus(page, '#openReviews');
+  await keyboardActivate(page, '#closeReviews'); await expectFocus(page, '#openReviews');
   await keyboardActivate(page, 'a[href="#work"]');
   await expectFocus(page, '#itemsHeading');
   const menu = page.locator('[aria-label="More actions for Insurance"]');
@@ -229,7 +229,7 @@ test('accessibility: keyboard actions and editor return focus survive background
   const { page } = await setup(t);
   await capture(page, 'Same title\nSame title');
   await showView(page, 'work');
-  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
+  await showView(page, 'work'); await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('@all');
   const id = await page.locator('#items article').nth(1).getAttribute('data-id');
   const row = `article[data-id="${id}"]`;
   await page.locator(`${row} button`).first().focus();
@@ -342,17 +342,16 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await expectFocus(page, '#preferences:modal [data-appearance]');
   await page.keyboard.press('Escape'); await expectFocus(page, '[data-open-preferences]');
   await page.locator('#openReviews').focus(); await page.keyboard.press('Enter');
-  await expectFocus(page, '#reviews:modal #reviewSessions');
-  await page.keyboard.press('Escape'); await expectFocus(page, '#openReviews');
+  await expectFocus(page, '#reviewsHeading');
+  assert.equal(await page.locator('dialog:modal').count(), 0);
+  await keyboardActivate(page, '#closeReviews'); await expectFocus(page, '#openReviews');
   // Force native closes into one task so the earlier close events arrive
   // after focus has moved on. It must not steal the later dialog's return focus.
   await page.evaluate(async () => {
-    const defaults = document.querySelector('#defaultsEditor'), reviews = document.querySelector('#reviews'), preferences = document.querySelector('#preferences');
-    const closed = [defaults, reviews, preferences].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
+    const defaults = document.querySelector('#defaultsEditor'), preferences = document.querySelector('#preferences');
+    const closed = [defaults, preferences].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
     const defaultsButton = document.querySelector('#userDefaults'), preferencesButton = document.querySelector('[data-open-preferences]');
     defaultsButton.focus(); defaultsButton.click(); defaults.close();
-    const reviewsButton = document.querySelector('#openReviews');
-    reviewsButton.focus(); reviewsButton.click(); reviews.close();
     preferencesButton.focus(); preferencesButton.click(); preferences.close();
     await Promise.all(closed);
   });

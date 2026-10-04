@@ -108,7 +108,7 @@ async function browserSetup(t) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.addInitScript(() => { Object.defineProperty(globalThis, 'LanguageModel', { value: undefined, configurable: true }); });
   const page = await context.newPage();
-  await page.goto(server.url + '/#work'); await page.getByRole('button', { name: 'Edit sort out insurance', exact: true }).waitFor(); await confirmed(page);
+  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await page.locator('#view').selectOption('all'); await page.getByRole('button', { name: 'Edit sort out insurance', exact: true }).waitFor(); await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   return { page, context, browser, url: server.url, setUser: value => { user = value; } };
 }
@@ -229,7 +229,7 @@ test('clarification browser: no AI, offline stop/reload/resume, editable proposa
   assert.match(readableExport(exported), /Coverage in place/);
   assert.match(readableExport(exported), /skipped/);
   const second = await browser.newContext(); const tab = await second.newPage();
-  await tab.goto(url + '/#work'); await clickControl(tab.getByRole('button', { includeHidden: true, name: 'Clarify Call the insurer', exact: true })); await question(tab, 4);
+  await tab.goto(url + '/#work'); await tab.locator('#workspace').waitFor(); await tab.locator('#view').selectOption('all'); await clickControl(tab.getByRole('button', { includeHidden: true, name: 'Clarify Call the insurer', exact: true })); await question(tab, 4);
   assert.match(await tab.locator('#clarifyAnswers').textContent(), /Coverage in place/);
   assert.deepEqual(errors, []);
 });
@@ -240,7 +240,7 @@ test('clarification browser: independent session conflicts preserve both proposa
   await page.locator('#clarifySave').click();
   await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js')).transact('alice')).records['clarification:insurance']);
   const second = await browser.newContext(); const tab = await second.newPage();
-  await tab.goto(url + '/#work'); await clickControl(tab.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
+  await tab.goto(url + '/#work'); await tab.locator('#workspace').waitFor(); await tab.locator('#view').selectOption('all'); await clickControl(tab.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await second.setOffline(true);
   await tab.locator('#clarifyForm [name=text]').fill('Laptop outcome');
   await tab.locator('#clarifyAccept').click(); await question(tab, 1); await tab.locator('#clarifyStop').click();

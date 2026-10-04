@@ -104,7 +104,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   // Account switching must also clear project context and the selected day.
   user = 'bob'; await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.waitForFunction(() => !document.querySelector('#items').textContent.includes('Milk') && !document.querySelector('#workspace').hidden);
-  assert.equal(await page.locator('#view').inputValue(), 'all');
+  assert.equal(await page.locator('#view').inputValue(), 'inbox');
   assert.equal(await page.locator('#projectOutcome').textContent(), '');
   assert.equal(await page.locator('#view option[value^="project:"]').count(), 0);
   assert.deepEqual(errors, []);

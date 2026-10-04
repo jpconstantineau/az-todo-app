@@ -83,7 +83,7 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('#captureText').value);
   await page.reload(); await page.locator('#workspace').waitFor();
-  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('waiting');
+  await showView(page, 'work'); await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('waiting');
   assert.equal(await page.locator('#items article').count(), 1);
   assert.match(await page.locator('#items').innerText(), /Waiting for: Alex/);
   await page.getByRole('button', { name: 'Edit Get the quote', exact: true }).click();
@@ -172,7 +172,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => !document.querySelector('#captureText').value); await confirmed();
   await context.setOffline(true);
-  await showView(page, 'work');
+  await showView(page, 'work'); await page.locator('#view').selectOption('all');
   await page.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
   await page.locator('#edit [name=status]').selectOption('waiting');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
@@ -221,7 +221,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   assert.equal(saved.waitingOn, 'Alex'); assert.equal(saved.dueDate, '2026-11-01'); assert.equal(saved.startDate, null);
   for (const timezoneId of ['Pacific/Honolulu', 'Pacific/Auckland']) {
     const other = await browser.newContext({ timezoneId }); const tab = await other.newPage();
-    await tab.goto(server.url); await tab.locator('#workspace').waitFor(); await showView(tab, 'work'); await tab.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
+    await tab.goto(server.url); await tab.locator('#workspace').waitFor(); await showView(tab, 'work'); await tab.locator('#view').selectOption('all'); await tab.getByRole('button', { name: 'Edit Get approval', exact: true }).click();
     assert.equal(await tab.locator('#edit [name=dueDate]').inputValue(), '2026-11-01');
     await other.close();
   }

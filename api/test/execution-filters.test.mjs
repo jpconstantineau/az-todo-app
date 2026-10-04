@@ -61,6 +61,7 @@ test('execution filters combine scopes, reset, stay offline and isolate accounts
   page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
   const rows = () => page.locator('#items article').evaluateAll(items => items.map(item => item.dataset.id).sort());
   await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor();
+  await page.locator('#view').selectOption('all');
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.waitForFunction(() => document.querySelectorAll('#items article').length === 7);
   await page.locator('#statusFilter').selectOption('next');

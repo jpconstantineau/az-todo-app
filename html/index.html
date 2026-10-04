@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=49" defer></script>
+  <script src="/pwa.js?v=50" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=49"></script>
+  <script type="module" src="/inbox.js?v=50"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -71,7 +71,12 @@
       <p>Archive makes a workspace read-only. Delete hides the whole workspace and blocks edits; its records, drafts and history stay stored and can be restored here. Neither action erases exports or backups.</p>
       <button id="closeWorkspaces" type="button">Close workspaces</button>
     </dialog>
-    <nav class="toolbar workspace-nav" aria-label="Workspace"><a class="button" id="quickFocus" href="#capture" aria-current="page">Capture</a><a class="button" id="yourWork" href="#work">Your Work</a><a class="button" id="listWorkspace" href="#lists" aria-label="List Workspace">Lists</a><button id="openReviews" type="button">Review</button></nav>
+    <nav class="toolbar workspace-nav" aria-label="Workspace">
+      <a class="button icon-button" id="quickFocus" href="#capture" aria-current="page" aria-label="Capture" title="Capture"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="8" rx="9" ry="5" transform="rotate(-15 12 8)"/><ellipse cx="7" cy="13" rx="2" ry="1.5"/><path d="M8 14.5c2 3 1 5-1 6"/></svg></a>
+      <a class="button icon-button" id="yourWork" href="#work" aria-label="Process and Organize" title="Process and Organize"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx=".5"/><path d="M12 8v5M5 16v-3h14v3"/><rect x="2" y="16" width="6" height="6" rx=".5"/><rect x="16" y="16" width="6" height="6" rx=".5"/></svg></a>
+      <a class="button icon-button" id="listWorkspace" href="#lists" aria-label="List Workspace" title="List Workspace"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4-9 4-9-4Zm0 6 9 4 9-4M3 19l9 4 9-4"/></svg></a>
+      <a class="button icon-button" id="openReviews" href="#reviews" aria-label="Review" title="Review"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m15 15 7 7"/></svg></a>
+    </nav>
     <div id="savedEdit" class="actions" hidden><span id="savedEditStatus" role="status"></span><button id="resumeEdit" type="button">Resume edit</button><button id="discardEdit" type="button">Discard edit draft</button></div>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
@@ -111,8 +116,8 @@
       <button id="discard">Use server version for this save</button>
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
-      <p class="eyebrow" id="workEyebrow">Review</p><h2 id="itemsHeading" tabindex="-1">Your Work</h2>
-      <label><span id="viewLabel">View</span> <select id="view"><option value="all">All items</option><option value="inbox">Inbox (unprocessed)</option><option value="unfiled">No list</option></select></label>
+      <p class="eyebrow" id="workEyebrow">Your work</p><h2 id="itemsHeading" tabindex="-1">Process and Organize</h2>
+      <label><span id="viewLabel">Your Work</span> <select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
       <fieldset id="statusSelection" hidden aria-describedby="statusSelectionHelp">
@@ -136,28 +141,10 @@
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
     </section>
-    </div>
-    <dialog class="side-panel" id="extractionReview" aria-labelledby="extractionHeading">
-      <p class="eyebrow">Review capture</p><h2 id="extractionHeading" tabindex="-1" aria-describedby="extractionHelp">Suggested tasks</h2>
-      <p id="extractionHelp">These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, use Merge into previous task.</p>
-      <p id="extractionClock"></p><details><summary>Exact original capture</summary><pre id="extractionOriginal"></pre></details>
-      <p id="extractionNotes"></p><p>Original text is retained on every accepted task, including notes that are not tasks.</p>
-      <p id="extractionError" role="alert"></p>
-      <form id="extractionForm"><div id="extractionItems"></div>
-        <div class="actions"><button id="extractAdd" type="button">Add task</button><button id="extractAccept" type="submit">Accept all tasks on device</button></div>
-      </form>
-      <div class="actions"><button id="extractClose" type="button">Stop and keep review</button><button id="extractOriginal" type="button">Discard suggestions and return to capture</button></div>
-    </dialog>
-    <dialog class="side-panel" id="deletedRecords" aria-labelledby="deletedHeading">
-      <p class="eyebrow">Recovery</p><h2 id="deletedHeading">Deleted records</h2>
-      <p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p>
-      <p>Restore a deleted list or project before its items. Only empty lists and projects can be deleted. Related clarification, review and brief history stays stored.</p>
-      <p id="deletedError" role="alert"></p><p id="deletedStatus" role="status"></p>
-      <div id="deletedItems"></div><button id="closeDeleted" type="button">Close deleted records</button>
-    </dialog>
-    <dialog class="side-panel" id="reviews" aria-labelledby="reviewsHeading">
-      <p class="eyebrow">Reflect</p><h2 id="reviewsHeading">Daily and weekly reviews</h2>
+    <section class="card review-panel" id="reviews" aria-labelledby="reviewsHeading" hidden>
+      <p class="eyebrow">Reflect</p><h2 id="reviewsHeading" tabindex="-1">Daily and weekly reviews</h2>
       <p><a href="/help.html#reviews" target="_blank" rel="noopener">Review help (new tab)</a></p>
+      <fieldset id="reviewWorkspaceFields" class="workspace-fields">
       <label>Saved reviews<select id="reviewSessions"></select></label>
       <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button></div>
       <p id="reviewError" role="alert"></p>
@@ -181,7 +168,27 @@
         <p class="muted">Select a reviewed record to undo its decision, then choose again. Undo is available until that record changes again. History is retained with the session; there is no timer.</p>
         <details><summary>Decision history</summary><pre id="reviewHistory"></pre></details>
       </section>
+      </fieldset>
       <button id="closeReviews" type="button">Stop and close review</button>
+    </section>
+    </div>
+    <dialog class="side-panel" id="extractionReview" aria-labelledby="extractionHeading">
+      <p class="eyebrow">Review capture</p><h2 id="extractionHeading" tabindex="-1" aria-describedby="extractionHelp">Suggested tasks</h2>
+      <p id="extractionHelp">These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, use Merge into previous task.</p>
+      <p id="extractionClock"></p><details><summary>Exact original capture</summary><pre id="extractionOriginal"></pre></details>
+      <p id="extractionNotes"></p><p>Original text is retained on every accepted task, including notes that are not tasks.</p>
+      <p id="extractionError" role="alert"></p>
+      <form id="extractionForm"><div id="extractionItems"></div>
+        <div class="actions"><button id="extractAdd" type="button">Add task</button><button id="extractAccept" type="submit">Accept all tasks on device</button></div>
+      </form>
+      <div class="actions"><button id="extractClose" type="button">Stop and keep review</button><button id="extractOriginal" type="button">Discard suggestions and return to capture</button></div>
+    </dialog>
+    <dialog class="side-panel" id="deletedRecords" aria-labelledby="deletedHeading">
+      <p class="eyebrow">Recovery</p><h2 id="deletedHeading">Deleted records</h2>
+      <p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p>
+      <p>Restore a deleted list or project before its items. Only empty lists and projects can be deleted. Related clarification, review and brief history stays stored.</p>
+      <p id="deletedError" role="alert"></p><p id="deletedStatus" role="status"></p>
+      <div id="deletedItems"></div><button id="closeDeleted" type="button">Close deleted records</button>
     </dialog>
     <dialog class="side-panel" id="editor" aria-labelledby="editHeading">
       <p class="eyebrow">Update</p><h2 id="editHeading">Edit</h2>

@@ -1,5 +1,5 @@
-import { key, projected } from './inbox-store.js?v=49';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=49';
+import { key, projected } from './inbox-store.js?v=50';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=50';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
@@ -10,7 +10,7 @@ export function reviewHistory(session, records) {
     .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }))];
 }
 
-export function setupReviews({ current, save, journal, showDialog, edit, clarify, addAction, records: scopedRecords }) {
+export function setupReviews({ current, save, journal, edit, clarify, addAction, records: scopedRecords }) {
   let active = null, selected = null, displayed, busy = false;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
   const message = value => { $('reviewError').textContent = value; };
@@ -88,7 +88,7 @@ export function setupReviews({ current, save, journal, showDialog, edit, clarify
     $('reviewHistory').textContent = session.decisions.length ? session.decisions.map(entry => `${session.included[entry.index].type}:${session.included[entry.index].id} · ${entry.choice} · version ${entry.recordVersion}\nBefore: ${JSON.stringify(entry.before)}\nAfter: ${JSON.stringify(entry.after)}`).join('\n\n') : 'No decisions yet.';
     if (!busy && displayed?.target && target && displayed.target.id === target.id && displayed.target.version !== target.version) message('This record changed. The latest version is shown; review it before deciding.');
     displayed = { session, target, index };
-    if (failed) message('A save needs attention. Close this panel to compare the conflict, keep a recovery copy, and use the server version before resuming this review.');
+    if (failed) message('A save needs attention. Compare the conflict in the save card above, keep a recovery copy, and use the server version before resuming this review.');
   }
   async function perform(action) {
     if (busy) return;
@@ -102,8 +102,8 @@ export function setupReviews({ current, save, journal, showDialog, edit, clarify
     finally {
       busy = false; for (const id of controls) $(id).disabled = false; render();
       // Disabling a saving control can drop focus to body. Do not take focus
-      // back if the user closed the dialog or moved to another control.
-      if ($('reviews').open && (document.activeElement === document.body || document.activeElement === focused)) {
+      // back if the user left the review or moved to another control.
+      if (!$('reviews').hidden && (document.activeElement === document.body || document.activeElement === focused)) {
         (succeeded || focused.disabled ? $('reviewTitle') : focused).focus();
       }
     }
@@ -128,7 +128,7 @@ export function setupReviews({ current, save, journal, showDialog, edit, clarify
     const sessionId = displayed.session.id;
     selected = displayed.index;
     if (!await journal()) throw new Error('Could not save your review position. Your draft is kept.');
-    if (!$('reviews').open) return;
+    if ($('reviews').hidden) return;
     const state = current(), records = state && (scopedRecords ? scopedRecords() : projected(state));
     const latest = records?.[key(target)];
     if (active !== sessionId || !records?.[`review:${sessionId}`] || !latest || latest.deleted || state.queue.some(entry => entry.failure)) throw new Error('This review or record changed. Inspect the latest state before continuing.');
@@ -168,8 +168,6 @@ export function setupReviews({ current, save, journal, showDialog, edit, clarify
     if (!current()) return;
     selected = choice === 'undo' ? index : null; $('reviewDefer').value = ''; render(); await journal();
   }
-  $('openReviews').onclick = () => { render(); showDialog($('reviews')); $('reviewSessions').focus(); };
-  $('closeReviews').onclick = () => $('reviews').close();
   $('startDaily').onclick = () => void perform(() => start('daily'));
   $('startWeekly').onclick = () => void perform(() => start('weekly'));
   $('reviewNextBatch').onclick = () => void perform(() => start(displayed.session.reviewKind, displayed.session));
@@ -180,8 +178,8 @@ export function setupReviews({ current, save, journal, showDialog, edit, clarify
   $('reviewClarify').onclick = () => void perform(() => inspect(clarify));
   $('reviewAddAction').onclick = () => void perform(() => inspect(addAction));
   for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewComplete', 'complete'], ['reviewNext', 'next'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
-  return { render, draft,
+  return { render, draft, get busy() { return busy; },
     restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
-    reset() { active = selected = displayed = null; $('reviews').close(); $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
+    reset() { active = selected = displayed = null; $('reviews').hidden = true; $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
   };
 }

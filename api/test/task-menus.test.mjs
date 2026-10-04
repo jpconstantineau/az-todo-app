@@ -21,7 +21,7 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.locator('#captureText').fill([longTitle, 'Milk', 'Bread'].join('\n'));
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await synced(page);
-  await showView(page, 'work');
+  await showView(page, 'work'); await page.locator('#view').selectOption('all');
   const cards = page.locator('#items article'), menu = cards.first().locator('.task-menu'), summary = menu.locator('summary');
   assert.equal(await cards.count(), 3);
   assert.ok((await cards.locator('.record-state').allTextContents()).every(text => !text.includes('Server-confirmed')));
