@@ -1,3 +1,4 @@
+import { revealControl } from './navigation-helper.mjs';
 import { clickControl, openMenu } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { test } from 'node:test';
@@ -361,6 +362,7 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   await context.setOffline(true);
   await page.locator('#view').selectOption('inbox');
   await page.getByRole('button', { name: 'Edit filed', exact: true }).click();
+  await revealControl(page.locator('#edit [name=listId]'));
   await page.locator('#edit [name=listId]').selectOption({ label: 'No list' });
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
@@ -548,6 +550,7 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   assert.ok(await page.locator('#resumeEdit').evaluate(el => el === document.activeElement));
   await showView(page, 'lists');
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
+  await revealControl(page.locator('#edit [name=listId]'));
   await page.locator('#edit [name=listId]').selectOption('');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });

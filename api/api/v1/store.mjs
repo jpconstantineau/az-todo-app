@@ -9,6 +9,8 @@ import { validateBrief } from "./briefs.mjs";
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
 import { validateClarification } from './clarification.mjs';
 
+import { normalizeMembership, memberships, isCollection, collectionContents, refKey } from './collection-model.mjs';
+
 export class ApiError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
 }
@@ -22,14 +24,34 @@ export async function legacyDefaults(accountId) {
 const create = resourceBody => ({ operationType: "Create", resourceBody });
 const replace = (resourceBody, ifMatch) => ({ operationType: "Replace", id: resourceBody.id, resourceBody, ifMatch });
 
-async function hasItems(accountId, type, id) {
-  const field = type === "project" ? "projectId" : "listId";
+async function hasContents(accountId, target, pending) {
   const { resources } = await container.items.query({
-    query: `SELECT TOP 1 c.id FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='record' AND c.record.type='item' AND c.record.deleted=false AND c.record.${field}=@l`,
-    parameters: [{ name: "@u", value: accountId }, { name: "@l", value: id }]
-  }, { partitionKey: partition(accountId), maxItemCount: 1 }).fetchAll();
-  // TOP 1 bounds the result; fetchAll handles empty intermediate query pages.
-  return resources.length > 0;
+    query: `SELECT TOP 21 c.record FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='record' AND c.record.deleted=false AND
+      (ARRAY_CONTAINS(c.record.collectionRefs, @ref) OR
+       (NOT IS_DEFINED(c.record.collectionRefs) AND c.record.${target.type === 'project' ? 'projectId' : 'listId'}=@l) OR
+       (c.record.parentRef.type=@type AND c.record.parentRef.id=@l))`,
+    parameters: [{ name: '@u', value: accountId }, { name: '@l', value: target.id }, { name: '@type', value: target.type }, { name: '@ref', value: { type: target.type, id: target.id } }]
+  }, { partitionKey: partition(accountId) }).fetchAll();
+  // At most 20 records can change in this operation; a 21st dependent always blocks deletion.
+  return [...resources.map(row => row.record).filter(record => !pending.some(next => refKey(next) === refKey(record))), ...pending].some(record => collectionContents(record, target));
+}
+async function validateCollections(record, lookup) {
+  if (record.deleted) return;
+  const refs = record.type === 'item' ? memberships(record) : isCollection(record) && record.parentRef ? [record.parentRef] : [];
+  for (const ref of refs) {
+    const target = await lookup(ref.type, ref.id);
+    if (!target || target.deleted) throw new ApiError(404, `${ref.type}_not_found`, 'Destination collection is unavailable. Restore or remove its link.');
+    if ((target.workspaceId || 'personal') !== (record.workspaceId || 'personal')) throw new ValidationError('Collections and items must belong to the same workspace. Clear memberships before moving.');
+  }
+  if (isCollection(record)) {
+    let parent = record.parentRef;
+    const seen = new Set([refKey(record)]);
+    while (parent) {
+      if (seen.has(refKey(parent))) throw new ValidationError('A collection cannot be its own ancestor.');
+      seen.add(refKey(parent));
+      parent = (await lookup(parent.type, parent.id))?.parentRef;
+    }
+  }
 }
 
 export async function commit(accountId, input, requestHash = digest(input)) {
@@ -58,6 +80,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         version: m.expectedVersion + 1, createdUtc: old?.createdUtc ?? now, updatedUtc: now,
         deleted: m.action === "delete", deletedUtc: m.action === "delete" ? now : null };
       if (m.type === "item") {
+        try { normalizeMembership(record, old, m.fields); } catch (error) { throw new ValidationError(error.message); }
         applyWorkflow(record, old, m.fields);
         record.completedUtc = record.status === "completed" ? (old?.completedUtc ?? now) : null;
       }
@@ -72,6 +95,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const lookup = async (type, id) => records.find(r => r.type === type && r.id === id) ?? (await read(accountId, recordId(type, id)))?.record;
     for (const [i, record] of records.entries()) {
       await validateWorkspace(record, current[i]?.record, lookup);
+      await validateCollections(record, lookup);
       if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
       if (record.type === 'brief') await validateBrief(record, current[i]?.record,
         async (type, id) => (type === 'brief' ? undefined : records.find(r => r.type === type && r.id === id)) ?? (await read(accountId, recordId(type, id)))?.record);
@@ -107,8 +131,8 @@ export async function commit(accountId, input, requestHash = digest(input)) {
           throw new ValidationError("status is not configured for this list or account.");
         }
       }
-      if (["list", "project"].includes(record.type) && record.deleted && await hasItems(accountId, record.type, record.id)) {
-        throw new ApiError(409, `${record.type}_not_empty`, `Move or delete this ${record.type}'s items before deleting the ${record.type}.`);
+      if (["list", "project"].includes(record.type) && record.deleted && await hasContents(accountId, record, records)) {
+        throw new ApiError(409, `${record.type}_not_empty`, `Move or delete this ${record.type}'s items and unlink child collections before deleting it.`);
       }
     }
     const response = { apiVersion: 1, accountId, operationId: input.operationId, sequence,

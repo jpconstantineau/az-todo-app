@@ -12,7 +12,7 @@ export async function openMenu(page) {
   const menu = page.locator('#appMenu');
   if (!await menu.evaluate(element => element.open)) await menu.locator(':scope > summary').click();
 }
-export async function clickControl(control) {
+export async function revealControl(control) {
   // Open outer disclosures before inner ones, using real clicks rather than
   // bypassing visibility/actionability checks on the requested control.
   await control.waitFor({ state: 'attached' });
@@ -20,5 +20,8 @@ export async function clickControl(control) {
   for (const summary of summaries) {
     if (!await summary.evaluate(el => el.parentElement.open)) await summary.click();
   }
+}
+export async function clickControl(control) {
+  await revealControl(control);
   await control.click();
 }

@@ -116,3 +116,12 @@
 }
 
 .workspace-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+#collectionOutline ul { list-style: none; padding-inline-start: var(--space-4); }
+#collectionOutline li { margin-block: var(--space-2); }
+#collectionOutline button { justify-content: flex-start; text-align: left; }
+#collectionBreadcrumbs { overflow-wrap: anywhere; }
+@media (max-width: 767px) { .collection-outline { display: none; } }
+
+.collection-check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
+.collection-check input[type="checkbox"] { flex: 0 0 24px; width: 24px; height: 24px; min-height: 24px; margin: 0; }

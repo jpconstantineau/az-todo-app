@@ -1,3 +1,4 @@
+import { validateRefs } from './collection-model.mjs';
 import { ValidationError, text as validateText } from '../shared/validate.mjs';
 import { calendarDate } from './workflow.mjs';
 
@@ -77,11 +78,13 @@ function branchingFields(input) {
       if (value.choice === 'planned' ? !value.plannedDay : value.plannedDay) fail('Only Plan for a day requires a planned day.');
     }
     if (key === 'organize') {
-      shape(value, ['text', 'listId', 'notes']); nonblank(value.text, 200); text(value.notes);
+      shape(value, ['text', 'listId', 'notes', 'collectionRefs', 'projectId']);
+      if ('collectionRefs' in value) { try { validateRefs(value.collectionRefs); } catch (error) { fail(error.message); } if (value.projectId !== '') id(value.projectId); } nonblank(value.text, 200); text(value.notes);
       if (value.listId !== '') id(value.listId);
     }
   }
-  shape(input.proposal, flowKeys);
+  shape(input.proposal, [...flowKeys, 'collectionRefs']);
+  if ('collectionRefs' in input.proposal) { try { validateRefs(input.proposal.collectionRefs); } catch (error) { fail(error.message); } }
   for (const name of flowKeys) text(input.proposal[name], ['text', 'projectTitle'].includes(name) ? 200 : ['projectId', 'listId'].includes(name) ? 128 : 4000);
   dates(input.proposal);
   return structuredClone(input);
@@ -105,8 +108,9 @@ export function validateClarification(record, old, mutations, item) {
     return;
   }
   const expected = { title: a.organize.text, listId: a.organize.listId || null, status: d.choice === 'planned' ? 'next' : d.choice };
-  if (a.project?.choice === 'none') expected.projectId = null;
-  if (a.project?.choice === 'existing') expected.projectId = a.project.projectId;
+  if (a.organize.collectionRefs) Object.assign(expected, { collectionRefs: a.organize.collectionRefs, projectId: a.organize.projectId || null });
+  if (!a.organize.collectionRefs && a.project?.choice === 'none') expected.projectId = null;
+  if (!a.organize.collectionRefs && a.project?.choice === 'existing') expected.projectId = a.project.projectId;
   if (d.choice === 'waiting') Object.assign(expected, { waitingOn: d.waitingOn, ...(d.reviewDate ? { reviewDate: d.reviewDate, reviewDateUtc: null } : {}) });
   if (d.choice === 'someday') Object.assign(expected, { reviewDate: d.reviewDate || null, reviewDateUtc: null });
   if (d.choice === 'deferred') Object.assign(expected, { startDate: d.startDate, startDateUtc: null });
@@ -116,9 +120,10 @@ export function validateClarification(record, old, mutations, item) {
     if (!project || project.action !== 'create' || project.fields.title !== a.project.projectTitle || project.fields.outcome !== a.project.outcome ||
       (project.fields.workspaceId || 'personal') !== (item.workspaceId || 'personal') || mutations.length !== 3) fail('Create and assign the proposed project with the final decision.');
     expected.projectId = project.id;
+    if (expected.collectionRefs) expected.collectionRefs = [...expected.collectionRefs, { type: 'project', id: project.id }];
   } else if (mutations.length !== 2) fail('Save only the item and its final clarification decision.');
   if (mutation.action !== 'update' || Object.keys(mutation.fields).length !== Object.keys(expected).length ||
-      Object.entries(expected).some(([name, value]) => mutation.fields[name] !== value)) fail('Item changes must match the accepted clarification exactly.');
+      Object.entries(expected).some(([name, value]) => JSON.stringify(mutation.fields[name]) !== JSON.stringify(value))) fail('Item changes must match the accepted clarification exactly.');
 }
 function disposition(value, draft = false) {
   shape(value, draft ? ['text', 'status', 'waitingOn', 'reviewDate', 'startDate'] : ['status', 'waitingOn', 'reviewDate', 'startDate']);

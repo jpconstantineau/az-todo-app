@@ -6,6 +6,8 @@ import { reviewFields, reviewDecisionFields } from "./reviews.mjs";
 import { clarificationFields } from "./clarification.mjs";
 import { briefFields } from "./briefs.mjs";
 
+import { collectionKinds, validateRef, validateRefs } from './collection-model.mjs';
+
 export const MAX_BODY_BYTES = 65536;
 export const MAX_RECORD_BYTES = 32768;
 export const partition = accountId => [accountId, "sync", "v1"];
@@ -78,12 +80,20 @@ export function fieldsFor(type, action, input) {
   }
   const shared = ["title", "description", ...(action === "create" || type === "item" ? ["workspaceId"] : [])];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
-  const itemFields = ["listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome"] : ["defaults"])];
+  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef"] : ["defaults", "kind", "parentRef"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
-    if (key === "workspaceId") result[key] = identifier(value, key);
+    if (key === 'collectionRefs' || key === 'parentRef') {
+      try { result[key] = key === 'collectionRefs' ? validateRefs(value) : value === null ? null : validateRef(value); }
+      catch (error) { throw new ValidationError(error.message); }
+    }
+    else if (key === 'kind') {
+      if (typeof value !== 'string' || !Object.hasOwn(collectionKinds, value) || value === 'project') throw new ValidationError('Choose a supported list kind. Projects retain their own identity.');
+      result[key] = value;
+    }
+    else if (key === "workspaceId") result[key] = identifier(value, key);
     else if (key === "captureId") result[key] = identifier(value, key);
     else if (key === "capturedAt") {
       if (!value) throw new ValidationError('capturedAt is required.');

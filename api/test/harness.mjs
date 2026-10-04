@@ -55,13 +55,18 @@ const container = {
         const value = literal.startsWith("@") ? params[literal] : literal === "false" ? false : literal.slice(1, -1);
         return op === "=" ? actual === value : op === ">" ? actual > value : actual <= value;
       }));
+      if (query.includes('ARRAY_CONTAINS(c.record.collectionRefs')) rows = documents.filter(doc => doc.UserID === params['@u'] && doc.ObjectType === 'sync' && doc.ObjectID === 'v1' && doc.kind === 'record' && !doc.record.deleted &&
+        (doc.record.collectionRefs?.some(ref => ref.type === params['@type'] && ref.id === params['@l']) ||
+         !doc.record.collectionRefs && doc.record[params['@type'] + 'Id'] === params['@l'] ||
+         doc.record.parentRef?.type === params['@type'] && doc.record.parentRef.id === params['@l']));
       if (query.includes('ARRAY_CONTAINS(c.members')) rows = documents.filter(doc => doc.kind === 'shared-list' &&
         (doc.ownerId === params['@u'] || !doc.deleted && doc.members.some(member => member.accountId === params['@u'])));
       if (config.partitionKey) rows = rows.filter(d => [d.UserID, d.ObjectType, d.ObjectID].every((v, i) => v === config.partitionKey[i]));
       const order = query.match(/ORDER BY c\.(\w+) (ASC|DESC)/);
       if (order) rows.sort((a, b) => (typeof a[order[1]] === "number" ? a[order[1]] - b[order[1]] : String(a[order[1]] || "").localeCompare(String(b[order[1]] || ""))) * (order[2] === "DESC" ? -1 : 1));
-      if (query.includes("TOP 1")) rows = rows.slice(0, 1);
-      const projection = query.match(/^SELECT (c\.[\w., ]+) FROM/);
+      const top = query.match(/SELECT TOP (\d+)/);
+      if (top) rows = rows.slice(0, Number(top[1]));
+      const projection = query.match(/^SELECT (?:TOP \d+ )?(c\.[\w., ]+) FROM/);
       if (projection) rows = rows.map(doc => Object.fromEntries(projection[1].split(",").map(key => { key = key.trim().slice(2); return [key, doc[key]]; })));
       return {
         async fetchAll() { return { resources: clone(rows) }; },
@@ -124,7 +129,7 @@ export async function startServer({ browserUser = false, assetContents = () => u
         res.end(await result.text());
       } else {
         const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/styles.css": ["styles.css", "text/css"] };
-        for (const name of ['shared.html', 'shared.js', 'shared.css', 'capture-extraction.js', 'workspaces.js', 'handoff.html', 'handoff.js', 'handoff-protocol.js', 'theme.js', 'pwa.js', 'help.html', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'local-guidance.js', 'local-agent.js', 'briefs.js', 'inbox-sw.js']) {
+        for (const name of ['collection-model.js', 'collections.js', 'shared.html', 'shared.js', 'shared.css', 'capture-extraction.js', 'workspaces.js', 'handoff.html', 'handoff.js', 'handoff-protocol.js', 'theme.js', 'pwa.js', 'help.html', 'inbox.html', 'inbox.css', 'inbox.js', 'inbox-store.js', 'inbox-fields.js', 'inbox-export.js', 'reviews.js', 'clarification.js', 'local-guidance.js', 'local-agent.js', 'briefs.js', 'inbox-sw.js']) {
           assets[`/${name}`] = [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript'];
         }
         assets["/manifest.json"] = ["manifest.json", "application/json"];

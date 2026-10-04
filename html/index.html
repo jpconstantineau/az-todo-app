@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=54" defer></script>
+  <script src="/pwa.js?v=55" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=54"></script>
+  <script type="module" src="/inbox.js?v=55"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -118,6 +118,7 @@
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
       <p class="eyebrow" id="workEyebrow">Your work</p><h2 id="itemsHeading" tabindex="-1">Process and Organize</h2>
+      <div id="collectionBrowser" hidden><details class="collection-outline"><summary>Browse lists and their children</summary><nav id="collectionOutline" aria-label="Collection outline"></nav></details><p id="collectionBreadcrumbs" class="muted"></p><div id="collectionChildren" class="actions"></div><label class="collection-check"><input id="includeNested" type="checkbox"> Include nested items</label></div>
       <label><span id="viewLabel">Your Work</span> <select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
@@ -140,7 +141,12 @@
       <div id="createdDestination" class="actions" role="status"></div>
       <button id="addContextItem" type="button" hidden>Add item</button>
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
-      <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
+      <details id="collectionUtilities" hidden><summary>Reuse reference lists and link area tags</summary><form id="collectionUtilityForm">
+        <label>Action<select name="mode"><option value="checklist">Use as checklist</option><option value="area">Create/link an area from a tag</option></select></label>
+        <div id="checklistFields"><p>Select a reference list above, then choose up to 19 direct entries. The original remains reusable.</p><label>Entries<select name="entries" multiple size="5"></select></label><label class="collection-check"><input name="next" type="checkbox"> Create copies as Next actions (otherwise Inbox)</label></div>
+        <div id="areaMappingFields" hidden><label>Existing area tag<select name="tag"></select></label><label>Link to Area<select name="target"></select></label><p>Tags are kept. Each save links up to 20 items (19 with a new Area). Save the next batch to resume; already linked items are skipped.</p></div>
+        <label>New list / Area name<input name="title" maxlength="200"></label><button type="submit">Save collection action on device</button><p id="collectionUtilityStatus" role="status"></p>
+      </form></details><div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
       <p class="eyebrow">Do</p><h2 id="executeHeading" tabindex="-1">Execute</h2>
@@ -204,8 +210,8 @@
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
         <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
-        <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span class="muted">Moving clears list and project links; the original text and item history move with it.</span></label>
-        <label id="editListLabel">List <select name="listId"></select></label>
+        <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span class="muted">Moving clears all collection memberships; the original text and item history move with it.</span></label>
+        <div id="editCollectionFields" hidden><label>Kind<select name="kind"></select></label><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
         <div id="editAdvanced"><div id="editFields"></div></div>
         <details><summary>Original capture</summary><pre id="original"></pre></details>
         </div>

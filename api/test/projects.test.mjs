@@ -1,3 +1,4 @@
+import { revealControl } from './navigation-helper.mjs';
 import { clickControl } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
@@ -39,6 +40,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
   await page.locator('#edit .task-dates > summary').click();
   await page.locator('#edit .task-metadata > summary').click();
+  await revealControl(page.locator('#edit [name=projectId]'));
   await page.locator('#edit [name=projectId]').selectOption(projectId);
   await page.locator('#edit [name=plannedDay]').fill('2026-10-05');
   await page.locator('#edit [name=areas]').selectOption('Personal');
