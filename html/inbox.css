@@ -4,6 +4,14 @@
 .inbox-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-items: start; margin: var(--space-6) 0; }
 .inbox-grid > * { min-width: 0; }
 #captureText { min-height: 120px; }
+.capture-text { position: relative; margin-top: var(--space-1); }
+.capture-text #captureText { margin-top: 0; }
+#captureMirror { position: absolute; top: var(--border-width); left: var(--border-width); padding: var(--space-2) var(--space-3); font: inherit; white-space: pre-wrap; overflow-wrap: break-word; overflow: hidden; pointer-events: none; }
+.capture-text.has-suggestion #captureText { color: transparent; caret-color: var(--ink); }
+#captureGhost { color: var(--muted); }
+#captureCompletionControls button { margin-bottom: var(--space-2); }
+#captureCompletionUse { margin-right: var(--space-2); }
+#captureSuggestedTasks { padding-left: var(--space-6); overflow-wrap: anywhere; }
 .workspace-nav [aria-current="page"] { border-color: var(--link); background: var(--selected); box-shadow: inset 0 -3px var(--link); text-decoration: underline; text-underline-offset: 4px; }
 .inbox-page article { background: var(--surface-raised); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); padding: var(--space-4); margin-top: var(--space-3); overflow-wrap: anywhere; }
 .inbox-page article .notes { font-size: var(--text-sm); color: var(--muted); }

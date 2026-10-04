@@ -1,8 +1,13 @@
 # Automatic local AI capture (#24)
 
 In Capture, open **Free-form task review and local AI** and enable **Automatically suggest with local AI**. A ready local model
-proposes tasks after a 1.2-second typing pause. **Review saved suggestions**
-appears without moving keyboard focus. Only **Accept all tasks on device**
+proposes text at the cursor after a 1.2-second typing pause. **Tab** or
+**Use suggested text** inserts it into Capture; **Escape** or **Dismiss suggestion**
+keeps your text. Shift+Tab still moves focus backwards. Moving the cursor or
+editing invalidates a suggestion. Suggested text is transient; accepted text is
+journalled as an ordinary capture draft. It creates no tasks until you save.
+**Suggest tasks now** shows proposed task titles and destinations beside Capture,
+with **Review saved suggestions** available even when AI options are collapsed. Only **Accept all tasks on device**
 commits the reviewed batch. **Suggest tasks now** starts an explicit attempt,
 including a browser model download if necessary; typing never initiates downloads.
 
@@ -29,8 +34,11 @@ clarification guidance. See the [Chrome Prompt API](https://developer.chrome.com
 No external inference service, API key or task-text logging is introduced. The
 prompt contains this capture, its notes and the captured clock. Existing list
 names/IDs are included only after enabling **Include my existing list names in
-local AI suggestions**. This preference persists per workspace and account on this device;
-changing it cancels an in-flight attempt. An explicitly selected destination is
+local AI suggestions**. This preference persists per workspace and account on this device.
+The option shows the included names (or that none exist in this workspace);
+changing it cancels an in-flight attempt and refreshes automatic suggested text.
+Saved review corrections are preserved and the choice applies to the next batch.
+This supplies context; destinations still need review before saving. An explicitly selected destination is
 still applied locally even without sending list names to the model.
 Accepted tasks still use ordinary cloud synchronization.
 

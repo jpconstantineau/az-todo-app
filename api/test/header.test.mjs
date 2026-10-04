@@ -22,8 +22,9 @@ async function setup(t, user, mode) {
         aiCalls.creates++; aiCalls.active = navigator.userActivation.isActive;
         options.monitor(new EventTarget());
         if (aiMode.createFail) return Promise.reject(Error('Download failed'));
-        const model = { destroy() { aiCalls.destroyed++; }, prompt: async () => {
-          aiCalls.prompts++; return '{"items":[],"notes":"No actionable tasks."}';
+        const model = { destroy() { aiCalls.destroyed++; }, prompt: async (text, options) => {
+          aiCalls.prompts++; if (options.responseConstraint.properties.text) return JSON.stringify({ text: " with a next step" });
+          return '{"items":[],"notes":"No actionable tasks."}';
         } };
         const ready = () => { aiMode.state = 'available'; return model; };
         if (aiMode.holdCreate) return new Promise(resolve => { window.finishCreate = () => resolve(ready()); });
@@ -39,7 +40,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=46')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=47')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -87,7 +88,7 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=46').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=47').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
@@ -103,7 +104,9 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   assert.equal((await local(page)).queue.length, 0); assert.equal(documents.length, 0);
   await page.locator('#captureAI summary').click(); await page.locator('#extractAuto').check();
   await page.evaluate(() => aiMode.holdCreate = false);
-  await page.locator('#captureText').fill('A thought to review'); await page.locator('#extractReview').waitFor();
+  await page.locator('#captureText').fill('A thought to review'); await page.locator('#captureGhost').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), 'A thought to review');
+  assert.equal((await local(page)).draft.extraction.draft, null);
   await agentStatus(page, 'available');
   assert.equal(await page.evaluate(() => aiCalls.prompts), 1);
 });
@@ -134,7 +137,7 @@ test('header follows workspace selection and save state, then clears identity on
   assert.equal(await page.locator('#capture > fieldset > label').innerText(), 'Capture items');
   assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureHelp').getAttribute('class'), 'sr-only');
-  assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp');
+  assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint');
   assert.equal(await page.locator('.capture-header button').innerText(), '');
   assert.ok((await page.locator('.capture-header button').boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
   await clickControl(page.locator('#manageWorkspaces'));
