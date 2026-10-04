@@ -59,6 +59,7 @@ test('collections: bounded checklist copies, area batches, exports and undo pres
   const item = { type: 'item', id: 'passport', version: 1, accountId: 'alice', deleted: false, title: 'Passport', description: 'Expiry', status: 'reference', listId: 'packing', areas: ['Travel'], referenceLinks: ['https://example.com/renew'] };
   const before = structuredClone(item);
   const copies = checklistMutations(source, [item], 'Trip');
+  assert.equal(copies[0].fields.kind, 'checklist');
   assert.equal(copies.length, 2); assert.equal(copies[1].fields.status, 'inbox'); assert.notEqual(copies[1].id, item.id);
   assert.deepEqual(copies[1].fields.referenceLinks, item.referenceLinks); assert.deepEqual(item, before);
   assert.equal(checklistMutations(source, [item], 'Trip', true)[1].fields.status, 'next');

@@ -1,4 +1,4 @@
-import { collectionKinds, collectionKind, isCollection, refKey, memberships, ancestry, normalizeMembership, belongsTo } from './collection-model.js?v=57';
+import { collectionKinds, collectionKind, isCollection, refKey, memberships, ancestry, normalizeMembership, belongsTo } from './collection-model.js?v=58';
 
 export const viewKey = record => record.type === 'project' ? refKey(record) : record.id;
 export const parseRef = value => { const [type, id] = value.split(':'); return { type, id }; };
@@ -44,7 +44,7 @@ export function checklistMutations(source, items, title, next = false) {
   if (!title.trim() || title.length > 200) throw new Error('Name the new checklist (1–200 characters).');
   if (!items.length || items.length > 19 || new Set(items.map(item => item.id)).size !== items.length) throw new Error('Choose 1–19 entries for one checklist.');
   const id = crypto.randomUUID(), workspaceId = source.workspaceId || 'personal', destination = { type: 'list', id };
-  return [{ type: 'list', id, action: 'create', expectedVersion: 0, fields: { title, kind: 'list', workspaceId, parentRef: source.parentRef || null } }, ...items.map(item => {
+  return [{ type: 'list', id, action: 'create', expectedVersion: 0, fields: { title, kind: 'checklist', workspaceId, parentRef: source.parentRef || null } }, ...items.map(item => {
     if (item.deleted || !belongsTo(item, source)) throw new Error('A selected source entry changed. Choose the entries again.');
     return { type: 'item', id: crypto.randomUUID(), action: 'create', expectedVersion: 0, fields: { title: item.title, description: item.description || '', referenceLinks: item.referenceLinks || [], sourceUrl: item.sourceUrl || null, sourceTitle: item.sourceTitle || '', originalText: item.title, workspaceId, status: next ? 'next' : 'inbox', ...membershipFields([destination]) } };
   })];
