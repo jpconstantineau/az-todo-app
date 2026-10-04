@@ -101,6 +101,10 @@
 .task-menu > summary { display: flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; margin-left: auto; padding: var(--space-2); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); cursor: pointer; }
 .task-menu > summary::-webkit-details-marker { display: none; }
 .task-heading .editable-title { padding-left: 0; }
+.execute-item { display: flex; align-items: center; gap: var(--space-2); }
+.execute-check { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; min-height: 44px; margin: 0; cursor: pointer; }
+.execute-check input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; }
+.execute-item .editable-title { flex: 1; min-width: 0; justify-content: flex-start; }
 @media (max-width: 767px) {
   #editor { height: 92dvh; }
   .menu-content .device-tools { align-items: stretch; }
