@@ -48,7 +48,7 @@ answers and final mutations are rejected. No flow version means the legacy v1
 questionnaire below: existing sessions, device drafts and queued requests continue
 unchanged. The API rejects changing an existing session's flow version.
 
-Deploy compatible API support before shell v52; do not downgrade that API while
+Deploy compatible API support before shell v53; do not downgrade that API while
 v2 operations are queued. The full cached module graph includes
 `clarification-flow.js`. No database migration, partition change, receipt rewrite,
 new dependency or device-storage reset is needed. #117 can replace the current

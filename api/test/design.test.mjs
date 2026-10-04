@@ -123,6 +123,20 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     return rgb.map(value => { value /= 255; return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; })
       .reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
   }
+  async function dropdownContrast() {
+    const options = await page.locator('select option').evaluateAll(options => options.map(option => {
+      const style = getComputedStyle(option);
+      return { label: option.textContent, color: style.color, background: style.backgroundColor };
+    }));
+    assert.ok(options.length > 0);
+    for (const option of options) {
+      const foreground = option.color.match(/[\d.]+/g).map(Number);
+      const background = option.background.match(/[\d.]+/g).map(Number);
+      assert.ok(background.length === 3 || background[3] === 1, `${option.label}: option background is opaque`);
+      const [a, b] = [luminance(foreground.slice(0, 3)), luminance(background.slice(0, 3))].sort((a, b) => b - a);
+      assert.ok((a + .05) / (b + .05) >= 4.5, `${option.label}: dropdown text contrast is at least 4.5:1`);
+    }
+  }
   for (const theme of ['light', 'dark']) {
     await appearance(theme);
     await page.reload();
@@ -149,6 +163,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     }
     const [a, b] = [luminance(colors.primary), luminance(colors['on-primary'])].sort((a, b) => b - a);
     assert.ok((a + .05) / (b + .05) >= 4.5);
+    await dropdownContrast();
     console.log(`${theme} minimum text contrast: ${minimum.toFixed(2)}:1`);
     if (theme === 'light') await shot('inbox-light-320');
   }
@@ -158,15 +173,23 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   assert.equal(await page.locator('[data-appearance]').inputValue(), 'system');
   await page.emulateMedia({ colorScheme: 'light' });
   assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(247, 248, 250)');
+  await dropdownContrast();
   await page.emulateMedia({ colorScheme: 'dark' });
   assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(0, 0, 0)');
+  await dropdownContrast();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
   await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(0, 0, 0)');
   await fits();
+  await dropdownContrast();
   await context.setOffline(false);
+  await page.goto(server.url + '/shared.html');
+  await page.locator('#sharedMain').waitFor();
+  await dropdownContrast();
+  await page.emulateMedia({ colorScheme: 'light' });
+  await dropdownContrast();
 
   const blocked = await browser.newContext({ colorScheme: 'light' });
   await blocked.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('Storage blocked'); } }));
