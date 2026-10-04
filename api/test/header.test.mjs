@@ -40,7 +40,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=47')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=48')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -71,6 +71,10 @@ for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'un
     assert.equal(await button.getAttribute('aria-disabled'), String(expected === 'unavailable'));
     assert.equal(await page.locator('.agent-unavailable').isVisible(), expected === 'unavailable');
     assert.equal(await button.getAttribute('aria-label'), await page.locator('#agentLabel').textContent());
+    for (const id of ['extractAuto', 'extractLists', 'extractStart']) {
+      assert.equal(await page.locator('#' + id).isDisabled(), expected === 'unavailable' || !!mode.checkFail);
+    }
+    assert.equal(await page.locator('#extractManual').isEnabled(), true);
     assert.deepEqual(await page.evaluate(() => aiCalls), { creates: 0, prompts: 0, destroyed: 0 });
     assert.ok((await button.boundingBox()).x > (await page.locator('#saveStatus').boundingBox()).x);
     if (expected === 'unavailable') { await button.focus(); await page.keyboard.press('Enter'); assert.equal(await page.evaluate(() => aiCalls.creates), 0); }
@@ -83,12 +87,49 @@ for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'un
   });
 }
 
+test('capture AI controls wait for the initial availability check', async t => {
+  const { page, url } = await setup(t, 'alice', { state: 'available', holdCheck: true });
+  await page.goto(url); await status(page, 'confirmed');
+  await page.waitForFunction(() => !!window.finishCheck);
+  await agentStatus(page, 'busy');
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isDisabled(), true);
+  assert.equal(await page.locator('#extractManual').isEnabled(), true);
+  await page.evaluate(() => finishCheck('available')); await agentStatus(page, 'available');
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isEnabled(), true);
+});
+
+test('unavailable agent has stroke-wide circle clearance and keeps its size when ready', async t => {
+  const { page, url } = await setup(t, 'alice', { state: 'unavailable' });
+  await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'unavailable');
+  const robot = page.locator('.agent-robot'), unavailableBounds = await robot.boundingBox();
+  const clearance = await page.evaluate(() => {
+    const svg = document.querySelector('.agent-icon'), circle = document.querySelector('.agent-unavailable circle');
+    const stroke = parseFloat(getComputedStyle(circle).strokeWidth);
+    let radius = 0;
+    for (const shape of document.querySelector('.agent-robot').children) {
+      const matrix = svg.getScreenCTM().inverse().multiply(shape.getScreenCTM());
+      const halfStroke = parseFloat(getComputedStyle(shape).strokeWidth) * Math.hypot(matrix.a, matrix.b) / 2;
+      const length = shape.getTotalLength();
+      for (let step = 0; step <= 256; step++) {
+        const point = shape.getPointAtLength(length * step / 256).matrixTransform(matrix);
+        radius = Math.max(radius, Math.hypot(point.x - circle.cx.baseVal.value, point.y - circle.cy.baseVal.value) + halfStroke);
+      }
+    }
+    return { gap: circle.r.baseVal.value - stroke / 2 - radius, stroke };
+  });
+  assert.ok(clearance.gap >= clearance.stroke, JSON.stringify(clearance));
+  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=48')).checkModel(); });
+  await agentStatus(page, 'available');
+  assert.deepEqual(await robot.boundingBox(), unavailableBounds);
+  assert.equal(await page.locator('.agent-unavailable').isVisible(), false);
+});
+
 test('header prepares the model from a keyboard gesture, ignores duplicate clicks and stale availability, then enables capture', async t => {
   const { page, url } = await setup(t, 'alice', { state: 'downloadable', holdCreate: true });
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=47').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=48').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
