@@ -1,4 +1,4 @@
-import { refKey } from './collection-model.js?v=63';
+import { refKey } from './collection-model.js?v=64';
 export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Energy', timeRequired: 'Time required', priority: 'Priority', statuses: 'Statuses' };
 export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
@@ -128,6 +128,7 @@ export function addTaskControls(container) {
 export function refreshTaskOptions(form, defaults) {
   for (const name of ['status', ...Object.keys(optionFields).filter(name => name !== 'statuses')]) {
     const control = form.elements.namedItem(name);
+    if (!control) continue;
     const selected = control.multiple ? [...control.selectedOptions].map(option => option.value) : [control.value];
     const values = name === 'status' ? ['inbox', 'next', 'waiting', 'deferred', 'someday', 'reference', 'completed', 'dropped', ...(defaults.statuses || [])] : defaults[name] || [];
     const options = [...new Set([...(control.multiple ? [] : name === 'status' ? [] : ['']), ...values, ...selected.filter(Boolean)])];

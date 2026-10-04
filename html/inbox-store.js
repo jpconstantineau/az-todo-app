@@ -1,6 +1,6 @@
-import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=63';
-import { workspaceOf } from './workspaces.js?v=63';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=63';
+import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=64';
+import { workspaceOf } from './workspaces.js?v=64';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=64';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -164,7 +164,7 @@ export function captureMutations(draft) {
   if (!titles.length || titles.some(title => title.length > 200)) throw new Error('Enter a title of 1–200 characters on each non-empty line.');
   if (source.length > 16000 || (draft.body ?? '').length > 4000) throw new Error('Capture text is limited to 16,000 characters and notes to 4,000.');
   const mutations = [];
-  let listId = draft.listId || null;
+  let listId = draft.listId?.startsWith('project:') ? null : draft.listId || null;
   if (draft.newList?.trim()) {
     if (draft.newList.length > 200) throw new Error('List title must be at most 200 characters.');
     listId = crypto.randomUUID();

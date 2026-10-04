@@ -11,7 +11,7 @@ import { enqueue } from '../../html/inbox-store.js';
 
 const clock = captureClock(new Date('2026-10-03T05:30:00.000Z'), 'America/Regina');
 const source = 'Call Sam tomorrow at 3 pm about the quote. Buy milk, urgent, at the shop.';
-const suggestion = (fields = {}) => ({ title: 'Call Sam', description: 'About the quote', listId: '', priority: '', context: '', area: '', dueDate: '2026-10-03', dueTime: '15:00', evidence: 'Call Sam tomorrow at 3 pm about the quote.', uncertainty: '', ...fields });
+const suggestion = (fields = {}) => ({ title: 'Call Sam', description: 'About the quote', listId: '', priority: '', context: '', dueDate: '2026-10-03', dueTime: '15:00', evidence: 'Call Sam tomorrow at 3 pm about the quote.', uncertainty: '', ...fields });
 const output = (items = [suggestion()]) => JSON.stringify({ items, notes: 'Check the quote before calling.' });
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
@@ -40,6 +40,10 @@ test('reviewed batches preserve original/identity, date-only semantics and trust
   const mutation = extractionMutations(draft, {})[0];
   assert.equal(mutation.fields.dueDate, '2026-10-03'); assert.equal(mutation.fields.dueDateUtc, null);
   assert.equal(mutation.fields.originalText, source); assert.equal(mutation.fields.captureId, draft.id);
+  draft.items[0].listId = 'project:garage';
+  const project = extractionMutations(draft, { 'project:garage': { type: 'project', id: 'garage' } })[0];
+  assert.equal(project.fields.projectId, 'garage'); assert.equal(project.fields.listId, null);
+  draft.items[0].listId = '';
   assert.equal(mutation.id, extractionMutations(draft, {})[0].id);
   assert.equal(fieldsFor('item', 'create', mutation.fields).captureTimeZone, 'America/Regina');
   assert.throws(() => fieldsFor('item', 'update', { captureId: 'replacement' }));
@@ -152,7 +156,7 @@ test('capture follows agent availability across reload without losing AI prefere
     const saved = (await (await import('/inbox-store.js')).transact('alice')).draft.extraction;
     return saved.enabled && saved.includeLists;
   });
-  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=63')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=64')).checkModel(); });
   await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'unavailable');
   assert.equal(await page.locator('#captureAI').isVisible(), false);
   assert.equal(await page.locator('#extractionStatus').isVisible(), false);
@@ -173,9 +177,9 @@ test('capture follows agent availability across reload without losing AI prefere
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   assert.equal(await page.locator('#extractStart').isDisabled(), true);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0);
-  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=63')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=64')).checkModel(); });
   await page.locator('#captureAI').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#extractionStatus').isVisible(), true);
+  assert.equal(await page.locator('#extractionStatus').isVisible(), false);
   for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isEnabled(), true);
   await page.locator('#agentStatus').click();
   await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'available');

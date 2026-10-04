@@ -41,7 +41,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#capture .task-metadata > summary').click();
   await page.locator('#capture .task-dates > summary').click();
   await page.locator('#capture [name=contexts]').selectOption(['@Kitchen', '@Shop']);
-  await page.locator('#capture [name=areas]').selectOption('Personal');
+  assert.equal(await page.locator('#capture [name=areas]').count(), 0);
   await page.locator('#capture [name=energy]').selectOption('Low');
   await page.locator('#capture [name=timeRequired]').selectOption('15m');
   await page.locator('#capture [name=priority]').selectOption('Urgent');

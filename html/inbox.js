@@ -1,15 +1,15 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=63';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=63';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=63';
-import { collectionMoveMutations } from './workspace-move.js?v=63';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=63';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=63';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=63';
-import { clarificationUI } from './clarification.js?v=63';
-import { setupReviews } from './reviews.js?v=63';
-import { setupBriefs } from './briefs.js?v=63';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=63';
-import { setupAgentStatus } from './local-agent.js?v=63';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=64';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=64';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=64';
+import { collectionMoveMutations } from './workspace-move.js?v=64';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=64';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=64';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=64';
+import { clarificationUI } from './clarification.js?v=64';
+import { setupReviews } from './reviews.js?v=64';
+import { setupBriefs } from './briefs.js?v=64';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=64';
+import { setupAgentStatus } from './local-agent.js?v=64';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -132,7 +132,7 @@ function workspaceReadOnly() {
 }
 const dialogOpeners = new Map();
 const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
-  current: () => accountId && !workspaceReadOnly() ? { ...captureDraft(), accountId, lists: Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted).map(({ id, title }) => ({ id, title })) } : null,
+  current: () => accountId && !workspaceReadOnly() ? { ...captureDraft(), accountId, lists: Object.values(scopedRecords()).filter(record => isCollection(record) && !record.deleted).map(record => ({ id: record.type === 'project' ? refKey(record) : record.id, title: collectionLabel(record) })) } : null,
   save: async submitted => {
     const owner = accountId, generation = accountGeneration;
     if (!owner || workspaceReadOnly()) throw new Error('Choose an active workspace to accept these suggestions.');
@@ -216,6 +216,8 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
   state = saved; clearError(); render(); broadcast(); void sync();
 } });
 addTaskControls($('captureFields')); addTaskControls($('editFields'));
+capture.elements.projectId.closest('label').remove();
+capture.elements.areas.closest('label').remove();
 const editOrganizer = organizer($('editOrganizer'), {}, []);
 const primaryMemberships = document.createElement('details'), primarySummary = document.createElement('summary');
 primarySummary.textContent = 'Primary memberships (defaults and older apps)'; primaryMemberships.append(primarySummary, $('editListLabel'), edit.elements.projectId.closest('label')); $('editOrganizer').append(primaryMemberships);
@@ -363,20 +365,20 @@ async function journal() {
   const owner = accountId, snapshot = draft();
   try {
     const saved = await transact(owner, local => { Object.assign(currentDraft(local), snapshot); });
-    if (owner === accountId) { state = saved; statusText('draftStatus', 'Draft saved on device'); statusText('clarifyDraftStatus', 'Draft saved on device; not accepted.'); }
+    if (owner === accountId) { state = saved; statusText('draftStatus', ''); statusText('clarifyDraftStatus', 'Draft saved on device; not accepted.'); }
     return owner === accountId;
   } catch (failure) { if (owner === accountId) storageFailure(failure); return false; }
 }
 function options(select, lists, first, keepMissing = false) {
   const selected = select.value;
   select.replaceChildren(...first.map(([value, text]) => new Option(text, value)), ...lists.map(list => new Option(list.title, list.id)));
-  if (keepMissing && selected && ![...select.options].some(option => option.value === selected)) select.add(new Option('Unavailable project — choose another or clear', selected));
+  if (keepMissing && selected && ![...select.options].some(option => option.value === selected)) select.add(new Option('Unavailable destination — choose another or clear', selected));
   if ([...select.options].some(option => option.value === selected)) select.value = selected;
 }
 function restoreDraft() {
   capture.reset(); edit.reset(); editing = null; originalInput = undefined;
   const saved = projected(state)['workspace:' + selectedWorkspace]?.deleted ? {} : currentDraft(state);
-  fillValues(capture, saved.capture || {});
+  fillValues(capture, { ...saved.capture, listId: saved.capture?.projectId ? `project:${saved.capture.projectId}` : saved.capture?.listId });
   originalInput = saved.capture?.original;
   extraction.restore(saved.extraction); restoreUtility(saved.collectionUtility);
   $('previewHelp').hidden = originalInput === undefined;
@@ -428,11 +430,10 @@ function render() {
     ? undoAvailable ? `Undo edit to “${state.undoEdit.title}” until ${new Date(state.undoEdit.expiresAt).toLocaleString()}.`
       : 'The last edit expired, its record changed, or a save needs attention.'
     : 'No editor save to undo on this device.');
-  options(capture.elements.listId, lists, [['', 'No list']]);
+  options(capture.elements.listId, [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(record => ({ id: refKey(record), title: collectionLabel(record) }))], [['', 'No list']], true);
   extraction.refreshLists();
   const moving = editing?.type === 'item' && edit.elements.workspaceId.value && edit.elements.workspaceId.value !== selectedWorkspace;
   options(edit.elements.listId, moving ? [] : lists, [['', 'No list']]);
-  options(capture.elements.projectId, projects, [['', 'No project']], true);
   options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
   const listMode = destination === 'lists';
   const filters = navigation[listMode ? 'lists' : 'work'];
@@ -826,7 +827,7 @@ capture.addEventListener('submit', event => {
     const owner = accountId, submitted = captureDraft();
     try {
       const mutations = captureMutations(submitted);
-      const details = taskFields(submitted);
+      const details = taskFields({ ...submitted, projectId: !submitted.newList?.trim() && submitted.listId?.startsWith('project:') ? submitted.listId.slice(8) : null });
       for (const mutation of mutations) {
         if (mutation.type === 'item') Object.assign(mutation.fields, details, { status: 'inbox' });
         else mutation.fields.defaults = structuredClone(userDefaults());
