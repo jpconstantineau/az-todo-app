@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=61" defer></script>
+  <script src="/pwa.js?v=62" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=61"></script>
+  <script type="module" src="/inbox.js?v=62"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -150,12 +150,13 @@
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
       <h2 id="executeHeading" tabindex="-1">Execute</h2>
-      <div class="actions execute-kinds" role="group" aria-label="Collection type">
+      <div class="actions execute-kinds" id="executeKinds" role="group" aria-label="Collection type">
         <button type="button" data-execute-kind="list" aria-pressed="true">List</button>
         <button type="button" data-execute-kind="project" aria-pressed="false">Project</button>
         <button type="button" data-execute-kind="checklist" aria-pressed="false">Checklist</button>
       </div>
       <select id="executeList" aria-label="Choose List"><option value="">Choose a list</option></select>
+      <p class="muted">Execute shows Inbox and Next items, including ordinary checklist entries. Waiting and deferred dates cue review without changing status; Someday, Reference, Dropped, Completed and custom statuses stay out of this work queue. <a id="inspectExecute" href="#lists">Inspect saved work in List Workspace</a> to see every status and review cue.</p>
       <details id="executeFilters">
         <summary id="executeFilterSummary">Context, time &amp; energy</summary>
         <div class="execution-controls">
