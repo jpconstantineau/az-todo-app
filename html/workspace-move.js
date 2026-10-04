@@ -12,6 +12,7 @@ export function collectionMoveMutations(record, workspaceId, records, fields) {
 
   const dependents = Object.values(records).filter(candidate => !candidate.deleted &&
     (moving.has(refKey(candidate)) || candidate.type === 'item' && memberships(candidate).some(ref => moving.has(refKey(ref)))));
+  // ponytail: one atomic operation supports 20 records; use a resumable move plan if larger collection moves are needed.
   if (dependents.length > 20) throw new Error('This collection has more than 19 linked records. Move smaller groups of items first, then move the collection.');
   return dependents.map(candidate => {
     let changes;

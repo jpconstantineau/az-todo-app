@@ -32,7 +32,7 @@ async function hasContents(accountId, target, pending, workspaceId = null) {
        (c.record.parentRef.type=@type AND c.record.parentRef.id=@l))`,
     parameters: [{ name: '@u', value: accountId }, { name: '@l', value: target.id }, { name: '@type', value: target.type }, { name: '@ref', value: { type: target.type, id: target.id } }]
   }, { partitionKey: partition(accountId) }).fetchAll();
-  // At most 20 records can change in this operation; a 21st dependent always blocks deletion.
+  // At most 20 records can change in this operation; a 21st dependent blocks deletion or movement.
   return [...resources.map(row => row.record).filter(record => !pending.some(next => refKey(next) === refKey(record))), ...pending]
     .some(record => collectionContents(record, target) && (workspaceId === null || (record.workspaceId || 'personal') !== workspaceId));
 }
