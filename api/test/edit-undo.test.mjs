@@ -178,7 +178,15 @@ test('browser undo stays account-bound, survives server confirmation and recheck
       await page.screenshot({ path: `${process.env.UNDO_SCREENSHOTS}/edit-undo-${theme}-${width}.png`, fullPage: true });
     }
   }
-  await page.evaluate(async () => (await import('/inbox-store.js')).transact('alice', state => { state.undoEdit.expiresAt = Date.now() - 1; }));
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js');
+    await transact('alice');
+    // Expire at the real click: this transaction precedes the undo handler's read.
+    // Earlier expiry lets an unrelated refresh correctly disable the control.
+    document.querySelector('#undoEdit').addEventListener('click', () => {
+      void transact('alice', state => { state.undoEdit.expiresAt = Date.now() - 1; });
+    }, { capture: true, once: true });
+  });
   await clickUndo(page);
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('can no longer be undone'));
   assert.equal((await local(page)).queue.length, 0);
