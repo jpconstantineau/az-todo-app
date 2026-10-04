@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=56';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=56';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=56';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=56';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=56';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=56';
-import { clarificationUI } from './clarification.js?v=56';
-import { setupReviews } from './reviews.js?v=56';
-import { setupBriefs } from './briefs.js?v=56';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=56';
-import { setupAgentStatus } from './local-agent.js?v=56';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=57';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=57';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=57';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=57';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=57';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=57';
+import { clarificationUI } from './clarification.js?v=57';
+import { setupReviews } from './reviews.js?v=57';
+import { setupBriefs } from './briefs.js?v=57';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=57';
+import { setupAgentStatus } from './local-agent.js?v=57';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -52,9 +52,7 @@ function renderWorkspaces() {
       const title = prompt('Workspace name', record.title);
       if (title !== null) return saveWorkspace(record, 'update', { title });
     }), action(record.archived ? 'Unarchive' : 'Archive', () => saveWorkspace(record, 'update', { archived: !record.archived })),
-    action('Delete', () => {
-      if (confirm(`Delete workspace “${record.title}” and hide all of its work? Its contents and history stay stored. Restore it here to recover them.`)) return saveWorkspace(record, 'delete');
-    }));
+    action('Delete', () => saveWorkspace(record, 'delete')));
     return article;
   }));
 }
@@ -229,6 +227,7 @@ edit.elements.kind.replaceChildren(...Object.entries(collectionKinds).map(([kind
 edit.elements.kind.onchange = () => {
   if (!editing || editing.version) return;
   editing.type = edit.elements.kind.value === 'project' ? 'project' : 'list';
+  $('editProjectLifecycle').hidden = editing.type !== 'project';
   $('editOutcomeLabel').hidden = editing.type !== 'project'; edit.elements.outcome.required = editing.type === 'project'; void journal();
 };
 capture.elements.status.closest('label').hidden = true;
@@ -481,7 +480,7 @@ function render() {
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
-  $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
+  $('projectOutcome').textContent = project ? `Project status: ${project.status || 'active'} · Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
@@ -581,9 +580,7 @@ function render() {
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
 function deleteButton(record) {
-  return button('Delete', async () => {
-    if (confirm(`Delete “${record.title}”? You can restore it from Menu → Deleted records. Its text and history remain stored; there is no automatic purge.`)) await changeDeletion(record, 'delete');
-  }, `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
+  return button('Delete', () => changeDeletion(record, 'delete'), `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
 }
 function renderDeleted() {
   statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
@@ -678,11 +675,12 @@ function openEditor(record, focus = true, show = true) {
   edit.elements.workspaceId.value = fields.workspaceId || selectedWorkspace;
   $('editWorkspaceLabel').hidden = record.type !== 'item';
   refreshOptions();
-  fillValues(edit, { ...fields, parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
+  fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status || 'active' : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
   editing.initialFields ??= formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
   $('editListLabel').hidden = record.type !== 'item';
   $('editAdvanced').hidden = record.type !== 'item';
+  $('editProjectLifecycle').hidden = record.type !== 'project';
   $('editOutcomeLabel').hidden = record.type !== 'project';
   edit.elements.outcome.required = record.type === 'project';
   $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
@@ -808,10 +806,10 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome } : { kind: values.kind }) }) };
+      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0 && editing.initialFields) {
-      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
+      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus || 'active' } : {}) };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { void discardEdit(); return; }
     }
@@ -1082,6 +1080,8 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
+  $('appMenu').open = false; $('preferences').close();
   restoreUtility(); utilityForm.elements.entries.replaceChildren(); utilityForm.elements.tag.replaceChildren(); utilityForm.elements.target.replaceChildren(); $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
   extraction.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
@@ -1102,9 +1102,9 @@ function hideAccount() {
   $('syncStatus').textContent = ''; clearError();
   $('connectionLabel').textContent = ''; $('saveStatus').hidden = true;
   delete $('saveStatus').dataset.state; $('saveStatus').removeAttribute('title');
-  $('accountName').textContent = 'Welcome'; $('defaultWorkspace').hidden = false; $('workspaceSelect').hidden = true;
-  $('signedOut').hidden = false; $('loginStatus').textContent = 'Sign in to open your workspace.';
-  document.title = 'Capture · Personal';
+  $('accountName').textContent = 'Welcome'; $('workspaceSelect').hidden = true;
+  $('signedOut').hidden = false; $('loginStatus').textContent = 'Sign in to continue.';
+  document.title = 'Sign in';
   $('menuDeviceTools').hidden = true;
   $('undoEdit').disabled = true; $('undoEditStatus').textContent = '';
   recentTaskChange = null; $('recentTaskChange').hidden = true; $('recentTaskChangeStatus').textContent = '';
@@ -1127,7 +1127,7 @@ async function pauseSession(message) {
   hideAccount();
   try { await transact(null, session => { session.paused = true; }); }
   catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.'); }
-  broadcast(); $('sessionStatus').textContent = message; $('loginStatus').textContent = message;
+  broadcast(); $('sessionStatus').textContent = message;
 }
 async function session({ allowOffline = false } = {}) {
   let generation = accountGeneration;
@@ -1138,7 +1138,7 @@ async function session({ allowOffline = false } = {}) {
     verified = true;
   } catch (failure) {
     if (failure.status === 401 || failure.status === 403) {
-      await pauseSession('Sign in to open your workspace.');
+      await pauseSession('Sign in to continue.');
       throw failure;
     }
     if (!allowOffline || failure.status) throw failure;
@@ -1162,7 +1162,8 @@ async function session({ allowOffline = false } = {}) {
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
   $('menuDeviceTools').hidden = false;
-  $('signedOut').hidden = true; $('defaultWorkspace').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
+  $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
+  $('appHeader').hidden = false; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
   void showAccountName(accountId, generation, verified);
   return accountId;
 }

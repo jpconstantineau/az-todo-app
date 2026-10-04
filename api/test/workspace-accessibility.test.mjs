@@ -45,14 +45,17 @@ test('workspace keyboard focus survives background refresh, duplicate names and 
 
 test('archive toggle keeps its control and delete/restore focus the same workspace result', { timeout: 30000 }, async t => {
   const { page } = await setup(t); const id = await create(page, 'Family');
+  const deletionDialogs = [];
+  page.on('dialog', dialog => { deletionDialogs.push(dialog.message()); void dialog.accept(); });
   const archive = page.getByRole('button', { name: 'Archive workspace: Family', exact: true });
   await archive.focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Unarchive workspace: Family', exact: true }).waitFor();
   await focus(page, `[aria-label="Unarchive workspace: Family"]`);
   await page.keyboard.press('Enter'); await focus(page, '[aria-label="Archive workspace: Family"]');
   await page.getByRole('button', { name: 'Delete workspace: Family', exact: true }).focus();
-  page.once('dialog', dialog => dialog.accept()); await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Restore workspace: Family', exact: true }).waitFor();
+  assert.deepEqual(deletionDialogs, [], 'workspace deletion needs no confirmation');
   await focus(page, `[data-focus-key="workspace:${id}:heading"]`);
   assert.match(await page.locator('#workspaceEntries p').textContent(), /Deleted/);
   await page.keyboard.press('Tab'); await focus(page, '[aria-label="Restore workspace: Family"]');

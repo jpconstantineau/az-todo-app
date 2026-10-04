@@ -20,7 +20,9 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   const other = await browser.newContext();
   const page = await context.newPage(), second = await other.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('dialog', dialog => dialog.accept()); second.on('dialog', dialog => dialog.accept());
+  const deletionDialogs = [];
+  page.on('dialog', dialog => { deletionDialogs.push(dialog.message()); void dialog.accept(); });
+  second.on('dialog', dialog => dialog.accept());
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('Ready to reopen'));
@@ -46,9 +48,11 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Move or delete'));
   assert.match(await page.locator('#error').textContent(), /Move or delete/);
   assert.equal((await local(page)).queue.length, 0);
+  assert.deepEqual(deletionDialogs, [], 'blocked collection deletion needs no confirmation');
   await clickControl(page.getByRole('button', { name: 'Delete item: Milk', exact: true, includeHidden: true }));
   await page.getByRole('button', { name: 'Delete item: Milk', exact: true }).waitFor({ state: 'hidden' });
   await confirmed(page);
+  assert.deepEqual(deletionDialogs, [], 'item deletion needs no confirmation');
   await other.setOffline(false); await clickControl(second.locator('#sync')); await second.locator('#failure').waitFor();
   assert.match(await second.locator('#comparison').textContent(), /Keep this offline text/);
   assert.equal(await second.locator('#items article').count(), 0);
@@ -61,6 +65,7 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   await showView(page, 'work'); await page.locator('#view').selectOption('project:project');
   await page.getByRole('button', { name: 'Delete project: Breakfast', exact: true }).click();
   await page.getByRole('button', { name: 'Delete project: Breakfast', exact: true }).waitFor({ state: 'hidden' });
+  assert.deepEqual(deletionDialogs, [], 'offline list and project deletion needs no confirmation');
   await page.reload(); await page.locator('#workspace').waitFor(); await trash(page);
   assert.equal(await page.locator('#deletedItems article').count(), 3);
   await page.getByRole('button', { name: 'Restore item: Milk', exact: true }).click();
@@ -107,4 +112,5 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   await page.reload(); await page.locator('#workspace').waitFor(); await trash(page);
   assert.equal(await page.locator('#deletedItems article').count(), 0);
   assert.deepEqual(errors, []);
+  assert.deepEqual(deletionDialogs, []);
 });

@@ -8,9 +8,12 @@ Daily reviews include active next actions, today's planned items, overdue/due
 deadlines (including timed deadlines later today), and waiting/deferred items ready
 for review. Deadlines use the device's local calendar day, including daylight-saving
 changes; timed waiting/deferred cues still use the current instant. Weekly reviews
-include all active items (including inbox, waiting and deferred) and project outcomes.
+include all active items (including inbox, waiting and deferred) and active project outcomes.
 Completed, dropped and reference items are excluded from new sessions. Projects can be
-retained; review their canonical actions individually to change their status.
+retained or edited to change their lifecycle. **Review someday projects** starts
+an optional `someday` review of incubated project outcomes only. Completed projects
+remain accessible in Your Work but are excluded from new reviews. Linked actions
+keep their independent statuses and review eligibility.
 
 Use **Edit** or **Clarify** on the selected record without closing the review.
 The ordinary editor/clarification panel opens above it; closing or saving returns

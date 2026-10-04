@@ -30,6 +30,27 @@ their creation before the action update. No IndexedDB or Cosmos migration is
 needed, and no current data is rewritten. Legacy migration fixtures verify that
 linking an imported action preserves its areas, custom status, deadline and text.
 
+## Project lifecycle (#79)
+
+In **Edit project**, choose **Active**, **Someday / on hold**, or **Completed**.
+Choose Active again to reactivate the same project. Existing projects without a
+status remain active; new projects default to active. The View selector and Lists
+outline label project states, including completed outcomes, so they remain retrievable.
+
+Status changes preserve the project identity, outcome, notes, linked actions and
+history. Unfinished actions are deliberately left unchanged: they remain in their
+usual views and reviews. Edit those actions individually to complete, defer, drop
+or move them. Project status never silently changes an action's status.
+
+Weekly reviews include active projects. **Review someday projects** starts an
+optional review of incubated outcomes. Completed projects are excluded from new
+reviews; existing review inventories and decision history stay intact. The review
+editor supports the same lifecycle changes without losing the review position.
+
+Lifecycle edits use the normal offline draft/outbox, version checks, conflict
+comparison and editor undo. `project-lifecycle.test.mjs` covers legacy defaults,
+validation, reactivation, unchanged actions/history, conflicts and offline reloads.
+
 ## Verification
 
 Run `npm test` from `api/` with Node 24+ and Playwright Chromium. New coverage

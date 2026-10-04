@@ -40,24 +40,57 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=56')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=57')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
   await page.screenshot({ path: `${process.env.HEADER_SCREENSHOTS}/${name}.png` });
 }
 
+async function signedOut(page) {
+  assert.equal(await page.title(), 'Sign in');
+  assert.equal(await page.locator('#signIn').isVisible(), true);
+  assert.equal(await page.locator('#signedOut h1').innerText(), 'Welcome');
+  for (const selector of ['#appHeader', '#accountName', '#workspaceSelect', '#saveStatus', '#agentStatus', '#agentLabel', '#appMenu', '#workspaceSkip', '#workspace', '#appUpdateStatus', '#preferences']) {
+    assert.equal(await page.locator(selector).isVisible(), false, selector);
+  }
+  assert.doesNotMatch(await page.locator('body').innerText(), /Personal|Family|alice-handle|AI agent|workspace|Menu|Preferences|saved|pending/i);
+}
+
+test('login hides application chrome before the session check and after a late agent check', async t => {
+  const { page, url } = await setup(t, null, { state: 'available', holdCheck: true });
+  let holdSession;
+  const session = new Promise(resolve => { holdSession = resolve; });
+  await page.route('**/api/v1/session', route => holdSession(route));
+  await page.goto(url);
+  const pending = await session;
+  await signedOut(page);
+  assert.equal(await page.locator('#loginStatus').textContent(), 'Checking account…');
+  await pending.continue();
+  await page.waitForFunction(() => document.querySelector('#loginStatus').textContent === 'Sign in to continue.');
+  await page.waitForFunction(() => !!window.finishCheck);
+  await page.evaluate(() => finishCheck('available')); await agentStatus(page, 'available');
+  // Worker notifications can also arrive while signed out.
+  await page.evaluate(() => document.querySelector('#appUpdateStatus').textContent = 'An app update is ready. Open Menu → Preferences for details.');
+  await signedOut(page);
+});
+
+test('login markup hides application chrome when the application module cannot load', async t => {
+  const { page, url } = await setup(t, null);
+  await page.route('**/inbox.js?*', route => route.abort());
+  await page.goto(url);
+  await signedOut(page);
+});
+
 test('fresh signed-out screen offers sign-in without an error or a saved-work claim', async t => {
   const { page, url } = await setup(t, null);
   await page.goto(url);
-  await page.waitForFunction(() => document.querySelector('#loginStatus').textContent === 'Sign in to open your workspace.');
-  assert.equal(await page.locator('#signIn').isVisible(), true);
+  await page.waitForFunction(() => document.querySelector('#loginStatus').textContent === 'Sign in to continue.');
+  await signedOut(page);
   assert.equal(await page.locator('#error').isVisible(), false);
   assert.equal(await page.locator('#workspace').isVisible(), false);
   assert.equal(await page.locator('#workspaceSelect').isVisible(), false);
   assert.equal(await page.locator('#saveStatus').isVisible(), false);
-  assert.equal(await page.locator('h1').innerText(), 'Personal');
-  assert.equal(await page.locator('#accountName').innerText(), 'Welcome');
   assert.doesNotMatch(await page.locator('body').innerText(), /401|saved|pending|To-Do/i);
   await shot(page, 'signed-out');
 });
@@ -118,7 +151,7 @@ test('unavailable agent has stroke-wide circle clearance and keeps its size when
     return { gap: circle.r.baseVal.value - stroke / 2 - radius, stroke };
   });
   assert.ok(clearance.gap >= clearance.stroke, JSON.stringify(clearance));
-  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=56')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=57')).checkModel(); });
   await agentStatus(page, 'available');
   assert.deepEqual(await robot.boundingBox(), unavailableBounds);
   assert.equal(await page.locator('.agent-unavailable').isVisible(), false);
@@ -129,7 +162,7 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=56').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=57').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
@@ -231,8 +264,29 @@ test('header follows workspace selection and save state, then clears identity on
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#error').isVisible(), false);
   assert.equal(await page.locator('#saveStatus').isVisible(), false);
-  assert.equal(await page.locator('#accountName').innerText(), 'Welcome');
-  assert.equal(await page.locator('h1').innerText(), 'Personal');
-  assert.equal(await page.locator('#signIn').isVisible(), true);
+  await signedOut(page);
   assert.deepEqual((await local(page)).queue, queued);
+});
+
+test('sign-out in another tab closes preferences and hides account chrome, then login restores it', async t => {
+  const { page, context, url, setUser } = await setup(t, 'alice');
+  await page.route('**/.auth/logout?**', route => route.fulfill({ status: 204 }));
+  await page.goto(url); await status(page, 'confirmed');
+  const second = await context.newPage();
+  await second.goto(url); await status(second, 'confirmed');
+  await clickControl(second.locator('[data-open-preferences]'));
+  await second.locator('#preferences').waitFor();
+  setUser(null);
+  await clickControl(page.locator('#signOut'));
+  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  await second.locator('#workspace').waitFor({ state: 'hidden' });
+  await signedOut(page); await signedOut(second);
+  // A previously opened menu must also be closed when the session ends.
+  assert.equal(await second.locator('#appMenu').getAttribute('open'), null);
+  setUser('alice');
+  await page.reload(); await status(page, 'confirmed');
+  assert.equal(await page.locator('#appHeader').isVisible(), true);
+  assert.equal(await page.locator('#agentStatus').isVisible(), true);
+  assert.equal(await page.locator('#signedOut').isVisible(), false);
+  assert.equal(await page.title(), 'Capture · Personal');
 });
