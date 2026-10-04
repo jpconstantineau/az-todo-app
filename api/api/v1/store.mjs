@@ -80,7 +80,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
           const target = (await read(accountId, recordId(ref.type, ref.id)))?.record;
           return target && await workspaceOf(target, lookup) === (record.workspaceId || 'personal') ? target : null;
         });
-      if (record.type === "clarification" && !record.deleted) {
+      if (record.type === "clarification" && (!record.deleted || record.flowVersion === 2)) {
         const originalItem = (await read(accountId, recordId('item', record.id)))?.record;
         validateClarification(record, current[i]?.record, input.mutations, originalItem);
         const item = records.find(r => r.type === "item" && r.id === record.id)

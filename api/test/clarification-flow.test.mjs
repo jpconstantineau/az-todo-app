@@ -8,6 +8,7 @@ import { waitForBrowser } from './browser-wait.mjs';
 import { flowProposal, newFlow, flowDecision, flowEdits } from '../../html/clarification-flow.js';
 import { clarificationFields } from '../api/v1/clarification.mjs';
 import { reviewReady } from '../../html/inbox-fields.js';
+import { deviceExport, validateDeviceExport, readableExport } from '../../html/inbox-export.js';
 import { defaultSettings } from '../api/shared/defaults.mjs';
 
 const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
@@ -123,6 +124,7 @@ test('v2 lost acknowledgement replays one final decision, and flow versions cann
   assert.equal(stored('project', 'new-project').version, 1);
   const legacy = { step: 0, answers: {}, proposal: { text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' } };
   assert.equal((await post(server.url, [{ type: 'clarification', id: 'capture', action: 'update', expectedVersion: 1, fields: legacy }])).status, 400);
+  assert.equal((await post(server.url, [{ type: 'clarification', id: 'capture', action: 'delete', expectedVersion: 1 }])).status, 400);
 });
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
@@ -168,10 +170,16 @@ test('v2 reference skips action questions, journals offline, reloads, applies an
     if (process.env.CLARIFICATION_SCREENSHOTS) { await mkdir(process.env.CLARIFICATION_SCREENSHOTS, { recursive: true }); await page.screenshot({ path: `${process.env.CLARIFICATION_SCREENSHOTS}/gtd-reference-${theme}-${width}.png` }); }
   }
   await next(page, 'complete'); await page.locator('#clarifyStop').click();
+  const pending = await local(page), exported = deviceExport('alice', pending, pending.draft);
+  assert.deepEqual(validateDeviceExport(exported).warnings, []);
+  assert.deepEqual(exported.state.queue, pending.queue);
+  assert.match(readableExport(exported), /A reference, not a commitment/);
   assert.equal(await page.getByRole('button', { name: 'Edit Original capture', exact: true }).count(), 0);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   assert.equal(stored('item').status, 'reference'); assert.equal(stored('item').originalText, 'Untouched source');
   assert.equal(stored('clarification').answers.nextAction, undefined);
+  const state = await local(page);
+  assert.deepEqual(validateDeviceExport(deviceExport('alice', state, state.draft)).warnings, []);
 });
 
 test('v2 creates a project only at Apply, handles Back, and explicitly confirms two-minute work', { timeout: 60000 }, async t => {
