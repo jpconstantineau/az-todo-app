@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=59';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=59';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=59';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=59';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=59';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=59';
-import { clarificationUI } from './clarification.js?v=59';
-import { setupReviews } from './reviews.js?v=59';
-import { setupBriefs } from './briefs.js?v=59';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=59';
-import { setupAgentStatus } from './local-agent.js?v=59';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=60';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=60';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=60';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=60';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=60';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=60';
+import { clarificationUI } from './clarification.js?v=60';
+import { setupReviews } from './reviews.js?v=60';
+import { setupBriefs } from './briefs.js?v=60';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=60';
+import { setupAgentStatus } from './local-agent.js?v=60';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -567,7 +567,9 @@ function render() {
   const executeFilterCount = [execute.context, execute.minutes, execute.energy].filter(Boolean).length;
   $('executeFilterSummary').textContent = `Context, time & energy${executeFilterCount ? ` (${executeFilterCount} active)` : ''}`;
   const executeCollection = executeCollections.find(record => viewKey(record) === execute.view);
-  $('executeItems').replaceChildren(...records.filter(record => executeCollection && record.type === 'item' && belongsTo(record, executeCollection) && record.status !== 'completed' && matchesExecutionFilters(record, execute)).map(record => {
+  const executeItems = records.filter(record => executeCollection && record.type === 'item' && belongsTo(record, executeCollection));
+  const readyItems = executeItems.filter(readyToExecute);
+  $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).map(record => {
     const article = document.createElement('article'); article.className = 'execute-item'; article.dataset.id = record.id;
     const checkLabel = document.createElement('label'); checkLabel.className = 'execute-check';
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.disabled = readOnly;
@@ -581,7 +583,7 @@ function render() {
     checkLabel.append(checkbox); article.append(checkLabel, title); return article;
   }));
   if (!$('executeItems').childElementCount) $('executeItems').textContent = execute.view
-    ? executeFilterCount ? 'No items match these filters. Reset context, time & energy to see more.' : `All items in this ${execute.kind} are done. Choose another ${execute.kind} to continue.`
+    ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Inspect saved work in List Workspace, or choose another ${execute.kind}.`
     : executeCollections.length ? `Choose a ${execute.kind} to start working through its items.` : `No ${execute.kind}s yet. Create one in List Workspace.`;
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
   $('captureAI').hidden = readOnly;
@@ -943,6 +945,9 @@ for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('cla
 $('executeList').onchange = () => {
   navigation.execute.view = $('executeList').value;
   render(); void journal();
+};
+$('inspectExecute').onclick = () => {
+  Object.assign(navigation.lists, { view: navigation.execute.view, status: '@all', context: '', minutes: '', energy: '' });
 };
 for (const control of document.querySelectorAll('[data-execute-kind]')) control.onclick = () => {
   navigation.execute.kind = control.dataset.executeKind;

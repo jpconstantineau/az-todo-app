@@ -163,7 +163,7 @@ test('navigation: Execute selects a list, opens details and completes exact item
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Bread']);
   assert.deepEqual((await local(page)).queue, pending);
   await page.getByRole('checkbox', { name: 'Complete Bread', exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('#executeItems').textContent.includes('All items'));
+  await page.waitForFunction(() => document.querySelector('#executeItems').textContent.includes('No ready items'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 2);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const records = documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
@@ -217,6 +217,68 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   await page.locator('#executeList').selectOption('checklist');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Pack passport']);
   assert.equal(await page.locator('#executeFilterSummary').textContent(), 'Context, time & energy');
+});
+
+test('navigation: Execute offers only ready work in every collection and opens excluded work for review', { timeout: 90000 }, async t => {
+  const { page, context, url } = await setup(t, '#execute');
+  const states = [
+    ['inbox', {}], ['next', {}],
+    ['waiting-due', { status: 'waiting', waitingOn: 'Alex', reviewDate: '2020-01-01' }],
+    ['waiting-later', { status: 'waiting', waitingOn: 'Alex', reviewDate: '2999-01-01' }],
+    ['deferred-due', { status: 'deferred', startDate: '2020-01-01' }],
+    ['deferred-later', { status: 'deferred', startDate: '2999-01-01' }],
+    ['someday', {}], ['reference', {}], ['dropped', {}], ['completed', {}], ['active', {}]
+  ];
+  for (const [kind, type, id, membership] of [
+    ['list', 'list', 'regular', { listId: 'regular' }],
+    ['project', 'project', 'project', { projectId: 'project' }],
+    ['checklist', 'list', 'checklist', { listId: 'checklist' }]
+  ]) {
+    const mutations = [
+      { type, id, action: 'create', expectedVersion: 0, fields: { title: kind, ...(type === 'project' ? { outcome: 'Finished' } : { kind }) } },
+      ...(kind === 'list' ? [
+        { type: 'list', id: 'holding', action: 'create', expectedVersion: 0, fields: { title: 'Holding' } },
+        { type: 'item', id: 'holding-waiting', action: 'create', expectedVersion: 0,
+          fields: { title: 'Holding waiting', listId: 'holding', status: 'waiting', waitingOn: 'Alex' } }
+      ] : []),
+      ...states.map(([status, extra]) => ({ type: 'item', id: `${kind}-${status}`, action: 'create', expectedVersion: 0,
+        fields: { title: `${kind} ${status}`, status, ...extra, ...membership } }))
+    ];
+    const response = await fetch(url + '/api/v1/operations', { method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
+      body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: `execute-ready-${kind}`, mutations }) });
+    assert.equal(response.status, 200, await response.text());
+  }
+  await clickControl(page.locator('#sync'));
+  await page.locator('#executeList option[value="regular"]').waitFor({ state: 'attached' });
+  await confirmed(page);
+  for (const [kind, id] of [['list', 'regular'], ['project', 'project:project'], ['checklist', 'checklist']]) {
+    await page.locator(`[data-execute-kind="${kind}"]`).click();
+    await page.locator('#executeList').selectOption(id);
+    assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [`${kind} inbox`, `${kind} next`]);
+    assert.equal(await page.locator('#executeItems input[type=checkbox]').count(), 2);
+    await page.locator('#inspectExecute').click();
+    await page.waitForFunction(value => document.querySelector('#listWorkspace').getAttribute('aria-current') === 'page' && document.querySelector('#view').value === value, id);
+    assert.equal(await page.locator('#view').inputValue(), id);
+    assert.equal(await page.locator('#statusFilter').inputValue(), '@all');
+    assert.equal(await page.locator('#items article').count(), states.length);
+    assert.match(await page.locator('#items').innerText(), /Ready for review — choose Next or set a new date/);
+    assert.equal((await local(page)).records[`item:${kind}-waiting-due`].status, 'waiting');
+    assert.equal((await local(page)).records[`item:${kind}-deferred-due`].status, 'deferred');
+    await showView(page, 'execute');
+  }
+  await page.locator('[data-execute-kind="list"]').click();
+  await page.locator('#executeList').selectOption('holding');
+  assert.match(await page.locator('#executeItems').innerText(), /No ready items in this list/);
+  await page.locator('#inspectExecute').click();
+  await page.waitForFunction(() => document.querySelector('#view').value === 'holding');
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Holding waiting']);
+  await showView(page, 'execute');
+  await page.locator('[data-execute-kind="checklist"]').click();
+  await page.locator('#executeList').selectOption('checklist');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.execute.view === 'checklist');
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#executeList').inputValue(), 'checklist');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['checklist inbox', 'checklist next']);
 });
 
 test('navigation: Execute keeps failed completions unchecked, clears deleted lists and isolates accounts', { timeout: 90000 }, async t => {

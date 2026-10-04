@@ -1,7 +1,7 @@
-import { organizer, selectedRefs, membershipFields } from './collections.js?v=59';
-import { memberships, refKey } from './collection-model.js?v=59';
-import { localGuidance } from './local-guidance.js?v=59';
-import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=59';
+import { organizer, selectedRefs, membershipFields } from './collections.js?v=60';
+import { memberships, refKey } from './collection-model.js?v=60';
+import { localGuidance } from './local-guidance.js?v=60';
+import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=60';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [
