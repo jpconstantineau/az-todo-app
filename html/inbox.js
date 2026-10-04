@@ -227,6 +227,7 @@ edit.elements.kind.replaceChildren(...Object.entries(collectionKinds).map(([kind
 edit.elements.kind.onchange = () => {
   if (!editing || editing.version) return;
   editing.type = edit.elements.kind.value === 'project' ? 'project' : 'list';
+  $('editProjectLifecycle').hidden = editing.type !== 'project';
   $('editOutcomeLabel').hidden = editing.type !== 'project'; edit.elements.outcome.required = editing.type === 'project'; void journal();
 };
 capture.elements.status.closest('label').hidden = true;
@@ -479,7 +480,7 @@ function render() {
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
-  $('projectOutcome').textContent = project ? `Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
+  $('projectOutcome').textContent = project ? `Project status: ${project.status || 'active'} · Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
@@ -674,11 +675,12 @@ function openEditor(record, focus = true, show = true) {
   edit.elements.workspaceId.value = fields.workspaceId || selectedWorkspace;
   $('editWorkspaceLabel').hidden = record.type !== 'item';
   refreshOptions();
-  fillValues(edit, { ...fields, parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
+  fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status || 'active' : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
   editing.initialFields ??= formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
   $('editListLabel').hidden = record.type !== 'item';
   $('editAdvanced').hidden = record.type !== 'item';
+  $('editProjectLifecycle').hidden = record.type !== 'project';
   $('editOutcomeLabel').hidden = record.type !== 'project';
   edit.elements.outcome.required = record.type === 'project';
   $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
@@ -804,10 +806,10 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome } : { kind: values.kind }) }) };
+      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0 && editing.initialFields) {
-      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null };
+      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus || 'active' } : {}) };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { void discardEdit(); return; }
     }

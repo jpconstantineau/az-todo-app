@@ -7,7 +7,7 @@ export function reviewFields(action, input) {
   object(input, action === 'create' ? ['reviewKind', 'reviewDay', 'included', 'decisions', 'previousReviewId'] : ['decisions', 'decisionHeads', 'decisionCount'], 'review');
   if (action === 'create') {
     if (input.previousReviewId !== undefined) identifier(input.previousReviewId, 'previousReviewId');
-    if (!['daily', 'weekly'].includes(input.reviewKind)) fail('Choose a daily or weekly review.');
+    if (!['daily', 'weekly', 'someday'].includes(input.reviewKind)) fail('Choose a daily, weekly or someday project review.');
     if (!calendarDate(input.reviewDay, 'reviewDay')) fail('reviewDay is required.');
     if (!Array.isArray(input.included) || input.included.length > 200) fail('A review supports up to 200 records.');
     const seen = new Set();

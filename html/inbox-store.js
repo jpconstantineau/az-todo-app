@@ -109,7 +109,7 @@ export function enqueue(state, accountId, mutations) {
 
 // One editor save per account on this device; the outbox and inverse commit together.
 export function rememberEdit(state, record, fields, now = Date.now()) {
-  const empty = { workspaceId: 'personal', title: '', description: '', outcome: '', status: 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [], collectionRefs: [], parentRef: null, kind: 'list' };
+  const empty = { workspaceId: 'personal', title: '', description: '', outcome: '', status: record.type === 'project' ? 'active' : 'inbox', waitingOn: '', contexts: [], areas: [], referenceLinks: [], collectionRefs: [], parentRef: null, kind: 'list' };
   state.undoEdit = {
     type: record.type, id: record.id, title: record.title, expectedVersion: record.version + 1,
     operationId: state.queue.at(-1).operation.operationId, expiresAt: now + 7 * 24 * 60 * 60 * 1000,
