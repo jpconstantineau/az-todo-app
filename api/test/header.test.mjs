@@ -40,7 +40,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=53')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=54')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -118,7 +118,7 @@ test('unavailable agent has stroke-wide circle clearance and keeps its size when
     return { gap: circle.r.baseVal.value - stroke / 2 - radius, stroke };
   });
   assert.ok(clearance.gap >= clearance.stroke, JSON.stringify(clearance));
-  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=53')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=54')).checkModel(); });
   await agentStatus(page, 'available');
   assert.deepEqual(await robot.boundingBox(), unavailableBounds);
   assert.equal(await page.locator('.agent-unavailable').isVisible(), false);
@@ -129,7 +129,7 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=53').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=54').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
@@ -176,6 +176,7 @@ test('header follows workspace selection and save state, then clears identity on
   assert.equal(await page.locator('#manageWorkspaces').isVisible(), false);
   for (const id of ['sessionStatus', 'offlineStatus', 'syncStatus']) assert.equal(await page.locator(`#${id}`).isVisible(), false);
   assert.equal(await page.locator('#capture > fieldset > label').innerText(), 'Capture items');
+  assert.equal(await page.locator('#captureHeading').innerText(), 'Capture');
   assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureHelp').getAttribute('class'), 'sr-only');
   assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint');
@@ -193,6 +194,13 @@ test('header follows workspace selection and save state, then clears identity on
   for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    const heading = await page.locator('#captureHeading').boundingBox();
+    const save = await page.locator('.capture-header button').boundingBox();
+    const text = await page.locator('#captureText').boundingBox();
+    assert.ok(heading.width > 1 && heading.height > 1, 'Capture heading must be visually rendered');
+    assert.equal(heading.x, text.x, 'Capture heading aligns with the textarea');
+    assert.ok(heading.x + heading.width < save.x, 'Save stays to the right of the heading');
+    assert.ok(heading.y + heading.height < text.y, 'Capture heading stays above the textarea');
     await shot(page, `capture-${width}`);
   }
   // The capture shortcut still submits from the textarea after moving the button.
