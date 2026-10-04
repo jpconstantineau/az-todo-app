@@ -151,7 +151,7 @@ test('capture follows agent availability across manual review and reload without
     const saved = (await (await import('/inbox-store.js')).transact('alice')).draft.extraction;
     return saved.enabled && saved.includeLists;
   });
-  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=48')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=49')).checkModel(); });
   await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'unavailable');
   for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isDisabled(), true);
   for (const id of ['extractAuto', 'extractLists']) assert.equal(await page.locator('#' + id).isChecked(), true);
@@ -174,7 +174,7 @@ test('capture follows agent availability across manual review and reload without
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   assert.equal(await page.locator('#extractStart').isDisabled(), true);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0);
-  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=48')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=49')).checkModel(); });
   for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isEnabled(), true);
   await page.locator('#agentStatus').click();
   await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'available');

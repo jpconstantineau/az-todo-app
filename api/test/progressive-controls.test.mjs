@@ -42,6 +42,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   await context.setOffline(true);
   await page.locator('#captureText').fill('Prepare the room');
   await page.locator('#captureOptions > summary').click();
+  assert.equal(await page.locator('#capture button[type=submit]').count(), 1, 'capture has one Save button even with Notes open');
   for (const name of ['listId', 'projectId', 'status']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), true);
   for (const name of ['dueLocal', 'contexts']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), false);
   await page.locator('#capture [name=newList]').fill('Home');
@@ -52,7 +53,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.dueDate === '2026-12-01');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#capture [name=dueDate]').inputValue(), '2026-12-01', 'collapsed metadata survives reload');
-  await clickControl(page.getByRole('button', { name: 'Save capture on device', exact: true, includeHidden: true }));
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await showView(page, 'work');
   await page.getByRole('button', { name: 'Edit Prepare the room', exact: true }).click();
