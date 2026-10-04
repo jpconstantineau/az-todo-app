@@ -31,7 +31,6 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Edit Printer paper specification', exact: true }).click();
-  await page.locator('#editAdvanced > summary').click();
   await page.locator('#edit [name=status]').selectOption('reference');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
@@ -80,7 +79,6 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await page.locator('#statusFilter').selectOption('reference'); assert.deepEqual(await rows(), ['printer']);
   // Reclassification remains an ordinary edit and state undo can restore reference.
   await page.getByRole('button', { name: 'Edit Printer paper specification', exact: true }).click();
-  if (!await page.locator('#editAdvanced').evaluate(el => el.open)) await page.locator('#editAdvanced > summary').click();
   await page.locator('#edit [name=status]').selectOption('next');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed();

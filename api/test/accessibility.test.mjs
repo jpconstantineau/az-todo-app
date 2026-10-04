@@ -334,6 +334,7 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await page.locator('#defaultsForm [name=contexts]').fill('At home');
   await page.locator('#defaultsForm [type=submit]').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '[aria-label="Defaults: Household"]');
+  await page.locator('#appMenu > summary').focus(); await page.keyboard.press('Enter');
   await page.locator('#userDefaults').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#defaultsEditor:modal #defaultsForm [name=contexts]');
   await page.keyboard.press('Escape'); await expectFocus(page, '#userDefaults');
@@ -356,6 +357,7 @@ test('accessibility: list, project, defaults and clarification dialogs return to
     await Promise.all(closed);
   });
   await expectFocus(page, '[data-open-preferences]');
+  await page.locator('#exportTools > summary').focus(); await page.keyboard.press('Enter');
   await page.locator('#export').focus();
   const download = page.waitForEvent('download'); await page.keyboard.press('Enter');
   assert.equal((await download).suggestedFilename(), 'todo-device-recovery.json');

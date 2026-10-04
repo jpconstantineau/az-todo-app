@@ -1,11 +1,11 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=42';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=42';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=42';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=42';
-import { clarificationUI } from './clarification.js?v=42';
-import { setupReviews } from './reviews.js?v=42';
-import { setupBriefs } from './briefs.js?v=42';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=42';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=43';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=43';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=43';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=43';
+import { clarificationUI } from './clarification.js?v=43';
+import { setupReviews } from './reviews.js?v=43';
+import { setupBriefs } from './briefs.js?v=43';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=43';
 
 const $ = id => document.getElementById(id);
 const capture = $('capture'), edit = $('edit');
@@ -24,7 +24,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Manage workspaces to unarchive or restore it. Drafts are kept.' : 'Capture, lists, projects and reviews belong to this workspace.');
+  statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
     const article = document.createElement('article'), heading = document.createElement('h3'), status = document.createElement('p');
@@ -143,20 +143,10 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
     clearError(); render(); broadcast(); void sync();
   }
 });
-const mobile = matchMedia('(max-width: 767px)');
-function responsiveMenus() {
-  document.querySelectorAll('.responsive-menu:not(.task-menu)').forEach(menu => {
-    const hidesFocus = mobile.matches && menu.contains(document.activeElement);
-    menu.open = !mobile.matches;
-    if (hidesFocus) menu.querySelector('summary').focus();
-  });
-}
-mobile.addEventListener('change', responsiveMenus);
-responsiveMenus();
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   const menu = document.activeElement.closest('details');
-  if (menu?.open && (menu.id === 'connection' || menu.classList.contains('task-menu') || mobile.matches && menu.classList.contains('responsive-menu'))) {
+  if (menu?.open && (menu.id === 'connection' || menu.classList.contains('task-menu') || menu.classList.contains('responsive-menu'))) {
     menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
   }
 });
@@ -558,6 +548,7 @@ function openEditor(record, focus = true, show = true) {
   }
   editing = { type: record.type, id: record.id, version: record.version, initialFields: record.initialFields };
   edit.reset();
+  edit.querySelectorAll('details').forEach(section => { section.open = false; });
   const fields = record.fields ? projected(state)[key(record)] || record.fields : record;
   edit.elements.title.value = fields.title;
   edit.elements.description.value = fields.description || '';
@@ -659,7 +650,7 @@ capture.addEventListener('submit', event => {
   if (saving || switchingWorkspace || !accountId || workspaceReadOnly()) return;
   if (extraction.snapshot().draft) { error('A suggested batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
   const focused = document.activeElement;
-  saving = true; capture.querySelector('[type=submit]').disabled = true;
+  saving = true; capture.querySelectorAll('[type=submit]').forEach(control => { control.disabled = true; });
   void (async () => {
     const owner = accountId, submitted = captureDraft();
     try {
@@ -685,7 +676,7 @@ capture.addEventListener('submit', event => {
           (document.activeElement === document.body || document.activeElement === focused)) capture.elements.text.focus();
       broadcast(); void sync();
     } catch (failure) { if (owner === accountId) storageFailure(failure); }
-    finally { saving = false; capture.querySelector('[type=submit]').disabled = false; }
+    finally { saving = false; capture.querySelectorAll('[type=submit]').forEach(control => { control.disabled = false; }); }
   })();
 });
 edit.addEventListener('submit', event => {
@@ -906,6 +897,7 @@ $('accountExport').onclick = async () => {
   } catch (failure) {
     if (owner === accountId && generation === accountGeneration) {
       statusText('exportStatus', controller.signal.aborted ? 'Export cancelled. No file was downloaded.' : `Export failed: ${failure.message} You can still export a device copy.`);
+      if (!controller.signal.aborted) error($('exportStatus').textContent);
       if ([401, 403].includes(failure.status) || failure.code === 'account_mismatch') {
         await pauseSession('Sign in to the original account to export its server copy. Pending work is kept on this device.');
       }

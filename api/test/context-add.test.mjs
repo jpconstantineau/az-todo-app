@@ -106,7 +106,7 @@ test('context add: workspace changes keep pending additions isolated and archive
   await page.getByRole('button', { name: 'Add item to Personal list', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Personal draft');
   await page.locator('#cancelEdit').click();
-  await page.locator('#manageWorkspaces').click();
+  await clickControl(page.locator('#manageWorkspaces'));
   await page.locator('#createWorkspace input').fill('Work');
   await page.locator('#createWorkspace button').click();
   await page.getByRole('heading', { name: 'Work', exact: true }).waitFor();
@@ -123,7 +123,7 @@ test('context add: workspace changes keep pending additions isolated and archive
   await saveEdit(page); await synced(page);
   const item = records().find(record => record.title === 'Work action');
   assert.equal(item.workspaceId, work); assert.equal(item.projectId, projectId);
-  await page.locator('#manageWorkspaces').click();
+  await clickControl(page.locator('#manageWorkspaces'));
   await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click();

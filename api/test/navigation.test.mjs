@@ -150,7 +150,6 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   await page.locator('#editor').waitFor({ state: 'hidden' });
   assert.deepEqual(await rows(), ['filed', 'unfiled'], 'filing alone never processes a capture');
   await page.getByRole('button', { name: 'Edit unfiled', exact: true }).click();
-  await page.locator('#editAdvanced').evaluate(el => { el.open = true; });
   await page.locator('#edit [name=status]').selectOption('next');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
@@ -344,6 +343,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
     assert.ok(await page.locator('#discard').isVisible());
     await openMenu(page);
     assert.ok(await page.locator('#sync').isVisible());
+    if (!await page.locator('#exportTools').evaluate(el => el.open)) await page.locator('#exportTools > summary').click();
     assert.ok(await page.locator('#export').isVisible());
     assert.match(await page.locator('#comparison').textContent(), /Rejected private task/);
   }

@@ -33,11 +33,13 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await showView(page, 'lists'); await page.locator('#view').selectOption({ label: 'Groceries' }); await page.getByRole('button', { name: 'Defaults: Groceries', exact: true }).click();
   await page.locator('#defaultsForm [name=priority]').fill('Urgent');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
-  await showView(page, 'capture'); await page.locator('#captureOptions summary').click();
+  await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=listId]').selectOption(list.id);
   await showView(page, 'capture'); await page.locator('#captureText').fill('<img src=x onerror=alert(1)>');
   await page.locator('#capture [name=body]').fill('Two cartons');
   await page.locator('#capture [name=status]').selectOption('custom');
+  await page.locator('#capture .task-metadata > summary').click();
+  await page.locator('#capture .task-dates > summary').click();
   await page.locator('#capture [name=contexts]').selectOption(['@Kitchen', '@Shop']);
   await page.locator('#capture [name=areas]').selectOption('Personal');
   await page.locator('#capture [name=energy]').selectOption('Low');
@@ -58,7 +60,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await showView(page, 'work'); await page.getByRole('button', { name: 'Complete ' + item.title, exact: true }).click();
   await showView(page, 'work'); await page.getByRole('button', { name: 'Reopen ' + item.title, exact: true }).click();
   await showView(page, 'work'); await page.getByRole('button', { name: 'Edit ' + item.title, exact: true }).click();
-  await page.locator('#editAdvanced summary').click(); await page.locator('#edit [name=dueLocal]').fill('');
+  await page.locator('#edit .task-dates > summary').click(); await page.locator('#edit [name=dueLocal]').fill('');
   await page.locator('#edit [name=title]').fill('Milk');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));

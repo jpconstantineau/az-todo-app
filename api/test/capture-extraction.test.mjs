@@ -174,7 +174,7 @@ test('invalid output and no-action notes stay recoverable; add/remove edits are 
 test('model download requires interaction; explicit notes survive suggestions and later edits block acceptance', { timeout: 60000 }, async t => {
   const { page } = await setup(t, { state: 'downloadable' });
   await page.locator('#captureText').fill(source);
-  await page.locator('#captureOptions summary').click();
+  await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=body]').fill('Keep this exact note.');
   await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
   assert.equal(await page.evaluate(() => aiCalls.active), true);
@@ -243,7 +243,7 @@ test('manual batch review works without AI, retains offline corrections and acce
   const { page, context } = await setup(t, { absent: true });
   const paragraph = 'One long thought '.repeat(30);
   await page.locator('#captureText').fill(paragraph);
-  await page.locator('#captureOptions summary').click();
+  await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=body]').fill('Keep these original notes.');
   await context.setOffline(true);
   await page.locator('#extractManual').click();

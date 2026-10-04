@@ -1,3 +1,4 @@
+import { clickControl } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -12,7 +13,7 @@ async function setup(t) {
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   await context.setOffline(true);
-  await page.locator('#manageWorkspaces').click();
+  await clickControl(page.locator('#manageWorkspaces'));
   return { page, context, setUser: value => { user = value; } };
 }
 async function create(page, title) {
@@ -80,7 +81,7 @@ test('a delayed workspace create preserves a later focus choice and newly typed 
   assert.equal(await page.locator('#createWorkspace input').inputValue(), 'Next workspace');
   await focus(page, '#closeWorkspaces');
   await page.keyboard.press('Enter'); await focus(page, '#manageWorkspaces');
-  await page.locator('#manageWorkspaces').click();
+  await clickControl(page.locator('#manageWorkspaces'));
   await page.locator('#createWorkspace input').fill('Family');
   await page.evaluate(() => { window.delayWorkspaceSave = true; window.releaseWorkspaceSave = null; });
   await page.locator('#createWorkspace button').click();
@@ -109,7 +110,7 @@ test('a previous account workspace save cannot reset the current account form', 
   setUser('bob'); await context.setOffline(false);
   await page.locator('#workspaceManager').waitFor({ state: 'hidden' });
   await page.locator('#workspace').waitFor();
-  await page.locator('#manageWorkspaces').click();
+  await clickControl(page.locator('#manageWorkspaces'));
   await page.locator('#createWorkspace input').fill('New account name');
   await page.locator('#closeWorkspaces').focus();
   await page.evaluate(() => releasePreviousSave());

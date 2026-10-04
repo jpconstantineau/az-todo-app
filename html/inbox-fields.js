@@ -89,7 +89,14 @@ export function taskFields(values, initial = null) {
   return result;
 }
 export function addTaskControls(container) {
-  container.classList.add('form-grid');
+  const common = document.createElement('div'); common.className = 'form-grid';
+  const dates = document.createElement('details'), metadata = document.createElement('details');
+  dates.className = 'task-dates'; metadata.className = 'task-metadata';
+  for (const [section, title] of [[dates, 'Dates and waiting'], [metadata, 'Context, time & energy']]) {
+    const summary = document.createElement('summary'); summary.textContent = title;
+    section.append(summary);
+  }
+  container.append(common, dates, metadata);
   for (const [name, title] of [['projectId', 'Project (optional)'], ['plannedDay', 'Planned day (not a deadline)'], ['status', 'Status'], ['waitingOn', 'Waiting for (person or dependency)'], ['dueDate', 'Deadline (calendar date)'], ['dueLocal', 'Deadline time (local; repeated DST hour uses first occurrence)'], ['startDate', 'Deferred until (calendar date)'], ['startDateUtc', 'Or deferred until (ISO time with offset)'], ['reviewDate', 'Review on (optional calendar date)'], ['reviewDateUtc', 'Or review on (optional ISO time with offset)'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses')]) {
     const label = document.createElement('label'); label.textContent = title;
     const input = document.createElement(['status', 'projectId'].includes(name) || name in optionFields ? 'select' : 'input'); input.name = name;
@@ -98,11 +105,21 @@ export function addTaskControls(container) {
     else if (name.endsWith('DateUtc')) input.placeholder = '2026-11-01T01:30:00-05:00';
     else if (name === 'waitingOn') input.maxLength = 4000;
     if (['contexts', 'areas'].includes(name)) { input.multiple = true; input.size = 3; }
-    label.append(input); container.append(label);
+    label.append(input);
+    (['status', 'projectId'].includes(name) ? common : name in optionFields ? metadata : dates).append(label);
+    if (name === 'status') input.addEventListener('change', () => {
+      if (['waiting', 'deferred'].includes(input.value)) dates.open = true;
+    });
   }
   const help = document.createElement('p'); help.className = 'muted';
   help.textContent = 'Choose a calendar date or a timed value for each purpose. Waiting needs a dependency; its review date is optional. Undated waiting work stays in Waiting and weekly reviews. Deferred work appears in Ready for review from its start date on your next refresh; choose Next when ready. Neither changes your deadline or planned day.';
-  container.append(help);
+  dates.append(help);
+  // Native validation must reveal a collapsed field before focusing its error.
+  container.addEventListener('invalid', event => {
+    for (let parent = event.target.parentElement; parent; parent = parent.parentElement) {
+      if (parent.tagName === 'DETAILS') parent.open = true;
+    }
+  }, true);
 }
 export function refreshTaskOptions(form, defaults) {
   for (const name of ['status', ...Object.keys(optionFields).filter(name => name !== 'statuses')]) {
