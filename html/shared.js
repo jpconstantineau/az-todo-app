@@ -1,4 +1,4 @@
-import { transact } from './inbox-store.js?v=61';
+import { transact } from './inbox-store.js?v=62';
 
 const $ = id => document.getElementById(id);
 const rights = ['view', 'add', 'edit', 'complete', 'delete'];
@@ -12,7 +12,7 @@ async function offlineReady() {
   const channel = new MessageChannel();
   channel.port1.onmessage = event => {
     channel.port1.close();
-    message('sharedOffline', event.data === 'todo-inbox-shell-v61' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
+    message('sharedOffline', event.data === 'todo-inbox-shell-v62' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
   };
   worker.postMessage('shell-version', [channel.port2]);
 }
@@ -178,12 +178,20 @@ async function directory(more = false) {
 }
 async function pull(id = state.selected) {
   if (!id) return;
+  const invalidation = (await local()).invalidations?.[id] || 0;
   try {
     const result = await request('shared/list?id=' + encodeURIComponent(id));
-    await local(data => { data.lists[id] = result.list; });
+    await local(data => {
+      if ((data.invalidations?.[id] || 0) === invalidation &&
+          (data.lists[id]?.revision || 0) <= result.list.revision) data.lists[id] = result.list;
+    });
   } catch (error) {
     if (error.code === 'shared_access_denied') {
-      await local(data => { delete data.lists[id]; data.directory = data.directory.filter(list => list.id !== id); });
+      await local(data => {
+        data.invalidations ??= {};
+        data.invalidations[id] = (data.invalidations[id] || 0) + 1;
+        delete data.lists[id]; data.directory = data.directory.filter(list => list.id !== id);
+      });
       if (editItem?.listId === id) $('sharedEditor').close();
     }
     throw error;
