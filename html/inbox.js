@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=58';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=58';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=58';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=58';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=58';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=58';
-import { clarificationUI } from './clarification.js?v=58';
-import { setupReviews } from './reviews.js?v=58';
-import { setupBriefs } from './briefs.js?v=58';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=58';
-import { setupAgentStatus } from './local-agent.js?v=58';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=59';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=59';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=59';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=59';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=59';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=59';
+import { clarificationUI } from './clarification.js?v=59';
+import { setupReviews } from './reviews.js?v=59';
+import { setupBriefs } from './briefs.js?v=59';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=59';
+import { setupAgentStatus } from './local-agent.js?v=59';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
