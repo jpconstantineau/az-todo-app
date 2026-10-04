@@ -5,11 +5,32 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { clickControl } from './navigation-helper.mjs';
 
-async function setup(t, user) {
+async function setup(t, user, mode) {
   documents.length = 0;
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  if (mode) await context.addInitScript(mode => {
+    window.aiMode = mode; window.aiCalls = { creates: 0, prompts: 0, destroyed: 0 };
+    Object.defineProperty(globalThis, 'LanguageModel', { configurable: true, value: mode.absent ? undefined : {
+      availability: async () => {
+        if (aiMode.checkFail) throw Error('Check failed');
+        if (aiMode.holdCheck) return new Promise(resolve => { window.finishCheck = resolve; });
+        return aiMode.state;
+      },
+      create: options => {
+        aiCalls.creates++; aiCalls.active = navigator.userActivation.isActive;
+        options.monitor(new EventTarget());
+        if (aiMode.createFail) return Promise.reject(Error('Download failed'));
+        const model = { destroy() { aiCalls.destroyed++; }, prompt: async () => {
+          aiCalls.prompts++; return '{"items":[],"notes":"No actionable tasks."}';
+        } };
+        const ready = () => { aiMode.state = 'available'; return model; };
+        if (aiMode.holdCreate) return new Promise(resolve => { window.finishCreate = () => resolve(ready()); });
+        return Promise.resolve(ready());
+      }
+    } });
+  }, mode);
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(() => assert.deepEqual(errors, []));
@@ -17,7 +38,8 @@ async function setup(t, user) {
   return { page, context, url: server.url, setUser(value) { user = value; } };
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=44')).transact('alice'));
+const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=45')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -37,6 +59,67 @@ test('fresh signed-out screen offers sign-in without an error or a saved-work cl
   assert.equal(await page.locator('#accountName').innerText(), 'Welcome');
   assert.doesNotMatch(await page.locator('body').innerText(), /401|saved|pending|To-Do/i);
   await shot(page, 'signed-out');
+});
+
+for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'unavailable' }, 'unavailable'], [{ checkFail: true }, 'error'], [{ state: 'downloadable' }, 'downloadable'], [{ state: 'downloading' }, 'busy'], [{ state: 'available' }, 'available']]) {
+  test('agent header identifies model availability: ' + JSON.stringify(mode), async t => {
+    const { page, url } = await setup(t, 'alice', mode);
+    await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, expected);
+    const button = page.locator('#agentStatus');
+    assert.equal(await button.isVisible(), true);
+    assert.equal(await button.getAttribute('aria-disabled'), String(expected === 'unavailable'));
+    assert.equal(await page.locator('.agent-unavailable').isVisible(), expected === 'unavailable');
+    assert.equal(await button.getAttribute('aria-label'), await page.locator('#agentLabel').textContent());
+    assert.deepEqual(await page.evaluate(() => aiCalls), { creates: 0, prompts: 0, destroyed: 0 });
+    assert.ok((await button.boundingBox()).x > (await page.locator('#saveStatus').boundingBox()).x);
+    if (expected === 'unavailable') { await button.focus(); await page.keyboard.press('Enter'); assert.equal(await page.evaluate(() => aiCalls.creates), 0); }
+    for (const theme of ['light', 'dark']) for (const width of [320, 390, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await shot(page, `agent-${expected}-${theme}-${width}`);
+    }
+  });
+}
+
+test('header prepares the model from a keyboard gesture, ignores duplicate clicks and stale availability, then enables capture', async t => {
+  const { page, url } = await setup(t, 'alice', { state: 'downloadable', holdCreate: true });
+  await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
+  await page.evaluate(() => {
+    aiMode.holdCheck = true;
+    void import('/local-agent.js?v=45').then(agent => agent.checkModel());
+  });
+  await page.waitForFunction(() => !!window.finishCheck);
+  await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => aiCalls.creates), 1);
+  assert.equal(await page.evaluate(() => aiCalls.active), true);
+  assert.equal(await page.locator('#agentStatus').evaluate(el => el === document.activeElement), true);
+  await page.evaluate(() => finishCreate()); await agentStatus(page, 'available');
+  await page.evaluate(() => { aiMode.holdCheck = false; finishCheck('downloadable'); });
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'available');
+  assert.equal(await page.evaluate(() => aiCalls.destroyed), 1);
+  assert.equal(await page.evaluate(() => aiCalls.prompts), 0);
+  assert.equal((await local(page)).queue.length, 0); assert.equal(documents.length, 0);
+  await page.locator('#captureAI summary').click(); await page.locator('#extractAuto').check();
+  await page.evaluate(() => aiMode.holdCreate = false);
+  await page.locator('#captureText').fill('A thought to review'); await page.locator('#extractReview').waitFor();
+  await agentStatus(page, 'available');
+  assert.equal(await page.evaluate(() => aiCalls.prompts), 1);
+});
+
+test('header download failures stay red and can be retried without changing saved work', async t => {
+  const { page, context, url } = await setup(t, 'alice', { state: 'downloadable', createFail: true });
+  await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
+  await page.locator('#agentStatus').click(); await agentStatus(page, 'error');
+  assert.equal(await page.locator('.agent-unavailable').isVisible(), false);
+  assert.match(await page.locator('#agentStatus').getAttribute('title'), /error.*retry/);
+  await page.evaluate(() => aiMode.createFail = false);
+  await page.locator('#agentStatus').click(); await agentStatus(page, 'available');
+  await context.setOffline(true); await status(page, 'offline');
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'available');
+  assert.equal(await page.evaluate(() => aiCalls.prompts), 0);
+  assert.equal((await local(page)).queue.length, 0);
 });
 
 test('header follows workspace selection and save state, then clears identity on expiry', { timeout: 60000 }, async t => {

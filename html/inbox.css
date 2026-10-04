@@ -45,7 +45,7 @@
 
 /* Native disclosures keep secondary actions out of the active workflow. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.inbox-page .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); padding-bottom: var(--space-2); border-bottom: 0; }
+.inbox-page .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); padding-bottom: var(--space-2); border-bottom: 0; }
 .app-header h1 { font-size: var(--text-heading); margin: 0; }
 .workspace-identity { min-width: 0; }
 #accountName { overflow-wrap: anywhere; margin-bottom: var(--space-1); text-transform: none; }
@@ -56,11 +56,17 @@
 .save-status[data-state="confirmed"] { color: var(--success); }
 .save-status[data-state="pending"] { color: var(--warning); }
 .save-status[data-state="error"], .save-status[data-state="offline"] { color: var(--error); }
+.agent-status { grid-column: 3; display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: var(--space-1); background: transparent; border-color: transparent; color: var(--error); }
+.agent-status[data-state="available"] { color: var(--success); }
+.agent-status[data-state="busy"] { color: var(--warning); }
+.agent-icon { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.agent-unavailable { display: none; }
+.agent-status[data-state="unavailable"] .agent-unavailable { display: inline; }
 .capture-header { display: flex; justify-content: flex-end; margin-bottom: var(--space-2); }
 .capture-header .icon-button { display: flex; align-items: center; justify-content: center; width: 44px; padding: var(--space-2); }
 #draftStatus:empty { display: none; }
 #appMenu { display: contents; }
-#appMenu > summary { grid-column: 3; }
+#appMenu > summary { grid-column: 4; }
 .responsive-menu > summary { display: flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: var(--space-2); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); cursor: pointer; }
 .responsive-menu > summary::-webkit-details-marker { display: none; }
 #appMenu .menu-content { grid-column: 1 / -1; padding: var(--space-4); background: var(--surface); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }

@@ -1,6 +1,6 @@
 // Optional inference has no record/outbox access. Only reviewed text leaves this panel.
-export const modelOptions = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['en'] }] };
-export function destroyModel(model) { try { model?.destroy(); } catch { /* Aborted sessions may already be destroyed. */ } }
+import { modelOptions, destroyModel, checkModel, beginModelWork } from './local-agent.js?v=45';
+export { modelOptions, destroyModel };
 const options = modelOptions;
 export function validateSuggestion(raw, limit) {
   if (typeof raw !== 'string' || raw.length > 24000) throw new Error('Invalid suggestion');
@@ -12,11 +12,12 @@ export function validateSuggestion(raw, limit) {
 export function localGuidance({ context, use }) {
   const $ = id => document.getElementById(id);
   const panel = $('localGuidance'), status = $('guidanceStatus'), start = $('guidanceStart'), cancel = $('guidanceCancel'), preview = $('guidancePreview'), apply = $('guidanceUse');
-  let generation = 0, controller, session, readiness = 'unavailable', suggestion = '';
+  let generation = 0, controller, session, finish, readiness = 'unavailable', suggestion = '';
   const message = text => { if (status.textContent !== text) status.textContent = text; };
   const destroy = destroyModel;
   function reset() {
     generation++; controller?.abort(); controller = null;
+    finish?.(session ? 'available' : undefined); finish = null;
     destroy(session); session = null;
     suggestion = ''; preview.textContent = ''; preview.hidden = apply.hidden = cancel.hidden = true;
     start.disabled = !['available', 'downloadable', 'downloading'].includes(readiness);
@@ -27,8 +28,7 @@ export function localGuidance({ context, use }) {
     if (panel.hidden) return;
     start.disabled = true; message('Checking local AI availability. You can keep answering manually.');
     try {
-      const api = globalThis.LanguageModel;
-      const result = api?.availability && api?.create ? await api.availability(options) : 'unavailable';
+      const result = await checkModel();
       if (generation !== current) return;
       readiness = ['available', 'downloadable', 'downloading'].includes(result) ? result : 'unavailable';
       start.disabled = readiness === 'unavailable';
@@ -47,6 +47,7 @@ export function localGuidance({ context, use }) {
     start.disabled = true; cancel.hidden = false;
     message(readiness === 'available' ? 'Preparing local suggestion…' : 'Preparing the browser model download…');
     let model;
+    const done = beginModelWork(); finish = done;
     try {
       // Called directly from the click, before awaiting, to retain user activation.
       model = await globalThis.LanguageModel.create({ ...options, signal: abort.signal, monitor(monitor) {
@@ -62,9 +63,11 @@ export function localGuidance({ context, use }) {
       suggestion = validateSuggestion(raw, input.limit);
       preview.textContent = suggestion; preview.hidden = apply.hidden = false;
       message('Unaccepted AI suggestion. Review it before replacing your proposed answer.');
+      done('available');
     } catch {
-      if (generation === current) message('Local AI could not produce a valid suggestion. Your answer is unchanged; retry or continue manually.');
+      if (generation === current) { done('error'); message('Local AI could not produce a valid suggestion. Your answer is unchanged; retry or continue manually.'); }
     } finally {
+      done(); if (finish === done) finish = null;
       destroy(model);
       if (generation === current) {
         const cancelling = document.activeElement === cancel;

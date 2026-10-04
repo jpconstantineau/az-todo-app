@@ -1,5 +1,6 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel } from './local-guidance.js?v=44';
+import { modelOptions, destroyModel } from './local-guidance.js?v=45';
+import { checkModel, beginModelWork, modelReadiness } from './local-agent.js?v=45';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -101,7 +102,7 @@ export function extractionMutations(draft, records) {
 
 export function setupCaptureExtraction({ current, journal, save, showDialog, recovery }) {
   const $ = id => document.getElementById(id);
-  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, busy = false, timer, enabled = false, includeLists = false, readiness = 'unavailable';
+  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, finish, busy = false, timer, enabled = false, includeLists = false, readiness = 'unavailable';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; };
   function openReview() { showDialog($('extractionReview')); $('extractionHeading').focus(); }
   function finishInteraction(focused, open = false) {
@@ -112,9 +113,9 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     focused.focus();
     if (open) openReview();
   }
-  function cancel() { clearTimeout(timer); generation++; controller?.abort(); controller = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; $('extractStart').disabled = $('extractManual').disabled = false; }
+  function cancel() { clearTimeout(timer); generation++; controller?.abort(); controller = null; finish?.(model ? 'available' : undefined); finish = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; $('extractStart').disabled = $('extractManual').disabled = false; }
   async function check() {
-    try { readiness = globalThis.LanguageModel?.availability && globalThis.LanguageModel?.create ? await LanguageModel.availability(modelOptions) : 'unavailable'; }
+    try { readiness = await checkModel(); }
     catch { readiness = 'unavailable'; }
     if (readiness === 'unavailable') status('Local AI is unavailable here. Review tasks manually, or use one item per line and Save on device.');
   }
@@ -234,18 +235,20 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     status('Saving your capture before checking local AI…');
     const owner = input.accountId, source = input.original ?? input.text;
     const stale = () => run !== generation || current()?.accountId !== owner || JSON.stringify(captureInput(current())) !== JSON.stringify(captureInput(input));
-    let session, timeout;
+    let session, timeout, done;
     try {
       const api = globalThis.LanguageModel;
+      readiness = modelReadiness();
       if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before requesting suggestions. AI capture uses existing lists only.');
       if (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness)) throw new Error('Local AI is unavailable. Use one item per line and Save on device; comma / semicolon preview is also available.');
       if (!interactive && readiness !== 'available') throw new Error('Choose Suggest tasks now to start or continue the browser model download. Manual capture is available.');
+      done = beginModelWork(); finish = done;
       // Create during the enabling/retry click to retain activation for a model download.
       // Inference still waits for durable capture; automatic calls never initiate downloads.
       const creating = api.create({ ...modelOptions, signal, monitor(monitor) {
         monitor.addEventListener('downloadprogress', event => { if (!stale() && Number.isFinite(event.loaded)) status(`Downloading browser model: ${Math.round(Math.max(0, Math.min(1, event.loaded)) * 100)}%.`); });
       } });
-      timeout = setTimeout(() => { if (!stale()) { cancel(); status('Local AI timed out. Your text is kept; retry or save manually.'); } }, 120000);
+      timeout = setTimeout(() => { if (!stale()) { done('error'); cancel(); status('Local AI timed out. Your text is kept; retry or save manually.'); } }, 120000);
       // The capture is journalled before model work. No inference on reload/reconnect.
       const [saved, created] = await Promise.all([journal(), creating.then(created => { session = created; if (stale()) destroyModel(created); return created; })]);
       session = created;
@@ -273,8 +276,10 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       if (stale()) return;
       status('Suggestions saved on device, not committed. Review every task and deadline.');
       ready = true;
-    } catch (error) { if (!stale()) status(signal.aborted ? 'Local AI timed out. Your text is kept; retry or save manually.' : error.message); }
+      done('available');
+    } catch (error) { if (!stale()) { done?.('error'); status(signal.aborted ? 'Local AI timed out. Your text is kept; retry or save manually.' : error.message); } }
     finally {
+      done?.(); if (finish === done) finish = null;
       clearTimeout(timeout); destroyModel(session);
       if (run === generation) {
         model = null; controller = null; busy = false; $('extractStart').disabled = $('extractManual').disabled = false; $('extractCancel').hidden = true;
