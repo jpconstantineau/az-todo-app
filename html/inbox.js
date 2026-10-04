@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=55';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=55';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=55';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=55';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=55';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=55';
-import { clarificationUI } from './clarification.js?v=55';
-import { setupReviews } from './reviews.js?v=55';
-import { setupBriefs } from './briefs.js?v=55';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=55';
-import { setupAgentStatus } from './local-agent.js?v=55';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=56';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=56';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=56';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=56';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=56';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=56';
+import { clarificationUI } from './clarification.js?v=56';
+import { setupReviews } from './reviews.js?v=56';
+import { setupBriefs } from './briefs.js?v=56';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=56';
+import { setupAgentStatus } from './local-agent.js?v=56';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -582,7 +582,13 @@ function render() {
 }
 function deleteButton(record) {
   return button('Delete', async () => {
-    if (confirm(`Delete “${record.title}”? You can restore it from Menu → Deleted records. Its text and history remain stored; there is no automatic purge.`)) await changeDeletion(record, 'delete');
+    const linked = record.type === 'list' ? Object.values(scopedRecords()).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record)) : [];
+    const pending = linked.filter(item => item.status !== 'completed').length;
+    const warning = record.type === 'list' && linked.length
+      ? ` This list has ${pending} uncompleted item${pending === 1 ? '' : 's'}. Its ${linked.length} linked item${linked.length === 1 ? '' : 's'} will also be marked deleted.` : '';
+    if (confirm(`Delete “${record.title}”?${warning} You can restore it from Menu → Deleted records. Its text and history remain stored; there is no automatic purge.`)) {
+      await changeDeletion(record, 'delete', linked.map(item => `${key(item)}:${item.version}`).sort());
+    }
   }, `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
 }
 function renderDeleted() {
@@ -597,14 +603,22 @@ function renderDeleted() {
   }));
   if (!deleted.length) $('deletedItems').textContent = 'No deleted items, lists or projects on this device. Sync to retrieve changes from other devices.';
 }
-async function changeDeletion(record, action) {
+async function changeDeletion(record, action, linkedSnapshot = []) {
   const owner = accountId, generation = accountGeneration;
   if (!owner) return;
   const saved = await transact(owner, local => {
     if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before deleting or restoring records.');
     const records = projected(local), current = records[key(record)];
     if (!current || current.version !== record.version || !!current.deleted !== (action === 'restore')) throw new Error('This record changed. Review its latest state before trying again.');
-    if (action === 'delete' && ['list', 'project'].includes(record.type) && Object.values(records).some(item => collectionContents(item, record))) {
+    if (action === 'delete' && record.type === 'list') {
+      const linked = Object.values(records).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record));
+      if (JSON.stringify(linked.map(item => `${key(item)}:${item.version}`).sort()) !== JSON.stringify(linkedSnapshot)) throw new Error('This list’s items changed. Review them before deleting the list.');
+      const deletions = linked.map(item => ({ type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }));
+      while (deletions.length > 19) enqueue(local, owner, deletions.splice(0, 20));
+      enqueue(local, owner, [...deletions, { type: 'list', id: record.id, action, expectedVersion: record.version }]);
+      return;
+    }
+    if (action === 'delete' && record.type === 'project' && Object.values(records).some(item => collectionContents(item, record))) {
       throw new Error(`Move or delete this ${record.type}'s items and unlink child collections before deleting it.`);
     }
     if (action === 'restore' && record.type === 'item') {

@@ -1,6 +1,6 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=55';
-import { beginModelWork, modelReadiness } from './local-agent.js?v=55';
+import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=56';
+import { beginModelWork, modelReadiness } from './local-agent.js?v=56';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);

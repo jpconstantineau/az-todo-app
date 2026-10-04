@@ -208,8 +208,9 @@ PWA suite verifies shell delivery, cache boundaries and upgrades.
 ## Recoverable record deletion
 
 Choose **Delete** in an item's actions or beside the selected list/project.
-Confirm the named record. Only empty lists/projects can be deleted: move or delete
-their active items first. Deletion is journaled on device, works offline, and
+Confirm the named record. Deleting a list also marks its linked items deleted;
+the confirmation shows the count of uncompleted items. Projects must be empty
+before deletion. Deletion is journaled on device, works offline, and
 survives reload. **Menu → Deleted records** shows deleted items, lists and projects
 and offers **Restore**, including while a deletion is still queued offline.
 Restore a deleted parent list/project before restoring its items. Record identity,

@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=55" defer></script>
+  <script src="/pwa.js?v=56" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=55"></script>
+  <script type="module" src="/inbox.js?v=56"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -198,7 +198,7 @@
     <dialog class="side-panel" id="deletedRecords" aria-labelledby="deletedHeading">
       <p class="eyebrow">Recovery</p><h2 id="deletedHeading">Deleted records</h2>
       <p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p>
-      <p>Restore a deleted list or project before its items. Only empty lists and projects can be deleted. Related clarification, review and brief history stays stored.</p>
+      <p>Deleting a list also marks its linked items deleted; projects must be empty before deletion. Restore a deleted list or project before its items. Related clarification, review and brief history stays stored.</p>
       <p id="deletedError" role="alert"></p><p id="deletedStatus" role="status"></p>
       <div id="deletedItems"></div><button id="closeDeleted" type="button">Close deleted records</button>
     </dialog>
