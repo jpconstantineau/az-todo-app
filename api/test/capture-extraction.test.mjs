@@ -139,10 +139,12 @@ test('late results cannot overwrite changed input, cancellation, or another acco
   const { page, setUser } = await setup(t, { delay: true });
   await page.locator('#captureText').fill(source); await page.locator('#extractStart').click();
   await page.waitForFunction(() => !!window.finishAI);
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'busy');
   await page.locator('#captureText').fill('Newer input'); await page.evaluate(raw => finishAI(raw), output());
   assert.equal(await page.locator('#captureText').inputValue(), 'Newer input'); assert.equal(await page.locator('#extractReview').isHidden(), true);
   await page.locator('#captureText').fill(source); await page.locator('#extractStart').click();
   await page.waitForFunction(() => aiCalls.prompts.length === 2); await page.locator('#extractCancel').click();
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'available');
   await page.evaluate(raw => finishAI(raw), output()); assert.equal(await page.locator('#extractReview').isHidden(), true);
   await page.locator('#extractStart').click(); await page.waitForFunction(() => aiCalls.prompts.length === 3);
   setUser('bob'); await clickControl(page.locator('#sync'));
@@ -231,12 +233,14 @@ test('explicit AI success and failure retain the initiating keyboard control', {
   await page.locator('#captureText').fill(source);
   await page.locator('#extractStart').focus(); await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent === 'Model failed');
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'error');
   await page.waitForFunction(() => document.activeElement.id === 'extractStart');
   await page.evaluate(() => { aiMode.fail = false; });
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.activeElement.id === 'extractionHeading');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.activeElement.id === 'extractStart');
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'available');
 });
 
 test('manual batch review works without AI, retains offline corrections and accepts once', { timeout: 60000 }, async t => {

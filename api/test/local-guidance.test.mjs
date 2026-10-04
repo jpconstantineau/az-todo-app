@@ -68,6 +68,7 @@ test('local suggestion stays separate until chosen, journals offline, reloads an
   await context.setOffline(true);
   await page.locator('#clarifyForm [name=text]').fill('My existing draft');
   await page.locator('#guidanceStart').click(); await page.locator('#guidanceUse').waitFor();
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'available');
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'My existing draft');
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.evaluate(() => aiCalls.create[0].active), true);
@@ -103,6 +104,7 @@ for (const mode of [{ createFail: true }, { promptFail: true }, { raw: '{"text":
   await page.locator('#clarifyForm [name=text]').fill('Keep this');
   await page.locator('#guidanceStart').click();
   await page.waitForFunction(() => document.querySelector('#guidanceStatus').textContent.includes('could not produce'));
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'error');
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Keep this');
   assert.equal(await page.locator('#guidanceUse').isVisible(), false);
   assert.equal((await local(page)).queue.length, 0);
@@ -114,9 +116,11 @@ for (const state of ['downloadable', 'downloading']) test('download progress and
   assert.equal(await page.evaluate(() => aiCalls.create.length), 0);
   await page.locator('#clarifyForm [name=text]').fill('Keep me');
   await page.locator('#guidanceStart').click();
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-state'), 'busy');
   await page.evaluate(() => progress(0.5));
   assert.match(await page.locator('#guidanceStatus').textContent(), /50%/);
   await page.locator('#guidanceCancel').click();
+  assert.equal(await page.locator('#agentStatus').getAttribute('aria-disabled'), 'false');
   await page.evaluate(() => finishCreate());
   await page.waitForFunction(() => aiCalls.destroyed === 1);
   assert.equal(await page.evaluate(() => aiCalls.prompt.length), 0);
