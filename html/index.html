@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=57" defer></script>
+  <script src="/pwa.js?v=58" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=57"></script>
+  <script type="module" src="/inbox.js?v=58"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -149,8 +149,23 @@
       </form></details><div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
-      <p class="eyebrow">Do</p><h2 id="executeHeading" tabindex="-1">Execute</h2>
-      <label>List <select id="executeList"><option value="">Choose a list</option></select></label>
+      <h2 id="executeHeading" tabindex="-1">Execute</h2>
+      <div class="actions execute-kinds" role="group" aria-label="Collection type">
+        <button type="button" data-execute-kind="list" aria-pressed="true">List</button>
+        <button type="button" data-execute-kind="project" aria-pressed="false">Project</button>
+        <button type="button" data-execute-kind="checklist" aria-pressed="false">Checklist</button>
+      </div>
+      <select id="executeList" aria-label="Choose List"><option value="">Choose a list</option></select>
+      <details id="executeFilters">
+        <summary id="executeFilterSummary">Context, time &amp; energy</summary>
+        <div class="execution-controls">
+          <label>Context <select id="executeContextFilter"><option value="">Any context</option></select></label>
+          <label>Available time <select id="executeTimeFilter" aria-describedby="executeFilterHelp"><option value="">Any duration</option><option value="5">Up to 5 minutes</option><option value="15">Up to 15 minutes</option><option value="30">Up to 30 minutes</option><option value="60">Up to 1 hour</option><option value="120">Up to 2 hours</option></select></label>
+          <label>Available energy <select id="executeEnergyFilter" aria-describedby="executeFilterHelp"><option value="">Any energy</option><option value="low">Up to Low</option><option value="medium">Up to Medium</option><option value="high">Up to High</option></select></label>
+        </div>
+        <p id="executeFilterHelp" class="muted">Time and energy limits keep tasks with missing or unrecognized estimates visible. Context matches only the chosen context. Choose No context to find unclassified tasks.</p>
+        <button id="resetExecuteFilters" type="button">Reset context, time &amp; energy</button>
+      </details>
       <div id="executeItems"></div>
     </section>
     <section class="card review-panel" id="reviews" aria-labelledby="reviewsHeading" hidden>

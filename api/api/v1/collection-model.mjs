@@ -1,5 +1,5 @@
 // Also shipped in api/api/v1/collection-model.mjs; a contract test keeps both runtimes identical.
-export const collectionKinds = { list: 'List', project: 'Project', area: 'Area', role: 'Role', initiative: 'Initiative', program: 'Program', reference: 'Reference list' };
+export const collectionKinds = { list: 'List', checklist: 'Checklist', project: 'Project', area: 'Area', role: 'Role', initiative: 'Initiative', program: 'Program', reference: 'Reference list' };
 export const refKey = ref => `${ref.type}:${ref.id}`;
 export const isCollection = record => ['list', 'project'].includes(record?.type);
 export const collectionKind = record => record.type === 'project' ? 'project' : record.kind || 'list';

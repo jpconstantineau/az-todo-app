@@ -1,5 +1,5 @@
 // Optional inference has no record/outbox access. Only reviewed text leaves this panel.
-import { modelOptions, destroyModel, checkModel, beginModelWork } from './local-agent.js?v=57';
+import { modelOptions, destroyModel, checkModel, beginModelWork } from './local-agent.js?v=58';
 export { modelOptions, destroyModel };
 const options = modelOptions;
 export function validateSuggestion(raw, limit) {

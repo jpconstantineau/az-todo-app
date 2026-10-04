@@ -175,6 +175,50 @@ test('navigation: Execute selects a list, opens details and completes exact item
   assert.equal(records.find(record => record.title === 'Unfiled').status, 'inbox');
 });
 
+test('navigation: Execute separates lists, projects and checklists and keeps its filters offline', { timeout: 90000 }, async t => {
+  const { page, context, url } = await setup(t, '#execute');
+  const mutations = [
+    { type: 'list', id: 'regular', fields: { title: 'Errands', kind: 'list' } },
+    { type: 'list', id: 'checklist', fields: { title: 'Packing', kind: 'checklist' } },
+    { type: 'project', id: 'project', fields: { title: 'Trip', outcome: 'Travel arranged' } },
+    { type: 'item', id: 'short', fields: { title: 'Buy milk', listId: 'regular', contexts: ['Store'], timeRequired: '15m', energy: 'Low' } },
+    { type: 'item', id: 'long', fields: { title: 'Buy furniture', listId: 'regular', contexts: ['Store'], timeRequired: '2h', energy: 'High' } },
+    { type: 'item', id: 'project-task', fields: { title: 'Book tickets', projectId: 'project' } },
+    { type: 'item', id: 'checklist-task', fields: { title: 'Pack passport', listId: 'checklist' } }
+  ].map(({ type, id, fields }) => ({ type, id, action: 'create', expectedVersion: 0, fields }));
+  const response = await fetch(url + '/api/v1/operations', { method: 'POST', headers: { origin: url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execute-kinds', mutations }) });
+  assert.equal(response.status, 200, await response.text());
+  await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).records['list:checklist']?.kind === 'checklist');
+  await page.locator('#executeList option[value="regular"]').waitFor({ state: 'attached' }); await confirmed(page);
+  await showView(page, 'execute');
+  assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a list', 'Errands']);
+  await page.locator('#executeList').selectOption('regular');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk', 'Buy furniture']);
+  await page.locator('#executeFilters > summary').click();
+  await page.locator('#executeContextFilter').selectOption('context:Store');
+  await page.locator('#executeTimeFilter').selectOption('30');
+  await page.locator('#executeEnergyFilter').selectOption('low');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.execute.energy === 'low');
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#executeList').inputValue(), 'regular');
+  assert.equal(await page.locator('#executeTimeFilter').inputValue(), '30');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
+  await page.locator('[data-execute-kind="project"]').click();
+  assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a project', 'Trip']);
+  await page.locator('#executeList').selectOption('project:project');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [], 'Execute filters continue across collection types');
+  await page.locator('#executeFilters > summary').click();
+  await page.locator('#resetExecuteFilters').click();
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Book tickets']);
+  await page.locator('[data-execute-kind="checklist"]').click();
+  assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a checklist', 'Packing']);
+  await page.locator('#executeList').selectOption('checklist');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Pack passport']);
+  assert.equal(await page.locator('#executeFilterSummary').textContent(), 'Context, time & energy');
+});
+
 test('navigation: Execute keeps failed completions unchecked, clears deleted lists and isolates accounts', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t);
   await capture(page, 'Private task', 'Private list'); await confirmed(page);
