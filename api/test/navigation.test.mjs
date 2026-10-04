@@ -243,11 +243,19 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   assert.deepEqual(await rows(), ['filed'], 'processing removes an item without assigning a list');
   // Clarification and ordinary editing must use the same Inbox membership rule.
   await clickControl(page.getByRole('button', { name: 'Clarify filed', exact: true, includeHidden: true }));
-  for (let step = 0; step < 3; step++) {
-    await page.locator('#clarifySkip').click();
-    await page.waitForFunction(step => document.querySelector('#clarifyHeading').textContent.includes(`Question ${step + 2} of 4`), step);
-  }
-  await page.locator('#clarifyForm [name=status]').selectOption('next');
+  await page.locator('[name=flow_choice][value=yes]').check();
+  await page.locator('#clarifyAccept').click();
+  await page.locator('[name=flow_text]').fill('filed');
+  await page.locator('#clarifyAccept').click();
+  await page.locator('select[name=flow_choice]').selectOption('keep');
+  await page.locator('#clarifyAccept').click();
+  await page.locator('[name=flow_choice][value=no]').check();
+  await page.locator('#clarifyAccept').click();
+  await page.locator('select[name=flow_choice]').selectOption('next');
+  await page.locator('#clarifyAccept').click();
+  await page.locator('[name=flow_text]').waitFor();
+  await page.locator('#clarifyAccept').click();
+  await page.getByRole('button', { name: 'Apply decision', exact: true }).waitFor();
   await page.locator('#clarifyAccept').click();
   await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent.includes('complete'));
   await page.locator('#clarifyStop').click();

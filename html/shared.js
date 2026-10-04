@@ -1,4 +1,4 @@
-import { transact } from './inbox-store.js?v=50';
+import { transact } from './inbox-store.js?v=51';
 
 const $ = id => document.getElementById(id);
 const rights = ['view', 'add', 'edit', 'complete', 'delete'];
@@ -12,7 +12,7 @@ async function offlineReady() {
   const channel = new MessageChannel();
   channel.port1.onmessage = event => {
     channel.port1.close();
-    message('sharedOffline', event.data === 'todo-inbox-shell-v50' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
+    message('sharedOffline', event.data === 'todo-inbox-shell-v51' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
   };
   worker.postMessage('shell-version', [channel.port2]);
 }

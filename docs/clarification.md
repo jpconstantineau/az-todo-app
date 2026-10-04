@@ -1,4 +1,74 @@
-# Progressive clarification (#9)
+# GTD clarification (#107)
+
+New clarification sessions begin with **Is it actionable?**, without requiring an
+outcome or action for reference information. Original capture remains available.
+
+- **No:** Incubate (Someday / maybe), Reference, or recoverable Trash. Incubation
+  has an optional reconsideration date. Blank explicitly clears an earlier review
+  cue. Dated Someday becomes Ready for review when due, never automatically Next.
+  Undated Someday remains in weekly reviews; Reference stays out of new reviews.
+- **Yes:** Write a next action, choose a project relationship, and consider the
+  two-minute rule. Existing projects retain their outcome; a new project requires
+  a title and desired outcome. Standalone actions need no project.
+- **Do now:** Explicitly choose **I have done it** after acting. Merely answering
+  Yes to the two-minute question, stopping, or closing never completes work.
+- **Do later:** Do when possible uses Next. Delegate uses Waiting with a required
+  person/dependency and optional date (blank preserves existing cues). Plan for a
+  day uses Next plus a planned day; Not before uses Deferred plus a start date.
+  Existing deadlines are retained and separately labelled. Nothing is sent to
+  another person or an external calendar.
+
+Choose an optional list and edit the working title before the final summary.
+Missing-information notes belong to the clarification, separate from item notes.
+Existing project/list membership is preserved unless deliberately changed.
+Trash goes directly to its confirmation summary and retains the original item
+for the existing Deleted/Restore flow. Drop remains a distinct workflow status.
+Context, time and energy remain available in ordinary Task details.
+
+## Save and compatibility contract
+
+**Continue** saves the answer and next step, with no item mutation. Typing journals
+a device draft; **Save proposal** queues progress for foreground sync. **Stop for
+now** or Escape keeps the draft without accepting it. **Back** confirms discarding
+the preceding answer/current unsaved wording, then restores that answer as a
+proposal. Users can backtrack across branches without undoing task mutations.
+
+Only **Apply decision** changes the item. The final session, item update/deletion,
+and optional project creation share one version-checked operation and server
+batch. The server verifies the exact changes against the accepted answers.
+Concurrent task changes cannot silently overwrite one another; failed project
+creation cannot leave the task pointing at a missing project. Existing receipts,
+conflict recovery, export, workspace isolation and original-text protections apply.
+
+New records use `flowVersion: 2`, a named `step`, typed `answers`, and a bounded
+unaccepted `proposal`. The branch includes actionable, nextAction, project,
+twoMinutes, disposition, organize, summary, and complete as applicable. Trash
+omits organize. Summary/complete require all applicable answers. Branch-incompatible
+answers and final mutations are rejected. No flow version means the legacy v1
+questionnaire below: existing sessions, device drafts and queued requests continue
+unchanged. The API rejects changing an existing session's flow version.
+
+Deploy compatible API support before shell v51; do not downgrade that API while
+v2 operations are queued. The full cached module graph includes
+`clarification-flow.js`. No database migration, partition change, receipt rewrite,
+new dependency or device-storage reset is needed. #117 can replace the current
+list/project selectors with its common organizer independently.
+
+## Verification
+
+`api/test/clarification-flow.test.mjs` covers branch validation, all dispositions,
+custom status settings, date semantics, atomic project creation, stale/deleted and
+foreign records, lost acknowledgements, legacy-version protection, Back,
+offline stop/reload/resume, storage failure, workspace/account switches, and Trash
+restoration. The existing clarification/local-guidance tests explicitly start
+legacy sessions to preserve upgrade coverage. Navigation and keyboard tests exercise
+the new flow. Shell upgrade tests preserve exact operations from earlier shells.
+
+Screenshots in `docs/design/gtd-clarification` cover the new decision panel.
+Physical devices, spoken screen readers and production Cosmos/SWA behavior require
+deployment validation beyond the local handler/IndexedDB browser harness.
+
+## Legacy progressive clarification (#9)
 
 Capture remains a one-step save. In **Your Work** or **List Workspace**, choose
 **Clarify** on an existing task when you want to work through it. No AI API,

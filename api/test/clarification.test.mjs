@@ -104,6 +104,8 @@ async function browserSetup(t) {
   let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
   await post(server.url, [mutation('item', 0, { title: 'sort out insurance' })]);
+  // Already-started v1 sessions must continue unchanged after upgrading the shell.
+  await post(server.url, [mutation('clarification', 0, initial())]);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.addInitScript(() => { Object.defineProperty(globalThis, 'LanguageModel', { value: undefined, configurable: true }); });
