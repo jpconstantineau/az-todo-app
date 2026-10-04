@@ -1,10 +1,10 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v45';
+const CACHE = 'todo-inbox-shell-v46';
 // The agent module is public shell code, without model downloads or user data.
-const ASSETS = ['/capture-extraction.js?v=45', '/workspaces.js', '/workspaces.js?v=45', '/local-guidance.js?v=45', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=45', '/reviews.js?v=45', '/pwa.js?v=45', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const ASSETS = ['/capture-extraction.js?v=46', '/workspaces.js', '/workspaces.js?v=46', '/local-guidance.js?v=46', '/', '/index.html', '/inbox.html', '/styles.css', '/theme.js', '/inbox.css', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/inbox-export.js', '/reviews.js', '/clarification.js', '/clarification.js?v=46', '/reviews.js?v=46', '/pwa.js?v=46', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 // Fresh module URLs bypass older workers' exact asset allowlists.
-ASSETS.push('/inbox.js?v=45', '/inbox-store.js?v=45', '/inbox-fields.js?v=45', '/inbox-export.js?v=45', '/briefs.js', '/briefs.js?v=45', '/help.html');
-ASSETS.push('/shared.html', '/shared.js', '/shared.js?v=45', '/shared.css', '/local-agent.js?v=45');
+ASSETS.push('/inbox.js?v=46', '/inbox-store.js?v=46', '/inbox-fields.js?v=46', '/inbox-export.js?v=46', '/briefs.js', '/briefs.js?v=46', '/help.html');
+ASSETS.push('/shared.html', '/shared.js', '/shared.js?v=46', '/shared.css', '/local-agent.js?v=46');
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
