@@ -26,7 +26,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : 'Process and Organize') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'reviews' ? 'Review' : 'Process and Organize') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -73,7 +73,7 @@ async function saveWorkspace(record, action, fields) {
 }
 async function switchWorkspace(id) {
   if (!accountId || id === selectedWorkspace) return;
-  if (saving || switchingWorkspace) { $('workspaceSelect').value = selectedWorkspace; throw new Error('Wait for the device save, then switch workspaces.'); }
+  if (saving || reviews.busy || switchingWorkspace) { $('workspaceSelect').value = selectedWorkspace; throw new Error('Wait for the device save, then switch workspaces.'); }
   if (!availableWorkspaces().some(space => space.id === id)) throw new Error('Workspace unavailable.');
   const owner = accountId, old = selectedWorkspace, snapshot = draft();
   switchingWorkspace = true;
@@ -186,7 +186,7 @@ async function saveClarification(mutations, next) {
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'inbox', status: '' }, lists: { view: '', status: '' } });
 let navigation = emptyNavigation();
-const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal, showDialog,
+const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal,
   edit: record => {
     if (editing && (key(editing) !== key(record) || editing.version !== record.version) && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields)) {
       showDialog($('editor')); error('Finish saving this edit before editing another record. Your draft is still here.');
@@ -265,7 +265,6 @@ function storageFailure(failure) {
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), localCopy: state }, null, 2);
   $('editor').close(); // Make the recovery copy outside the modal reachable.
   $('defaultsEditor').close();
-  $('reviews').close();
   clarification.close();
   briefs.close();
   extraction.close();
@@ -467,9 +466,10 @@ function render() {
   const readOnly = workspaceReadOnly();
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
   $('captureAI').hidden = readOnly;
-  if (readOnly) { extraction.suspend(); $('editor').close(); $('defaultsEditor').close(); $('reviews').close(); clarification.close(); briefs.close(); }
+  if (readOnly) { extraction.suspend(); $('editor').close(); $('defaultsEditor').close(); clarification.close(); briefs.close(); }
   $('captureWorkspaceFields').disabled = readOnly;
-  for (const id of ['newList', 'newProject', 'openReviews']) $(id).disabled = readOnly;
+  $('reviewWorkspaceFields').disabled = readOnly;
+  for (const id of ['newList', 'newProject']) $(id).disabled = readOnly;
   if (readOnly) document.querySelectorAll('#items button, #lists button, #projectActions button, #deletedItems button').forEach(control => { control.disabled = true; });
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
@@ -739,7 +739,7 @@ function focusDestination() {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : $('itemsHeading')).focus();
+  (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
 }
 function restoreFocus(control) {
   const modal = document.querySelector('dialog[open]'), scope = modal || document;
@@ -757,10 +757,11 @@ function showDialog(dialog) {
   dialog.showModal();
 }
 function workspace(focus = true) {
-  destination = ['work', 'lists'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
+  destination = ['work', 'lists', 'reviews'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
   const listMode = destination === 'lists';
   document.querySelector('.capture-panel').hidden = destination !== 'capture';
-  document.querySelector('.work-panel').hidden = destination === 'capture';
+  document.querySelector('.work-panel').hidden = !['work', 'lists'].includes(destination);
+  $('reviews').hidden = destination !== 'reviews';
   $('listTools').hidden = !listMode;
   $('newProject').hidden = listMode;
   $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process and Organize';
@@ -773,6 +774,9 @@ function workspace(focus = true) {
   render();
   if (focus) { $('createdDestination').replaceChildren(); focusDestination(); void journal(); }
 }
+$('closeReviews').onclick = () => {
+  history.replaceState(null, '', '#capture'); workspace(false); $('openReviews').focus(); void journal();
+};
 addEventListener('hashchange', () => workspace());
 for (const link of document.querySelectorAll('.workspace-nav a')) {
   link.addEventListener('click', event => {
@@ -783,7 +787,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('reviews'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);

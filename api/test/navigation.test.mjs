@@ -32,13 +32,54 @@ async function capture(page, title, list = '') {
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
 }
 
+test('navigation: reviews stay in a page card with history, editing, offline reload and saved position', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t, '#reviews');
+  assert.equal(await page.title(), 'Review · Personal');
+  assert.equal(await page.locator('#reviews').evaluate(element => element.tagName), 'SECTION');
+  assert.equal(await page.locator('.inbox-grid > #reviews').isVisible(), true);
+  assert.equal(await page.locator('dialog:modal').count(), 0);
+  await capture(page, 'Review this'); await confirmed(page);
+  await showView(page, 'reviews');
+  assert.equal(await page.locator('#reviewsHeading').evaluate(el => el === document.activeElement), true);
+  await page.locator('#startWeekly').click();
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 1')); await confirmed(page);
+  await page.locator('#reviewEdit').click(); await page.locator('#editor').waitFor();
+  await page.locator('#edit [name=description]').fill('Keep these review notes');
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
+  assert.equal(await page.locator('#reviews').isVisible(), true);
+  await page.waitForFunction(() => document.activeElement.id === 'reviewEdit');
+  assert.match(await page.locator('#reviewDetails').textContent(), /Keep these review notes/);
+  await page.locator('#reviewDefer').fill('2027-02-01');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.review.deferUntil === '2027-02-01');
+  await showView(page, 'work');
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('#openReviews').getAttribute('aria-current') === 'page');
+  assert.equal(await page.locator('#reviews').isVisible(), true);
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#openReviews').getAttribute('aria-current'), 'page');
+  assert.equal(await page.locator('#reviewDefer').inputValue(), '2027-02-01');
+  assert.match(await page.locator('#reviewDetails').textContent(), /Keep these review notes/);
+  assert.equal(await page.locator('dialog:modal').count(), 0);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.locator('#startDaily').click();
+  await page.waitForFunction(() => document.querySelector('#reviewError').textContent.includes('Full'));
+  assert.match(await page.locator('#recoveryText').inputValue(), /2027-02-01/);
+  assert.equal((await local(page)).queue.length, 0, 'a failed review save never enters the queue');
+  await page.locator('#copyRecovery').focus();
+  assert.equal(await page.locator('#copyRecovery').evaluate(el => el === document.activeElement), true);
+  await page.locator('#closeReviews').click();
+  assert.equal(await page.locator('#reviews').isVisible(), false);
+  assert.equal(await page.locator('#openReviews').evaluate(el => el === document.activeElement), true);
+});
+
 test('navigation: process selector defaults to Inbox, preserves a chosen list offline and falls back when it disappears', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t, '#work');
   assert.equal(await page.locator('#itemsHeading').textContent(), 'Process and Organize');
   assert.equal(await page.title(), 'Process and Organize · Personal');
   assert.equal(await page.getByRole('combobox', { name: 'Your Work', exact: true }).inputValue(), 'inbox');
   assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
-  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace']]) {
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace'], ['openReviews', 'Review']]) {
     const link = page.getByRole('link', { name, exact: true });
     assert.equal(await link.getAttribute('id'), id);
     assert.equal(await link.getAttribute('title'), name);
@@ -422,7 +463,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   assert.equal(await page.locator('.work-panel').isVisible(), false);
 });
 
-test('navigation: keyboard links, responsive layout and appearance across all three destinations', { timeout: 90000 }, async t => {
+test('navigation: keyboard links, responsive layout and appearance across all four destinations', { timeout: 90000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Buy milk\nBook a bike tune-up', 'Weekend'); await confirmed(page);
   const list = documents.find(doc => doc.record?.type === 'list').record;
@@ -441,7 +482,7 @@ test('navigation: keyboard links, responsive layout and appearance across all th
     await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
     for (const width of [320, 390, 768, 1440, 2560]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const view of ['capture', 'work', 'lists']) {
+      for (const view of ['capture', 'work', 'lists', 'reviews']) {
         await showView(page, view);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${theme} ${width} ${view}`);
         assert.equal(await page.locator('.workspace-nav [aria-current="page"]').count(), 1);
@@ -459,10 +500,10 @@ test('navigation: keyboard links, responsive layout and appearance across all th
   // Reflow and 200% text enlargement; physical browser zoom/phone keyboards remain manual checks.
   await page.setViewportSize({ width: 720, height: 450 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  for (const view of ['capture', 'work', 'lists']) {
+  for (const view of ['capture', 'work', 'lists', 'reviews']) {
     await showView(page, view);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   }
   await page.locator('.skip-link').focus(); await page.keyboard.press('Enter');
-  assert.ok(await page.locator('#itemsHeading').evaluate(el => el === document.activeElement));
+  assert.ok(await page.locator('#reviewsHeading').evaluate(el => el === document.activeElement));
 });

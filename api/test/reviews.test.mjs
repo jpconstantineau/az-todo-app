@@ -131,8 +131,8 @@ test('reviews resume offline and across devices, allow retained unknowns and und
     for (const theme of ['light', 'dark']) {
       await other.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
       await other.setViewportSize({ width: 390, height: 844 });
-      await other.locator('#reviews').evaluate(el => el.scrollTop = 0);
-      await other.screenshot({ path: `${process.env.REVIEW_SCREENSHOTS}/review-${theme}-390.png` });
+      await other.evaluate(() => scrollTo(0, 0));
+      await other.screenshot({ path: `${process.env.REVIEW_SCREENSHOTS}/review-${theme}-390.png`, fullPage: true });
     }
   }
   await other.locator('#closeReviews').click();

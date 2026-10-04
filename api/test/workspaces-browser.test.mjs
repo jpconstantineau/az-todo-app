@@ -68,7 +68,7 @@ test('workspaces: offline drafts, filters, capture, reviews, moves, reload and a
   await page.locator('#startWeekly').click(); await page.locator('#reviewBody').waitFor();
   assert.match(await page.locator('#reviewTitle').innerText(), /Work report/);
   assert.equal(await page.locator('#reviewRecord option').count(), 1);
-  await page.locator('#closeReviews').click();
+  await page.locator('#closeReviews').click(); await showView(page, 'work');
   await page.getByRole('button', { name: 'Edit Work report', exact: true }).click();
   await page.locator('#edit [name=workspaceId]').selectOption(family);
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
@@ -151,6 +151,8 @@ test('workspaces: archive, delete, offline recovery and responsive management pr
   assert.equal(await page.locator('#captureText').isDisabled(), true);
   await showView(page, 'work'); assert.equal(await page.locator('#items article').count(), 1);
   assert.equal(await page.getByRole('button', { name: 'Complete Preserved report', exact: true }).isDisabled(), true);
+  await showView(page, 'reviews');
+  for (const id of ['startDaily', 'startWeekly', 'reviewSessions']) assert.equal(await page.locator('#' + id).isDisabled(), true);
   await clickControl(page.locator('#manageWorkspaces'));
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Delete workspace: Work', exact: true }).click();
