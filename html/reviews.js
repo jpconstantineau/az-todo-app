@@ -1,5 +1,5 @@
-import { key, projected } from './inbox-store.js?v=53';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=53';
+import { key, projected } from './inbox-store.js?v=54';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=54';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));

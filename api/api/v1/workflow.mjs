@@ -21,7 +21,7 @@ export function applyWorkflow(record, old, fields = {}) {
     if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) {
       throw new ValidationError('Deferred needs a start date; it becomes ready for review on that date.');
     }
-    const prefix = record.status === 'waiting' ? 'review' : record.status === 'deferred' ? 'start' : null;
+    const prefix = ['waiting', 'someday'].includes(record.status) ? 'review' : record.status === 'deferred' ? 'start' : null;
     if (prefix && record[`${prefix}Date`]) calendarDate(record[`${prefix}Date`], `${prefix}Date`);
     if (prefix && record[`${prefix}DateUtc`]) utcDate(record[`${prefix}DateUtc`]);
   }

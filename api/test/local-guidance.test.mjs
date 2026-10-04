@@ -45,6 +45,17 @@ async function setup(t, mode = {}) {
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  // Preserve coverage for guidance in an existing, pre-upgrade questionnaire.
+  await page.evaluate(async () => {
+    const { transact, enqueue } = await import('/inbox-store.js');
+    await transact('alice', local => {
+      const item = Object.values(local.records).find(record => record.type === 'item');
+      enqueue(local, 'alice', [{ type: 'clarification', id: item.id, action: 'create', expectedVersion: 0,
+        fields: { step: 0, answers: {}, proposal: { text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' } } }]);
+    });
+  });
+  await clickControl(page.locator('#sync'));
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   await page.locator('a[href="#work"]').click();
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await page.locator('#localGuidance').waitFor();

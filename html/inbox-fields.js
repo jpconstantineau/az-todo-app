@@ -18,7 +18,7 @@ export function validateWorkflow(record, old, fields = record) {
   if (!old || workflowFields.some(key => key in fields && (fields[key] ?? null) !== (old[key] ?? null))) {
     if (record.status === 'waiting' && !record.waitingOn?.trim()) throw new Error('Waiting needs who/what you are waiting for.');
     if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) throw new Error('Deferred needs a start date; it becomes ready for review on that date.');
-    const prefix = record.status === 'waiting' ? 'review' : record.status === 'deferred' ? 'start' : null;
+    const prefix = ['waiting', 'someday'].includes(record.status) ? 'review' : record.status === 'deferred' ? 'start' : null;
     if (prefix) taskFields({ [`${prefix}Date`]: record[`${prefix}Date`], [`${prefix}DateUtc`]: record[`${prefix}DateUtc`] });
   }
   for (const name of ['due', 'start', 'review']) {
@@ -27,7 +27,7 @@ export function validateWorkflow(record, old, fields = record) {
 }
 export function reviewReady(record, now = new Date()) {
   const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const prefix = record.status === 'deferred' ? 'start' : record.status === 'waiting' ? 'review' : null;
+  const prefix = record.status === 'deferred' ? 'start' : ['waiting', 'someday'].includes(record.status) ? 'review' : null;
   return !!prefix && (!!record[`${prefix}Date`] && record[`${prefix}Date`] <= day || !!record[`${prefix}DateUtc`] && Date.parse(record[`${prefix}DateUtc`]) <= now.getTime());
 }
 
@@ -125,7 +125,7 @@ export function refreshTaskOptions(form, defaults) {
   for (const name of ['status', ...Object.keys(optionFields).filter(name => name !== 'statuses')]) {
     const control = form.elements.namedItem(name);
     const selected = control.multiple ? [...control.selectedOptions].map(option => option.value) : [control.value];
-    const values = name === 'status' ? ['inbox', 'next', 'waiting', 'deferred', 'reference', 'completed', 'dropped', ...(defaults.statuses || [])] : defaults[name] || [];
+    const values = name === 'status' ? ['inbox', 'next', 'waiting', 'deferred', 'someday', 'reference', 'completed', 'dropped', ...(defaults.statuses || [])] : defaults[name] || [];
     const options = [...new Set([...(control.multiple ? [] : name === 'status' ? [] : ['']), ...values, ...selected.filter(Boolean)])];
     control.replaceChildren(...options.map(value => new Option(name === 'status' && value === 'reference' ? 'Reference (non-actionable)' : value || 'None', value)));
     if (control.multiple) for (const option of control.options) option.selected = selected.includes(option.value);
