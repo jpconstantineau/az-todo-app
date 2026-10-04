@@ -73,9 +73,10 @@ On link activation and back/forward, focus moves to the destination heading (Cap
 
 ### Context, available time and energy (issue #75)
 
-Your Work and List Workspace offer an optional **Context, time & energy**
+List Workspace and Execute offer an optional **Context, time & energy**
 disclosure. Its summary shows the number of active limits even when collapsed.
-All limits combine with the existing status/list/project/planned-day filters.
+In List Workspace, limits combine with status and list selection; in Execute,
+they narrow the selected collection. Process has no execution limits.
 **Reset context, time & energy** clears only those limits.
 
 Context matches an exact saved context, including custom values; **No context**
@@ -86,7 +87,7 @@ unrecognized time/energy values stay visible, as explained beside the controls.
 No metadata is required for capture or task actions.
 
 Choices use the existing account/workspace draft and remain independent between
-Your Work and Lists. They survive offline reload without editing or queuing tasks.
+List Workspace and Execute. They survive offline reload without editing or queuing tasks.
 Shell v34 updates the complete module graph for installed clients. Regression
 coverage lives in `api/test/execution-filters.test.mjs`, including custom values,
 combined scopes, reset, keyboard focus, offline reload and account/workspace isolation.

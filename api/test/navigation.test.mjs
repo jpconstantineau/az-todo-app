@@ -76,11 +76,15 @@ test('navigation: reviews stay in a page card with history, editing, offline rel
 
 test('navigation: process selector defaults to Inbox, preserves a chosen list offline and falls back when it disappears', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t, '#work');
-  assert.equal(await page.locator('#itemsHeading').textContent(), 'Process and Organize');
-  assert.equal(await page.title(), 'Process and Organize · Personal');
-  assert.equal(await page.getByRole('combobox', { name: 'Your Work', exact: true }).inputValue(), 'inbox');
+  assert.equal(await page.locator('#itemsHeading').textContent(), 'Process');
+  assert.equal(await page.title(), 'Process · Personal');
+  assert.equal(await page.locator('#workEyebrow').isVisible(), false);
+  assert.equal(await page.locator('#viewLabel').getAttribute('class'), 'sr-only');
+  assert.equal(await page.locator('#executionFilters').isVisible(), false);
+  assert.equal(await page.getByRole('combobox', { name: 'View', exact: true }).inputValue(), 'inbox');
+  assert.equal(await page.locator('#view').evaluate(el => getComputedStyle(el).fontSize), await page.locator('#itemsHeading').evaluate(el => getComputedStyle(el).fontSize));
   assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
-  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process'], ['listWorkspace', 'List Workspace'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
     const link = page.getByRole('link', { name, exact: true });
     assert.equal(await link.getAttribute('id'), id);
     assert.equal(await link.getAttribute('title'), name);
@@ -97,12 +101,15 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
   assert.equal(await page.locator('#items article').count(), 0, 'processed work leaves the default Inbox');
-  await page.getByRole('combobox', { name: 'Your Work', exact: true }).selectOption(list.id);
+  await page.getByRole('combobox', { name: 'View', exact: true }).selectOption(list.id);
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
   await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.work.view === id, list.id);
+  await page.evaluate(async () => (await import('/inbox-store.js')).transact('alice', local => {
+    local.draft.navigation.work.context = 'context:Former filter';
+  }));
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), list.id);
-  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this'], 'old Process filters no longer hide work');
   await page.evaluate(async id => {
     await (await import('/inbox-store.js')).transact('alice', local => { local.records['list:' + id].deleted = true; });
   }, list.id);

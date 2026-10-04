@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=59';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=59';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=59';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=59';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=59';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=59';
-import { clarificationUI } from './clarification.js?v=59';
-import { setupReviews } from './reviews.js?v=59';
-import { setupBriefs } from './briefs.js?v=59';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=59';
-import { setupAgentStatus } from './local-agent.js?v=59';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=60';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=60';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=60';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=60';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=60';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=60';
+import { clarificationUI } from './clarification.js?v=60';
+import { setupReviews } from './reviews.js?v=60';
+import { setupBriefs } from './briefs.js?v=60';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=60';
+import { setupAgentStatus } from './local-agent.js?v=60';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -28,7 +28,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process and Organize') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -450,7 +450,7 @@ function render() {
     $(id).value = filters[field] || '';
     filters[field] = $(id).value;
   }
-  const executionCount = [filters.context, filters.minutes, filters.energy].filter(Boolean).length;
+  const executionCount = listMode ? [filters.context, filters.minutes, filters.energy].filter(Boolean).length : 0;
   $('executionSummary').textContent = `Context, time & energy${executionCount ? ` (${executionCount} active)` : ''}`;
   const customStatuses = ['@include', '@exclude'].includes(filters.status);
   $('statusSelection').hidden = !customStatuses;
@@ -484,7 +484,7 @@ function render() {
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
-    if (!matchesExecutionFilters(record, filters)) return false;
+    if (listMode && !matchesExecutionFilters(record, filters)) return false;
     if (collectionKind(context || { type: 'list' }) !== 'reference' && !filters.status && ['completed', 'reference'].includes(record.status)) return false;
     if (view === 'day' && record.status === 'reference') return false;
     if (customStatuses) {
@@ -904,9 +904,12 @@ function workspace(focus = true) {
   $('execute').hidden = destination !== 'execute';
   $('listTools').hidden = !listMode;
   $('newProject').hidden = listMode;
-  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process and Organize';
-  $('workEyebrow').textContent = listMode ? 'Organize' : 'Your work';
-  $('viewLabel').textContent = listMode ? 'List' : 'Your Work';
+  document.querySelector('.work-panel').classList.toggle('process-mode', !listMode);
+  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process';
+  $('workEyebrow').hidden = !listMode;
+  $('viewLabel').textContent = listMode ? 'List' : 'View';
+  $('viewLabel').classList.toggle('sr-only', !listMode);
+  $('executionFilters').hidden = !listMode;
   for (const link of document.querySelectorAll('.workspace-nav a')) {
     if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');

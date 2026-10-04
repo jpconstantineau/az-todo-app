@@ -63,6 +63,8 @@
 #accountName { overflow-wrap: anywhere; margin-bottom: var(--space-1); text-transform: none; }
 #workspaceSelect { font: inherit; font-weight: inherit; width: 100%; min-width: 0; text-overflow: ellipsis; background-color: transparent; border-color: transparent; padding-left: 0; }
 #workspaceSelect:hover { border-color: var(--control-border); }
+.work-panel.process-mode #view { font-size: var(--text-heading); font-weight: var(--weight-emphasis); background-color: transparent; border-color: transparent; padding-left: 0; cursor: pointer; }
+.work-panel.process-mode #view:hover { border-color: var(--control-border); }
 .save-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 .save-status { display: flex; align-items: center; justify-content: center; width: 32px; min-height: 44px; }
 .save-status[data-state="confirmed"] { color: var(--success); }
