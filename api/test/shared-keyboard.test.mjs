@@ -65,8 +65,11 @@ test('shared keyboard: refresh preserves item identity but delayed work does not
 
 test('shared keyboard: deletion uses a visible fallback and account changes never restore old item focus', async t => {
   const { page, switchAccount } = await setup(t);
+  const deletionDialogs = [];
+  page.on('dialog', dialog => { deletionDialogs.push(dialog.message()); });
   const remove = page.locator('#sharedItems article').nth(1).getByRole('button', { name: 'Delete Milk', exact: true });
   await remove.focus(); await page.keyboard.press('Enter'); await settled(page);
+  assert.deepEqual(deletionDialogs, [], 'shared item deletion needs no confirmation');
   await assertFocused(page.locator('#sharedTitle'));
   await page.locator('#sharedDeleted').evaluate(element => { element.closest('details').open = true; });
   await page.getByRole('button', { name: 'Restore Milk', exact: true }).focus();

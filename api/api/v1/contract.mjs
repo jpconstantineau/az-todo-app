@@ -81,7 +81,7 @@ export function fieldsFor(type, action, input) {
   const shared = ["title", "description", ...(action === "create" || type === "item" ? ["workspaceId"] : [])];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef"] : ["defaults", "kind", "parentRef"])];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status"] : ["defaults", "kind", "parentRef"])];
   object(input, allowed, "fields");
   const result = {};
   for (const [key, value] of Object.entries(input)) {
@@ -118,6 +118,7 @@ export function fieldsFor(type, action, input) {
     else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
     else if (key === "plannedDay") result[key] = calendarDate(value, key);
     else if (key === "status") {
+      if (type === 'project' && !['active', 'someday', 'completed'].includes(value)) throw new ValidationError('Choose an active, someday or completed project status.');
       result[key] = cleanTag(exactText(value, 64, key), key);
       if (!result[key]) throw new ValidationError("status is required.");
     } else if (["dueDate", "startDate", "reviewDate"].includes(key)) result[key] = calendarDate(value, key);
@@ -135,6 +136,7 @@ export function fieldsFor(type, action, input) {
     return {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
+      ...(type === 'project' ? { status: 'active' } : {}),
       ...(type === "item" ? { listId: null, projectId: null, plannedDay: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,
         priority: null, referenceLinks: [] } : {}), ...result

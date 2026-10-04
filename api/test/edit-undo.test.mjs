@@ -160,6 +160,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
   // Session metadata commits before Bob's pull; switching the fixture user early
   // can reject that still-running request and hide the controls for Alice's sync.
   await (await bobPull).finished();
+  await page.locator('#appHeader').waitFor(); await openMenu(page);
   await page.locator('#menuDeviceTools').waitFor();
   assert.equal(await page.locator('#undoEdit').isDisabled(), true);
   assert.doesNotMatch(await page.locator('#undoEditStatus').textContent(), /Original/);

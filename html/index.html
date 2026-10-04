@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Capture · Personal</title>
+  <title>Sign in</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=56" defer></script>
+  <script src="/pwa.js?v=57" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=56"></script>
+  <script type="module" src="/inbox.js?v=57"></script>
 </head>
 <body class="container inbox-page">
-  <a class="skip-link" href="#workspace">Skip to current view</a>
-  <header class="app-header"><div class="workspace-identity"><p id="accountName" class="eyebrow">Welcome</p><h1><span id="defaultWorkspace">Personal</span><select id="workspaceSelect" aria-label="Workspace" aria-describedby="workspaceStatus" hidden></select></h1></div>
+  <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
+  <header id="appHeader" class="app-header" hidden><div class="workspace-identity"><p id="accountName" class="eyebrow">Welcome</p><h1><select id="workspaceSelect" aria-label="Workspace" aria-describedby="workspaceStatus" hidden></select></h1></div>
     <span id="saveStatus" class="save-status" role="status" hidden><svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3 M7 21v-8h10v8"/></svg><span id="connectionLabel" class="sr-only"></span></span>
     <button id="agentStatus" class="agent-status" type="button" aria-label="Checking AI agent availability." aria-disabled="true" data-state="busy"><svg class="agent-icon" viewBox="0 0 32 32" aria-hidden="true"><g class="agent-robot" transform="translate(3.2 3.2) scale(.8)"><rect x="7" y="11" width="18" height="15" rx="1.5"/><path d="M7 15H4v7h3m18-7h3v7h-3M16 7v4"/><circle cx="16" cy="5" r="2"/><circle cx="12" cy="18" r="1.2"/><circle cx="20" cy="18" r="1.2"/></g><g class="agent-unavailable"><circle cx="16" cy="16" r="14"/><path d="M6 6l20 20"/></g></svg></button>
     <span id="agentLabel" class="sr-only" role="status"></span>
@@ -57,10 +57,10 @@
       <p id="checkAppUpdateStatus" role="status"></p>
       <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
-  <section id="signedOut" aria-label="Sign in"><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
-  <p id="appUpdateStatus" role="status"></p>
+  <section id="signedOut" aria-label="Sign in"><h1>Welcome</h1><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
+  <p id="appUpdateStatus" role="status" hidden></p>
   <p id="error" role="alert" hidden></p>
-  <noscript>Enable JavaScript to save and edit your inbox.</noscript>
+  <noscript>Enable JavaScript to continue.</noscript>
   <main id="workspace" hidden>
     <p id="workspaceStatus" role="status" class="muted"></p>
     <dialog id="workspaceManager" class="side-panel" aria-labelledby="workspaceHeading">
@@ -158,7 +158,8 @@
       <p><a href="/help.html#reviews" target="_blank" rel="noopener">Review help (new tab)</a></p>
       <fieldset id="reviewWorkspaceFields" class="workspace-fields">
       <label>Saved reviews<select id="reviewSessions"></select></label>
-      <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button></div>
+      <p class="muted">Weekly reviews include active projects. Review someday / on hold projects separately when you choose. Completed projects remain available in Your Work.</p>
+      <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button><button id="startSomeday" type="button">Review someday projects</button></div>
       <p id="reviewError" role="alert"></p>
       <section id="reviewBody" hidden>
         <p id="reviewProgress" role="status"></p>
@@ -210,6 +211,10 @@
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
         <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
+        <div id="editProjectLifecycle" hidden>
+          <label for="projectStatus">Project status</label>
+          <select id="projectStatus" name="projectStatus" aria-describedby="projectStatusHelp"><option value="active">Active</option><option value="someday">Someday / on hold</option><option value="completed">Completed</option></select>
+          <p id="projectStatusHelp" class="muted">Changing project status keeps its outcome, notes and history. Linked actions keep their own statuses and remain in their existing views and reviews, including unfinished actions. Edit those actions individually if needed. Choose Active to reactivate this project.</p></div>
         <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span class="muted">Moving clears all collection memberships; the original text and item history move with it.</span></label>
         <div id="editCollectionFields" hidden><label>Kind<select name="kind"></select></label><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
         <div id="editAdvanced"><div id="editFields"></div></div>

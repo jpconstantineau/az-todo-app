@@ -151,13 +151,13 @@ test('deletion: lists delete completed and active linked items, including offlin
   await page.getByRole('button', { name: 'Delete list: Done', exact: true }).click();
   await page.getByRole('button', { name: 'Delete list: Done', exact: true }).waitFor({ state: 'hidden' });
   await confirmed(page);
-  assert.match(prompts[0], /0 uncompleted items/);
+  assert.deepEqual(prompts, [], 'a completed-only list needs no confirmation');
   assert.equal(documents.find(doc => doc.kind === 'record' && doc.record.id === 'finished').record.deleted, true);
   await page.locator('#view').selectOption('mixed');
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Delete list: Mixed', exact: true }).click();
   await page.getByRole('button', { name: 'Delete list: Mixed', exact: true }).waitFor({ state: 'hidden' });
-  assert.match(prompts[1], /2 uncompleted items/);
+  assert.match(prompts[0], /2 uncompleted items/);
   let saved = await local(page);
   assert.deepEqual(saved.queue.map(entry => entry.operation.mutations.length), [20, 2]);
   assert.equal(Object.values(projected(saved)).filter(record => record.type === 'item' && record.listId === 'mixed' && record.deleted).length, 21);
