@@ -129,6 +129,7 @@ test('context add: workspace changes keep pending additions isolated and archive
   await page.locator('#closeWorkspaces').click();
   assert.equal(await page.locator('#addContextItem').isDisabled(), true);
   await page.locator('#workspaceSelect').selectOption('personal');
+  await page.locator('#resumeEdit').click();
   await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), 'Personal draft');
   await context.setOffline(true); await saveEdit(page);

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
+import { waitForBrowser } from './browser-wait.mjs';
 
 const baseline = process.env.DESIGN_BASELINE === '1';
 const screenshots = process.env.DESIGN_SCREENSHOTS;
@@ -89,7 +90,14 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press('Tab');
   assert.ok(await page.locator('#editor').evaluate(el => el.contains(document.activeElement)), 'focus stays inside modal');
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const { transact } = await import('/inbox-store.js');
+    return (await transact((await transact(null)).accountId)).draft.editOpen === false;
+  });
   await page.reload();
+  await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#editor').isVisible(), false);
+  await page.locator('#resumeEdit').click();
   await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), 'Preserved sheet draft');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();

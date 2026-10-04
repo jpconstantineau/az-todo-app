@@ -296,6 +296,7 @@ test('list-name permission is opt-in, persists per account and cancellation stop
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await confirmed(page); await page.reload(); await page.locator('#workspace').waitFor();
+  await confirmed(page); // Finish startup sync before changing the server-side account.
   assert.equal(await page.locator('#extractLists').isChecked(), true);
   setUser('bob'); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
