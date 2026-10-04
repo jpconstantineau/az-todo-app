@@ -141,7 +141,7 @@ function render() {
           $('editShared').elements.title.value = state.drafts[list.id]?.edit?.id === item.id ? state.drafts[list.id].edit.title : item.title;
           $('sharedEditor').showModal(); $('editShared').elements.title.focus();
         }, !can('edit')));
-        actions.append(button('Delete ' + item.title, () => { if (confirm(`Delete “${item.title}”? It can be restored from Deleted items.`)) return save('delete', { id: item.id }); }, !can('delete')));
+        actions.append(button('Delete ' + item.title, () => save('delete', { id: item.id }), !can('delete')));
       }
       [...actions.children].forEach((control, index) => { control.dataset.itemAction = deleted ? 'restore' : ['complete', 'edit', 'delete'][index]; });
       article.append(title, actions); return article;

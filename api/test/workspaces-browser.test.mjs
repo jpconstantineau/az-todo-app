@@ -154,7 +154,6 @@ test('workspaces: archive, delete, offline recovery and responsive management pr
   await showView(page, 'reviews');
   for (const id of ['startDaily', 'startWeekly', 'reviewSessions']) assert.equal(await page.locator('#' + id).isDisabled(), true);
   await clickControl(page.locator('#manageWorkspaces'));
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Delete workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Restore workspace: Work', exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click(); await synced(page);
