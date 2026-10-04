@@ -1,4 +1,4 @@
-import { collectionKinds, collectionKind, isCollection, refKey, memberships, ancestry, normalizeMembership, belongsTo } from './collection-model.js?v=59';
+import { collectionKinds, collectionKind, isCollection, refKey, memberships, ancestry, normalizeMembership, belongsTo } from './collection-model.js?v=60';
 
 export const viewKey = record => record.type === 'project' ? refKey(record) : record.id;
 export const parseRef = value => { const [type, id] = value.split(':'); return { type, id }; };

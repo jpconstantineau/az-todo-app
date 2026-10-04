@@ -29,7 +29,7 @@ test('execution filters compare limits and retain unspecified or custom estimate
   assert.equal(matchesExecutionFilters(item, {}), true);
 });
 
-test('execution filters combine scopes, reset, stay offline and isolate accounts/workspaces', { timeout: 90000 }, async t => {
+test('List Workspace filters combine, reset, stay offline and isolate accounts/workspaces while Process stays unfiltered', { timeout: 90000 }, async t => {
   documents.length = 0;
   let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -61,7 +61,7 @@ test('execution filters combine scopes, reset, stay offline and isolate accounts
   page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
   const rows = () => page.locator('#items article').evaluateAll(items => items.map(item => item.dataset.id).sort());
   await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor();
-  await page.locator('#view').selectOption('all');
+  await showView(page, 'lists'); await page.locator('#view').selectOption('list');
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.waitForFunction(() => document.querySelectorAll('#items article').length === 7);
   await page.locator('#statusFilter').selectOption('next');
@@ -75,11 +75,6 @@ test('execution filters combine scopes, reset, stay offline and isolate accounts
   await page.locator('#executionSummary').click();
   assert.match(await page.locator('#executionSummary').innerText(), /3 active/);
   await page.locator('#executionSummary').click();
-  for (const view of ['list', 'project:project', 'day']) {
-    await page.locator('#view').selectOption(view);
-    if (view === 'day') await page.locator('#day').fill('2026-10-03');
-    assert.deepEqual(await rows(), ['custom', 'home', 'unknown'], view);
-  }
   await page.locator('#statusFilter').selectOption('completed'); assert.deepEqual(await rows(), ['done']);
   await page.locator('#statusFilter').selectOption('@exclude');
   await page.getByRole('checkbox', { name: 'Completed', exact: true }).check();
@@ -88,21 +83,18 @@ test('execution filters combine scopes, reset, stay offline and isolate accounts
   assert.deepEqual(await rows(), ['custom']); assert.equal(await page.locator('#contextFilter custom').count(), 0);
   await page.locator('#contextFilter').selectOption('@none'); assert.deepEqual(await rows(), ['unclassified']);
   await page.locator('#resetExecutionFilters').click();
-  assert.equal(await page.locator('#view').inputValue(), 'day');
+  assert.equal(await page.locator('#view').inputValue(), 'list');
   assert.equal(await page.locator('#statusFilter').inputValue(), '@exclude');
   assert.equal((await rows()).length, 7);
   await page.locator('#contextFilter').selectOption('context:@Home');
   await page.locator('#timeFilter').selectOption('15'); await page.locator('#energyFilter').selectOption('low');
-  await page.locator('#view').selectOption('inbox');
-  assert.match(await page.locator('#items').innerText(), /Reset context, time & energy/);
-  await page.locator('#view').selectOption('all');
-  await showView(page, 'lists'); await page.locator('#view').selectOption('list');
-  assert.equal(await page.locator('#contextFilter').inputValue(), '');
-  await page.locator('#contextFilter').selectOption('@none'); assert.deepEqual(await rows(), ['unclassified']);
-  await showView(page, 'work'); assert.deepEqual(await rows(), ['custom', 'home', 'unknown']);
+  await showView(page, 'work'); await page.locator('#view').selectOption('all');
+  assert.equal(await page.locator('#executionFilters').isVisible(), false);
+  assert.equal((await rows()).length, 7, 'Process does not apply execution limits');
+  await showView(page, 'lists'); assert.deepEqual(await rows(), ['custom', 'home', 'unknown']);
   await waitForBrowser(page, async () => {
     const local = await (await import('/inbox-store.js')).transact('alice');
-    return local.draft.navigation?.work.energy === 'low' && local.draft.navigation?.lists.context === '@none';
+    return local.draft.navigation?.lists.energy === 'low';
   });
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.deepEqual(await rows(), ['custom', 'home', 'unknown']);
@@ -127,7 +119,7 @@ test('execution filters combine scopes, reset, stay offline and isolate accounts
   const local = await page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
   assert.deepEqual(local.queue, []); assert.deepEqual(documents, before, 'filters never mutate tasks');
   user = 'bob'; await context.setOffline(false); await page.reload(); await page.locator('#workspace').waitFor();
-  await showView(page, 'work');
+  await showView(page, 'lists');
   for (const id of ['contextFilter', 'timeFilter', 'energyFilter']) assert.equal(await page.locator('#' + id).inputValue(), '');
   assert.equal(await page.locator('#contextFilter option[value="context:<custom>"]').count(), 0);
 });
