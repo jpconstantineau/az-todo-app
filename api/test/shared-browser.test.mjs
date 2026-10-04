@@ -13,6 +13,71 @@ const settled = page => waitForBrowser(page, async () => {
 });
 const openDetails = async locator => locator.evaluate(element => { element.open = true; });
 
+test('shared lists browser: delayed reads cannot replace a newer snapshot or undo access denial', { timeout: 60000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  const first = await context.newPage(), second = await context.newPage();
+  const releases = []; t.after(() => releases.forEach(release => release()));
+  const holdRead = async page => {
+    let started, release;
+    const requested = new Promise(resolve => { started = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    releases.push(release);
+    await page.route('**/api/shared/list?*', async route => {
+      const response = await route.fetch();
+      started();
+      await gate;
+      await route.fulfill({ response });
+    }, { times: 1 });
+    return { requested, release };
+  };
+  const selectAgain = async (page, id) => {
+    await page.locator('#sharedSelect').selectOption('');
+    await page.waitForFunction(() => document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false');
+    await page.locator('#sharedSelect').selectOption(id);
+  };
+
+  await first.goto(server.url + '/shared.html'); await first.locator('#sharedMain').waitFor();
+  await openDetails(first.locator('details').filter({ has: first.locator('#createShared') }));
+  await first.locator('#createShared input').fill('Shared race');
+  await first.locator('#createShared button').click(); await settled(first);
+  const id = (await local(first)).selected;
+  await first.locator('#addShared input').fill('Milk');
+  await first.locator('#addShared button').click(); await settled(first);
+  await second.goto(server.url + '/shared.html'); await settled(second);
+  await first.locator('#addShared input').fill('Keep this draft');
+  await waitForBrowser(first, async id => (await (await import('/inbox-store.js')).transact('alice')).sharedLists.drafts[id]?.add === 'Keep this draft', id);
+
+  const older = await holdRead(first);
+  await selectAgain(first, id); await older.requested;
+  const previous = (await local(second)).lists[id].revision;
+  await second.getByRole('button', { name: 'Complete Milk', exact: true }).click(); await settled(second);
+  await waitForBrowser(second, async ({ id, revision }) => (await (await import('/inbox-store.js')).transact('alice')).sharedLists.lists[id]?.revision === revision,
+    { id, revision: previous + 1 });
+  older.release();
+  await first.waitForFunction(() => document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false');
+  assert.equal((await local(first)).lists[id].revision, previous + 1);
+  await first.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
+  assert.equal((await local(first)).drafts[id].add, 'Keep this draft');
+
+  const obsolete = await holdRead(first);
+  await selectAgain(first, id); await obsolete.requested;
+  await second.route('**/api/shared/list?*', route => route.fulfill({ status: 403, contentType: 'application/json',
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', error: 'shared_access_denied', message: 'Permission removed.' }) }), { times: 1 });
+  await selectAgain(second, id);
+  await waitForBrowser(second, async id => {
+    const data = (await (await import('/inbox-store.js')).transact('alice')).sharedLists;
+    return !data.lists[id] && !data.directory.some(list => list.id === id);
+  }, id);
+  obsolete.release();
+  await first.waitForFunction(() => document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false');
+  assert.equal((await local(first)).lists[id], undefined);
+  assert.equal(await first.locator('#sharedContent').isVisible(), false);
+  assert.equal((await local(first)).drafts[id].add, 'Keep this draft');
+});
+
 test('shared lists browser: create, invite, constrained member, offline conflict/revocation and account isolation', { timeout: 90000 }, async t => {
   documents.length = 0;
   // Two servers provide independently authenticated browser sessions over one store.
