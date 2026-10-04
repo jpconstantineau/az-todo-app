@@ -45,15 +45,18 @@ test('progressive controls keep capture and editor actions reachable without exp
   assert.equal(await page.locator('#capture button[type=submit]').count(), 1, 'capture has one Save button even with Notes open');
   assert.equal(await page.locator('#capture [name=listId]').isVisible(), true);
   assert.equal(await page.locator('#capture [name=projectId], #capture [name=areas]').count(), 0);
-  for (const name of ['dueLocal', 'contexts']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), false);
+  assert.equal(await page.locator('#captureOptions > summary').innerText(), 'Notes, list, or context');
+  assert.equal(await page.locator('#capture [name=contexts]').isVisible(), true);
+  for (const name of ['dueLocal', 'waitingOn', 'energy', 'timeRequired']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), false);
   await page.locator('#capture [name=newList]').fill('Home');
   assert.equal(await page.locator('#capture [name=status]').isVisible(), false);
-  await page.locator('#capture .task-dates > summary').click();
-  await page.locator('#capture [name=dueDate]').fill('2026-12-01');
-  await page.locator('#capture .task-dates > summary').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.dueDate === '2026-12-01');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Prepare the room');
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js');
+    await transact('alice', local => { local.draft.capture.dueDate = '2026-12-01'; });
+  });
   await page.reload(); await page.locator('#workspace').waitFor();
-  assert.equal(await page.locator('#capture [name=dueDate]').inputValue(), '2026-12-01', 'collapsed metadata survives reload');
+  assert.equal(await page.locator('#capture [name=dueDate]').inputValue(), '2026-12-01', 'an existing draft retains its date after the UI moves');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await showView(page, 'work'); await page.locator('#view').selectOption('all');
