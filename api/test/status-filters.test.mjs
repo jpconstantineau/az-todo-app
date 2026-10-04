@@ -31,6 +31,7 @@ test('status filters: inclusion, exclusion, scopes, offline persistence and acco
   const rows = () => page.locator('#items article').evaluateAll(items => items.map(item => item.dataset.id).sort());
   const status = name => page.getByRole('checkbox', { name, exact: true });
   await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor();
+  await page.locator('#view').selectOption('all');
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.waitForFunction(() => document.querySelectorAll('#items article').length === 4);
   const before = structuredClone(documents);

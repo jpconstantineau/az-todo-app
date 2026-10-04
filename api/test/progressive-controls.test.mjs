@@ -55,7 +55,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   assert.equal(await page.locator('#capture [name=dueDate]').inputValue(), '2026-12-01', 'collapsed metadata survives reload');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
-  await showView(page, 'work');
+  await showView(page, 'work'); await page.locator('#view').selectOption('all');
   await page.getByRole('button', { name: 'Edit Prepare the room', exact: true }).click();
   assert.equal(await page.locator('#edit [name=status]').isVisible(), true);
   assert.equal(await page.locator('#edit [name=dueLocal]').isVisible(), false);

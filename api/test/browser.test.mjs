@@ -52,7 +52,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   assert.equal(item.dueDateUtc, '2026-10-03T18:30:00.000Z'); assert.equal(item.status, 'custom');
   assert.deepEqual(item.contexts, ['@Kitchen', '@Shop']); assert.equal(item.priority, 'Urgent');
   assert.equal(await page.locator('#items img').count(), 0);
-  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('waiting'); assert.equal(await page.locator('#items article').count(), 0);
+  await showView(page, 'work'); await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('waiting'); assert.equal(await page.locator('#items article').count(), 0);
   await showView(page, 'work'); await page.locator('#statusFilter').selectOption('custom'); assert.equal(await page.locator('#items article').count(), 1);
   await showView(page, 'work'); await page.locator('#statusFilter').selectOption('');
   await context.setOffline(true);

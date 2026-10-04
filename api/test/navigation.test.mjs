@@ -32,8 +32,52 @@ async function capture(page, title, list = '') {
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
 }
 
+test('navigation: process selector defaults to Inbox, preserves a chosen list offline and falls back when it disappears', { timeout: 90000 }, async t => {
+  const { page, context, setUser } = await setup(t, '#work');
+  assert.equal(await page.locator('#itemsHeading').textContent(), 'Process and Organize');
+  assert.equal(await page.title(), 'Process and Organize · Personal');
+  assert.equal(await page.getByRole('combobox', { name: 'Your Work', exact: true }).inputValue(), 'inbox');
+  assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace']]) {
+    const link = page.getByRole('link', { name, exact: true });
+    assert.equal(await link.getAttribute('id'), id);
+    assert.equal(await link.getAttribute('title'), name);
+    assert.equal(await link.innerText(), '');
+    assert.equal(await link.locator('svg[aria-hidden="true"]').count(), 1);
+  }
+  await capture(page, 'Process this', 'Errands'); await confirmed(page);
+  const list = documents.find(doc => doc.record?.type === 'list').record;
+  await showView(page, 'work');
+  assert.equal(await page.locator('#view').inputValue(), 'inbox');
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
+  await page.getByRole('button', { name: 'Edit Process this', exact: true }).click();
+  await page.locator('#edit [name=status]').selectOption('next');
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
+  assert.equal(await page.locator('#items article').count(), 0, 'processed work leaves the default Inbox');
+  await page.getByRole('combobox', { name: 'Your Work', exact: true }).selectOption(list.id);
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.work.view === id, list.id);
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#view').inputValue(), list.id);
+  assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
+  await page.evaluate(async id => {
+    await (await import('/inbox-store.js')).transact('alice', local => { local.records['list:' + id].deleted = true; });
+  }, list.id);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#view').inputValue(), 'inbox');
+  assert.equal(await page.locator('#items article').count(), 0);
+  setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
+  await showView(page, 'work');
+  assert.equal(await page.locator('#view').inputValue(), 'inbox');
+  assert.equal(await page.locator('#view option[value="' + list.id + '"]').count(), 0);
+});
+
 test('navigation: incomplete defaults, completed recovery and all statuses work across views and offline reload', { timeout: 90000 }, async t => {
   const { page, context, url, setUser } = await setup(t, '#work');
+  await page.locator('#view').selectOption('all');
   const response = await fetch(`${url}/api/v1/operations`, {
     method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
@@ -111,6 +155,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
 
 test('navigation: unprocessed inbox spans lists while No list preserves filing and offline task identity', { timeout: 90000 }, async t => {
   const { page, context, url, setUser } = await setup(t, '#work');
+  await page.locator('#view').selectOption('all');
   const response = await fetch(`${url}/api/v1/operations`, {
     method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [

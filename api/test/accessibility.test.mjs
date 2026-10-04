@@ -229,7 +229,7 @@ test('accessibility: keyboard actions and editor return focus survive background
   const { page } = await setup(t);
   await capture(page, 'Same title\nSame title');
   await showView(page, 'work');
-  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
+  await showView(page, 'work'); await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('@all');
   const id = await page.locator('#items article').nth(1).getAttribute('data-id');
   const row = `article[data-id="${id}"]`;
   await page.locator(`${row} button`).first().focus();

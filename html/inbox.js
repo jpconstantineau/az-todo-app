@@ -1,12 +1,12 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=49';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=49';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=49';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=49';
-import { clarificationUI } from './clarification.js?v=49';
-import { setupReviews } from './reviews.js?v=49';
-import { setupBriefs } from './briefs.js?v=49';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=49';
-import { setupAgentStatus } from './local-agent.js?v=49';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=50';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=50';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=50';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=50';
+import { clarificationUI } from './clarification.js?v=50';
+import { setupReviews } from './reviews.js?v=50';
+import { setupBriefs } from './briefs.js?v=50';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=50';
+import { setupAgentStatus } from './local-agent.js?v=50';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -26,7 +26,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : 'Your Work') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : 'Process and Organize') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -184,7 +184,7 @@ async function saveClarification(mutations, next) {
   state = saved; render(); broadcast(); void sync(); return true;
 }
 let destination = 'capture';
-const emptyNavigation = () => ({ work: { view: 'all', status: '' }, lists: { view: '', status: '' } });
+const emptyNavigation = () => ({ work: { view: 'inbox', status: '' }, lists: { view: '', status: '' } });
 let navigation = emptyNavigation();
 const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal, showDialog,
   edit: record => {
@@ -297,7 +297,7 @@ function restoreDraft() {
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
   // Preserve the former review filter when upgrading an existing device draft.
-  Object.assign(navigation.work, saved.navigation?.work || { view: saved.view || 'all', status: saved.status || '' });
+  Object.assign(navigation.work, saved.navigation?.work || { view: saved.view || 'inbox', status: saved.status || '' });
   Object.assign(navigation.lists, saved.navigation?.lists || {});
   $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
   workspace(false);
@@ -351,8 +351,8 @@ function render() {
   const listMode = destination === 'lists';
   const filters = navigation[listMode ? 'lists' : 'work'];
   options($('view'), listMode ? lists : [...lists, ...projects.map(project => ({ id: `project:${project.id}`, title: `Project: ${project.title}` }))],
-    listMode ? [['', 'Choose a list']] : [['all', 'All items'], ['inbox', 'Inbox (unprocessed)'], ['unfiled', 'No list'], ['day', 'Planned day']]);
-  $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'all';
+    listMode ? [['', 'Choose a list']] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
+  $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'inbox';
   filters.view = $('view').value;
   refreshOptions();
   filters.statuses = Array.isArray(filters.statuses) ? filters.statuses.filter(status => typeof status === 'string') : [];
@@ -763,9 +763,9 @@ function workspace(focus = true) {
   document.querySelector('.work-panel').hidden = destination === 'capture';
   $('listTools').hidden = !listMode;
   $('newProject').hidden = listMode;
-  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Your Work';
-  $('workEyebrow').textContent = listMode ? 'Organize' : 'Review';
-  $('viewLabel').textContent = listMode ? 'List' : 'View';
+  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process and Organize';
+  $('workEyebrow').textContent = listMode ? 'Organize' : 'Your work';
+  $('viewLabel').textContent = listMode ? 'List' : 'Your Work';
   for (const link of document.querySelectorAll('.workspace-nav a')) {
     if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
