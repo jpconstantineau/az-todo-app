@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=55" defer></script>
+  <script src="/pwa.js?v=56" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=55"></script>
+  <script type="module" src="/inbox.js?v=56"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
@@ -158,7 +158,8 @@
       <p><a href="/help.html#reviews" target="_blank" rel="noopener">Review help (new tab)</a></p>
       <fieldset id="reviewWorkspaceFields" class="workspace-fields">
       <label>Saved reviews<select id="reviewSessions"></select></label>
-      <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button></div>
+      <p class="muted">Weekly reviews include active projects. Review someday / on hold projects separately when you choose. Completed projects remain available in Your Work.</p>
+      <div class="actions"><button id="startDaily" type="button">Start daily review</button><button id="startWeekly" type="button">Start weekly review</button><button id="startSomeday" type="button">Review someday projects</button></div>
       <p id="reviewError" role="alert"></p>
       <section id="reviewBody" hidden>
         <p id="reviewProgress" role="status"></p>
@@ -210,6 +211,10 @@
         <label>Title <input name="title" maxlength="200" required></label>
         <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
         <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
+        <div id="editProjectLifecycle" hidden>
+          <label for="projectStatus">Project status</label>
+          <select id="projectStatus" name="projectStatus" aria-describedby="projectStatusHelp"><option value="active">Active</option><option value="someday">Someday / on hold</option><option value="completed">Completed</option></select>
+          <p id="projectStatusHelp" class="muted">Changing project status keeps its outcome, notes and history. Linked actions keep their own statuses and remain in their existing views and reviews, including unfinished actions. Edit those actions individually if needed. Choose Active to reactivate this project.</p></div>
         <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span class="muted">Moving clears all collection memberships; the original text and item history move with it.</span></label>
         <div id="editCollectionFields" hidden><label>Kind<select name="kind"></select></label><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
         <div id="editAdvanced"><div id="editFields"></div></div>

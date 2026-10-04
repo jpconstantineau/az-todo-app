@@ -243,7 +243,10 @@ fit in 1.5 MB; larger operations receive a validation error before writing. Thes
 limits also bound stored receipts and change entries.
 
 Projects support title, description, creation-only capture fields and a required,
-nonblank `outcome` (at most 4,000 characters). `projectId` is an optional link to
+nonblank `outcome` (at most 4,000 characters). Project `status` accepts `active`,
+`someday`, or `completed`; it defaults to `active` on create, and absent legacy
+status is treated as active. Updating status preserves linked actions and uses
+the same expected-version conflict checks as other edits. `projectId` is an optional link to
 an owned, live project; foreign, missing or deleted projects return
 `404 project_not_found`. A project and its action links can commit atomically in
 one operation, in either mutation order. The
