@@ -1,14 +1,14 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=55';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=55';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=55';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=55';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=55';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=55';
-import { clarificationUI } from './clarification.js?v=55';
-import { setupReviews } from './reviews.js?v=55';
-import { setupBriefs } from './briefs.js?v=55';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=55';
-import { setupAgentStatus } from './local-agent.js?v=55';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=56';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=56';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=56';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=56';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=56';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=56';
+import { clarificationUI } from './clarification.js?v=56';
+import { setupReviews } from './reviews.js?v=56';
+import { setupBriefs } from './briefs.js?v=56';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=56';
+import { setupAgentStatus } from './local-agent.js?v=56';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -52,9 +52,7 @@ function renderWorkspaces() {
       const title = prompt('Workspace name', record.title);
       if (title !== null) return saveWorkspace(record, 'update', { title });
     }), action(record.archived ? 'Unarchive' : 'Archive', () => saveWorkspace(record, 'update', { archived: !record.archived })),
-    action('Delete', () => {
-      if (confirm(`Delete workspace “${record.title}” and hide all of its work? Its contents and history stay stored. Restore it here to recover them.`)) return saveWorkspace(record, 'delete');
-    }));
+    action('Delete', () => saveWorkspace(record, 'delete')));
     return article;
   }));
 }
@@ -581,9 +579,7 @@ function render() {
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
 function deleteButton(record) {
-  return button('Delete', async () => {
-    if (confirm(`Delete “${record.title}”? You can restore it from Menu → Deleted records. Its text and history remain stored; there is no automatic purge.`)) await changeDeletion(record, 'delete');
-  }, `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
+  return button('Delete', () => changeDeletion(record, 'delete'), `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
 }
 function renderDeleted() {
   statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
