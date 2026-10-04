@@ -1,6 +1,7 @@
 import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=61';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=61';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=61';
+import { collectionMoveMutations } from './workspace-move.js?v=61';
 import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=61';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=61';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=61';
@@ -111,9 +112,14 @@ $('createWorkspace').onsubmit = event => {
 };
 edit.elements.workspaceId.onchange = () => {
   const moving = edit.elements.workspaceId.value !== selectedWorkspace;
-  options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'No list']]);
-  options(edit.elements.projectId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'project' && !record.deleted), [['', 'No project']]);
-  if (moving) { edit.elements.listId.value = edit.elements.projectId.value = ''; pickerOptions(edit.elements.collectionRefs, {}, []); } else pickerOptions(edit.elements.collectionRefs, scopedRecords(), selectedRefs(edit.elements.collectionRefs));
+  if (editing?.type === 'item') {
+    options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'No list']]);
+    options(edit.elements.projectId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'project' && !record.deleted), [['', 'No project']]);
+    if (moving) { edit.elements.listId.value = edit.elements.projectId.value = ''; pickerOptions(edit.elements.collectionRefs, {}, []); } else pickerOptions(edit.elements.collectionRefs, scopedRecords(), selectedRefs(edit.elements.collectionRefs));
+  } else {
+    if (moving) edit.elements.parentRef.value = '';
+    edit.elements.parentRef.disabled = moving;
+  }
   void journal();
 };
 function enqueue(local, owner, mutations) {
@@ -697,9 +703,13 @@ function openEditor(record, focus = true, show = true) {
   const parentOptions = Object.values(scopedRecords()).filter(candidate => isCollection(candidate) && !candidate.deleted && !ancestry(candidate, scopedRecords()).some(ref => refKey(ref) === key(record)));
   options(edit.elements.parentRef, parentOptions.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']], true);
   edit.elements.parentRef.value = fields.parentRef ? refKey(fields.parentRef) : '';
+  edit.elements.parentRef.disabled = false;
   options(edit.elements.workspaceId, availableWorkspaces().filter(space => !space.archived), []);
   edit.elements.workspaceId.value = fields.workspaceId || selectedWorkspace;
-  $('editWorkspaceLabel').hidden = record.type !== 'item';
+  $('editWorkspaceLabel').hidden = false;
+  $('editWorkspaceHelp').textContent = record.type === 'item'
+    ? 'Moving clears collection memberships; the original text and item history move with it.'
+    : 'Moving carries nested collections and linked items, including their history. Links to collections left behind are cleared.';
   refreshOptions();
   fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status || 'active' : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
   editing.initialFields ??= formValues(edit);
@@ -759,8 +769,11 @@ async function updateRecord(record, fields, close = false) {
     const saved = await transact(owner, local => {
       const current = projected(local)[key(record)];
       if (record.version !== 0 && (!current || current.deleted || current.version !== record.version)) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
-      enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }]);
-      if (close && current && record.version > 0) rememberEdit(local, current, fields);
+      const movingCollection = current && isCollection(current) && fields.workspaceId && fields.workspaceId !== (current.workspaceId || PERSONAL);
+      const mutations = movingCollection ? collectionMoveMutations(current, fields.workspaceId, projected(local), fields)
+        : [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }];
+      enqueue(local, owner, mutations);
+      if (close && current && record.version > 0 && !movingCollection) rememberEdit(local, current, fields);
       if (close) currentDraft(local).edit = null;
     });
     if (owner === accountId) state = saved;
@@ -832,7 +845,7 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
+      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { workspaceId: values.workspaceId, parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0 && editing.initialFields) {
       const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus || 'active' } : {}) };
