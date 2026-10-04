@@ -8,9 +8,14 @@ import { showView, clickControl } from './navigation-helper.mjs';
 
 const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-async function setup(t, ai = false) {
+async function setup(t, ai = false, seeds = []) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  if (seeds.length) {
+    const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+      body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'workspace-move-seed', mutations: seeds }) });
+    assert.equal(response.status, 200, await response.text());
+  }
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   if (ai) await context.addInitScript(() => {
@@ -25,6 +30,7 @@ async function setup(t, ai = false) {
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   return { page, context, server, setUser: value => { user = value; } };
 }
+const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
 async function createSpace(page, title) {
   await clickControl(page.locator('#manageWorkspaces'));
   await page.locator('#createWorkspace input').fill(title);
@@ -84,6 +90,30 @@ test('workspaces: offline drafts, filters, capture, reviews, moves, reload and a
   await page.waitForFunction(() => document.querySelector('#workspaceSelect').options.length === 1);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   assert.equal(await page.locator('#workspaceSelect').inputValue(), 'personal');
+});
+
+test('workspaces: list move carries a nested project and clarified item through offline save and sync', async t => {
+  const { page, context } = await setup(t, false, [
+    create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' }),
+    create('list', 'root', { title: 'Root', workspaceId: 'work' }),
+    create('project', 'child', { title: 'Child', outcome: 'Done', workspaceId: 'work', parentRef: { type: 'list', id: 'root' } }),
+    create('item', 'task', { title: 'Clarified task', originalText: 'Original task', workspaceId: 'work', projectId: 'child' })
+  ]);
+  await switchTo(page, 'work'); await showView(page, 'lists'); await page.locator('#view').selectOption('root');
+  await page.getByRole('button', { name: 'Edit list: Root' }).click();
+  await context.setOffline(true);
+  await page.locator('#edit [name=workspaceId]').selectOption('family');
+  await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  const saved = await local(page);
+  assert.deepEqual(saved.queue[0].operation.mutations.map(mutation => `${mutation.type}:${mutation.id}`).sort(), ['item:task', 'list:root', 'project:child']);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await switchTo(page, 'family'); await showView(page, 'lists'); await page.locator('#view').selectOption('root');
+  await page.locator('#includeNested').check();
+  await page.getByRole('button', { name: 'Edit Clarified task' }).waitFor();
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
+  assert.equal(documents.find(row => row.id === 'record:item:task').record.originalText, 'Original task');
+  assert.equal(documents.find(row => row.id === 'record:item:task').record.workspaceId, 'family');
 });
 
 test('workspaces: AI capture cancels on switching and restored reviewed batches keep their original workspace', { timeout: 60000 }, async t => {

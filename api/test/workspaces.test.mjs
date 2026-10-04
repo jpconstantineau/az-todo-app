@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { documents, faults, startServer } from './harness.mjs';
 import { workspaceOf, workspaceRecords, workspaceDraft } from '../../html/workspaces.js';
+import { collectionMoveMutations } from '../../html/workspace-move.js';
 
 async function setup(t) {
   documents.length = 0;
@@ -72,6 +73,35 @@ test('workspaces: membership, review scope, foreign IDs, item moves and legacy P
   workspaceDraft(state, '__proto__').capture = { text: 'Safe workspace ID' };
   assert.equal(Object.prototype.capture, undefined);
   assert.equal(workspaceDraft(structuredClone(state), '__proto__').capture.text, 'Safe workspace ID');
+});
+
+test('workspaces: moving a collection carries its nested records and keeps history IDs', async t => {
+  const { post } = await setup(t);
+  assert.equal((await post([
+    create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' }),
+    create('list', 'root', { title: 'Root', workspaceId: 'work' }),
+    create('project', 'child', { title: 'Project', outcome: 'Done', workspaceId: 'work', parentRef: { type: 'list', id: 'root' } }),
+    create('list', 'other', { title: 'Other', workspaceId: 'work' }),
+    create('item', 'task', { title: 'Clarified task', workspaceId: 'work', collectionRefs: [{ type: 'project', id: 'child' }, { type: 'list', id: 'other' }], projectId: 'child', listId: 'other' })
+  ])).status, 200);
+  const records = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
+  records['clarification:task'] = { type: 'clarification', id: 'task', step: 'complete' };
+  records['brief:brief'] = { type: 'brief', id: 'brief', subjectType: 'item', subjectId: 'task' };
+  const mutations = collectionMoveMutations(records['list:root'], 'family', records, { title: 'Root renamed', workspaceId: 'family', parentRef: null });
+  assert.deepEqual(mutations.map(mutation => `${mutation.type}:${mutation.id}`).sort(), ['item:task', 'list:root', 'project:child']);
+  assert.equal((await post([change('list', 'root', 1, { workspaceId: 'family' })])).status, 400, 'a direct API move cannot strand contents');
+  assert.equal((await post(mutations)).status, 200);
+  const moved = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
+  assert.equal(moved['list:root'].title, 'Root renamed');
+  assert.equal(moved['project:child'].workspaceId, 'family');
+  assert.deepEqual(moved['project:child'].parentRef, { type: 'list', id: 'root' });
+  assert.deepEqual(moved['item:task'].collectionRefs, [{ type: 'project', id: 'child' }]);
+  assert.equal(moved['item:task'].listId, null);
+  assert.equal(moved['item:task'].projectId, 'child');
+  assert.equal(moved['list:other'].workspaceId, 'work');
+  moved['clarification:task'] = records['clarification:task']; moved['brief:brief'] = records['brief:brief'];
+  assert.equal(workspaceOf(moved['clarification:task'], moved), 'family');
+  assert.equal(workspaceOf(moved['brief:brief'], moved), 'family');
 });
 
 test('workspaces: concurrent archive and capture serialize; frozen workspace rejects derived history changes', async t => {

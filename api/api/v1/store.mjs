@@ -24,7 +24,7 @@ export async function legacyDefaults(accountId) {
 const create = resourceBody => ({ operationType: "Create", resourceBody });
 const replace = (resourceBody, ifMatch) => ({ operationType: "Replace", id: resourceBody.id, resourceBody, ifMatch });
 
-async function hasContents(accountId, target, pending) {
+async function hasContents(accountId, target, pending, workspaceId = null) {
   const { resources } = await container.items.query({
     query: `SELECT TOP 21 c.record FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='record' AND c.record.deleted=false AND
       (ARRAY_CONTAINS(c.record.collectionRefs, @ref) OR
@@ -32,8 +32,9 @@ async function hasContents(accountId, target, pending) {
        (c.record.parentRef.type=@type AND c.record.parentRef.id=@l))`,
     parameters: [{ name: '@u', value: accountId }, { name: '@l', value: target.id }, { name: '@type', value: target.type }, { name: '@ref', value: { type: target.type, id: target.id } }]
   }, { partitionKey: partition(accountId) }).fetchAll();
-  // At most 20 records can change in this operation; a 21st dependent always blocks deletion.
-  return [...resources.map(row => row.record).filter(record => !pending.some(next => refKey(next) === refKey(record))), ...pending].some(record => collectionContents(record, target));
+  // At most 20 records can change in this operation; a 21st dependent blocks deletion or movement.
+  return [...resources.map(row => row.record).filter(record => !pending.some(next => refKey(next) === refKey(record))), ...pending]
+    .some(record => collectionContents(record, target) && (workspaceId === null || (record.workspaceId || 'personal') !== workspaceId));
 }
 async function validateCollections(record, lookup) {
   if (record.deleted) return;
@@ -133,6 +134,11 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       }
       if (["list", "project"].includes(record.type) && record.deleted && await hasContents(accountId, record, records)) {
         throw new ApiError(409, `${record.type}_not_empty`, `Move or delete this ${record.type}'s items and unlink child collections before deleting it.`);
+      }
+      if (isCollection(record) && current[i]?.record && !record.deleted &&
+          (record.workspaceId || 'personal') !== (current[i].record.workspaceId || 'personal') &&
+          await hasContents(accountId, record, records, record.workspaceId || 'personal')) {
+        throw new ValidationError('Move linked items and child collections with this collection.');
       }
     }
     const response = { apiVersion: 1, accountId, operationId: input.operationId, sequence,

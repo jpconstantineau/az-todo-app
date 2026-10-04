@@ -78,7 +78,7 @@ export function fieldsFor(type, action, input) {
     object(input, ["defaults"], "fields");
     return { defaults: validateDefaults(input.defaults) };
   }
-  const shared = ["title", "description", ...(action === "create" || type === "item" ? ["workspaceId"] : [])];
+  const shared = ["title", "description", "workspaceId"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status"] : ["defaults", "kind", "parentRef"])];
