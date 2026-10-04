@@ -79,7 +79,7 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   assert.equal(await page.title(), 'Process and Organize · Personal');
   assert.equal(await page.getByRole('combobox', { name: 'Your Work', exact: true }).inputValue(), 'inbox');
   assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
-  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace'], ['openReviews', 'Review']]) {
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process and Organize'], ['listWorkspace', 'List Workspace'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
     const link = page.getByRole('link', { name, exact: true });
     assert.equal(await link.getAttribute('id'), id);
     assert.equal(await link.getAttribute('title'), name);
@@ -115,6 +115,135 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   await showView(page, 'work');
   assert.equal(await page.locator('#view').inputValue(), 'inbox');
   assert.equal(await page.locator('#view option[value="' + list.id + '"]').count(), 0);
+});
+
+test('navigation: Execute selects a list, opens details and completes exact items offline through reload and sync', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t, '#execute');
+  assert.equal(await page.title(), 'Execute · Personal');
+  assert.equal(await page.locator('#doWork').getAttribute('aria-current'), 'page');
+  assert.equal(await page.locator('.inbox-grid > #execute').isVisible(), true);
+  assert.match(await page.locator('#executeItems').innerText(), /No lists yet/);
+  await capture(page, 'Milk\nBread', 'Groceries'); await confirmed(page);
+  await capture(page, 'Laundry', 'Chores'); await confirmed(page);
+  await capture(page, 'Unfiled'); await confirmed(page);
+  const groceries = documents.find(doc => doc.record?.title === 'Groceries').record;
+  const chores = documents.find(doc => doc.record?.title === 'Chores').record;
+  const milk = documents.find(doc => doc.record?.title === 'Milk').record;
+  await showView(page, 'execute');
+  assert.equal(await page.locator('#executeItems article').count(), 0, 'choosing a list is required');
+  await page.locator('#executeList').selectOption(groceries.id);
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Milk', 'Bread']);
+  await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Edit Milk');
+  await page.keyboard.press('Enter'); await page.locator('#editor').waitFor();
+  await page.locator('#edit [name=description]').fill('Buy two litres');
+  await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
+  await page.waitForFunction(() => document.activeElement.closest('#executeItems') && document.activeElement.getAttribute('aria-label') === 'Edit Milk');
+  await context.setOffline(true);
+  await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).waitFor({ state: 'detached' });
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === id && mutation.fields?.status === 'completed')), milk.id);
+  const pending = (await local(page)).queue;
+  assert.equal(pending.length, 1);
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Bread']);
+  await page.locator('#executeList').selectOption(chores.id);
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Laundry']);
+  await page.locator('#executeList').selectOption(groceries.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.execute.view === id, groceries.id);
+  await showView(page, 'work');
+  assert.equal(await page.locator('#view').inputValue(), 'inbox', 'Execute has an independent list selection');
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('#doWork').getAttribute('aria-current') === 'page');
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#executeList').inputValue(), groceries.id);
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Bread']);
+  assert.deepEqual((await local(page)).queue, pending);
+  await page.getByRole('checkbox', { name: 'Complete Bread', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#executeItems').textContent.includes('All items'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 2);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+  const records = documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
+  assert.equal(records.length, 6, 'completion preserves one canonical record per item and list');
+  assert.equal(records.find(record => record.id === milk.id).status, 'completed');
+  assert.equal(records.find(record => record.id === milk.id).description, 'Buy two litres');
+  assert.equal(records.find(record => record.id === milk.id).originalText, 'Milk\nBread');
+  assert.equal(records.find(record => record.title === 'Laundry').status, 'inbox');
+  assert.equal(records.find(record => record.title === 'Unfiled').status, 'inbox');
+});
+
+test('navigation: Execute keeps failed completions unchecked, clears deleted lists and isolates accounts', { timeout: 90000 }, async t => {
+  const { page, context, setUser } = await setup(t);
+  await capture(page, 'Private task', 'Private list'); await confirmed(page);
+  const list = documents.find(doc => doc.record?.type === 'list').record;
+  await showView(page, 'execute'); await page.locator('#executeList').selectOption(list.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.execute.view === id, list.id);
+  await context.setOffline(true);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.getByRole('checkbox', { name: 'Complete Private task', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#recoveryText').value.includes('Private task'));
+  assert.equal(await page.getByRole('checkbox', { name: 'Complete Private task', exact: true }).isChecked(), false);
+  assert.equal((await local(page)).queue.length, 0, 'a failed local completion never enters the queue');
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.getByRole('checkbox', { name: 'Complete Private task', exact: true }).isChecked(), false);
+  await page.evaluate(async id => {
+    await (await import('/inbox-store.js')).transact('alice', local => { local.records['list:' + id].deleted = true; });
+  }, list.id);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#executeList').inputValue(), '');
+  assert.equal(await page.locator('#executeItems article').count(), 0);
+  setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await confirmed(page);
+  await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
+  await showView(page, 'execute');
+  assert.equal(await page.locator('#executeList').inputValue(), '');
+  assert.equal(await page.locator('#executeList option[value="' + list.id + '"]').count(), 0);
+  assert.equal(await page.locator('#executeItems article').count(), 0);
+});
+
+test('navigation: Execute scopes lists and saved selection to each workspace and disables archived work', { timeout: 90000 }, async t => {
+  const { page, url } = await setup(t);
+  await capture(page, 'Personal task', 'Personal list'); await confirmed(page);
+  const personalList = documents.find(doc => doc.record?.type === 'list').record;
+  const response = await fetch(url + '/api/v1/operations', {
+    method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execute-workspace', mutations: [
+      { type: 'workspace', id: 'work', action: 'create', expectedVersion: 0, fields: { title: 'Work' } },
+      { type: 'list', id: 'work-list', action: 'create', expectedVersion: 0, fields: { title: 'Work list', workspaceId: 'work' } },
+      { type: 'item', id: 'work-task', action: 'create', expectedVersion: 0, fields: { title: 'Work task', workspaceId: 'work', listId: 'work-list' } }
+    ] })
+  });
+  assert.equal(response.status, 200);
+  await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).records['item:work-task']?.version === 1);
+  await confirmed(page);
+  await showView(page, 'execute'); await page.locator('#executeList').selectOption(personalList.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation.execute.view === id, personalList.id);
+  await page.locator('#workspaceSelect').selectOption('work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).selectedWorkspace === 'work');
+  assert.equal(await page.locator('#executeList').inputValue(), '');
+  assert.equal(await page.locator('#executeList option[value="' + personalList.id + '"]').count(), 0);
+  await page.locator('#executeList').selectOption('work-list');
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Work task']);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).workspaceDrafts.work.navigation.execute.view === 'work-list');
+  await page.locator('#workspaceSelect').selectOption('personal');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).selectedWorkspace === 'personal');
+  assert.equal(await page.locator('#executeList').inputValue(), personalList.id);
+  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Personal task']);
+  await page.locator('#workspaceSelect').selectOption('work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).selectedWorkspace === 'work');
+  await clickControl(page.locator('#manageWorkspaces'));
+  await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
+  await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor();
+  await page.locator('#closeWorkspaces').click();
+  assert.equal(await page.locator('#executeList').inputValue(), 'work-list');
+  assert.equal(await page.getByRole('checkbox', { name: 'Complete Work task', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Edit Work task', exact: true }).isDisabled(), true);
+  await confirmed(page);
+  assert.equal(documents.find(doc => doc.record?.id === 'work-task').record.status, 'inbox');
 });
 
 test('navigation: incomplete defaults, completed recovery and all statuses work across views and offline reload', { timeout: 90000 }, async t => {
@@ -449,7 +578,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   await page.route('**/api/v1/operations', route => route.fulfill({ status: 400, json: { apiVersion: 1, error: 'invalid_request', message: 'Keep this rejected save.' } }));
   await capture(page, 'Rejected private task'); await page.locator('#failure').waitFor();
   await page.locator('#captureText').fill('Private unsaved draft');
-  for (const view of ['work', 'lists', 'capture']) {
+  for (const view of ['work', 'lists', 'execute', 'capture']) {
     await showView(page, view);
     assert.ok(await page.locator('#failure').isVisible());
     assert.ok(await page.locator('#discard').isVisible());
@@ -462,7 +591,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   await context.setOffline(true);
   await page.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('Full', 'QuotaExceededError'); }; });
   await page.locator('#captureText').fill('Recover this draft'); await page.locator('#recovery').waitFor();
-  for (const view of ['work', 'lists', 'capture']) {
+  for (const view of ['work', 'lists', 'execute', 'capture']) {
     await showView(page, view);
     assert.ok(await page.locator('#recovery').isVisible());
     assert.match(await page.locator('#recoveryText').inputValue(), /Recover this draft/);
@@ -490,11 +619,12 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   assert.equal(await page.locator('.work-panel').isVisible(), false);
 });
 
-test('navigation: keyboard links, responsive layout and appearance across all four destinations', { timeout: 90000 }, async t => {
+test('navigation: keyboard links, responsive layout and appearance across all five destinations', { timeout: 90000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Buy milk\nBook a bike tune-up', 'Weekend'); await confirmed(page);
   const list = documents.find(doc => doc.record?.type === 'list').record;
   await showView(page, 'lists'); await page.locator('#view').selectOption(list.id);
+  await showView(page, 'execute'); await page.locator('#executeList').selectOption(list.id);
   await showView(page, 'capture');
   await page.locator('#quickFocus').focus(); await page.keyboard.press('Tab');
   assert.ok(await page.locator('#yourWork').evaluate(el => el === document.activeElement));
@@ -507,15 +637,16 @@ test('navigation: keyboard links, responsive layout and appearance across all fo
     await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
     await page.locator('[data-appearance]').selectOption(theme);
     await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+    if (await page.locator('#appMenu').evaluate(element => element.open)) await page.locator('#appMenu > summary').click();
     for (const width of [320, 390, 768, 1440, 2560]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const view of ['capture', 'work', 'lists', 'reviews']) {
+      for (const view of ['capture', 'work', 'lists', 'execute', 'reviews']) {
         await showView(page, view);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${theme} ${width} ${view}`);
         assert.equal(await page.locator('.workspace-nav [aria-current="page"]').count(), 1);
         assert.equal(await page.locator('.inbox-grid > section:visible:not(#failure)').count(), 1);
         for (const link of await page.locator('.workspace-nav a').all()) assert.ok((await link.boundingBox()).height >= 44);
-        if (shots && [390, 1440].includes(width) && (theme === 'dark' || view === 'work')) {
+        if (shots && [390, 1440].includes(width) && (theme === 'dark' || ['work', 'execute'].includes(view))) {
           await page.locator('.workspace-nav [aria-current="page"]').focus();
           await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
           await page.evaluate(() => scrollTo(0, 0));
@@ -527,7 +658,7 @@ test('navigation: keyboard links, responsive layout and appearance across all fo
   // Reflow and 200% text enlargement; physical browser zoom/phone keyboards remain manual checks.
   await page.setViewportSize({ width: 720, height: 450 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  for (const view of ['capture', 'work', 'lists', 'reviews']) {
+  for (const view of ['capture', 'work', 'lists', 'execute', 'reviews']) {
     await showView(page, view);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   }
