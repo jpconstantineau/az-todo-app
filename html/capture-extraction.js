@@ -1,6 +1,6 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=48';
-import { checkModel, beginModelWork, modelReadiness } from './local-agent.js?v=48';
+import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=49';
+import { beginModelWork, modelReadiness } from './local-agent.js?v=49';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -104,7 +104,8 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   const $ = id => document.getElementById(id);
   const field = $('captureText'), mirror = $('captureMirror');
   let completion = null, pendingCursor = null, composing = false, listSource = '';
-  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, finish, busy = false, timer, enabled = false, includeLists = false, readiness = 'unavailable';
+  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, finish, busy = false, timer, enabled = false, includeLists = false;
+  const unavailableMessage = 'Local AI is unavailable here. Review tasks manually, or use one item per line and Save on device.';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; };
   function openReview() { showDialog($('extractionReview')); $('extractionHeading').focus(); }
   function finishInteraction(focused, open = false) {
@@ -170,13 +171,19 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   });
   field.addEventListener('compositionstart', () => { composing = true; cancel(); });
   field.addEventListener('compositionend', () => { composing = false; changed(); });
-  function cancel() { pendingCursor = null; clearCompletion(); clearTimeout(timer); generation++; controller?.abort(); controller = null; finish?.(model ? 'available' : undefined); finish = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; $('extractStart').disabled = $('extractManual').disabled = false; }
-  async function check() {
-    try { readiness = await checkModel(); }
-    catch { readiness = 'unavailable'; }
-    if (readiness === 'unavailable') status('Local AI is unavailable here. Review tasks manually, or use one item per line and Save on device.');
+  function updateControls() {
+    const unavailable = modelReadiness() === 'unavailable';
+    $('extractAuto').disabled = $('extractLists').disabled = unavailable;
+    $('extractStart').disabled = busy || unavailable;
+    $('extractManual').disabled = busy;
   }
-  void check();
+  document.addEventListener('agentstatuschange', () => {
+    updateControls();
+    if (modelReadiness() === 'unavailable') status(unavailableMessage);
+    else if ($('extractionStatus').textContent === unavailableMessage) status('Optional local AI. Manual capture always works.');
+  });
+  updateControls();
+  function cancel() { pendingCursor = null; clearCompletion(); clearTimeout(timer); generation++; controller?.abort(); controller = null; finish?.(model ? 'available' : undefined); finish = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; updateControls(); }
   function changed() {
     if (composing) return;
     refreshLists();
@@ -185,7 +192,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     if (value !== sourceText || fields !== sourceFields) {
       if (value !== sourceText) clock = value ? captureClock() : null;
       sourceText = value; sourceFields = fields; cancel();
-      if (enabled && value.trim()) {
+      if (enabled && modelReadiness() !== 'unavailable' && value.trim()) {
         if (draft) status('Your reviewed suggestions are kept. Accept or discard that review before processing changed text.');
         else timer = setTimeout(() => { void run(false, true); }, 1200);
       }
@@ -268,7 +275,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     const focused = document.activeElement;
     let ready = false;
     changed(); cancel(); const run = generation, owner = input.accountId;
-    busy = true; $('extractManual').disabled = $('extractStart').disabled = true;
+    busy = true; updateControls();
     try {
       if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before reviewing tasks.');
       const source = text(input.original ?? input.text, 16000, 'Capture');
@@ -281,7 +288,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       status('Manual review saved on device. Add titles and notes; nothing is committed until acceptance.');
       ready = true;
     } catch (error) { if (run === generation && owner === current()?.accountId) status(error.message); }
-    finally { if (run === generation) { busy = false; $('extractManual').disabled = $('extractStart').disabled = false; finishInteraction(focused, ready); } }
+    finally { if (run === generation) { busy = false; updateControls(); finishInteraction(focused, ready); } }
   };
   async function run(interactive, inline = false) {
     if (inline && (composing || field.selectionStart !== field.selectionEnd)) return;
@@ -292,7 +299,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     let ready = false;
     changed(); cancel(); const run = generation; busy = true;
     controller = new AbortController(); const signal = controller.signal;
-    $('extractStart').disabled = $('extractManual').disabled = true; $('extractCancel').hidden = false;
+    updateControls(); $('extractCancel').hidden = false;
     status('Saving your capture before checking local AI…');
     const owner = input.accountId, source = inline ? input.text : input.original ?? input.text, cursor = field.selectionStart;
     if (inline) pendingCursor = cursor;
@@ -302,7 +309,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     let session, timeout, done;
     try {
       const api = globalThis.LanguageModel;
-      readiness = modelReadiness();
+      const readiness = modelReadiness();
       if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before requesting suggestions. AI capture uses existing lists only.');
       if (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness)) throw new Error('Local AI is unavailable. Use one item per line and Save on device; comma / semicolon preview is also available.');
       if (!interactive && readiness !== 'available') throw new Error('Choose Suggest tasks now to start or continue the browser model download. Manual capture is available.');
@@ -319,7 +326,6 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       if (!saved) throw new Error('Save the capture on this device before requesting suggestions.');
       if (stale()) return;
       text(source, 16000, 'Capture');
-      readiness = 'available';
       model = session; status('Generating local suggestions. Nothing has been committed.');
       const contextLists = includeLists ? input.lists : [];
       if (inline) {
@@ -360,7 +366,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       done?.(); if (finish === done) finish = null;
       clearTimeout(timeout); destroyModel(session);
       if (run === generation) {
-        pendingCursor = null; model = null; controller = null; busy = false; $('extractStart').disabled = $('extractManual').disabled = false; $('extractCancel').hidden = true;
+        pendingCursor = null; model = null; controller = null; busy = false; updateControls(); $('extractCancel').hidden = true;
         if (interactive && !inline) finishInteraction(focused, ready);
       }
     }
@@ -386,7 +392,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     suspend() { cancel(); $('extractionReview').close(); },
     snapshot: () => ({ draft: structuredClone(draft), clock, sourceText, enabled, includeLists }),
     restore(value) { cancel(); draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); },
-    reset(keepEnabled = false) { cancel(); draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status('Optional local AI. Manual capture always works.'); },
+    reset(keepEnabled = false) { cancel(); draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : 'Optional local AI. Manual capture always works.'); },
     close() { $('extractionReview').close(); }
   };
 }

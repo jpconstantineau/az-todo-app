@@ -11,6 +11,11 @@ with **Review saved suggestions** available even when AI options are collapsed. 
 commits the reviewed batch. **Suggest tasks now** starts an explicit attempt,
 including a browser model download if necessary; typing never initiates downloads.
 
+When the header agent is unavailable, both AI checkboxes and **Suggest tasks now**
+are disabled. Manual capture and task review still work. Saved AI preferences stay
+with the draft and become usable again when this device supports the model;
+availability changes and reloads do not themselves start inference.
+
 **Review tasks manually** opens the same durable batch review without a model,
 including for paragraphs longer than a manual one-line title. Add titles and
 notes using the exact original; nothing runs through AI. Original notes and the

@@ -133,12 +133,53 @@ test('inline capture and explicit batch review journal before inference, preserv
 
 test('manual capture survives absent or invalid local AI, and no tasks are saved implicitly', { timeout: 90000 }, async t => {
   const { page } = await setup(t, { absent: true });
-  await page.locator('#captureText').fill('Milk'); await page.locator('#extractAuto').check();
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isDisabled(), true);
+  assert.equal(await page.locator('#extractManual').isEnabled(), true);
+  await page.locator('#captureText').fill('Milk');
   await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.includes('unavailable'));
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await confirmed(page);
   assert.equal(records().find(record => record.type === 'item').title, 'Milk');
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isDisabled(), true);
+});
+
+test('capture follows agent availability across manual review and reload without losing AI preferences', async t => {
+  const { page } = await setup(t);
+  await page.locator('#extractAuto').check(); await page.locator('#extractLists').check();
+  await waitForBrowser(page, async () => {
+    const saved = (await (await import('/inbox-store.js')).transact('alice')).draft.extraction;
+    return saved.enabled && saved.includeLists;
+  });
+  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=49')).checkModel(); });
+  await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'unavailable');
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isDisabled(), true);
+  for (const id of ['extractAuto', 'extractLists']) assert.equal(await page.locator('#' + id).isChecked(), true);
+  await page.locator('#captureText').fill('Review this manually');
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  assert.match(await page.locator('#extractionHelp').textContent(), /No AI was used/);
+  await page.locator('#extractOriginal').click();
+  await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  await waitForBrowser(page, async () => !(await (await import('/inbox-store.js')).transact('alice')).draft.extraction.draft);
+  assert.equal(await page.locator('#extractStart').isDisabled(), true);
+  await page.addInitScript(() => { aiMode.state = 'unavailable'; });
+  await page.reload(); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'unavailable');
+  await clickControl(page.locator('#captureAI summary'));
+  for (const id of ['extractAuto', 'extractLists']) {
+    assert.equal(await page.locator('#' + id).isDisabled(), true);
+    assert.equal(await page.locator('#' + id).isChecked(), true);
+  }
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
+  assert.equal(await page.locator('#extractStart').isDisabled(), true);
+  assert.equal(await page.evaluate(() => aiCalls.creates), 0);
+  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=49')).checkModel(); });
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isEnabled(), true);
+  await page.locator('#agentStatus').click();
+  await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'available');
+  for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isEnabled(), true);
+  assert.equal(await page.evaluate(() => aiCalls.prompts.length), 0);
 });
 
 test('late results cannot overwrite changed input, cancellation, or another account', { timeout: 90000 }, async t => {
