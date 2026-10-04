@@ -1,6 +1,6 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=58';
-import { beginModelWork, modelReadiness } from './local-agent.js?v=58';
+import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=59';
+import { beginModelWork, modelReadiness } from './local-agent.js?v=59';
 
 const text = (value, max, name) => {
   if (typeof value !== 'string' || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error(`${name} must be text of at most ${max} characters.`);
@@ -105,7 +105,7 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   const field = $('captureText'), mirror = $('captureMirror');
   let completion = null, pendingCursor = null, composing = false, listSource = '';
   let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, model, finish, busy = false, timer, enabled = false, includeLists = false;
-  const unavailableMessage = 'Local AI is unavailable here. Review tasks manually, or use one item per line and Save on device.';
+  const unavailableMessage = 'Local AI is unavailable here. Use one item per line and Save on device.';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; };
   function openReview() { showDialog($('extractionReview')); $('extractionHeading').focus(); }
   function finishInteraction(focused, open = false) {
@@ -173,9 +173,10 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   field.addEventListener('compositionend', () => { composing = false; changed(); });
   function updateControls() {
     const unavailable = modelReadiness() === 'unavailable';
+    $('captureAI').toggleAttribute('data-unavailable', unavailable);
+    $('extractionStatus').hidden = unavailable;
     $('extractAuto').disabled = $('extractLists').disabled = unavailable;
     $('extractStart').disabled = busy || unavailable;
-    $('extractManual').disabled = busy;
   }
   document.addEventListener('agentstatuschange', () => {
     updateControls();
@@ -267,28 +268,6 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     status(draft ? 'Your saved review is kept. The list-name choice applies to your next suggestion.' : 'List context updated.');
     void journal();
     if (enabled && !draft && current()?.text.trim()) timer = setTimeout(() => { void run(false, true); }, 1200);
-  };
-  $('extractManual').onclick = async () => {
-    const input = current();
-    if (busy || !input?.text.trim()) { status('Enter a capture first.'); return; }
-    if (draft) { render(); openReview(); return; }
-    const focused = document.activeElement;
-    let ready = false;
-    changed(); cancel(); const run = generation, owner = input.accountId;
-    busy = true; updateControls();
-    try {
-      if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before reviewing tasks.');
-      const source = text(input.original ?? input.text, 16000, 'Capture');
-      const notes = text(input.body || '', 4000, 'Notes');
-      draft = { id: crypto.randomUUID(), source, inputCapture: captureInput(input), clock: structuredClone(clock), manual: true, notes: '',
-        items: [{ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID(), description: notes, listId: input.listId || '' }] };
-      render();
-      if (!await journal()) throw new Error('Manual review could not be saved. Copy/export it before leaving.');
-      if (run !== generation || owner !== current()?.accountId) return;
-      status('Manual review saved on device. Add titles and notes; nothing is committed until acceptance.');
-      ready = true;
-    } catch (error) { if (run === generation && owner === current()?.accountId) status(error.message); }
-    finally { if (run === generation) { busy = false; updateControls(); finishInteraction(focused, ready); } }
   };
   async function run(interactive, inline = false) {
     if (inline && (composing || field.selectionStart !== field.selectionEnd)) return;

@@ -112,14 +112,18 @@ test('workspaces: AI capture cancels on switching and restored reviewed batches 
   assert.equal((await local(page)).workspaceDrafts[family].capture.text, 'Write report');
 });
 
-test('workspaces: manual reviews and list-name permission stay with their workspace', async t => {
+test('workspaces: suggested reviews and list-name permission stay with their workspace', async t => {
   const { page, context } = await setup(t, true);
   const work = await createSpace(page, 'Work'); await synced(page);
   await switchTo(page, work); await context.setOffline(true);
   await page.locator('#captureText').fill('Prepare the report and check its figures.');
   await page.locator('#captureAI summary').click();
   await page.locator('#extractLists').check();
-  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  await page.locator('#extractStart').click();
+  await page.waitForFunction(() => typeof finishWorkspaceAI === 'function');
+  const result = JSON.stringify({ items: [{ title: 'Prepare the report', description: '', listId: '', priority: '', context: '', area: '', dueDate: '', dueTime: '', evidence: 'Prepare the report', uncertainty: '' }], notes: '' });
+  await page.evaluate(result => finishWorkspaceAI(result), result);
+  await page.locator('#extractionReview').waitFor();
   await page.locator('#extractionItems [name=title]').fill('Prepare the report');
   await page.locator('#extractClose').click();
   await switchTo(page, 'personal');

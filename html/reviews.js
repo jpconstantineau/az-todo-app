@@ -1,6 +1,6 @@
-import { belongsTo, memberships, refKey } from './collection-model.js?v=58';
-import { key, projected } from './inbox-store.js?v=58';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=58';
+import { belongsTo, memberships, refKey } from './collection-model.js?v=59';
+import { key, projected } from './inbox-store.js?v=59';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=59';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
