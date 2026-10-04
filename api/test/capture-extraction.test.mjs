@@ -64,7 +64,7 @@ async function setup(t, mode = {}) {
           aiCalls.prompts.push({ text, schema: options.responseConstraint });
           if (aiMode.fail) throw Error('Model failed');
           if (aiMode.delay) return new Promise(resolve => { window.finishAI = resolve; });
-          return aiMode.raw || raw;
+          return aiMode.raw || (options.responseConstraint.properties.text ? JSON.stringify({ text: ' about the quote' }) : raw);
         } };
         return Promise.resolve(model);
       }
@@ -78,12 +78,18 @@ async function setup(t, mode = {}) {
   return { page, context, browser, server, setUser: value => { user = value; } };
 }
 
-test('opted-in automatic capture journals before inference, preserves corrections offline and accepts once', { timeout: 90000 }, async t => {
+test('inline capture and explicit batch review journal before inference, preserve corrections offline and accept once', { timeout: 90000 }, async t => {
   const { page, context, browser } = await setup(t);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.locator('#extractAuto').check();
   await page.locator('#captureText').fill(source);
+  await page.locator('#captureGhost').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), source);
+  assert.equal((await local(page)).draft.extraction.draft, null);
+  await page.locator('#extractStart').click();
   await page.locator('#extractReview').waitFor();
+  await page.locator('#extractClose').click();
+  await page.locator('#captureText').focus();
   assert.equal(await page.locator('#extractionReview').evaluate(el => el.open), false, 'automatic suggestions must not steal focus');
   assert.equal(await page.locator('#captureText').evaluate(el => document.activeElement === el), true);
   assert.equal(records().length, 0);
@@ -288,7 +294,14 @@ test('list-name permission is opt-in, persists per account and cancellation stop
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.extraction.includeLists);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#extractLists').isChecked(), true);
+  await page.evaluate(raw => { aiMode.raw = raw; }, output([suggestion({ listId: 'private' })]));
   await clickControl(page.locator('#extractStart')); await page.locator('#extractionReview').waitFor();
+  assert.equal(await page.locator('#extractionItems [name=listId]').inputValue(), 'private');
+  await page.locator('#extractClose').click(); await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  await page.locator('#captureAI > summary').click();
+  assert.equal(await page.locator('#extractReview').isVisible(), true, 'saved review is visible outside collapsed AI options');
+  assert.match(await page.locator('#captureSuggestedTasks').textContent(), /Call Sam → Private list name/);
+  await page.locator('#extractReview').click();
   assert.match(await page.evaluate(() => aiCalls.prompts[0].text), /Private list name/);
   await page.locator('#extractOriginal').click();
   await page.evaluate(() => { aiMode.delay = true; });
@@ -350,4 +363,139 @@ test('manual review storage failures retain source and corrections without queui
   assert.match(await page.locator('#recoveryText').inputValue(), /Keep this correction/);
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0);
+});
+
+
+test('inline text appears at the cursor, Tab inserts only the continuation and the ordinary draft survives offline', { timeout: 60000 }, async t => {
+  const { page, context } = await setup(t);
+  await page.locator('#captureText').fill('Call Sam today');
+  await page.locator('#captureText').evaluate(field => field.setSelectionRange(8, 8));
+  await page.locator('#extractAuto').check();
+  await page.locator('#captureGhost').waitFor();
+  assert.equal(await page.locator('#captureBefore').textContent(), 'Call Sam');
+  assert.equal(await page.locator('#captureGhost').textContent(), ' about the quote');
+  assert.equal(await page.locator('#captureAfter').textContent(), ' today');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam today');
+  assert.equal((await local(page)).draft.capture.text, 'Call Sam today');
+  assert.equal((await local(page)).draft.extraction.draft, null);
+  assert.equal((await local(page)).queue.length, 0);
+  const request = await page.evaluate(() => aiCalls.prompts[0]);
+  assert.equal(request.schema.properties.text.maxLength, 500);
+  assert.match(request.text, /"beforeCursor":"Call Sam","afterCursor":" today"/);
+  await page.locator('#captureText').focus();
+  if (process.env.CAPTURE_SUGGESTION_SCREENSHOTS) {
+    await mkdir(process.env.CAPTURE_SUGGESTION_SCREENSHOTS, { recursive: true });
+    for (const theme of ['dark', 'light']) for (const width of [320, 390, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+      await page.locator('#captureText').scrollIntoViewIfNeeded();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await page.screenshot({ path: process.env.CAPTURE_SUGGESTION_SCREENSHOTS + '/inline-' + theme + '-' + width + '.png', fullPage: true });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    }
+  }
+  await page.locator('#captureText').press('Tab');
+  await page.waitForFunction(() => document.querySelector('#captureText').value === 'Call Sam about the quote today');
+  assert.equal(await page.locator('#captureText').evaluate(field => field === document.activeElement), true);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Call Sam about the quote today');
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal(records().length, 0);
+  await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam about the quote today');
+  assert.equal(await page.locator('#captureMirror').isHidden(), true);
+  assert.equal(await page.evaluate(() => aiCalls.creates), 0, 'reload never runs inference');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 1);
+  assert.equal((await local(page)).queue[0].operation.mutations[0].fields.title, 'Call Sam about the quote today');
+});
+
+test('inline Escape, Shift+Tab, cursor moves and pointer insertion preserve ordinary editing', { timeout: 30000 }, async t => {
+  const { page } = await setup(t);
+  await page.locator('#captureText').fill('Call Sam'); await page.locator('#extractAuto').check();
+  await page.locator('#captureGhost').waitFor(); await page.locator('#captureText').focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.getByRole('button', { name: 'Save on device', exact: true }).evaluate(button => button === document.activeElement), true);
+  await page.locator('#captureText').focus(); await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#captureGhost').isHidden(), true);
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#captureOptions > summary').evaluate(summary => summary === document.activeElement), true);
+  await page.locator('#captureText').fill('Call Sam again'); await page.locator('#captureGhost').waitFor();
+  await page.keyboard.press('ArrowLeft'); await page.locator('#captureGhost').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam again');
+  await page.locator('#captureText').fill('Call Sam once more'); await page.locator('#captureGhost').waitFor();
+  await page.locator('#captureCompletionUse').click();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam once more about the quote');
+  assert.equal(await page.locator('#captureText').evaluate(field => field === document.activeElement), true);
+  assert.equal((await local(page)).queue.length, 0);
+});
+
+test('list context is visible, changing it regenerates inline text and late results cannot cross accounts', { timeout: 30000 }, async t => {
+  const { page, setUser } = await setup(t, { delay: true });
+  await page.locator('#extractLists').check();
+  assert.match(await page.locator('#extractListsHelp').textContent(), /No existing lists in this workspace/);
+  await page.locator('#extractLists').uncheck();
+  await page.evaluate(async () => {
+    await (await import('/inbox-store.js')).transact('alice', local => {
+      local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', version: 1, accountId: 'alice', deleted: false };
+    });
+    document.querySelector('#sync').click();
+  });
+  await page.waitForFunction(() => [...document.querySelector('#capture [name=listId]').options].some(option => option.value === 'private'));
+  await confirmed(page);
+  await page.locator('#extractAuto').check(); await page.locator('#captureText').fill('Call Sam');
+  await page.waitForFunction(() => aiCalls.prompts.length === 1);
+  assert.doesNotMatch(await page.evaluate(() => aiCalls.prompts[0].text), /Private list name/);
+  await page.evaluate(() => { window.oldAI = finishAI; });
+  await page.locator('#extractLists').check();
+  assert.match(await page.locator('#extractListsHelp').textContent(), /Included names: Private list name/);
+  await page.evaluate(() => oldAI(JSON.stringify({ text: ' stale response' })));
+  assert.equal(await page.locator('#captureGhost').isHidden(), true);
+  await page.waitForFunction(() => aiCalls.prompts.length === 2);
+  assert.match(await page.evaluate(() => aiCalls.prompts[1].text), /Private list name/);
+  await page.evaluate(() => finishAI(JSON.stringify({ text: ' with list context' })));
+  await page.locator('#captureGhost').waitFor();
+  assert.equal(await page.locator('#captureGhost').textContent(), ' with list context');
+  await page.locator('#extractLists').uncheck();
+  assert.match(await page.locator('#extractListsHelp').textContent(), /List names are excluded/);
+  await page.waitForFunction(() => aiCalls.prompts.length === 3);
+  assert.doesNotMatch(await page.evaluate(() => aiCalls.prompts[2].text), /Private list name/);
+  setUser('bob'); await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await page.evaluate(() => finishAI(JSON.stringify({ text: ' alice only' })));
+  assert.equal(await page.locator('#captureGhost').isHidden(), true);
+  assert.equal(await page.locator('#captureText').inputValue(), '');
+  assert.doesNotMatch(await page.locator('#extractListsHelp').textContent(), /Private list name/);
+});
+
+test('invalid inline output leaves capture untouched and typing never starts a model download', { timeout: 30000 }, async t => {
+  const { page } = await setup(t, { state: 'downloadable' });
+  await page.locator('#extractAuto').check(); await page.locator('#captureText').fill('Call Sam');
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.includes('Choose Suggest tasks now'));
+  assert.equal(await page.evaluate(() => aiCalls.creates), 0);
+  await page.locator('#extractAuto').uncheck();
+  await page.evaluate(() => { aiMode.raw = JSON.stringify({ text: 'x'.repeat(501) }); });
+  await page.locator('#extractAuto').check();
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent === 'Invalid suggestion');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam');
+  assert.equal(await page.locator('#captureMirror').isHidden(), true);
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal((await local(page)).draft.extraction.draft, null);
+});
+
+test('inline generation waits for persistence and rejects results after cursor movement', { timeout: 30000 }, async t => {
+  const { page } = await setup(t, { delay: true });
+  await page.locator('#captureText').fill('Call Sam');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Call Sam');
+  await page.locator('#extractAuto').check(); await page.waitForFunction(() => aiCalls.prompts.length === 1);
+  await page.locator('#captureText').focus(); await page.keyboard.press('ArrowLeft');
+  await page.evaluate(() => finishAI(JSON.stringify({ text: ' stale continuation' })));
+  assert.equal(await page.locator('#captureGhost').isHidden(), true);
+  await page.locator('#extractAuto').uncheck();
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.locator('#extractAuto').check(); await page.locator('#recovery').waitFor();
+  await page.waitForFunction(() => !document.querySelector('#extractStart').disabled);
+  assert.equal(await page.evaluate(() => aiCalls.prompts.length), 1);
+  assert.match(await page.locator('#recoveryText').inputValue(), /Call Sam/);
+  assert.equal((await local(page)).queue.length, 0);
 });

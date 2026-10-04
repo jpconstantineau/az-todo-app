@@ -1,12 +1,12 @@
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=46';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=46';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=46';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=46';
-import { clarificationUI } from './clarification.js?v=46';
-import { setupReviews } from './reviews.js?v=46';
-import { setupBriefs } from './briefs.js?v=46';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=46';
-import { setupAgentStatus } from './local-agent.js?v=46';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=47';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=47';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters } from './inbox-fields.js?v=47';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=47';
+import { clarificationUI } from './clarification.js?v=47';
+import { setupReviews } from './reviews.js?v=47';
+import { setupBriefs } from './briefs.js?v=47';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=47';
+import { setupAgentStatus } from './local-agent.js?v=47';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -343,6 +343,7 @@ function render() {
       : 'The last edit expired, its record changed, or a save needs attention.'
     : 'No editor save to undo on this device.');
   options(capture.elements.listId, lists, [['', 'No list']]);
+  extraction.refreshLists();
   const moving = editing?.type === 'item' && edit.elements.workspaceId.value && edit.elements.workspaceId.value !== selectedWorkspace;
   options(edit.elements.listId, moving ? [] : lists, [['', 'No list']]);
   options(capture.elements.projectId, projects, [['', 'No project']], true);
