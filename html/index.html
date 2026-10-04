@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Capture · To-Do</title>
+  <title>Capture · Personal</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=43" defer></script>
+  <script src="/pwa.js?v=44" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=43"></script>
+  <script type="module" src="/inbox.js?v=44"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#workspace">Skip to current view</a>
-  <header class="app-header"><h1>To-Do</h1>
+  <header class="app-header"><div class="workspace-identity"><p id="accountName" class="eyebrow">Welcome</p><h1><span id="defaultWorkspace">Personal</span><select id="workspaceSelect" aria-label="Workspace" aria-describedby="workspaceStatus" hidden></select></h1></div>
+    <span id="saveStatus" class="save-status" role="status" hidden><svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3 M7 21v-8h10v8"/></svg><span id="connectionLabel" class="sr-only"></span></span>
     <details id="appMenu" class="responsive-menu"><summary aria-label="Menu" title="Menu">☰ Menu</summary>
       <div class="menu-content">
-        <nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a href="/help.html" target="_blank" rel="noopener">Help <span class="sr-only">(opens in a new tab)</span></a><a id="signIn" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a><button id="signOut" hidden>Sign out</button></nav>
+        <nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a href="/help.html" target="_blank" rel="noopener">Help <span class="sr-only">(opens in a new tab)</span></a><button id="signOut" hidden>Sign out</button></nav>
         <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="manageWorkspaces" type="button">Manage workspaces</button><button id="userDefaults">User defaults</button></div>
+        <details id="connection"><summary>Account &amp; device status<span id="offlineBadge" role="status"></span></summary>
+          <p id="sessionStatus" role="status"></p><p id="offlineStatus" role="status"></p><p id="syncStatus" role="status"></p>
+        </details>
         <button id="openDeleted" type="button">Deleted records</button><a class="button" href="/shared.html">Shared lists</a>
         <details id="exportTools"><summary>Export</summary>
         <div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div>
@@ -51,16 +55,11 @@
       <p id="checkAppUpdateStatus" role="status"></p>
       <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
-  <details id="connection"><summary><span id="connectionLabel" role="status">Account &amp; device status</span><span id="offlineBadge" role="status"></span></summary>
-    <p id="sessionStatus" role="status">Checking account…</p>
-    <p id="offlineStatus" role="status"></p>
-    <p id="syncStatus" role="status"></p>
-  </details>
+  <section id="signedOut" aria-label="Sign in"><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
   <p id="appUpdateStatus" role="status"></p>
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to save and edit your inbox.</noscript>
   <main id="workspace" hidden>
-    <div class="toolbar workspace-switcher"><label>Workspace<select id="workspaceSelect" aria-describedby="workspaceStatus"></select></label></div>
     <p id="workspaceStatus" role="status" class="muted"></p>
     <dialog id="workspaceManager" class="side-panel" aria-labelledby="workspaceHeading">
       <p class="eyebrow">Organize</p><h2 id="workspaceHeading">Workspaces</h2>
@@ -74,11 +73,11 @@
     <div id="savedEdit" class="actions" hidden><span id="savedEditStatus" role="status"></span><button id="resumeEdit" type="button">Resume edit</button><button id="discardEdit" type="button">Discard edit draft</button></div>
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
-      <h2 id="captureHeading" class="sr-only">Capture</h2>
       <form id="capture"><fieldset id="captureWorkspaceFields" class="workspace-fields">
-        <label for="captureText">What do you need to remember?</label>
+        <div class="capture-header"><h2 id="captureHeading" class="sr-only">Capture</h2><button type="submit" class="icon-button" aria-label="Save on device" title="Save on device"><svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3 M7 21v-8h10v8"/></svg></button></div>
+        <label for="captureText" class="sr-only">Capture items</label>
         <textarea id="captureText" name="text" rows="4" maxlength="16000" required aria-describedby="captureHelp" placeholder="Get it out of your head. Write your items here."></textarea>
-        <div class="save-bar"><button type="submit">Save on device</button><span id="draftStatus" role="status"></span></div>
+        <p id="draftStatus" role="status"></p>
         <p id="captureHelp">One item per line. Ctrl/⌘ + Enter saves.</p>
         <details id="captureOptions"><summary>Notes, list, project, or status</summary>
           <label>Notes <textarea name="body" rows="2" maxlength="4000"></textarea></label>
