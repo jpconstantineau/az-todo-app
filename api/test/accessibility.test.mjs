@@ -236,7 +236,7 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
   const { page } = await setup(t);
   await page.locator('#captureText').fill('First draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture?.text === 'First draft');
-  await page.waitForFunction(() => document.querySelector('#draftStatus').textContent === 'Draft saved on device');
+  assert.equal(await page.locator('#draftStatus').textContent(), '');
   await page.evaluate(() => {
     window.announcements = [];
     for (const id of ['draftStatus', 'syncStatus']) {

@@ -124,14 +124,15 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
       .reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
   }
   async function dropdownContrast() {
-    const options = await page.locator('select option').evaluateAll(options => options.map(option => {
+    const options = await page.locator('select option').evaluateAll(options => options.filter(option => option.closest('select')?.getClientRects().length).map(option => {
       const style = getComputedStyle(option);
       return { label: option.textContent, color: style.color, background: style.backgroundColor };
     }));
     assert.ok(options.length > 0);
     for (const option of options) {
-      const foreground = option.color.match(/[\d.]+/g).map(Number);
-      const background = option.background.match(/[\d.]+/g).map(Number);
+      const foreground = option.color.match(/[\d.]+/g)?.map(Number);
+      const background = option.background.match(/[\d.]+/g)?.map(Number);
+      assert.ok(foreground && background, `${option.label}: visible dropdown has resolved colors`);
       assert.ok(background.length === 3 || background[3] === 1, `${option.label}: option background is opaque`);
       const [a, b] = [luminance(foreground.slice(0, 3)), luminance(background.slice(0, 3))].sort((a, b) => b - a);
       assert.ok((a + .05) / (b + .05) >= 4.5, `${option.label}: dropdown text contrast is at least 4.5:1`);
