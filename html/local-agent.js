@@ -47,6 +47,7 @@ export function setupAgentStatus() {
     button.dataset.state = state; button.title = message; button.setAttribute('aria-label', message);
     button.setAttribute('aria-disabled', String(!!work.size || checking || state === 'unavailable'));
     label.textContent = message;
+    document.dispatchEvent(new Event('agentstatuschange'));
   };
   render();
   button.onclick = async () => {

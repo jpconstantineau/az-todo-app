@@ -113,7 +113,7 @@ test('workspaces: AI capture cancels on switching and restored reviewed batches 
 });
 
 test('workspaces: manual reviews and list-name permission stay with their workspace', async t => {
-  const { page, context } = await setup(t);
+  const { page, context } = await setup(t, true);
   const work = await createSpace(page, 'Work'); await synced(page);
   await switchTo(page, work); await context.setOffline(true);
   await page.locator('#captureText').fill('Prepare the report and check its figures.');

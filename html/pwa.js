@@ -111,7 +111,7 @@
       const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
       reply.port1.onmessage = event => {
         clearTimeout(timeout); reply.port1.close();
-        if (event.data === 'todo-inbox-shell-v47') resolve(); else reject(new Error('Old shell is still active'));
+        if (event.data === 'todo-inbox-shell-v48') resolve(); else reject(new Error('Old shell is still active'));
       };
       (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
     });
