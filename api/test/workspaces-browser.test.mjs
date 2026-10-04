@@ -95,7 +95,7 @@ test('workspaces: AI capture cancels on switching and restored reviewed batches 
   await page.locator('#extractStart').click();
   await page.waitForFunction(() => typeof finishWorkspaceAI === 'function');
   await switchTo(page, family); await page.locator('#captureText').fill('Write report');
-  const result = JSON.stringify({ items: [{ title: 'Write report', description: '', listId: '', priority: '', context: '', area: '', dueDate: '', dueTime: '', evidence: 'Write report', uncertainty: '' }], notes: '' });
+  const result = JSON.stringify({ items: [{ title: 'Write report', description: '', listId: '', priority: '', context: '', dueDate: '', dueTime: '', evidence: 'Write report', uncertainty: '' }], notes: '' });
   await page.evaluate(async result => { finishWorkspaceAI(result); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); }, result);
   assert.equal(await page.locator('#extractReview').isVisible(), false, 'same text in another workspace cannot receive the late result');
   await switchTo(page, work);
@@ -121,7 +121,7 @@ test('workspaces: suggested reviews and list-name permission stay with their wor
   await page.locator('#extractLists').check();
   await page.locator('#extractStart').click();
   await page.waitForFunction(() => typeof finishWorkspaceAI === 'function');
-  const result = JSON.stringify({ items: [{ title: 'Prepare the report', description: '', listId: '', priority: '', context: '', area: '', dueDate: '', dueTime: '', evidence: 'Prepare the report', uncertainty: '' }], notes: '' });
+  const result = JSON.stringify({ items: [{ title: 'Prepare the report', description: '', listId: '', priority: '', context: '', dueDate: '', dueTime: '', evidence: 'Prepare the report', uncertainty: '' }], notes: '' });
   await page.evaluate(result => finishWorkspaceAI(result), result);
   await page.locator('#extractionReview').waitFor();
   await page.locator('#extractionItems [name=title]').fill('Prepare the report');

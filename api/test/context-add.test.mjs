@@ -78,7 +78,7 @@ test('context add: offline list/project creation keeps Capture and editor drafts
   await showView(page, 'capture');
   assert.equal(await page.locator('#captureText').inputValue(), 'Unfinished global capture');
   assert.equal(await page.locator('#capture [name=listId]').inputValue(), '');
-  assert.equal(await page.locator('#capture [name=projectId]').inputValue(), '');
+  assert.equal(await page.locator('#capture [name=projectId]').count(), 0);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
   const items = records().filter(record => record.type === 'item');
   assert.equal(items.length, 2);

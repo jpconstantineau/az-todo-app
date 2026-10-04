@@ -54,6 +54,40 @@ async function serverEdit(url, record, fields, action = 'update') {
   assert.equal(response.status, 200);
 }
 
+test('capture: one List selector includes projects and areas and saves the selected collection', { timeout: 90000 }, async t => {
+  const { page, url } = await setup(t);
+  await serverEdit(url, { type: 'list', id: 'home', version: 0 }, { title: 'Home', kind: 'area' }, 'create');
+  await serverEdit(url, { type: 'project', id: 'garage', version: 0 }, { title: 'Garage', outcome: 'Organized garage' }, 'create');
+  await page.reload(); await confirmed(page);
+  await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
+  const selector = page.locator('#capture [name=listId]');
+  assert.deepEqual(await selector.locator('option').allTextContents(), ['No list', 'Area: Home', 'Project: Garage (Active)']);
+  assert.equal(await page.locator('#capture [name=projectId], #capture [name=areas]').count(), 0);
+  await selector.selectOption('project:garage'); await page.locator('#captureText').fill('Sort tools');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.listId === 'project:garage');
+  assert.equal(await page.locator('#draftStatus').textContent(), '');
+  await page.reload(); await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
+  assert.equal(await selector.inputValue(), 'project:garage');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
+  const projectItem = records().find(record => record.title === 'Sort tools');
+  assert.equal(projectItem.projectId, 'garage'); assert.equal(projectItem.listId, null);
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Clear desk');
+  await selector.selectOption('home');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
+  const areaItem = records().find(record => record.title === 'Clear desk');
+  assert.equal(areaItem.listId, 'home'); assert.equal(areaItem.projectId, null);
+  await page.evaluate(async () => (await import('/inbox-store.js')).transact('alice', state => {
+    state.draft.capture = { text: 'Legacy project draft', listId: '', projectId: 'garage' };
+  }));
+  await page.reload(); await showView(page, 'capture');
+  assert.equal(await selector.inputValue(), 'project:garage');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
+  assert.equal(records().find(record => record.title === 'Legacy project draft').projectId, 'garage');
+});
+
 test('inbox: groceries capture, offline editing/moving/completion, original input and mobile keyboard layout', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t, { viewport: { width: 390, height: 844 } });
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -124,8 +158,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await capture(page, 'Survive termination');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Still thinking about this');
   // Inspect the same module instance as the app before closing its persistent profile.
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=62')).transact('alice')).draft.capture.text === 'Still thinking about this');
-  const beforeClose = await page.evaluate(async () => (await import('/inbox-store.js?v=62')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=63')).transact('alice')).draft.capture.text === 'Still thinking about this');
+  const beforeClose = await page.evaluate(async () => (await import('/inbox-store.js?v=63')).transact('alice'));
   assert.equal(beforeClose.queue.length, 1);
   await context.close();
   context = await chromium.launchPersistentContext(profile, { channel, offline: true });
@@ -133,9 +167,9 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.goto(`${server.url}/inbox.html`);
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=62')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v62')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
-  assert.deepEqual(cached.sort(), ['/collection-model.js', '/collection-model.js?v=62', '/collections.js', '/collections.js?v=62', '/clarification-flow.js', '/clarification-flow.js?v=62', '/local-agent.js?v=62', '/shared.html', '/shared.js', '/shared.js?v=62', '/shared.css', '/capture-extraction.js?v=62', '/workspaces.js', '/workspaces.js?v=62', '/briefs.js', '/briefs.js?v=62', '/help.html', '/local-guidance.js?v=62', '/clarification.js', '/clarification.js?v=62', '/reviews.js', '/reviews.js?v=62', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=62', '/inbox-store.js?v=62', '/inbox-fields.js?v=62', '/pwa.js?v=62', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=62'].sort());
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=63')).transact('alice'))).queue, beforeClose.queue);
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v63')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual(cached.sort(), ['/collection-model.js', '/collection-model.js?v=63', '/collections.js', '/collections.js?v=63', '/clarification-flow.js', '/clarification-flow.js?v=63', '/local-agent.js?v=63', '/shared.html', '/shared.js', '/shared.js?v=63', '/shared.css', '/capture-extraction.js?v=63', '/workspaces.js', '/workspaces.js?v=63', '/briefs.js', '/briefs.js?v=63', '/help.html', '/local-guidance.js?v=63', '/clarification.js', '/clarification.js?v=63', '/reviews.js', '/reviews.js?v=63', '/', '/index.html', '/inbox.css', '/inbox.html', '/inbox.js', '/inbox-store.js', '/inbox-fields.js', '/styles.css', '/theme.js', '/inbox.js?v=63', '/inbox-store.js?v=63', '/inbox-fields.js?v=63', '/pwa.js?v=63', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png', '/inbox-export.js', '/inbox-export.js?v=63'].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().length, 1);
 });
@@ -363,7 +397,7 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
+for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62]) test(`shell upgrade from v${oldVersion} preserves old account cache, draft and exact queued operation without mixed modules`, { timeout: 90000 }, async t => {
   documents.length = 0;
   let oldWorker = true, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => oldWorker && path === '/inbox-sw.js' ? `
@@ -388,8 +422,8 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 1
   await page.evaluate(() => navigator.serviceWorker.ready);
   await capture(page, 'Old queued item');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Old unsubmitted draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=62')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
-  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=62')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=63')).transact('alice')).draft.capture.text === 'Old unsubmitted draft');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=63')).transact('alice'));
   assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
   if (oldVersion >= 30) {
     // v30–v32 cached shared.js without a version. The new page must bypass that copy.
@@ -400,7 +434,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 1
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
   assert.ok(await page.evaluate(version => caches.has(`todo-inbox-shell-v${version}`), oldVersion));
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=62')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=63')).transact('alice'))).queue, before.queue);
   rejectUpgrade = false;
   const nextWorker = context.waitForEvent('serviceworker');
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
@@ -408,7 +442,7 @@ for (const oldVersion of [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 1
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Old unsubmitted draft');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=62')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=63')).transact('alice'))).queue, before.queue);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('close all app tabs'));
   await page.close();
   // Closing a tab and releasing its worker client are asynchronous in Chromium.
