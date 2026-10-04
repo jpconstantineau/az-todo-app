@@ -1,5 +1,5 @@
-import { localGuidance } from './local-guidance.js?v=51';
-import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=51';
+import { localGuidance } from './local-guidance.js?v=52';
+import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=52';
 
 // Proposals stay separate from action fields until the user accepts a question.
 export const questions = [

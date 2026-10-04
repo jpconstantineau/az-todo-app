@@ -216,9 +216,31 @@ test('v2 stopped decisions retain private drafts on failure and clear on workspa
   await page.locator('#workspaceSelect').selectOption('personal');
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   assert.equal(await page.locator('[name=flow_text]').inputValue(), 'Private proposed wording');
+  await waitForBrowser(page, async () => {
+    const draft = (await (await import('/inbox-store.js')).transact('alice')).draft.clarification;
+    return draft?.open && draft.proposal.text === 'Private proposed wording';
+  });
   await confirmed(page); await context.setOffline(true);
-  await page.evaluate(() => { window.originalPut = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function () { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }; });
+  await page.evaluate(() => {
+    window.originalPut = IDBObjectStore.prototype.put;
+    window.failedClarificationWrites = 0;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      // Fail the accepted next-action transaction, not a background draft journal.
+      if (value?.queue?.some(entry => entry.operation.mutations.some(mutation => mutation.type === 'clarification' &&
+          mutation.fields.step === 'project' && mutation.fields.answers.nextAction === 'Private proposed wording'))) {
+        window.failedClarificationWrites++;
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      return window.originalPut.call(this, value, ...args);
+    };
+  });
+  // A late draft save must remain harmless while the fault is armed.
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js');
+    await transact('alice', state => { state.draft.clarification.proposal.text = 'Private proposed wording'; });
+  });
   await page.locator('#clarifyAccept').click(); await page.locator('#recovery').waitFor();
+  assert.equal(await page.evaluate(() => window.failedClarificationWrites), 1);
   assert.match(await page.locator('#recoveryText').inputValue(), /Private proposed wording/);
   assert.equal((await local(page)).queue.length, 0);
   await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
