@@ -110,6 +110,7 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   assert.equal(await page.locator('#items article').count(), 0);
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   await showView(page, 'work');
   assert.equal(await page.locator('#view').inputValue(), 'inbox');
@@ -323,9 +324,34 @@ test('navigation: new lists open only on request and resume the same draft after
   await page.locator('#edit [name=title]').fill('Alice private list draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.edit?.fields.title === 'Alice private list draft');
   await page.locator('#cancelEdit').click();
+  // Hold Bob's device copy after the session ID changes but before its view restores.
+  await page.evaluate(() => {
+    const get = IDBObjectStore.prototype.get;
+    const complete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    IDBObjectStore.prototype.get = function (key) {
+      if (key === 'account:bob') {
+        this.transaction.delayAccountOpen = true;
+        IDBObjectStore.prototype.get = get;
+      }
+      return get.call(this, key);
+    };
+    Object.defineProperty(IDBTransaction.prototype, 'oncomplete', { ...complete, set(callback) {
+      const delay = this.delayAccountOpen;
+      if (delay) Object.defineProperty(IDBTransaction.prototype, 'oncomplete', complete);
+      complete.set.call(this, delay ? function (event) { window.releaseAccountOpen = () => callback.call(this, event); } : callback);
+    } });
+  });
   setUser('bob'); await clickControl(page.locator('#sync'));
+  await page.waitForFunction(() => !!window.releaseAccountOpen);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
-  await showView(page, 'lists'); await page.locator('#newList').click();
+  assert.equal(await page.locator('#workspace').isVisible(), false);
+  let navigated = false;
+  const navigation = showView(page, 'lists').then(() => { navigated = true; });
+  assert.equal(await page.locator('#listWorkspace').getAttribute('aria-current'), 'page', 'the hidden link still describes Alice’s old view');
+  assert.equal(navigated, false, 'navigation waits for the restored account view');
+  await page.evaluate(() => window.releaseAccountOpen());
+  await navigation; await confirmed(page);
+  await page.locator('#newList').click();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), '');
 });
 
@@ -453,6 +479,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   assert.match(await page.locator('#items').innerText(), /No lists yet/);
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact(null)).accountId === 'bob');
+  await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   assert.doesNotMatch(await page.locator('body').innerText(), /Private list|Private task|Rejected private task|Recover this draft/);
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
