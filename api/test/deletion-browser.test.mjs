@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
+import { projected } from '../../html/inbox-store.js';
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const sync = async page => { await clickControl(page.locator('#sync')); await confirmed(page); };
@@ -20,8 +21,13 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   const other = await browser.newContext();
   const page = await context.newPage(), second = await other.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  const deletionDialogs = [];
-  page.on('dialog', dialog => { deletionDialogs.push(dialog.message()); void dialog.accept(); });
+  let cancelledListWarning;
+  page.on('dialog', dialog => {
+    if (!cancelledListWarning && dialog.message().includes('Delete “Groceries”')) {
+      cancelledListWarning = dialog.message();
+      void dialog.dismiss();
+    } else void dialog.accept();
+  });
   second.on('dialog', dialog => dialog.accept());
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -45,14 +51,12 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
 
   await showView(page, 'lists'); await page.locator('#view').selectOption('list');
   await page.getByRole('button', { name: 'Delete list: Groceries', exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Move or delete'));
-  assert.match(await page.locator('#error').textContent(), /Move or delete/);
+  assert.match(cancelledListWarning, /1 uncompleted item/);
+  assert.equal(await page.getByRole('button', { name: 'Delete list: Groceries', exact: true }).count(), 1);
   assert.equal((await local(page)).queue.length, 0);
-  assert.deepEqual(deletionDialogs, [], 'blocked collection deletion needs no confirmation');
   await clickControl(page.getByRole('button', { name: 'Delete item: Milk', exact: true, includeHidden: true }));
   await page.getByRole('button', { name: 'Delete item: Milk', exact: true }).waitFor({ state: 'hidden' });
   await confirmed(page);
-  assert.deepEqual(deletionDialogs, [], 'item deletion needs no confirmation');
   await other.setOffline(false); await clickControl(second.locator('#sync')); await second.locator('#failure').waitFor();
   assert.match(await second.locator('#comparison').textContent(), /Keep this offline text/);
   assert.equal(await second.locator('#items article').count(), 0);
@@ -65,7 +69,6 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   await showView(page, 'work'); await page.locator('#view').selectOption('project:project');
   await page.getByRole('button', { name: 'Delete project: Breakfast', exact: true }).click();
   await page.getByRole('button', { name: 'Delete project: Breakfast', exact: true }).waitFor({ state: 'hidden' });
-  assert.deepEqual(deletionDialogs, [], 'offline list and project deletion needs no confirmation');
   await page.reload(); await page.locator('#workspace').waitFor(); await trash(page);
   assert.equal(await page.locator('#deletedItems article').count(), 3);
   await page.getByRole('button', { name: 'Restore item: Milk', exact: true }).click();
@@ -112,5 +115,56 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   await page.reload(); await page.locator('#workspace').waitFor(); await trash(page);
   assert.equal(await page.locator('#deletedItems article').count(), 0);
   assert.deepEqual(errors, []);
-  assert.deepEqual(deletionDialogs, []);
+});
+
+test('deletion: lists delete completed and active linked items, including offline batches', { timeout: 90000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext();
+  const page = await context.newPage(), prompts = [];
+  page.on('dialog', dialog => { prompts.push(dialog.message()); void dialog.accept(); });
+  await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
+  const statuses = await page.evaluate(async () => {
+    const batches = [
+      [{ type: 'list', id: 'done', action: 'create', expectedVersion: 0, fields: { title: 'Done' } },
+        { type: 'item', id: 'finished', action: 'create', expectedVersion: 0, fields: { title: 'Finished', status: 'completed', listId: 'done' } },
+        { type: 'list', id: 'mixed', action: 'create', expectedVersion: 0, fields: { title: 'Mixed' } }],
+      ...[0, 19].map(start => Array.from({ length: start ? 2 : 19 }, (_, index) => {
+        const id = start + index;
+        return { type: 'item', id: `task-${id}`, action: 'create', expectedVersion: 0,
+          fields: { title: `Task ${id}`, status: id < 19 ? 'completed' : 'next', listId: 'mixed' } };
+      }))
+    ];
+    const results = [];
+    for (const mutations of batches) {
+      const response = await fetch('/api/v1/operations', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations }) });
+      results.push(response.status);
+    }
+    return results;
+  });
+  assert.deepEqual(statuses, [200, 200, 200]);
+  await sync(page);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js')).transact('alice')).records['item:task-20']);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('done');
+  await page.getByRole('button', { name: 'Delete list: Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete list: Done', exact: true }).waitFor({ state: 'hidden' });
+  await confirmed(page);
+  assert.deepEqual(prompts, [], 'a completed-only list needs no confirmation');
+  assert.equal(documents.find(doc => doc.kind === 'record' && doc.record.id === 'finished').record.deleted, true);
+  await page.locator('#view').selectOption('mixed');
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Delete list: Mixed', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete list: Mixed', exact: true }).waitFor({ state: 'hidden' });
+  assert.match(prompts[0], /2 uncompleted items/);
+  let saved = await local(page);
+  assert.deepEqual(saved.queue.map(entry => entry.operation.mutations.length), [20, 2]);
+  assert.equal(Object.values(projected(saved)).filter(record => record.type === 'item' && record.listId === 'mixed' && record.deleted).length, 21);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  saved = await local(page);
+  assert.deepEqual(saved.queue.map(entry => entry.operation.mutations.length), [20, 2]);
+  await context.setOffline(false); await sync(page);
+  assert.equal(documents.filter(doc => doc.kind === 'record' && doc.record.type === 'item' && doc.record.listId === 'mixed' && doc.record.deleted).length, 21);
+  assert.equal(documents.find(doc => doc.kind === 'record' && doc.record.id === 'mixed').record.deleted, true);
 });

@@ -580,7 +580,12 @@ function render() {
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
 function deleteButton(record) {
-  return button('Delete', () => changeDeletion(record, 'delete'), `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
+  return button('Delete', async () => {
+    const linked = record.type === 'list' ? Object.values(scopedRecords()).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record)) : [];
+    const pending = linked.filter(item => item.status !== 'completed').length;
+    if (pending && !confirm(`Delete “${record.title}”? This list has ${pending} uncompleted item${pending === 1 ? '' : 's'}. Its ${linked.length} linked item${linked.length === 1 ? '' : 's'} will also be marked deleted. Cancel to review the pending items.`)) return;
+    await changeDeletion(record, 'delete', linked.map(item => `${key(item)}:${item.version}`).sort());
+  }, `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
 }
 function renderDeleted() {
   statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
@@ -594,14 +599,22 @@ function renderDeleted() {
   }));
   if (!deleted.length) $('deletedItems').textContent = 'No deleted items, lists or projects on this device. Sync to retrieve changes from other devices.';
 }
-async function changeDeletion(record, action) {
+async function changeDeletion(record, action, linkedSnapshot = []) {
   const owner = accountId, generation = accountGeneration;
   if (!owner) return;
   const saved = await transact(owner, local => {
     if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before deleting or restoring records.');
     const records = projected(local), current = records[key(record)];
     if (!current || current.version !== record.version || !!current.deleted !== (action === 'restore')) throw new Error('This record changed. Review its latest state before trying again.');
-    if (action === 'delete' && ['list', 'project'].includes(record.type) && Object.values(records).some(item => collectionContents(item, record))) {
+    if (action === 'delete' && record.type === 'list') {
+      const linked = Object.values(records).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record));
+      if (JSON.stringify(linked.map(item => `${key(item)}:${item.version}`).sort()) !== JSON.stringify(linkedSnapshot)) throw new Error('This list’s items changed. Review them before deleting the list.');
+      const deletions = linked.map(item => ({ type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }));
+      while (deletions.length > 19) enqueue(local, owner, deletions.splice(0, 20));
+      enqueue(local, owner, [...deletions, { type: 'list', id: record.id, action, expectedVersion: record.version }]);
+      return;
+    }
+    if (action === 'delete' && record.type === 'project' && Object.values(records).some(item => collectionContents(item, record))) {
       throw new Error(`Move or delete this ${record.type}'s items and unlink child collections before deleting it.`);
     }
     if (action === 'restore' && record.type === 'item') {
