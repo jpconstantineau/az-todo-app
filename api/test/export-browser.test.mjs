@@ -130,7 +130,7 @@ test('server download includes unsynced remote records, excludes local drafts, a
   await openMenu(page);
   for (const format of ['json', 'text']) {
     await clickControl(page.locator('#exportFormat'));
-  await page.locator('#exportFormat').selectOption(format);
+    await page.locator('#exportFormat').selectOption(format);
     const pending = page.waitForEvent('download');
     await page.locator('#accountExport').click();
     const file = await pending, text = await readFile(await file.path(), 'utf8');
@@ -175,6 +175,9 @@ test('server export cancels promptly, rejects malformed/error pages and discards
     await page.route(pattern, route => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ apiVersion: 1, message: 'Try again' }) }));
     await page.locator('#accountExport').click();
     await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('Export failed'));
+    await page.locator('#appMenu > summary').click();
+    assert.equal(await page.locator('#error').isVisible(), true, 'export failures remain visible with Menu closed');
+    await page.locator('#appMenu > summary').click();
     await page.unroute(pattern);
   }
   let release;

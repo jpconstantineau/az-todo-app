@@ -55,7 +55,7 @@
 #workspaceStatus:empty { display: none; }
 #editor[open] { display: flex; flex-direction: column; overflow: hidden; }
 #edit { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.edit-scroll { overflow-y: auto; min-height: 0; padding: var(--space-1); scroll-padding-block: var(--space-3); }
+.edit-scroll { overflow-y: auto; min-height: 0; padding: var(--space-2); scroll-padding-block: var(--space-3); }
 .editor-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); border-top: var(--border-width) solid var(--border); background: var(--surface); }
 .menu-content { max-width: 760px; }
 .menu-content .device-tools { margin-block: var(--space-3); }
