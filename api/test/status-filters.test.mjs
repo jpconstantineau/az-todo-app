@@ -6,6 +6,7 @@ import { documents, startServer } from './harness.mjs';
 import { showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { defaultSettings } from '../api/shared/defaults.mjs';
+import { currentCreate } from './current-record.mjs';
 
 test('status filters: inclusion, exclusion, scopes, offline persistence and account isolation', { timeout: 90000 }, async t => {
   documents.length = 0;
@@ -14,13 +15,11 @@ test('status filters: inclusion, exclusion, scopes, offline persistence and acco
   const response = await fetch(`${server.url}/api/v1/operations`, {
     method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
-      { type: 'list', id: 'list', action: 'create', expectedVersion: 0, fields: { title: 'Errands', defaults: { ...defaultSettings, statuses: ['next', 'completed', 'dropped', 'custom <status>'] } } },
-      { type: 'project', id: 'project', action: 'create', expectedVersion: 0, fields: { title: 'Launch', outcome: 'Ready' } },
-      ...['next', 'completed', 'dropped', 'custom <status>'].map((status, i) => ({
-        type: 'item', id: `item-${i}`, action: 'create', expectedVersion: 0,
-        fields: { title: status, status, listId: 'list', projectId: 'project', plannedDay: '2026-10-02' }
-      })),
-      { type: 'item', id: 'inbox', action: 'create', expectedVersion: 0, fields: { title: 'Unfiled', status: 'inbox' } }
+      currentCreate('list', 'list', { title: 'Errands', defaults: { ...defaultSettings, statuses: ['next', 'completed', 'dropped', 'custom <status>'] } }),
+      currentCreate('project', 'project', { title: 'Launch', outcome: 'Ready' }),
+      ...['next', 'completed', 'dropped', 'custom <status>'].map((status, i) =>
+        currentCreate('item', `item-${i}`, { title: status, status, listId: 'list', projectId: 'project', plannedDay: '2026-10-02' })),
+      currentCreate('item', 'inbox', { title: 'Unfiled', status: 'inbox' })
     ] })
   });
   assert.equal(response.status, 200, await response.text());
@@ -63,7 +62,7 @@ test('status filters: inclusion, exclusion, scopes, offline persistence and acco
   assert.equal(await page.locator('#statusFilter').inputValue(), '@exclude');
   assert.deepEqual(await rows(), ['inbox', 'item-0', 'item-3']);
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=1')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=2')).transact('alice');
     return local.draft.navigation?.work.statuses.includes('dropped') && local.draft.navigation?.lists.statuses.includes('completed');
   });
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
@@ -84,7 +83,7 @@ test('status filters: inclusion, exclusion, scopes, offline persistence and acco
       await page.screenshot({ path: `${process.env.STATUS_FILTER_SCREENSHOTS}/statuses-${width}.png`, fullPage: true });
     }
   }
-  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
   assert.deepEqual(local.queue, []); assert.deepEqual(documents, before, 'filtering never mutates tasks');
   user = 'bob'; await context.setOffline(false); await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'work');

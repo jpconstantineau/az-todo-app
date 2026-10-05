@@ -39,7 +39,7 @@ export function reviewDecisionFields(action, input) {
   for (const name of ['before', 'changes']) object(input[name], workflowFields, name);
   return structuredClone(input);
 }
-export const workflowSnapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
+export const workflowSnapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : null)]));
 
 // The decision and its canonical action edit must share one version-checked batch.
 export async function validateReview(record, old, mutations, records, readRecord) {

@@ -112,13 +112,17 @@ Reply with exactly those five fields plus `operation`:
       "originalText": "Read the article with its examples.",
       "sourceTitle": "An article",
       "sourceUrl": "https://example.com/article",
-      "selectedText": "Selected passage"
+      "selectedText": "Selected passage",
+      "workspaceId": "personal",
+      "collectionRefs": []
     }
   }]
 }
 ```
 
-All shown fields are required; additional fields are rejected. IDs contain 1–128
+All shown fields are required; additional fields are rejected. Extension captures
+enter the Personal workspace inbox, so `workspaceId` must be `personal` and
+`collectionRefs` must be empty. IDs contain 1–128
 letters/digits/underscores/hyphens. Limits match v1: title 200, notes 4,000,
 original 16,000, source title 2,000, selection 8,000, source URL 2,048 characters;
 the entire operation is at most 64 KiB UTF-8. The server also enforces its 32 KiB

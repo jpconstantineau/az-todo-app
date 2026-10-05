@@ -28,9 +28,10 @@ export function captureOperation(value, accountId) {
   if (mutation.type !== 'item' || mutation.action !== 'create' || mutation.expectedVersion !== 0) fail();
   id(mutation.id);
   const fields = mutation.fields;
-  object(fields, ['title', 'description', 'originalText', 'sourceTitle', 'sourceUrl', 'selectedText']);
+  object(fields, ['title', 'description', 'originalText', 'sourceTitle', 'sourceUrl', 'selectedText', 'workspaceId', 'collectionRefs']);
   text(fields.title, 200, true); text(fields.description, 4000); text(fields.originalText, 16000, true);
   text(fields.sourceTitle, 2000); text(fields.selectedText, 8000); text(fields.sourceUrl, 2048, true);
+  if (fields.workspaceId !== 'personal' || !Array.isArray(fields.collectionRefs) || fields.collectionRefs.length) fail();
   try {
     const url = new URL(fields.sourceUrl);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) fail();
@@ -45,7 +46,7 @@ export function committedReceipt(receipt, operation) {
       receipt.status !== 'committed' || !Number.isSafeInteger(receipt.sequence) || receipt.sequence < 1 ||
       !Array.isArray(receipt.records) || receipt.records.length !== 1 || record?.accountId !== operation.accountId ||
       record.type !== 'item' || record.id !== mutation.id || record.version !== 1 || record.deleted !== false ||
-      Object.entries(mutation.fields).some(([key, value]) => record[key] !== value)) {
+      Object.entries(mutation.fields).some(([key, value]) => JSON.stringify(record[key]) !== JSON.stringify(value))) {
     throw new Error('The server has not confirmed this exact capture. Keep the extension copy and retry unchanged.');
   }
   // Only this capture's identity is returned to the extension, never other account data.

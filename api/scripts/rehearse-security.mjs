@@ -83,7 +83,11 @@ export async function rehearse({ origin, cookies, backendOrigin = null, report, 
   const read = async (account, type, id) => call('v1/records?' + new URLSearchParams({ accountId: account.id, type, id }), { account });
   const operation = (account, mutations) => ({ apiVersion: 1, accountId: account.id, operationId: randomUUID(), mutations });
   const post = (account, body, headers = { origin }) => call('v1/operations', { account, body, headers });
-  const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+  const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields: {
+    ...fields, ...(['item', 'list', 'project', 'review'].includes(type) ? { workspaceId: fields.workspaceId ?? 'personal' } : {}),
+    ...(type === 'item' ? { status: fields.status ?? 'inbox', collectionRefs: fields.collectionRefs ?? ['list', 'project']
+      .filter(kind => fields[`${kind}Id`]).map(kind => ({ type: kind, id: fields[`${kind}Id`] })) } : {}),
+    ...(type === 'project' ? { status: fields.status ?? 'active' } : {}) } });
   const track = async (account, type = 'item') => {
     const fixture = { account: account.label, type, id: 'security-' + randomUUID() };
     report.fixtures.push(fixture);

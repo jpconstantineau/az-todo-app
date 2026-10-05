@@ -86,7 +86,8 @@ export function summarize(samples) {
 
 export function workloadOperation(accountId, size, id, version) {
   // Near-limit combines the existing text field limits into a ~30 KiB record.
-  const fields = { title: `Task ${id} revision ${version}`, description: size === 'near-limit' ? 'n'.repeat(4000) : 'A representative task note.' };
+  const fields = { title: `Task ${id} revision ${version}`, description: size === 'near-limit' ? 'n'.repeat(4000) : 'A representative task note.',
+    ...(!version ? { workspaceId: 'personal', collectionRefs: [] } : {}) };
   if (!version) Object.assign(fields, size === 'near-limit'
     ? { originalText: 'o'.repeat(16000), selectedText: 's'.repeat(8000), sourceTitle: 't'.repeat(2000) }
     : { originalText: `Task ${id}` });

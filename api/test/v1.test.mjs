@@ -22,10 +22,14 @@ async function fixture(t) {
   return { request, post: (body, options) => request("operations", { body, ...options }),
     get: (type, id, user = "alice") => request(`records?accountId=${user}&type=${type}&id=${id}`, { user }) };
 }
-const edit = (operationId, id, expectedVersion, fields, action = "update", type = "item") => ({
-  apiVersion: 1, accountId: "alice", operationId,
-  mutations: [{ type, id, expectedVersion, action, ...(fields ? { fields } : {}) }]
-});
+const edit = (operationId, id, expectedVersion, fields, action = "update", type = "item") => {
+  const next = fields && action === 'create' ? { ...fields,
+    ...(['item', 'list', 'project', 'review'].includes(type) ? { workspaceId: fields.workspaceId ?? 'personal' } : {}),
+    ...(type === 'item' ? { status: fields.status ?? 'inbox', collectionRefs: fields.collectionRefs ?? ['list', 'project'].filter(kind => fields[`${kind}Id`]).map(kind => ({ type: kind, id: fields[`${kind}Id`] })) } : {}),
+    ...(type === 'project' ? { status: fields.status ?? 'active' } : {}) } : fields;
+  return { apiVersion: 1, accountId: "alice", operationId,
+    mutations: [{ type, id, expectedVersion, action, ...(next ? { fields: next } : {}) }] };
+};
 const records = () => documents.filter(d => d.kind === "record").map(d => d.record);
 
 test('explicit restore retains identity/content, retries safely and rejects stale or foreign intent', async t => {
@@ -355,7 +359,7 @@ test("v1 byte-bounded pages resume without dropping a large entry; oversized res
   assert.ok(documents.every(d => d.ttl === -1), "container TTL cannot silently expire receipts/history/tombstones");
 });
 
-test('v1 defaults are account-bound, repeat-safe, versioned and validated; custom statuses reopen safely', async t => {
+test('v1 defaults are account-bound, repeat-safe, versioned and validate removed custom statuses', async t => {
   const f = await fixture(t);
   const { defaultSettings } = await import('../api/shared/defaults.mjs');
   const session = (await f.request('session')).body;
@@ -375,7 +379,7 @@ test('v1 defaults are account-bound, repeat-safe, versioned and validated; custo
   const conflict = races.find(r => r.status === 409).body;
   assert.ok(conflict.proposed[0].fields.defaults.contexts.length);
   assert.equal((await f.post(edit('remove-custom-option', 'settings', 2, { defaults: defaultSettings }, 'update', 'settings'))).status, 200);
-  assert.equal((await f.post(edit('reopen-historic', 'custom-item', 2, { status: 'custom' }))).status, 200);
+  assert.equal((await f.post(edit('reopen-removed-custom', 'custom-item', 2, { status: 'custom' }))).status, 400);
   assert.equal((await f.post(edit('new-invalid-status', 'other', 0, { title: 'Other', status: 'custom' }, 'create'))).status, 400);
   for (const fields of [
     { defaults: { ...defaults, contexts: Array(201).fill('x') } },

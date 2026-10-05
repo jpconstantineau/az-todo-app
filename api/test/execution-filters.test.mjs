@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
+import { currentCreate } from './current-record.mjs';
 import { matchesExecutionFilters } from '../../html/inbox-fields.js';
 
 test('execution filters compare limits and retain unspecified or custom estimates', () => {
@@ -47,10 +48,10 @@ test('List Workspace filters combine, reset, stay offline and isolate accounts/w
     method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
       { type: 'workspace', id: 'other', action: 'create', expectedVersion: 0, fields: { title: 'Other work' } },
-      { type: 'list', id: 'list', action: 'create', expectedVersion: 0, fields: { title: 'Home list' } },
-      { type: 'project', id: 'project', action: 'create', expectedVersion: 0, fields: { title: 'Home project', outcome: 'Ready' } },
-      ...items.map(([id, fields]) => ({ type: 'item', id, action: 'create', expectedVersion: 0,
-        fields: { title: id, status: 'next', listId: 'list', projectId: 'project', plannedDay: '2026-10-03', ...fields } }))
+      currentCreate('list', 'list', { title: 'Home list' }),
+      currentCreate('project', 'project', { title: 'Home project', outcome: 'Ready' }),
+      ...items.map(([id, fields]) => currentCreate('item', id,
+        { title: id, status: 'next', listId: 'list', projectId: 'project', plannedDay: '2026-10-03', ...fields }))
     ] })
   });
   assert.equal(response.status, 200, await response.text());
@@ -93,7 +94,7 @@ test('List Workspace filters combine, reset, stay offline and isolate accounts/w
   assert.equal((await rows()).length, 7, 'Process does not apply execution limits');
   await showView(page, 'lists'); assert.deepEqual(await rows(), ['custom', 'home', 'unknown']);
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=1')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=2')).transact('alice');
     return local.draft.navigation?.lists.energy === 'low';
   });
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
@@ -116,7 +117,7 @@ test('List Workspace filters combine, reset, stay offline and isolate accounts/w
       await page.screenshot({ path: `${process.env.EXECUTION_FILTER_SCREENSHOTS}/filters-${width}.png` });
     }
   }
-  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
   assert.deepEqual(local.queue, []); assert.deepEqual(documents, before, 'filters never mutate tasks');
   user = 'bob'; await context.setOffline(false); await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'lists');

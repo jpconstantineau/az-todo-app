@@ -77,7 +77,7 @@ export function validateExtraction(raw, source, lists, clock) {
   });
   return { items, notes: value.notes };
 }
-export function extractionMutations(draft, records) {
+export function extractionMutations(draft, records, workspaceId = 'personal') {
   text(draft.source, 16000, 'Original capture');
   if (!draft.items.length || draft.items.length > 20) throw new Error('Choose 1–20 tasks before accepting.');
   return draft.items.map(item => {
@@ -92,9 +92,11 @@ export function extractionMutations(draft, records) {
     }
     const dueDate = day(item.dueDate);
     const dueDateUtc = item.dueTime ? capturedTime(item.dueDate + 'T' + item.dueTime, draft.clock.timeZone) : null;
-    const fields = { title, description: text(item.description, 4000, 'Notes'), originalText: draft.source,
+    const listId = project ? null : item.listId || null, projectId = project ? item.listId.slice(8) : null;
+    const fields = { title, description: text(item.description, 4000, 'Notes'), originalText: draft.source, workspaceId,
       captureId: draft.id, capturedAt: draft.clock.capturedAt, captureTimeZone: draft.clock.timeZone,
-      listId: project ? null : item.listId || null, projectId: project ? item.listId.slice(8) : null, priority: item.priority || null, contexts: item.context ? [item.context] : [],
+      listId, projectId, collectionRefs: [['list', listId], ['project', projectId]].filter(([, id]) => id).map(([type, id]) => ({ type, id })),
+      priority: item.priority || null, contexts: item.context ? [item.context] : [],
       dueDate: dueDateUtc ? null : dueDate, dueDateUtc, status: 'inbox' };
     // Leave room for server metadata/default fields in the 32 KiB record limit.
     if (new TextEncoder().encode(JSON.stringify(fields)).length > 30000) throw new Error('A task and its original capture are too large. Copy/export the draft and use a smaller capture.');

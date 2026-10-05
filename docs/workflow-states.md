@@ -82,12 +82,12 @@ patches, preserving precision and the original instant even in a repeated hour.
 
 ## Compatibility
 
-No migration, backfill, partition change or reset is needed. Calendar fields and
-server-derived undo metadata are additive; original capture/source and stable
-IDs are unchanged. Current records preserve custom statuses and date values
-verbatim, including historic unparseable dates. Unrelated edits
-preserve those values; an explicit workflow change must supply valid required
-metadata. Derived `nextAction` is reconciled on the next live item write.
+No partition change or reset is needed. Calendar fields and server-derived undo
+metadata are additive; original capture/source and stable IDs are unchanged.
+Every live item write validates the resulting workflow state, including existing
+calendar values. Custom statuses remain valid, while malformed dates must be
+corrected before any other edit can be accepted. Derived `nextAction` is
+reconciled on the next live item write.
 
 Deploy the API before the workflow-capable client and keep its support while
 clients have pending operations. Shell upgrade checks retain exact queued

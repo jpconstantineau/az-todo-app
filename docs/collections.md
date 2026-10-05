@@ -42,16 +42,15 @@ each save. Sync failures use the existing outbox and conflict recovery.
   `list`, `area`, `role`, `initiative`, `program`, `reference`.
 - Lists and projects have optional `parentRef: { type: "list" | "project", id }`.
   Each has one parent at most. Typed IDs keep equal list/project IDs distinct.
-- `item.collectionRefs` is an optional array of at most 20 unique typed refs.
-  When present, including an empty array, it is authoritative. Otherwise the
-  client derives membership from the legacy `listId` and `projectId` fields.
-- `listId` and `projectId` remain primary compatibility links. A combined refs
-  and primary patch cannot name a primary outside the selected refs. A legacy
-  edit replaces/removes only the corresponding primary link and preserves other
-  memberships. Unrelated old-client edits retain the new fields.
+- `item.collectionRefs` is a required array of at most 20 unique typed refs.
+  An empty array represents an unfiled item and is still authoritative.
+- `listId` and `projectId` remain primary links for the UI. A combined refs and
+  primary patch cannot name a primary outside the selected refs. Changing a
+  primary link replaces or removes only that typed membership and preserves the
+  other selected memberships.
 - The shared pure membership implementation ships in both deployment roots;
   the contract test checks the two files are identical. Server and optimistic
-  client projections therefore apply the same compatibility rules.
+  client projections therefore apply the same membership rules.
 - References must exist in the account and share the writable workspace.
   Parents cannot form cycles. Validation and deletion/link queries are inside
   the account-state ETag retry loop, so concurrent moves cannot bypass them.

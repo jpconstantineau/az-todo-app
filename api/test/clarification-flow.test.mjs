@@ -10,9 +10,10 @@ import { clarificationFields } from '../api/v1/clarification.mjs';
 import { reviewReady } from '../../html/inbox-fields.js';
 import { deviceExport, validateDeviceExport, readableExport } from '../../html/inbox-export.js';
 import { defaultSettings } from '../api/shared/defaults.mjs';
+import { currentCreate } from './current-record.mjs';
 
-const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
-const item = { id: 'capture', version: 1, title: 'Original capture', workspaceId: 'personal' };
+const create = currentCreate;
+const item = { type: 'item', id: 'capture', version: 1, title: 'Original capture', workspaceId: 'personal', status: 'inbox', collectionRefs: [] };
 function summary(kind, project = 'none', extra = {}) {
   let session = newFlow();
   const advance = p => { session = flowDecision(session, { ...flowProposal(), ...p }, 'accepted', item); assert.deepEqual(clarificationFields(session), session); };
@@ -156,7 +157,7 @@ test('v2 lost acknowledgement replays one final decision, and flow versions cann
 });
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
 async function setup(t) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -175,7 +176,7 @@ async function setup(t) {
 }
 async function next(page, step) {
   await page.locator('#clarifyAccept').click();
-  await waitForBrowser(page, async step => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.session.step === step, step);
+  await waitForBrowser(page, async step => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.session.step === step, step);
 }
 
 test('v2 reference skips action questions, journals offline, reloads, applies and stays out of Inbox', { timeout: 60000 }, async t => {
@@ -184,9 +185,9 @@ test('v2 reference skips action questions, journals offline, reloads, applies an
   await page.locator('[name=flow_choice]').selectOption('reference'); await next(page, 'organize');
   assert.equal(await page.locator('[name=flow_text]').inputValue(), item.title);
   await page.locator('[name=flow_notes]').fill('A reference, not a commitment');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.proposal.notes === 'A reference, not a commitment');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.proposal.notes === 'A reference, not a commitment');
   await page.locator('#clarifyStop').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.open === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.open === false);
   await page.reload(); await page.locator('#workspace').waitFor(); assert.equal(await page.locator('#clarifier').isVisible(), false);
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   assert.equal(await page.locator('[name=flow_notes]').inputValue(), 'A reference, not a commitment');
@@ -218,7 +219,7 @@ test('completed v2 reference can be clarified again offline, recovers a failed r
   await next(page, 'summary'); await next(page, 'complete'); await confirmed(page);
   const before = structuredClone(stored('item')), version = stored('clarification').version;
   await page.locator('#clarifyStop').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.open === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.open === false);
   await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('reference');
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   assert.equal(await page.locator('#clarifyQuestion').textContent(), 'Clarification complete');
@@ -240,10 +241,10 @@ test('completed v2 reference can be clarified again offline, recovers a failed r
   assert.equal(await page.locator('#clarifyQuestion').textContent(), 'Clarification complete');
   assert.equal((await local(page)).records['clarification:capture'].step, 'complete');
   await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.open === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.open === false);
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   await page.locator('#clarifyRestart').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.session.step === 'actionable');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.session.step === 'actionable');
   const pending = await local(page);
   assert.equal(pending.queue.length, 1); assert.equal(pending.queue[0].operation.mutations.length, 1);
   assert.equal(pending.queue[0].operation.mutations[0].expectedVersion, version);
@@ -255,9 +256,9 @@ test('completed v2 reference can be clarified again offline, recovers a failed r
   assert.equal(await page.locator('#clarifyAnswers').textContent(), '');
   await page.locator('[name=flow_choice][value=yes]').check(); await next(page, 'nextAction');
   await page.locator('[name=flow_text]').fill('Order replacement paper');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.proposal.text === 'Order replacement paper');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.proposal.text === 'Order replacement paper');
   await page.locator('#clarifyStop').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.open === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.open === false);
   await page.reload(); await page.locator('#workspace').waitFor();
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   assert.equal(await page.locator('[name=flow_text]').inputValue(), 'Order replacement paper');
@@ -299,7 +300,7 @@ test('v2 stopped decisions retain private drafts on failure and clear on workspa
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   await page.locator('[name=flow_choice][value=yes]').check(); await next(page, 'nextAction');
   await page.locator('[name=flow_text]').fill('Private proposed wording');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.proposal.text === 'Private proposed wording');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification?.proposal.text === 'Private proposed wording');
   await page.locator('#clarifyStop').click();
   await page.locator('#workspaceSelect').selectOption('work');
   await page.waitForFunction(() => !document.querySelector('#clarifyFlow').textContent);
@@ -307,7 +308,7 @@ test('v2 stopped decisions retain private drafts on failure and clear on workspa
   await clickControl(page.getByRole('button', { name: 'Clarify Original capture', exact: true, includeHidden: true }));
   assert.equal(await page.locator('[name=flow_text]').inputValue(), 'Private proposed wording');
   await waitForBrowser(page, async () => {
-    const draft = (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification;
+    const draft = (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.clarification;
     return draft?.open && draft.proposal.text === 'Private proposed wording';
   });
   await confirmed(page); await context.setOffline(true);
@@ -326,7 +327,7 @@ test('v2 stopped decisions retain private drafts on failure and clear on workspa
   });
   // A late draft save must remain harmless while the fault is armed.
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=1');
+    const { transact } = await import('/inbox-store.js?v=2');
     await transact('alice', state => { state.draft.clarification.proposal.text = 'Private proposed wording'; });
   });
   await page.locator('#clarifyAccept').click(); await page.locator('#recovery').waitFor();

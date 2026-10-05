@@ -37,16 +37,16 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Alice unfinished draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text === 'Alice unfinished draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Alice unfinished draft');
   await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'work');
   await page.locator('#statusFilter').selectOption('completed');
   assert.equal(await page.locator('#items article').count(), 0);
   // A completed write from another tab need not have broadcast before exporting.
   await page.evaluate(async () => {
-    const { transact, enqueue } = await import('/inbox-store.js?v=1');
+    const { transact, enqueue } = await import('/inbox-store.js?v=2');
     await transact('alice', state => enqueue(state, 'alice', [{ type: 'item', id: 'other-tab', action: 'create', expectedVersion: 0,
-      fields: { title: 'Other tab pending task', originalText: 'Other tab source' } }]));
+      fields: { title: 'Other tab pending task', originalText: 'Other tab source', workspaceId: 'personal', collectionRefs: [], status: 'inbox' } }]));
   });
   const before = JSON.stringify(documents), value = JSON.parse(await download(page));
   assert.equal(value.accountId, 'alice'); assert.equal(value.source, 'indexeddb');
@@ -86,7 +86,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   await page.waitForFunction(() => !!window.releaseExport);
   user = 'bob'; await context.setOffline(false);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now', exact: true }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
   await page.locator('#workspace').waitFor();
   await page.evaluate(async () => { window.releaseExport(); await window.pendingExport; });
   assert.equal(downloads.length, 0, 'a delayed Alice export cannot download in Bob’s session');
@@ -119,12 +119,12 @@ test('server download includes unsynced remote records, excludes local drafts, a
   await page.route('**/api/v1/changes?*', route => route.abort());
   const saved = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'other-device', mutations: [
-      { type: 'item', id: 'remote', expectedVersion: 0, action: 'create', fields: { title: 'Only on the server <script>', originalText: 'Exact remote original' } }
+      { type: 'item', id: 'remote', expectedVersion: 0, action: 'create', fields: { title: 'Only on the server <script>', originalText: 'Exact remote original', workspaceId: 'personal', collectionRefs: [] } }
     ] }) });
   assert.equal(saved.status, 200);
   await page.locator('#captureText').fill('Unsubmitted local draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text === 'Unsubmitted local draft');
-  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Unsubmitted local draft');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
   const before = await local(), serverBefore = structuredClone(documents);
   assert.deepEqual(before.records, {});
   await openMenu(page);
@@ -190,7 +190,7 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   user = 'bob';
   const bobChanges = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/changes' && response.ok());
   await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
   await held.route.fulfill({ response: held.response });
   await page.unroute(pattern);
   await page.waitForFunction(() => !document.querySelector('#accountExport').disabled);

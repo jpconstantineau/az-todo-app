@@ -82,7 +82,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text === 'Unsaved after settings');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Unsaved after settings');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsaved after settings');
   await showView(page, 'work');
@@ -95,7 +95,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   assert.ok(records().find(r => r.type === 'settings').defaults.contexts.includes('@Home'));
   // Pre-upgrade editor drafts have no initialFields or advanced controls.
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=1');
+    const { transact } = await import('/inbox-store.js?v=2');
     await transact('alice', local => {
       const record = Object.values(local.records).find(r => r.type === 'item');
       local.draft.edit = { type: 'item', id: record.id, version: record.version,
@@ -113,7 +113,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   assert.equal(await page.locator('#edit [name=energy]').inputValue(), 'Low');
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=1');
+    const { transact } = await import('/inbox-store.js?v=2');
     await transact('alice', local => {
       const record = Object.values(local.records).find(r => r.type === 'item');
       record.version++;

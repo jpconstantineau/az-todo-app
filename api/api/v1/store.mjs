@@ -25,13 +25,12 @@ async function hasContents(accountId, target, pending, workspaceId = null) {
   const { resources } = await container.items.query({
     query: `SELECT TOP 21 c.record FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='record' AND c.record.deleted=false AND
       (ARRAY_CONTAINS(c.record.collectionRefs, @ref) OR
-       (NOT IS_DEFINED(c.record.collectionRefs) AND c.record.${target.type === 'project' ? 'projectId' : 'listId'}=@l) OR
        (c.record.parentRef.type=@type AND c.record.parentRef.id=@l))`,
     parameters: [{ name: '@u', value: accountId }, { name: '@l', value: target.id }, { name: '@type', value: target.type }, { name: '@ref', value: { type: target.type, id: target.id } }]
   }, { partitionKey: partition(accountId) }).fetchAll();
   // At most 20 records can change in this operation; a 21st dependent blocks deletion or movement.
   return [...resources.map(row => row.record).filter(record => !pending.some(next => refKey(next) === refKey(record))), ...pending]
-    .some(record => collectionContents(record, target) && (workspaceId === null || (record.workspaceId || 'personal') !== workspaceId));
+    .some(record => collectionContents(record, target) && (workspaceId === null || record.workspaceId !== workspaceId));
 }
 async function validateCollections(record, lookup) {
   if (record.deleted) return;
@@ -39,7 +38,7 @@ async function validateCollections(record, lookup) {
   for (const ref of refs) {
     const target = await lookup(ref.type, ref.id);
     if (!target || target.deleted) throw new ApiError(404, `${ref.type}_not_found`, 'Destination collection is unavailable. Restore or remove its link.');
-    if ((target.workspaceId || 'personal') !== (record.workspaceId || 'personal')) throw new ValidationError('Collections and items must belong to the same workspace. Clear memberships before moving.');
+    if (target.workspaceId !== record.workspaceId) throw new ValidationError('Collections and items must belong to the same workspace. Clear memberships before moving.');
   }
   if (isCollection(record)) {
     let parent = record.parentRef;
@@ -49,6 +48,15 @@ async function validateCollections(record, lookup) {
       seen.add(refKey(parent));
       parent = (await lookup(parent.type, parent.id))?.parentRef;
     }
+  }
+}
+function validateCurrentShape(record) {
+  if (['item', 'list', 'project', 'review'].includes(record.type) && typeof record.workspaceId !== 'string') {
+    throw new ValidationError('workspaceId is required.');
+  }
+  if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
+  if (record.type === 'project' && !['active', 'someday', 'completed'].includes(record.status)) {
+    throw new ValidationError('Choose an active, someday or completed project status.');
   }
 }
 
@@ -92,6 +100,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? {}) };
     const lookup = async (type, id) => records.find(r => r.type === type && r.id === id) ?? (await read(accountId, recordId(type, id)))?.record;
     for (const [i, record] of records.entries()) {
+      validateCurrentShape(record);
       await validateWorkspace(record, current[i]?.record, lookup);
       await validateCollections(record, lookup);
       if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
@@ -100,7 +109,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       if (record.type === 'review') await validateReview(record, current[i]?.record, input.mutations, records,
         async ref => {
           const target = (await read(accountId, recordId(ref.type, ref.id)))?.record;
-          return target && await workspaceOf(target, lookup) === (record.workspaceId || 'personal') ? target : null;
+          return target && await workspaceOf(target, lookup) === record.workspaceId ? target : null;
         });
       if (record.type === "clarification") {
         const originalItem = (await read(accountId, recordId('item', record.id)))?.record;
@@ -122,10 +131,8 @@ export async function commit(accountId, input, requestHash = digest(input)) {
             ?? (await read(accountId, recordId("project", record.projectId)))?.record;
           if (!project || project.deleted) throw new ApiError(404, "project_not_found", "Destination project not found in this account.");
         }
-        const mutation = input.mutations[i], old = current[i]?.record;
         const allowed = ["inbox", "next", "waiting", "deferred", "someday", "reference", "completed", "dropped", ...(list?.defaults?.statuses ?? userDefaults.statuses)];
-        // Historic values stay editable; unrelated edits and moves never erase them.
-        if (mutation.fields?.status !== undefined && ![...allowed, old?.status, old?.statusBeforeCompletion, old?.workflowBeforeTransition?.status].includes(record.status)) {
+        if (!allowed.includes(record.status)) {
           throw new ValidationError("status is not configured for this list or account.");
         }
       }
@@ -133,8 +140,8 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         throw new ApiError(409, `${record.type}_not_empty`, `Move or delete this ${record.type}'s items and unlink child collections before deleting it.`);
       }
       if (isCollection(record) && current[i]?.record && !record.deleted &&
-          (record.workspaceId || 'personal') !== (current[i].record.workspaceId || 'personal') &&
-          await hasContents(accountId, record, records, record.workspaceId || 'personal')) {
+          record.workspaceId !== current[i].record.workspaceId &&
+          await hasContents(accountId, record, records, record.workspaceId)) {
         throw new ValidationError('Move linked items and child collections with this collection.');
       }
     }

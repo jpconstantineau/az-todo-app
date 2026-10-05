@@ -52,7 +52,7 @@ for (const [timezoneId, instant] of [
         undated: {},
       };
       return { day, mutations: Object.entries(cases).map(([id, fields]) => ({ type: 'item', id, action: 'create', expectedVersion: 0,
-        fields: { title: id, originalText: id, status: 'scheduled', ...fields } })) };
+        fields: { title: id, originalText: id, workspaceId: 'personal', collectionRefs: [], status: 'scheduled', ...fields } })) };
     });
     const post = async mutations => {
       const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },

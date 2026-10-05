@@ -96,7 +96,7 @@ export function validateClarification(record, old, mutations, item) {
   if (a.project?.choice === 'new') {
     const project = mutations.find(m => m.type === 'project' && m.id === mutation.fields?.projectId);
     if (!project || project.action !== 'create' || project.fields.title !== a.project.projectTitle || project.fields.outcome !== a.project.outcome ||
-      (project.fields.workspaceId || 'personal') !== (item.workspaceId || 'personal') || mutations.length !== 3) fail('Create and assign the proposed project with the final decision.');
+      project.fields.workspaceId !== item.workspaceId || project.fields.status !== 'active' || mutations.length !== 3) fail('Create and assign the proposed project with the final decision.');
     expected.projectId = project.id;
     if (expected.collectionRefs) expected.collectionRefs = [...expected.collectionRefs, { type: 'project', id: project.id }];
   } else if (mutations.length !== 2) fail('Save only the item and its final clarification decision.');

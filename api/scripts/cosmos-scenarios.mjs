@@ -9,7 +9,10 @@ export async function protocolScenarios({ store, container, check }) {
   const send = input => commit(input.accountId, validateOperation(input));
   const edit = (operationId, id, expectedVersion, fields, action = 'update') => ({
     apiVersion: 1, accountId: 'alice', operationId,
-    mutations: [{ type: 'item', id, expectedVersion, action, ...(fields ? { fields } : {}) }]
+    mutations: [{ type: 'item', id, expectedVersion, action, ...(fields ? { fields: action === 'create'
+      ? { ...fields, workspaceId: fields.workspaceId ?? 'personal', status: fields.status ?? 'inbox',
+        collectionRefs: fields.collectionRefs ?? ['list', 'project'].filter(kind => fields[`${kind}Id`]).map(kind => ({ type: kind, id: fields[`${kind}Id`] })) }
+      : fields } : {}) }]
   });
   const record = async id => (await read('alice', recordId('item', id)))?.record;
 

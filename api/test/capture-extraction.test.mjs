@@ -14,7 +14,7 @@ const source = 'Call Sam tomorrow at 3 pm about the quote. Buy milk, urgent, at 
 const suggestion = (fields = {}) => ({ title: 'Call Sam', description: 'About the quote', listId: '', priority: '', context: '', dueDate: '2026-10-03', dueTime: '15:00', evidence: 'Call Sam tomorrow at 3 pm about the quote.', uncertainty: '', ...fields });
 const output = (items = [suggestion()]) => JSON.stringify({ items, notes: 'Check the quote before calling.' });
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 
 test('capture clock fixes relative-date context and rejects skipped/repeated wall times', () => {
@@ -45,12 +45,15 @@ test('reviewed batches preserve original/identity, date-only semantics and trust
   assert.equal(project.fields.projectId, 'garage'); assert.equal(project.fields.listId, null);
   draft.items[0].listId = '';
   assert.equal(mutation.id, extractionMutations(draft, {})[0].id);
-  assert.equal(fieldsFor('item', 'create', mutation.fields).captureTimeZone, 'America/Regina');
+  const currentFields = { ...mutation.fields, workspaceId: 'personal', collectionRefs: [] };
+  assert.equal(fieldsFor('item', 'create', currentFields).captureTimeZone, 'America/Regina');
   assert.throws(() => fieldsFor('item', 'update', { captureId: 'replacement' }));
-  for (const fields of [{ capturedAt: '' }, { capturedAt: '2026-02-30T00:00:00Z' }, { captureTimeZone: 'made-up' }, { captureId: '../bob' }]) assert.throws(() => fieldsFor('item', 'create', { ...mutation.fields, ...fields }));
+  for (const fields of [{ capturedAt: '' }, { capturedAt: '2026-02-30T00:00:00Z' }, { captureTimeZone: 'made-up' }, { captureId: '../bob' }]) assert.throws(() => fieldsFor('item', 'create', { ...currentFields, ...fields }));
   draft.items[0].listId = 'deleted'; assert.throws(() => extractionMutations(draft, { 'list:deleted': { deleted: true } }));
   draft.items[0].listId = ''; draft.source = 'x'.repeat(16000); draft.items = Array.from({ length: 5 }, () => ({ ...draft.items[0], id: crypto.randomUUID() }));
-  const state = { records: {}, queue: [] }; assert.throws(() => enqueue(state, 'alice', extractionMutations(draft, {})), /too large/); assert.equal(state.queue.length, 0);
+  const state = { records: {}, queue: [] }, oversized = extractionMutations(draft, {});
+  for (const entry of oversized) Object.assign(entry.fields, { workspaceId: 'personal', collectionRefs: [] });
+  assert.throws(() => enqueue(state, 'alice', oversized), /too large/); assert.equal(state.queue.length, 0);
 });
 
 async function setup(t, mode = {}) {
@@ -101,7 +104,7 @@ test('inline capture and explicit batch review journal before inference, preserv
   const call = await page.evaluate(() => aiCalls.prompts[0]); assert.match(call.text, /America\/Regina/);
   await page.locator('#extractReview').click();
   await page.locator('#extractionItems [name=title]').first().fill('Call Sam about the revised quote');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.extraction.draft.items[0].title === 'Call Sam about the revised quote');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.extraction.draft.items[0].title === 'Call Sam about the revised quote');
   if (process.env.EXTRACTION_SCREENSHOTS) {
     await mkdir(process.env.EXTRACTION_SCREENSHOTS, { recursive: true });
     for (const theme of ['dark', 'light']) for (const width of [320, 390, 1440]) {
@@ -129,7 +132,7 @@ test('inline capture and explicit batch review journal before inference, preserv
   assert.equal(task.originalText, source); assert.equal(task.captureId, savedDraft.extraction.draft.id);
   assert.equal(task.dueDateUtc, '2026-10-03T21:00:00.000Z');
   // Simulate a stale tab restoring a pre-acceptance draft after acknowledgement.
-  await page.evaluate(async draft => (await import('/inbox-store.js?v=1')).transact('alice', state => { state.draft = draft; }), savedDraft);
+  await page.evaluate(async draft => (await import('/inbox-store.js?v=2')).transact('alice', state => { state.draft = draft; }), savedDraft);
   await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#extractReview')); await page.locator('#extractAccept').click();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('already accepted'));
   assert.equal(records().filter(record => record.type === 'item').length, 2); assert.deepEqual(errors, []);
@@ -153,7 +156,7 @@ test('capture follows agent availability across reload without losing AI prefere
   const { page } = await setup(t);
   await page.locator('#extractAuto').check(); await page.locator('#extractLists').check();
   await waitForBrowser(page, async () => {
-    const saved = (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.extraction;
+    const saved = (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.extraction;
     return saved.enabled && saved.includeLists;
   });
   await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=1')).checkModel(); });
@@ -200,7 +203,7 @@ test('late results cannot overwrite changed input, cancellation, or another acco
   await page.evaluate(raw => finishAI(raw), output()); assert.equal(await page.locator('#extractReview').isHidden(), true);
   await page.locator('#extractStart').click(); await page.waitForFunction(() => aiCalls.prompts.length === 3);
   setUser('bob'); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
   await page.evaluate(raw => finishAI(raw), output()); assert.equal(await page.locator('#extractReview').isHidden(), true);
   assert.equal(await page.locator('#captureText').inputValue(), ''); assert.equal(records().length, 0);
   assert.equal((await local(page)).draft.capture.text, source);
@@ -244,7 +247,7 @@ test('model download requires interaction; explicit notes survive suggestions an
 test('failed persistence never passes capture to inference or loses its recovery text', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await page.locator('#captureText').fill(source);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture?.text?.startsWith('Call Sam'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture?.text?.startsWith('Call Sam'));
   await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
   await page.locator('#extractStart').click();
   await page.locator('#recovery').waitFor();
@@ -310,7 +313,7 @@ test('suggested batch review retains offline corrections and accepts once', { ti
   assert.equal(await page.locator('#extractionItems [name=description]').inputValue(), 'Keep these original notes.');
   await page.locator('#extractAdd').click();
   await page.locator('#extractionItems [name=title]').last().fill('My second task');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.extraction.draft.items[1].title === 'My second task');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.extraction.draft.items[1].title === 'My second task');
   const draft = (await local(page)).draft.extraction.draft;
   assert.equal(await page.evaluate(() => aiCalls.creates), 1);
   await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#extractReview'));
@@ -329,8 +332,8 @@ test('suggested batch review retains offline corrections and accepts once', { ti
 test('list-name permission is opt-in, persists per account and cancellation stops stale inference', async t => {
   const { page, setUser } = await setup(t);
   await page.evaluate(async () => {
-    await (await import('/inbox-store.js?v=1')).transact('alice', local => {
-      local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', version: 1, accountId: 'alice', deleted: false };
+    await (await import('/inbox-store.js?v=2')).transact('alice', local => {
+      local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', workspaceId: 'personal', version: 1, accountId: 'alice', deleted: false };
     });
     document.querySelector('#sync').click();
   });
@@ -339,7 +342,7 @@ test('list-name permission is opt-in, persists per account and cancellation stop
   assert.ok(!(await page.evaluate(() => aiCalls.prompts[0].text)).includes('Private list name'));
   await page.locator('#extractOriginal').click();
   await page.locator('#extractLists').check();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.extraction.includeLists);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.extraction.includeLists);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#extractLists').isChecked(), true);
   await page.evaluate(raw => { aiMode.raw = raw; }, output([suggestion({ listId: 'private' })]));
@@ -364,7 +367,7 @@ test('list-name permission is opt-in, persists per account and cancellation stop
   await confirmed(page); // Finish startup sync before changing the server-side account.
   assert.equal(await page.locator('#extractLists').isChecked(), true);
   setUser('bob'); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
   assert.equal(await page.locator('#extractLists').isChecked(), false);
 });
 
@@ -382,7 +385,7 @@ test('merge review tasks preserves notes and attributes, journals the result and
   const notes = await page.locator('#extractionItems [name=description]').inputValue();
   assert.match(notes, /Buy milk/); assert.match(notes, /Get oat milk/); assert.match(notes, /Priority: urgent/);
   assert.equal(await page.locator('#extractionItems [name=description]').evaluate(el => document.activeElement === el), true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.extraction.draft.items.length === 1);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.extraction.draft.items.length === 1);
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#extractReview'));
   assert.equal(await page.locator('#extractionItems [name=description]').inputValue(), notes);
   assert.equal((await local(page)).queue.length, 0);
@@ -391,7 +394,7 @@ test('merge review tasks preserves notes and attributes, journals the result and
 test('suggested review storage failures retain source and corrections without queuing tasks', async t => {
   const { page } = await setup(t);
   await page.locator('#captureText').fill(source);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text.startsWith('Call Sam tomorrow'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text.startsWith('Call Sam tomorrow'));
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); };
@@ -402,7 +405,7 @@ test('suggested review storage failures retain source and corrections without qu
   await page.evaluate(() => { IDBObjectStore.prototype.put = originalPut; });
   await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
   await page.locator('#extractionItems [name=title]').first().fill('Keep this correction');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.extraction?.draft?.items[0].title === 'Keep this correction');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.extraction?.draft?.items[0].title === 'Keep this correction');
   await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
   await page.locator('#extractAccept').click();
   // Recovery is already visible from the first failure; wait for this save to fail.
@@ -445,7 +448,7 @@ test('inline text appears at the cursor, Tab inserts only the continuation and t
   await page.locator('#captureText').press('Tab');
   await page.waitForFunction(() => document.querySelector('#captureText').value === 'Call Sam about the quote today');
   assert.equal(await page.locator('#captureText').evaluate(field => field === document.activeElement), true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text === 'Call Sam about the quote today');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Call Sam about the quote today');
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(records().length, 0);
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
@@ -453,7 +456,7 @@ test('inline text appears at the cursor, Tab inserts only the continuation and t
   assert.equal(await page.locator('#captureMirror').isHidden(), true);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0, 'reload never runs inference');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue.length === 1);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.length === 1);
   assert.equal((await local(page)).queue[0].operation.mutations[0].fields.title, 'Call Sam about the quote today');
 });
 
@@ -484,8 +487,8 @@ test('list context is visible, changing it regenerates inline text and late resu
   assert.match(await page.locator('#extractListsHelp').textContent(), /No existing lists in this workspace/);
   await page.locator('#extractLists').uncheck();
   await page.evaluate(async () => {
-    await (await import('/inbox-store.js?v=1')).transact('alice', local => {
-      local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', version: 1, accountId: 'alice', deleted: false };
+    await (await import('/inbox-store.js?v=2')).transact('alice', local => {
+      local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', workspaceId: 'personal', version: 1, accountId: 'alice', deleted: false };
     });
     document.querySelector('#sync').click();
   });
@@ -509,7 +512,7 @@ test('list context is visible, changing it regenerates inline text and late resu
   await page.waitForFunction(() => aiCalls.prompts.length === 3);
   assert.doesNotMatch(await page.evaluate(() => aiCalls.prompts[2].text), /Private list name/);
   setUser('bob'); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
   await page.evaluate(() => finishAI(JSON.stringify({ text: ' alice only' })));
   assert.equal(await page.locator('#captureGhost').isHidden(), true);
   assert.equal(await page.locator('#captureText').inputValue(), '');
@@ -534,7 +537,7 @@ test('invalid inline output leaves capture untouched and typing never starts a m
 test('inline generation waits for persistence and rejects results after cursor movement', { timeout: 30000 }, async t => {
   const { page } = await setup(t, { delay: true });
   await page.locator('#captureText').fill('Call Sam');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text === 'Call Sam');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Call Sam');
   await page.locator('#extractAuto').check(); await page.waitForFunction(() => aiCalls.prompts.length === 1);
   await page.locator('#captureText').focus(); await page.keyboard.press('ArrowLeft');
   await page.evaluate(() => finishAI(JSON.stringify({ text: ' stale continuation' })));

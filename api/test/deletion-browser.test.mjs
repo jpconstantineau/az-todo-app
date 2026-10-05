@@ -9,7 +9,7 @@ import { projected } from '../../html/inbox-store.js';
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const sync = async page => { await clickControl(page.locator('#sync')); await confirmed(page); };
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
 const trash = page => clickControl(page.locator('#openDeleted'));
 
 test('deletion: offline reload, parent recovery, another device conflict and account isolation', { timeout: 90000 }, async t => {
@@ -35,13 +35,13 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
   const seeded = await page.evaluate(async () => {
     const response = await fetch('/api/v1/operations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
       apiVersion: 1, accountId: 'alice', operationId: 'deletion-fixture', mutations: [
-        { type: 'list', id: 'list', action: 'create', expectedVersion: 0, fields: { title: 'Groceries' } },
-        { type: 'project', id: 'project', action: 'create', expectedVersion: 0, fields: { title: 'Breakfast', outcome: 'Ready for breakfast' } },
-        { type: 'item', id: 'milk', action: 'create', expectedVersion: 0, fields: { title: 'Milk', originalText: '  Milk\n', listId: 'list', projectId: 'project' } }
+        { type: 'list', id: 'list', action: 'create', expectedVersion: 0, fields: { title: 'Groceries', workspaceId: 'personal' } },
+        { type: 'project', id: 'project', action: 'create', expectedVersion: 0, fields: { title: 'Breakfast', outcome: 'Ready for breakfast', workspaceId: 'personal', status: 'active' } },
+        { type: 'item', id: 'milk', action: 'create', expectedVersion: 0, fields: { title: 'Milk', originalText: '  Milk\n', listId: 'list', projectId: 'project', workspaceId: 'personal', collectionRefs: [{ type: 'list', id: 'list' }, { type: 'project', id: 'project' }] } }
       ] }) }); return response.status;
   });
   assert.equal(seeded, 200); await sync(page);
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=1')).transact('alice')).records['item:milk']);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=2')).transact('alice')).records['item:milk']);
   await second.goto(server.url); await second.locator('#workspace').waitFor(); await confirmed(second);
   await showView(second, 'work'); await other.setOffline(true);
   await second.getByRole('button', { name: 'Edit Milk', exact: true }).click();
@@ -127,13 +127,13 @@ test('deletion: lists delete completed and active linked items, including offlin
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   const statuses = await page.evaluate(async () => {
     const batches = [
-      [{ type: 'list', id: 'done', action: 'create', expectedVersion: 0, fields: { title: 'Done' } },
-        { type: 'item', id: 'finished', action: 'create', expectedVersion: 0, fields: { title: 'Finished', status: 'completed', listId: 'done' } },
-        { type: 'list', id: 'mixed', action: 'create', expectedVersion: 0, fields: { title: 'Mixed' } }],
+      [{ type: 'list', id: 'done', action: 'create', expectedVersion: 0, fields: { title: 'Done', workspaceId: 'personal' } },
+        { type: 'item', id: 'finished', action: 'create', expectedVersion: 0, fields: { title: 'Finished', status: 'completed', listId: 'done', workspaceId: 'personal', collectionRefs: [{ type: 'list', id: 'done' }] } },
+        { type: 'list', id: 'mixed', action: 'create', expectedVersion: 0, fields: { title: 'Mixed', workspaceId: 'personal' } }],
       ...[0, 19].map(start => Array.from({ length: start ? 2 : 19 }, (_, index) => {
         const id = start + index;
         return { type: 'item', id: `task-${id}`, action: 'create', expectedVersion: 0,
-          fields: { title: `Task ${id}`, status: id < 19 ? 'completed' : 'next', listId: 'mixed' } };
+          fields: { title: `Task ${id}`, status: id < 19 ? 'completed' : 'next', listId: 'mixed', workspaceId: 'personal', collectionRefs: [{ type: 'list', id: 'mixed' }] } };
       }))
     ];
     const results = [];
@@ -146,7 +146,7 @@ test('deletion: lists delete completed and active linked items, including offlin
   });
   assert.deepEqual(statuses, [200, 200, 200]);
   await sync(page);
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=1')).transact('alice')).records['item:task-20']);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=2')).transact('alice')).records['item:task-20']);
   await showView(page, 'lists'); await page.locator('#view').selectOption('done');
   await page.getByRole('button', { name: 'Delete list: Done', exact: true }).click();
   await page.getByRole('button', { name: 'Delete list: Done', exact: true }).waitFor({ state: 'hidden' });

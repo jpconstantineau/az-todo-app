@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { documents, faults, startServer } from './harness.mjs';
 import { workspaceOf, workspaceRecords, workspaceDraft } from '../../html/workspaces.js';
 import { collectionMoveMutations } from '../../html/workspace-move.js';
+import { currentCreate } from './current-record.mjs';
 
 async function setup(t) {
   documents.length = 0;
@@ -16,7 +17,7 @@ async function setup(t) {
   };
   return { post, server, setUser: value => { user = value; } };
 }
-const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+const create = currentCreate;
 const change = (type, id, expectedVersion, fields, action = 'update') => ({ type, id, action, expectedVersion, ...(fields ? { fields } : {}) });
 const clarification = (step = 'actionable') => ({ flowVersion: 2, step, answers: {}, proposal: {
   text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: ''
@@ -47,10 +48,11 @@ test('workspaces: atomic archive/delete gates all records, preserves history, an
   assert.equal((await post([create('workspace', 'personal', { title: 'Hijack default' })])).status, 400);
 });
 
-test('workspaces: membership, review scope, foreign IDs, item moves and legacy Personal are validated', async t => {
+test('workspaces: canonical membership, review scope, foreign IDs and item moves are validated', async t => {
   const { post, setUser } = await setup(t);
   await post([create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' })]);
   await post([create('list', 'list', { title: 'Work list', workspaceId: 'work' }), create('project', 'project', { title: 'Project', outcome: 'Done', workspaceId: 'work' })]);
+  assert.equal((await post([{ type: 'item', id: 'sparse', action: 'create', expectedVersion: 0, fields: { title: 'Sparse' } }])).status, 400);
   for (const fields of [{ workspaceId: 'missing' }, { listId: 'list' }, { projectId: 'project', workspaceId: 'family' }]) {
     assert.equal((await post([create('item', 'bad', { title: 'Bad', ...fields })])).status, 400);
   }
@@ -59,10 +61,8 @@ test('workspaces: membership, review scope, foreign IDs, item moves and legacy P
   assert.equal((await post([create('review', 'bad-review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [{ type: 'item', id: 'task' }], decisionHeads: [null], decisionCount: 0, workspaceId: 'family' })])).status, 400);
   assert.equal((await post([change('item', 'task', 1, { workspaceId: 'family', listId: null, projectId: null })])).status, 200);
   const records = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
-  records['item:legacy'] = { type: 'item', id: 'legacy', title: 'Old task' };
   records['clarification:task'] = { type: 'clarification', id: 'task', ...clarification() };
   records['brief:brief'] = { type: 'brief', id: 'brief', subjectType: 'item', subjectId: 'task' };
-  assert.equal(workspaceOf(records['item:legacy'], records), 'personal');
   assert.deepEqual(Object.keys(workspaceRecords(records, 'family')).sort(), ['brief:brief', 'clarification:task', 'item:task']);
   assert.equal(workspaceRecords(records, 'work')['item:task'], undefined);
   records['workspace:family'].deleted = true;

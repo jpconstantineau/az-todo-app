@@ -9,14 +9,14 @@ import { deviceExport, readableExport, validateDeviceExport } from '../../html/i
 
 function fixture() {
   const base = { accountId: 'alice', version: 2, deleted: false, createdUtc: '2026-10-02T12:00:00.000Z' };
-  const item = { ...base, type: 'item', id: 'milk', title: 'Milk', originalText: '  milk\n', description: 'Two cartons',
+  const item = { ...base, type: 'item', id: 'milk', workspaceId: 'personal', collectionRefs: [{ type: 'list', id: 'groceries' }, { type: 'project', id: 'dinner' }], title: 'Milk', originalText: '  milk\n', description: 'Two cartons',
     sourceUrl: 'https://example.com/milk', selectedText: 'original selection', referenceLinks: ['https://example.com'],
     listId: 'groceries', projectId: 'dinner', plannedDay: '2026-10-03', dueDateUtc: '2026-10-04T03:00:00.000Z',
     status: 'waiting', waitingOn: 'Sam', reviewDate: '2026-10-03', startDate: '2026-10-04', areas: ['Home'],
     workflowBeforeTransition: { status: 'next', waitingOn: '', startDate: null, startDateUtc: null, reviewDate: null, reviewDateUtc: null },
     completionBeforeTransition: 'next' };
-  const records = [item, { ...base, type: 'list', id: 'groceries', title: 'Groceries' },
-    { ...base, type: 'project', id: 'dinner', title: 'Dinner', outcome: 'Everyone fed' },
+  const records = [item, { ...base, type: 'list', id: 'groceries', workspaceId: 'personal', title: 'Groceries' },
+    { ...base, type: 'project', id: 'dinner', workspaceId: 'personal', status: 'active', title: 'Dinner', outcome: 'Everyone fed' },
     { ...base, type: 'settings', id: 'settings', defaults: { contexts: ['Home'] } },
     { ...item, id: 'deleted', title: 'Erased task', deleted: true, deletedUtc: base.createdUtc }];
   const mutation = { type: 'item', id: 'milk', action: 'update', expectedVersion: 1, fields: { title: 'Oat milk' } };
@@ -83,7 +83,7 @@ test('export accepts only the current clarification record and mutation shape', 
 
 test('export accepts only pointer-based review history and immutable decision records', () => {
   const base = { accountId: 'alice', version: 1, deleted: false, createdUtc: '2026-10-02T12:00:00.000Z' };
-  const review = { ...base, type: 'review', id: 'weekly', reviewKind: 'weekly', reviewDay: '2026-10-05',
+  const review = { ...base, type: 'review', id: 'weekly', workspaceId: 'personal', reviewKind: 'weekly', reviewDay: '2026-10-05',
     included: [{ type: 'item', id: 'milk' }], decisionHeads: ['decision'], decisionCount: 1 };
   const decision = { ...base, type: 'reviewDecision', id: 'decision', reviewId: 'weekly', sequence: 1, index: 0,
     choice: 'retain', recordVersion: 2, before: { status: 'inbox' }, changes: {} };

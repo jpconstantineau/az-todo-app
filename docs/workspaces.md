@@ -61,9 +61,8 @@ also preserve every workspace draft. Exports are recovery copies, not imports.
 The account partition, record IDs, receipts, history cursor and IndexedDB schema
 are unchanged. `workspace` is an account-owned v1 record type with a required
 `title` and boolean `archived`. It supports create/update/delete/restore using the
-same expected-version rules. `workspaceId` is optional on legacy item/list/project/
-review records; absence means `personal`. New clients explicitly assign it on
-creation. Only items allow membership updates. Clarifications derive membership
+same expected-version rules. Every item, list, project and review has an explicit
+`workspaceId`; `personal` names the built-in workspace. Only items allow membership updates. Clarifications derive membership
 from their item; briefs derive it from their source.
 
 Every mutation validates workspace existence and writable state, plus matching
@@ -94,7 +93,7 @@ node --experimental-test-module-mocks --test api/test/workspaces.test.mjs api/te
 Automated checks use production client/API code, browser IndexedDB and the
 existing transactional Cosmos substitute. They cover relationship rejection,
 archive/delete write protection, repeated lost acknowledgements, restoration
-without rewriting children, legacy Personal membership, offline drafts/filters/
+without rewriting children, Personal membership, offline drafts/filters/
 reviews/moves/reload, account switching and 320/390/768/1440px layouts.
 
 [320px workspace](design/workspaces/workspaces-320.png) ·
