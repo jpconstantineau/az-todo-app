@@ -65,7 +65,10 @@ test('capture: one List selector includes projects and areas and saves the selec
   await page.reload(); await confirmed(page);
   await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   const selector = page.locator('#capture [name=listId]');
-  assert.deepEqual(await selector.locator('option').allTextContents(), ['No list', 'Area: Home', 'Project: Garage (Active)']);
+  const expectedOptions = ['No list', 'Area: Home', 'Project: Garage (Active)'];
+  await page.waitForFunction(expected => [...document.querySelector('#capture [name=listId]').options]
+    .map(option => option.textContent).join('\n') === expected.join('\n'), expectedOptions);
+  assert.deepEqual(await selector.locator('option').allTextContents(), expectedOptions);
   assert.equal(await page.locator('#capture [name=projectId], #capture [name=areas]').count(), 0);
   await selector.selectOption('project:garage'); await page.locator('#captureText').fill('Sort tools');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.listId === 'project:garage');
