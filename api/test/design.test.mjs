@@ -124,6 +124,8 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
       .reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
   }
   async function dropdownContrast() {
+    await page.waitForFunction(() => [...document.querySelectorAll('select option')]
+      .some(option => option.closest('select')?.getClientRects().length));
     const options = await page.locator('select option').evaluateAll(options => options.filter(option => option.closest('select')?.getClientRects().length).map(option => {
       const style = getComputedStyle(option);
       return { label: option.textContent, color: style.color, background: style.backgroundColor };
