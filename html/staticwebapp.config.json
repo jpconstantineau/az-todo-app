@@ -3,7 +3,6 @@
   "navigationFallback": { "rewrite": "index.html", "exclude": ["/api/*", "/.auth/*", "/*.js", "/*.css", "/manifest.json", "/icons/*"] },
   "mimeTypes": { ".json": "application/json", ".png": "image/png" },
   "routes": [
-    { "route": "/api/app", "allowedRoles": ["anonymous", "authenticated"] },
     { "route": "/api/*", "allowedRoles": ["authenticated"] }
   ],
   "globalHeaders": {

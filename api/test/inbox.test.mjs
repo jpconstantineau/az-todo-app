@@ -331,23 +331,6 @@ test('inbox: editor storage failure closes the sheet and exposes a recovery copy
   assert.equal(records()[0].title, 'Original task');
 });
 
-test('retired shell explains recovery and every legacy mutation stays read-only', async t => {
-  const server = await startServer({ browserUser: true }); t.after(server.close);
-  process.env.V1_CLIENT_ENABLED = 'true';
-  try {
-    const response = await fetch(`${server.url}/api/app`);
-    assert.equal(response.status, 410);
-    assert.match(await response.text(), /durable inbox/);
-    const { routes } = await import('./harness.mjs');
-    for (const route of routes.keys()) {
-      if (!route.startsWith('POST ') || /\/(v1|shared)\//.test(route)) continue;
-      const rejected = await fetch(`${server.url}${route.slice(5)}`, { method: 'POST', headers: { origin: server.url } });
-      assert.equal(rejected.status, 409, route);
-      assert.match(await rejected.text(), /durable inbox/);
-    }
-  } finally { delete process.env.V1_CLIENT_ENABLED; }
-});
-
 test('inbox: aborted transaction never reports saved; keyboard double activation creates only one intent', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t);
   await context.setOffline(true);

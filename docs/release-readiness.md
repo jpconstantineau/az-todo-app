@@ -44,7 +44,6 @@ An anonymous request must be denied and must not receive that diagnostic header.
 | `COSMOS_DB` / `COSMOS_CONTAINER` | Explicit isolated target (defaults are `ToDoList` / `Items`) | UNVERIFIED |
 | Cosmos topology | Hierarchical key `[/UserID, /ObjectType, /ObjectID]`, single write region, at least Session consistency; record index policy | UNVERIFIED |
 | Ingress and cache | Managed backend or verified direct-URL restriction; authenticated API responses never shared/cached | UNVERIFIED |
-| Legacy client flag | `V1_CLIENT_ENABLED` is retired; old writes stay blocked for all values | UNVERIFIED |
 
 Do not use a production database for staging. Do not empty an existing database,
 clear IndexedDB, change partition keys, or remove receipts/history to get a green

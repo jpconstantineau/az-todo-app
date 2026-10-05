@@ -15,9 +15,9 @@ substitute. It does not exercise Azure authentication or a deployed Cosmos accou
 | Durable intent | Pass: offline edits/reload, persistent browser close/reopen, lost acknowledgements, duplicate saves, bounded queues, failed transactions and recovery/export. |
 | Upgrade preservation | Pass: old-worker/new-module isolation, failed worker install, delayed activation with old tabs, retained drafts and unchanged queued operation IDs; old editor drafts retain typed edits and existing optional fields. |
 | Multiple clients | Pass: separate browser contexts retrieve 52 records across change pages; concurrent defaults edits preserve both proposals and require explicit resolution. Existing competing-tab and task conflict checks pass. |
-| Security/isolation | Pass in local harness: authenticated principal, exact origin, account ownership, no-store responses, malicious title rendering, logout/account-switch queue isolation and unconditional retired-write rejection. |
+| Security/isolation | Pass in local harness: authenticated principal, exact origin, account ownership, no-store responses, malicious title rendering, logout/account-switch queue isolation and current-mutation route coverage. |
 | Migration compatibility | Pass in fixtures: stable IDs, complete field/original/link preservation, backup comparison and rollback, read-only archived settings fallback, partial defaults inheritance and historical custom-status reopening. |
-| Shell and retirement | Pass: canonical root, inbox bookmark alias, all rollout flag combinations, offline reopen and cache inspection; runtime/dependency audit finds no HTMX. Only public shell assets are cached. |
+| Shell and retirement | Pass: canonical root, inbox bookmark alias, explicit v1 gate states, retired-path not-found responses, offline reopen and cache inspection; runtime/dependency audit finds no HTMX. Only public shell assets are cached. |
 | Layout/appearance | Pass in automated Edge viewports: 320/390/393/768/1366/1440/2560px, 200% reflow equivalent, reduced keyboard viewport, light/dark/system, dialog focus and keyboard saves. Minimum sampled text contrast: light 4.95:1, dark 4.59:1. |
 
 The native parity test covers Regina local/UTC date conversion and clearing;
@@ -28,8 +28,8 @@ editable without overwriting unrelated original text or links.
 Runtime retirement audit: no HTMX imports, attributes, events, fragment headers or
 CDN references remain in `html/`, `api/api/` or dependency manifests. Test references
 to `HX-Request` deliberately verify that it grants no authority. Older design and
-security documents retain historical evidence. Minimal legacy route stubs only
-explain recovery; their write guard is unconditional.
+security documents retain historical evidence. Retired pre-v1 route registrations
+and their recovery stubs have been removed.
 
 ## Review images
 

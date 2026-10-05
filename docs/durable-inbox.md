@@ -244,14 +244,14 @@ defaults. Settings records use the new `settings:settings` logical identity.
 1. Keep deployment and Cosmos settings unchanged during PR review. On the target
    environment confirm `V1_API_ENABLED=true`, exact `APP_ORIGIN` and the existing
    Cosmos connection, hierarchical partition paths and Session consistency/single
-   write region. `V1_CLIENT_ENABLED` is obsolete and ignored by this release.
+   write region.
 2. The owner emptied the legacy database and has opened the new UI. No legacy import
    is required for that cutover. Preserve any new v1 server records and device data.
    Retain the old migration tool/checksum fixtures for other archived datasets.
 3. Deploy the additive API and native shell together. Test root, inbox bookmark and
-   GitHub auth return. Legacy POSTs must return 409 for legitimate authenticated
-   requests; old GETs return 410. The shared guard blocks non-v1 writes even with
-   the old client flag false/unset. A disabled API shows an error, never old data.
+   GitHub auth return. Retired pre-v1 HTTP paths must receive the platform's normal
+   not-found response for authenticated requests. A disabled API shows an error,
+   never old data.
 4. Verify task/default saves, offline reopen/reconnect and two-account isolation in
    disposable Azure staging, then two real devices. Check custom values, previous
    status, API headers and exact retry outcomes against real Cosmos.
@@ -290,7 +290,8 @@ v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitu
   rejection, copy/export recovery, queue bounds, quota and transaction abort.
 - Editable split preview, competing-tab saves, duplicate submit guard,
   keyboard shortcut/focus, 390px width and a shortened keyboard viewport.
-- Canonical root/bookmark, all flag combinations and unconditional rejection of every retired mutation.
+- Canonical root/bookmark, explicit v1 gate states and normal not-found responses
+  for retired pre-v1 paths.
 - Defaults/copy/reset, custom states, advanced task fields, previous-status restore,
   persisted settings drafts, old-worker upgrade and exact pending intent retention.
 

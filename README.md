@@ -43,9 +43,9 @@ flowchart LR
 
 The canonical entry is `/`; `/inbox.html` remains a bookmark alias. Set the backend
 `V1_API_ENABLED=true`, configure `APP_ORIGIN` for the exact environment origin and
-retain the existing Cosmos connection settings. `V1_CLIENT_ENABLED` is retired:
-legacy writes are always blocked, independently of flag values. Disabling v1
-shows an unavailable error; it never falls back to legacy storage.
+retain the existing Cosmos connection settings. Retired pre-v1 HTTP paths are not
+registered. Disabling v1 shows an unavailable error; it never falls back to another
+store.
 
 From `api/`, run `npm ci`, install Playwright Chromium (`npx playwright install chromium`),
 and run `npm test` with Node 22.x. On Windows with Edge installed, set

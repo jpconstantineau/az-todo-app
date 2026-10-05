@@ -9,7 +9,7 @@ must pass before closing the issue or claiming pilot readiness.
 The deployment workflow packages `html/` and `api/` together using Static Web Apps
 (SWA) managed Functions. The intended path is browser → SWA authentication and
 route authorization → managed Functions → owner-scoped Cosmos queries.
-`html/staticwebapp.config.json` permits anonymous access to the retired `/api/app` recovery response and requires the `authenticated` role for other API routes.
+`html/staticwebapp.config.json` requires the `authenticated` role for every API route.
 
 Microsoft documents that [managed Functions are not available outside SWA](https://learn.microsoft.com/en-us/azure/static-web-apps/apis-functions),
 and that [SWA supplies user information to the API through `x-ms-client-principal`](https://learn.microsoft.com/en-us/azure/static-web-apps/user-information).
@@ -28,11 +28,9 @@ The test harness injects principals deliberately; it is not an authentication pr
 
 Every route registers through `shared/http.mjs`. All methods other than GET, HEAD,
 and OPTIONS require authentication and `checkCsrf` before the handler can write.
-`GET /api/app` returns 410 without storage access. Retired mutations, including
-`settings/ensure`, are permanently rejected with 409 after authentication and CSRF
-checks. The native static shell contains the sign-in link. Private data writes,
-including user/list defaults, use `/api/v1/operations`; shared shopping/family
-lists use `/api/shared/operations` with the same guard and additional list permissions.
+The native static shell contains the sign-in link. Private data writes, including
+user/list defaults, use `/api/v1/operations`; shared shopping/family lists use
+`/api/shared/operations` with the same guard and additional list permissions.
 
 Set the **server-side** SWA application setting `APP_ORIGIN` to the exact public
 origins permitted in that environment, for example `https://todo.jpto.dev`.
@@ -111,11 +109,11 @@ Only storage and function registration are substituted.
 
 Local Windows verification passed on Node 26.7.0 and Edge 154.0.4258.48:
 
-- Every one of the eight current mutation routes rejects missing, foreign,
+- Both current mutation routes reject missing, foreign,
   malformed and conflicting origin evidence without modifying any documents;
   legitimate requests work without `HX-Request`.
-- Every registered route rejects invalid/unauthenticated principals (except the
-  public sign-in shell), and returns the API security/cache headers.
+- Every registered route rejects invalid/unauthenticated principals and returns
+  the API security/cache headers.
 - Two disposable accounts cannot see each other's list/item/settings data or
   mutate foreign records by guessing IDs, changing references, or forging owners.
 - All current GET handlers are read-only, including first-time page loading.
@@ -140,7 +138,7 @@ verify this branch, authenticated headers, or direct backend ingress.
 ## Remaining Azure verification gate
 
 The [opt-in deployed security runner](security-rehearsal.md) now exercises the
-current v1 boundary, retired mutation routes and two-account isolation over HTTPS.
+current private/shared mutation boundaries and two-account isolation over HTTPS.
 It writes only generated synthetic records, records sanitized response checks and
 tombstones its fixtures. Its local regression tests use the production handlers
 with a simulated ingress and in-memory Cosmos; they do not pass this Azure gate.

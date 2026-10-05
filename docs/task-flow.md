@@ -35,15 +35,12 @@ account draft document. Same-profile tabs still share that draft slot; submitted
 operations remain independently durable. Individual records are limited to 32 KiB
 and operations to 64 KiB, including defaults snapshots.
 
-## Retired endpoints
+## API endpoints
 
-`api/api/legacy.mjs` lists the old method/path pairs. Their GETs return 410 and
-POSTs return 409 after the shared authentication/origin guard; responses explain
-how to copy old form text and reopen `/`. None imports storage or templates.
-`GET /api/app` remains public solely to explain retirement to old shells.
-The shared guard unconditionally rejects non-v1 mutations, regardless of the
-obsolete client flag. Remove compatibility stubs only when old clients no longer
-need a useful recovery response; never restore the old writer.
+The current client uses only the versioned private and shared JSON endpoints.
+Retired pre-v1 paths are unregistered and receive the platform's normal not-found
+response. The shared guard authenticates every registered route and verifies the
+origin of every current mutation; there is no recovery shell or fallback writer.
 
 ## Verification
 
@@ -53,7 +50,7 @@ Alternatively use installed Edge with `PLAYWRIGHT_CHANNEL=msedge`.
 - `browser.test.mjs`: replaces the old HTMX flow with native settings, list creation,
   advanced fields, custom status filters, safe text, dates, offline reset/copy and
   completion/reopen parity.
-- `contracts.test.mjs`: flag matrix, permanently retired writes, local shell and CSP.
+- `contracts.test.mjs`: v1 gate states, retired-path not-found responses, local shell and CSP.
 - `inbox.test.mjs`: persistent browser restart, exact queued retries, conflicts,
   isolation, transaction/quota failure, competing tabs, old-worker upgrade and drafts.
 - `v1.test.mjs`: atomic batches, bounded changes, validation, repeat-safe settings
