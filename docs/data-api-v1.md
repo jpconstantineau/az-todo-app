@@ -430,9 +430,9 @@ operation IDs and content remain unchanged.
 ## Review sessions
 
 `review` records reference up to 200 canonical item/project IDs and hold a
-daily/weekly scope plus bounded pointers to immutable `reviewDecision` records.
-Existing inline decisions remain readable and immutable. Continuation batches
-link through `previousReviewId`. A decision, its review pointer and canonical task
+daily/weekly scope plus bounded pointers to immutable `reviewDecision` records;
+inline decision arrays are not part of the contract. Continuation batches link
+through `previousReviewId`. A decision, its review pointer and canonical task
 edit share one version-checked operation; retries do not duplicate decisions, and
 conflicts apply none of the edits. The server validates exact prior/next states and guards undo
 against subsequent edits. `dropped` is a retained, editable item status, not a

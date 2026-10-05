@@ -81,6 +81,24 @@ test('export accepts only the current clarification record and mutation shape', 
   assert.throws(() => validateDeviceExport(pending), /clarification mutation must use the current shape/);
 });
 
+test('export accepts only pointer-based review history and immutable decision records', () => {
+  const base = { accountId: 'alice', version: 1, deleted: false, createdUtc: '2026-10-02T12:00:00.000Z' };
+  const review = { ...base, type: 'review', id: 'weekly', reviewKind: 'weekly', reviewDay: '2026-10-05',
+    included: [{ type: 'item', id: 'milk' }], decisionHeads: ['decision'], decisionCount: 1 };
+  const decision = { ...base, type: 'reviewDecision', id: 'decision', reviewId: 'weekly', sequence: 1, index: 0,
+    choice: 'retain', recordVersion: 2, before: { status: 'inbox' }, changes: {} };
+  const value = deviceExport('alice', { records: { 'review:weekly': review, 'reviewDecision:decision': decision }, after: 1, queue: [], draft: {} }, {});
+  assert.deepEqual(validateDeviceExport(value).warnings, []);
+  const inline = structuredClone(value); inline.state.records['review:weekly'].decisions = [];
+  assert.throws(() => validateDeviceExport(inline), /current history pointers/);
+  const pending = fixture(); pending.state.queue[0].operation.mutations[0] = { type: 'review', id: 'weekly', action: 'create', expectedVersion: 0,
+    fields: { reviewKind: 'weekly', reviewDay: '2026-10-05', included: [], decisions: [] } };
+  assert.throws(() => validateDeviceExport(pending), /current history pointers/);
+  pending.state.queue[0].operation.mutations[0] = { type: 'reviewDecision', id: 'decision', action: 'update', expectedVersion: 1,
+    fields: { reviewId: 'weekly', sequence: 1, index: 0, choice: 'retain', recordVersion: 2, before: {}, changes: {} } };
+  assert.throws(() => validateDeviceExport(pending), /create immutable history/);
+});
+
 test('unsupported fields and future record types are reported and preserved without claiming workflow support', () => {
   const value = fixture();
   value.state.records['item:milk'].futureWorkflow = { step: 2, unknowns: ['Budget'] };

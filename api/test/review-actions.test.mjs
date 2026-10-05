@@ -24,13 +24,13 @@ test('complete and next review decisions require exact paired edits, preserve da
     create('item', 'waiting', { title: 'Quote', status: 'waiting', waitingOn: 'Supplier', reviewDate: '2026-10-12', dueDate: '2026-10-20', plannedDay: '2026-10-15' }),
     create('project', 'project', { title: 'Garage', outcome: 'Ready for winter' })
   ]))).status, 200);
-  await post(server.url, operation([create('review', 'review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [{ type: 'item', id: 'waiting' }, { type: 'project', id: 'project' }], decisions: [] })]));
+  await post(server.url, operation([create('review', 'review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [{ type: 'item', id: 'waiting' }, { type: 'project', id: 'project' }], decisionHeads: [null, null], decisionCount: 0 })]));
   function decision(choice, fields, index = 0) {
     const session = get('review', 'review'), target = get(index ? 'project' : 'item', index ? 'project' : 'waiting');
     const before = workflowSnapshot(target), after = workflowSnapshot({ ...target, ...fields });
-    const id = crypto.randomUUID(), heads = session.decisionHeads || [null, null]; heads[index] = id;
-    return operation([update(session, { decisionHeads: heads, decisionCount: (session.decisionCount || 0) + 1 }),
-      create('reviewDecision', id, { reviewId: session.id, sequence: (session.decisionCount || 0) + 1, index, choice, recordVersion: target.version, before,
+    const id = crypto.randomUUID(), heads = [...session.decisionHeads]; heads[index] = id;
+    return operation([update(session, { decisionHeads: heads, decisionCount: session.decisionCount + 1 }),
+      create('reviewDecision', id, { reviewId: session.id, sequence: session.decisionCount + 1, index, choice, recordVersion: target.version, before,
         changes: Object.fromEntries(Object.entries(after).filter(([name, value]) => value !== before[name])) }), update(target, fields)]);
   }
   const original = workflowSnapshot(get('item', 'waiting'));

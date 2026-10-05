@@ -4,7 +4,7 @@ import { calendarDate, workflowFields } from './workflow.mjs';
 
 const fail = message => { throw new ValidationError(message); };
 export function reviewFields(action, input) {
-  object(input, action === 'create' ? ['reviewKind', 'reviewDay', 'included', 'decisions', 'previousReviewId'] : ['decisions', 'decisionHeads', 'decisionCount'], 'review');
+  object(input, action === 'create' ? ['reviewKind', 'reviewDay', 'included', 'decisionHeads', 'decisionCount', 'previousReviewId'] : ['decisionHeads', 'decisionCount'], 'review');
   if (action === 'create') {
     if (input.previousReviewId !== undefined) identifier(input.previousReviewId, 'previousReviewId');
     if (!['daily', 'weekly', 'someday'].includes(input.reviewKind)) fail('Choose a daily, weekly or someday project review.');
@@ -16,25 +16,15 @@ export function reviewFields(action, input) {
       if (!['item', 'project'].includes(ref.type) || seen.has(`${ref.type}:${ref.id}`)) fail('Review references must be unique items or projects.');
       seen.add(`${ref.type}:${ref.id}`);
     }
+    if (input.decisionCount !== 0 || !Array.isArray(input.decisionHeads) || input.decisionHeads.length !== input.included.length ||
+        input.decisionHeads.some(id => id !== null)) fail('Start with empty review history pointers.');
   }
-  if (action === 'update' && 'decisionHeads' in input) {
-    if ('decisions' in input || !Number.isSafeInteger(input.decisionCount) || input.decisionCount < 1 ||
+  if (action === 'update') {
+    if (!Number.isSafeInteger(input.decisionCount) || input.decisionCount < 1 ||
         !Array.isArray(input.decisionHeads) || input.decisionHeads.length > 200) fail('Invalid review history pointers.');
     for (const id of input.decisionHeads) if (id !== null) {
       identifier(id, 'decision ID');
       if (id.length > 36) fail('Decision IDs must be at most 36 characters.');
-    }
-    return structuredClone(input);
-  }
-  if ('decisionCount' in input) fail('Review history pointers are required.');
-  if (!Array.isArray(input.decisions) || input.decisions.length > 200 || action === 'create' && input.decisions.length) fail('Start with no decisions; a review supports up to 200 decision entries.');
-  for (const decision of input.decisions) {
-    object(decision, ['index', 'choice', 'recordVersion', 'before', 'after'], 'decision');
-    if (!Number.isSafeInteger(decision.index) || decision.index < 0 || !Number.isSafeInteger(decision.recordVersion) || decision.recordVersion < 0 ||
-        !['retain', 'drop', 'defer', 'complete', 'next', 'unavailable', 'undo'].includes(decision.choice)) fail('Invalid review decision.');
-    for (const name of ['before', 'after']) {
-      object(decision[name], workflowFields, name);
-      if (JSON.stringify(decision[name]).length > 6000) fail('Review decision is too large.');
     }
   }
   return structuredClone(input);
@@ -65,30 +55,20 @@ export async function validateReview(record, old, mutations, records, readRecord
     }
     return;
   }
-  if (record.decisionCount !== old.decisionCount) {
-    if (record.decisionCount !== (old.decisionCount || 0) + 1 || record.decisionHeads.length !== record.included.length) fail('Append exactly one review decision.');
-    const changed = record.decisionHeads.flatMap((id, index) => id !== (old.decisionHeads?.[index] ?? null) ? [index] : []);
-    if (changed.length !== 1) fail('Append exactly one review decision.');
-    const index = changed[0], id = record.decisionHeads[index];
-    const decision = records.find(r => r.type === 'reviewDecision' && r.id === id);
-    if (!decision || decision.reviewId !== record.id || decision.index !== index || decision.sequence !== record.decisionCount) fail('Save the decision and review progress together.');
-    const prior = old.decisionHeads?.[index]
-      ? await readRecord({ type: 'reviewDecision', id: old.decisionHeads[index] })
-      : [...old.decisions].reverse().find(entry => entry.index === index);
-    await validateDecision(record, decision, prior, mutations, records, readRecord);
-    return;
-  }
-  if (old.decisionCount) fail('This review uses separate history. Update the app before continuing.');
-  if (record.decisions.length !== old.decisions.length + 1 || canonical(record.decisions.slice(0, -1)) !== canonical(old.decisions)) fail('Append one decision without rewriting review history.');
-  const decision = record.decisions.at(-1);
-  const prior = [...old.decisions].reverse().find(entry => entry.index === decision.index);
+  if (record.decisionCount !== old.decisionCount + 1 || record.decisionHeads.length !== record.included.length) fail('Append exactly one review decision.');
+  const changed = record.decisionHeads.flatMap((id, index) => id !== old.decisionHeads[index] ? [index] : []);
+  if (changed.length !== 1) fail('Append exactly one review decision.');
+  const index = changed[0], id = record.decisionHeads[index];
+  const decision = records.find(r => r.type === 'reviewDecision' && r.id === id);
+  if (!decision || decision.reviewId !== record.id || decision.index !== index || decision.sequence !== record.decisionCount) fail('Save the decision and review progress together.');
+  const prior = old.decisionHeads[index] ? await readRecord({ type: 'reviewDecision', id: old.decisionHeads[index] }) : undefined;
   await validateDecision(record, decision, prior, mutations, records, readRecord);
 }
 
 export function validateReviewDecision(record, old, records) {
   if (old || record.deleted || record.id.length > 36) fail('Review decisions are immutable and require an ID of at most 36 characters.');
   const review = records.find(r => r.type === 'review' && r.id === record.reviewId);
-  if (!review || review.decisionHeads?.[record.index] !== record.id || review.decisionCount !== record.sequence) fail('Save the decision and review progress together.');
+  if (!review || review.decisionHeads[record.index] !== record.id || review.decisionCount !== record.sequence) fail('Save the decision and review progress together.');
 }
 
 async function validateDecision(record, decision, prior, mutations, records, readRecord) {

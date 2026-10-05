@@ -82,9 +82,9 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         applyWorkflow(record, old, m.fields);
         record.completedUtc = record.status === "completed" ? (old?.completedUtc ?? now) : null;
       }
-      // Review metadata keeps at most 200 references/heads plus legacy history.
-      // New history lives in individually bounded, immutable decision records.
-      if (bytes(record) > (record.type === 'review' && record.decisionCount ? 65536 : MAX_RECORD_BYTES)) throw new ValidationError(
+      // Review metadata keeps at most 200 references/heads; history lives in
+      // individually bounded, immutable decision records.
+      if (bytes(record) > (record.type === 'review' ? 65536 : MAX_RECORD_BYTES)) throw new ValidationError(
         ['review', 'reviewDecision'].includes(record.type) ? "Review save exceeds its capacity. Update the app and resume this saved review; its history is retained." : "Record exceeds the 32 KiB limit; shorten its text or links.");
       return record;
     });
