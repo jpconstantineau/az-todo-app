@@ -48,8 +48,8 @@ brief fields. A device export can omit work not yet pulled from another device.
 ## API and recovery
 
 The additive `brief` record type uses the existing `/api/v1/operations`, records,
-receipts and changes endpoints. Deploy the API before shell v17. No IndexedDB,
-partition, authentication or cursor migration is needed.
+receipts and changes endpoints. Deploy the API before the updated client. No
+IndexedDB, partition, authentication or cursor migration is needed.
 
 A create has `subjectType` (`item` or `project`), `subjectId`, `sourceVersion`,
 `previousBriefId` (null for a fresh template), `status: "draft"`, and `content`
@@ -86,12 +86,7 @@ content and keep pending work with its original account.
 `api/test/briefs.test.mjs` covers template facts/unknowns, project templates,
 immutable content, decision conflicts, lost acknowledgements, source/account
 validation, deletion, export round-trip, offline edit/reload/resume, selected
-accepted versus draft exports, storage failures and account clearing. Screenshots
-in `docs/design/briefs/` show the native panel at 320, 390 and 1440 CSS pixels.
-Automated Windows/Edge checks do not establish physical phone, screen reader or
-deployed Cosmos/SWA behavior; those remain release checks under #17.
-
-On October 2, 2026, all 112 tests passed with Node 26.7.0 and Edge 154.0.4258.53
-on Windows after rebasing onto main's PR #44 (`e173bbf`). The combined shell is
-v17; upgrade tests cover v3–v16. The four brief checks also passed again after
-the final draft comparison and unconfirmed export filename refinements.
+accepted versus draft exports, storage failures, account clearing and responsive
+native-panel layouts. [Review screenshots](design/briefs/) cover the panel at
+320, 390 and 1440 CSS pixels. Automated browser checks do not establish physical phone,
+screen reader or deployed Cosmos/SWA behavior; those remain release checks under #17.

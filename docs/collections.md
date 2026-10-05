@@ -68,9 +68,9 @@ Old clarification requests without collection refs retain their original
 meaning; new organization answers include the exact selected refs in their
 final atomic decision.
 
-Deploy the additive API before shell v55. The new shell versions its entire
-module graph, caches the collection modules and retains upgrade coverage from
-prior shells including v54. No IndexedDB reset or bulk record migration occurs.
+Deploy the additive API before the updated client. The shell versions its entire
+module graph and caches the collection modules. No IndexedDB reset or bulk record
+migration occurs.
 Older shells show only primary membership and cannot present nesting or all
 memberships. Shared lists keep their separate permission-controlled interface;
 private nesting does not grant sharing access.

@@ -28,17 +28,17 @@ is introduced. See [retention and client recovery](device-export.md#recoverable-
 The additive [workflow contract](workflow-states.md) defines waiting/deferred
 validation, calendar versus timed dates, and derived undo metadata. Existing
 receipts remain repeat-safe; unacknowledged incomplete workflow transitions are
-rejected with recoverable field feedback. Deploy that API before shell v8.
+rejected with recoverable field feedback. Deploy that API before the updated client.
 
-The additive [clarification contract](clarification.md#api-and-rollout) introduces
+The additive [clarification contract](clarification.md#api-compatibility) introduces
 `type=clarification` records with the same ID as an owned item. Proposals and
 accepted/unknown answers remain separate from the task; accepted task changes
-and session progress share an atomic operation. Deploy that API before shell v11.
+and session progress share an atomic operation. Deploy that API before the updated client.
 
 The additive [brief contract](briefs.md#api-and-recovery) introduces immutable
 content revisions with explicit acceptance/rejection. Draft creation and decisions
 use the existing account transaction, receipt and conflict protocol. Deploy that
-API before shell v17.
+API before the updated client.
 
 **Decision: retain the working account transaction boundary.** The physical
 hierarchical paths remain `[/UserID, /ObjectType, /ObjectID]`; their v1 values are
@@ -426,12 +426,12 @@ Staging/production procedure:
 
 ## Evidence and remaining gates
 
-Local checks on October 1, 2026 use Node 26.7.0 and Edge 154.0.4258.48. All 21 tests
-pass, including registered production HTTP handlers with a transactional in-memory
-Cosmos substitute, rollback injection at every batch position, lost acknowledgements,
+Run `npm test` from `api/` with Node 22.x and Playwright Chromium. Coverage includes
+registered production HTTP handlers with a transactional in-memory Cosmos
+substitute, rollback injection at every batch position, lost acknowledgements,
 simultaneous duplicate writes/edits and membership/deletion races, immutable moves,
 tombstones, paging bounded by both entry count and bytes,
-account switching/expiry, malformed input and the existing desktop/390px HTMX flow.
+account switching/expiry, malformed input and the native desktop/390px browser flow.
 The migration test runs both CLI commands, checks checksum/round-trip equality,
 loads the prepared fixture into the isolated test store, and edits/reads migrated
 records through the production service.

@@ -74,8 +74,8 @@ to hide the collection. Authenticated account exports and sync still include
 retained records. Workspaces organize one owner's data; they are not separate
 accounts or a cross-user access-control/sharing system.
 
-Deploy the compatible API before the client. Shell v28 versions and caches the
-entire module graph, including workspaces.js, while keeping existing queues and
+Deploy the compatible API before the client. The shell versions and caches the
+entire module graph, including `workspaces.js`, while keeping existing queues and
 drafts. Older open clients do not understand workspace filtering and may display
 the owner's records together; close all app tabs/windows to activate the update
 on every device before relying on separated views. The server still rejects

@@ -80,7 +80,7 @@ the second occurrence can submit its explicit UTC instant. Timed cues are fixed
 instants, not recurring zone rules. Unchanged timestamps are omitted from editor
 patches, preserving precision and the original instant even in a repeated hour.
 
-## Compatibility and rollout
+## Compatibility
 
 No migration, backfill, partition change or reset is needed. Calendar fields and
 server-derived undo metadata are additive; original capture/source and stable
@@ -90,9 +90,9 @@ path is unchanged and covered by a workflow preservation test. Unrelated edits
 preserve those values; an explicit workflow change must supply valid required
 metadata. Derived `nextAction` is reconciled on the next live item write.
 
-Deploy the API before the workflow-capable shell (**v8** or later) and keep its support while clients have pending
-operations. v3–v9 shell upgrade checks retain exact queued operations, drafts and
-account caches. An old queued incomplete waiting/deferred transition can now be
+Deploy the API before the workflow-capable client and keep its support while
+clients have pending operations. Shell upgrade checks retain exact queued
+operations, drafts and account caches. An old queued incomplete waiting/deferred transition can now be
 rejected: it stays recoverable at the queue head, and is never silently repaired
 or discarded. Copy/export its proposal before removing the rejected save and
 re-entering it with a dependency/date. Previously acknowledged operations retain
@@ -110,20 +110,10 @@ project/day, migration, security, account isolation, responsive layout and shell
 upgrade checks are retained. Real SWA/Cosmos, physical phone keyboards and screen
 reader verification remain unverified release gates.
 
-Local evidence on October 2, 2026: Windows, Node 26.7.0, Edge 154.0.4258.48.
-Run from `api/` with `PLAYWRIGHT_CHANNEL=msedge`: `npm test`.
-All 58 tests passed, none skipped. One offline test initially raced shell
-installation; shared setup now waits for the app's offline-ready signal before
-disconnecting, and the full suite passed after that correction.
+Run from `api/` with Node 22.x and `PLAYWRIGHT_CHANNEL=msedge`: `npm test`.
+Shared setup waits for the app's offline-ready signal before disconnecting.
 The workflow editor was visually inspected at
 [390px](design/workflow-390.png) and [1440px](design/workflow-1440.png).
-This branch incorporates main's project/day PR #31 (`84f49c6`); its shared
-forms, calendar validator and cache/module versions were reconciled before testing.
-
-CI follow-up: reproduced the reopen/reload race using Chromium 153.0.8010.12.
-The workflow test now waits for the committed Reopen result before reloading.
-Merged PR #32 (`36277d7`) supplies the shared sync helper that waits for persisted
-cursor/queue state and matching rendered items, including a deliberately delayed
-response consumer. Its PWA install flow is retained; the combined shell is v8.
-All **66 tests pass** locally with Chromium after integration, including upgrades
-from shells v3–v7. No test was skipped or assertion weakened.
+The workflow test waits for the committed Reopen result before reloading, and the
+shared sync helper waits for persisted cursor/queue state and matching rendered
+items, including a deliberately delayed response consumer.

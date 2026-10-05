@@ -5,9 +5,8 @@ task-row layout. The title remains the edit target. Reference rows keep Delete
 and state undo; they omit Complete, Clarify and Brief. Status and pending/error
 text retain the existing colors and accessible native controls from DESIGN.md.
 
-Verified October 3, 2026 on Windows, Node 26.7.0 and headless Edge 154.0.4258.53.
 The local harness uses production HTTP handlers, IndexedDB and service workers
-with an in-memory Cosmos substitute. No production data was changed.
+with an in-memory Cosmos substitute. No production data is changed.
 
 The reference regression covers offline filing in a list with custom defaults,
 reload, keyboard opening, notes editing, original text/link preservation,
@@ -31,10 +30,6 @@ Reproduce the focused checks from the repository root with
 Set `PLAYWRIGHT_CHANNEL=msedge` to use installed Edge, and optionally set
 `REFERENCE_SCREENSHOTS` to an output directory to regenerate the images.
 
-Shell v39 delivers the updated UI and worker handshake together. Deploy the
+The shell delivers the updated UI and worker handshake together. Deploy the
 compatible API with the client. Existing saved review inventories remain frozen;
 new sessions exclude reference material. No data migration is needed.
-
-PR #89 merged during implementation. Its whole-local-day deadline inclusion and
-timezone/DST regressions are preserved, with added cases proving that reference
-stays excluded even with today's planned day and timed or overdue deadlines.

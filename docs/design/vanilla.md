@@ -1,9 +1,7 @@
 # Native client consolidation verification — issue #25
 
-Verified October 2, 2026 on Windows with Node 26.7.0 and Edge 154.0.4258.48, using
-`$env:PLAYWRIGHT_CHANNEL='msedge'; npm test --prefix api` from the repository root.
-All **37 tests passed**, with no skipped tests. The PR identifies the exact tested
-implementation commit; its base is `409e74b`. The browser suite runs production
+Run `npm test` from `api/` with Node 22.x and Playwright Chromium, or set
+`PLAYWRIGHT_CHANNEL=msedge` for installed Edge. The browser suite runs production
 HTTP handlers with real IndexedDB and service workers and an in-memory Cosmos
 substitute. It does not exercise Azure authentication or a deployed Cosmos account.
 
@@ -27,9 +25,9 @@ editable without overwriting unrelated original text or links.
 
 Runtime retirement audit: no HTMX imports, attributes, events, fragment headers or
 CDN references remain in `html/`, `api/api/` or dependency manifests. Test references
-to `HX-Request` deliberately verify that it grants no authority. Older design and
-security documents retain historical evidence. Retired pre-v1 route registrations
-and their recovery stubs have been removed.
+to `HX-Request` deliberately verify that it grants no authority. Current operational
+security evidence remains in the security and release documents. Retired pre-v1
+route registrations and their recovery stubs have been removed.
 
 ## Review images
 

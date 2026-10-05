@@ -48,8 +48,8 @@ answers and final mutations are rejected. No flow version means the legacy v1
 questionnaire below: existing sessions, device drafts and queued requests continue
 unchanged. The API rejects changing an existing session's flow version.
 
-Deploy compatible API support before shell v53; do not downgrade that API while
-v2 operations are queued. The full cached module graph includes
+Deploy compatible API support before the updated client; do not downgrade that
+API while v2 operations are queued. The full cached module graph includes
 `clarification-flow.js`. No database migration, partition change, receipt rewrite,
 new dependency or device-storage reset is needed. #117 can replace the current
 list/project selectors with its common organizer independently.
@@ -147,7 +147,7 @@ Storage failure closes the dialog and exposes a copyable recovery snapshot.
 Portable JSON/text exports preserve session records, exact pending operations,
 conflict versions and the current/device clarification drafts.
 
-## API and rollout
+## API compatibility
 
 `clarification` is an additive v1 record type. Its ID equals its owned item's ID;
 storage is `record:clarification:<itemId>` in the existing account partition.
@@ -173,21 +173,18 @@ alone never interprets a proposal as an instruction to mutate the task. Both
 records use normal version checks and change-feed delivery. A deleted item's
 historical clarification is retained for export/provenance, but cannot be updated.
 
-Deploy the additive API before **shell v11**. Older clients ignore this unfamiliar
-record type. Do not downgrade the API while clarification operations are queued;
-retain the API and roll back the shell if needed. Shell v11 includes the navigation
-and portable export changes merged through `b357abf` (PRs #34 and #35).
+Deploy the additive API before the updated client. Older clients ignore this
+unfamiliar record type. Do not downgrade the API while clarification operations
+are queued; retain the API and roll back the client if needed.
 
 ## Verification evidence
 
-On October 2, 2026, Windows, Node 26.7.0, Playwright Chromium 153.0.8010.12:
-the integrated `npm test` suite passes **82/82**, none skipped. The suite uses
+Run `npm test` from `api/` with Node 22.x and Playwright Chromium. The suite uses
 production handlers with the existing in-memory transactional Cosmos substitute.
 Focused checks cover schema/ownership, atomic failure, lost acknowledgements,
 stale/deleted tasks, unknown answers, offline stop/reload/resume, editable proposals,
 AI API absence, separate browser-context conflicts/resolution, account isolation,
-storage failure and export round-trip. Existing navigation/export/PWA/security
-checks pass, including shell upgrades from versions 3 through 10.
+storage failure, export round-trip and shell upgrades.
 
 Screenshots in [design/clarification](design/clarification) show the integrated
 dialog at 320/390/768/1440 CSS pixels, with overflow assertions. The dialog uses

@@ -48,13 +48,13 @@ responses are rejected before display/use; normal server validation remains in p
 No storage schema, server API, queue format or conflict behavior changes. Once
 chosen, the suggestion follows the existing account-bound draft/outbox and
 version-checked clarification path, including storage recovery and conflicts.
-The v16 shell includes the new module and fresh module URLs throughout the graph,
-so a v15 worker cannot mix cached old imports with the new UI. Existing safe
-update/close-all-tabs behavior remains in force.
+The shell uses fresh module URLs throughout the graph so an older worker cannot
+mix cached imports with the new UI. Existing safe update/close-all-tabs behavior
+remains in force.
 
 ## Verification
 
-Automated local checks on Windows 11 (build 26200) with Node 26.7.0 and Edge 154.0.4258.53:
+Automated local checks cover:
 
 - Mocked API absent/unavailable/availability failure: manual acceptance works.
 - Matching language/modality options; creation requires the explicit button.
@@ -70,9 +70,10 @@ Run from the repository root with PLAYWRIGHT_CHANNEL=msedge on Windows:
     node --experimental-test-module-mocks --test api/test/local-guidance.test.mjs
     node --experimental-test-module-mocks --test api/test/*.test.mjs
 
-Set GUIDANCE_SCREENSHOTS=docs/design/local-guidance to regenerate the
+Set `GUIDANCE_SCREENSHOTS=docs/design/local-guidance` to regenerate the
 [review screenshots](design/local-guidance/). Browser tests mock LanguageModel;
-they do not prove Gemini Nano quality, real model download/offline behavior or
+they do not prove Gemini Nano quality, real
+model download/offline behavior or
 physical phone/screen-reader usability. An unmocked secure-localhost probe in
 Chrome 154.0.8037.93 exposed LanguageModel but returned unavailable with the same
 English text options; no model was downloaded. A real supported desktop with a downloaded

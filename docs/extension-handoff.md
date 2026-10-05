@@ -170,7 +170,7 @@ redirect rejection and existing request protection. No cloud inference is used.
 
 ## Verification
 
-From `api/` on Node 24+ with Playwright Chromium installed:
+From `api/` on Node 22.x with Playwright Chromium installed:
 
 ```text
 node --experimental-test-module-mocks --test test/handoff.test.mjs
@@ -194,9 +194,8 @@ Review screenshots: [320px light](design/handoff/handoff-light-320.png),
 320/390/1440px light/dark views. Existing DESIGN.md tokens, labels, native controls,
 visible focus and live status/error regions are reused.
 
-Verified locally October 2, 2026 (America/Regina), Windows, Node 26.7.0, Chromium
-153.0.8010.12. These checks use the in-memory Cosmos substitute. The PR records
-the tested commit and full-suite result. TaskGem's real popup/keyboard/context
+These checks use the in-memory Cosmos substitute. CI records the tested commit
+and full-suite result. TaskGem's real popup/keyboard/context
 capture, popup termination, real production extension IDs/origins, SWA login
 return, deployed Cosmos, physical devices and assistive technology remain
 unverified #6/#17 completion gates.

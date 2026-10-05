@@ -103,8 +103,8 @@ invalid/oversized output, date-only/DST semantics, automatic opt-in, offline
 correction/reload, cancellation/late results, account changes, manual fallback,
 add/remove review and lost-acknowledgement/stale-tab duplicate protection.
 Inference is mocked; writes exercise production API handlers with the existing
-in-memory Cosmos substitute. Screenshots in `docs/design/capture-extraction/`
-cover 320/390/1440px in both themes.
+in-memory Cosmos substitute. [Review screenshots](design/capture-extraction/)
+and responsive checks cover 320/390/1440px in both themes.
 
 Keep #24 open for real supported-device Gemini Nano extraction quality/latency,
 physical phone/keyboard and screen-reader acceptance. Before widening rollout,
@@ -117,16 +117,8 @@ do not establish model quality or latency.
 
 The [representative quality fixtures](../api/test/fixtures/capture-quality.json)
 are manual real-model checks, not claims that mocked output establishes model
-quality. The follow-up to PR #64 keeps its API/provenance/draft format and adds
-manual batch review, list-context permission and the merge control to the same
-flow. No parallel capture UI or second capture metadata format is shipped.
-
-Integration verification on October 3, 2026: integrated main at `897e91c`
-(including PR #66 workspaces), retained its capture and PWA update behavior, and
-advanced the shell to v29. All **220 Node/Playwright checks passed** on Windows
-with Node 26.7.0 and Playwright Chromium, including shell upgrades through v28
-and offline manual review across workspace switches. The CI storage-recovery
-test race was reproduced in Chromium and fixed by waiting for the corrected
-draft to persist and the current failed save to close its dialog before reading
-recovery text. Phone/desktop screenshots cover the capture controls;
-`git diff --check` passed.
+quality. The capture flow keeps one API/provenance/draft format for automatic
+suggestions, manual batch review, list-context permission and merging. No parallel
+capture UI or second capture metadata format is shipped. Storage-recovery checks
+wait for the corrected draft to persist and the current failed save to close its
+dialog before reading recovery text.
