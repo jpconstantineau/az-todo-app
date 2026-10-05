@@ -29,16 +29,15 @@ history invariants in [the API contract](data-api-v1.md) still apply.
 `scope: "account"`, and `source: "server-history"`. `state.after` is the fixed
 cutoff. `state.records` preserves all record fields, originals, relationships,
 settings, clarification progress, reviews and every separately stored brief
-revision/decision, including tombstones. Immutable migrated legacy defaults are
-included separately. Queue and draft fields are empty: they never imply that
-local work was saved on the server. `exportedAt` records export completion.
+revision/decision, including tombstones. Queue and draft fields are empty: they
+never imply that local work was saved on the server. `exportedAt` records export
+completion.
 
 The export is a portable current-record copy. It excludes older overwritten
 record versions, rejected conflict proposals, receipt hashes, Cosmos metadata,
-legacy migration archives beyond defaults, auth-provider information and Azure
-backups. Tombstones retain their stored content under the existing retention
-policy; exporting them does not restore them. No server purge or account erasure
-is performed by export.
+auth-provider information and Azure backups. Tombstones retain their stored content
+under the existing retention policy; exporting them does not restore them. No
+server purge or account erasure is performed by export.
 
 `todo-account.txt` labels the cutoff and renders live/deleted snapshots and brief
 acceptance in plain text. The same validation/round-trip CLI below accepts either

@@ -2,7 +2,7 @@ import { app } from "../shared/http.mjs";
 import { getUserId } from "../shared/auth.mjs";
 import { ValidationError } from "../shared/validate.mjs";
 import { identifier, recordType, recordId, digest, validateOperation, MAX_BODY_BYTES } from "./contract.mjs";
-import { ApiError, commit, read, changes, legacyDefaults } from "./store.mjs";
+import { ApiError, commit, read, changes } from "./store.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json; charset=utf-8" } });
@@ -32,7 +32,7 @@ function number(value, fallback, max) {
   }
   return Number(value);
 }
-route("session", "GET", async (req, accountId) => json({ apiVersion: 1, accountId, defaultSettings, legacyDefaults: await legacyDefaults(accountId) }));
+route("session", "GET", async (req, accountId) => json({ apiVersion: 1, accountId, defaultSettings }));
 route("operations", "POST", async (req, accountId) => {
   if (req.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     throw new ApiError(415, "json_required", "Send application/json.");
@@ -81,7 +81,6 @@ route("export", "GET", async (req, accountId) => {
   const through = number(req.query.get("through"), undefined, Number.MAX_SAFE_INTEGER);
   const limit = number(req.query.get("limit"), 50, 50);
   if (!limit || (after > 0 && through === undefined)) throw new ValidationError("Export needs limit 1–50 and the original through cutoff when resuming.");
-  const page = await changes(accountId, after, limit, through);
   // Replay immutable history up to one cutoff, never page mutable current records.
-  return json({ ...page, ...(after === 0 ? { legacyDefaults: await legacyDefaults(accountId) } : {}) });
+  return json(await changes(accountId, after, limit, through));
 });

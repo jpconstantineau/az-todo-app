@@ -232,7 +232,7 @@ defaults; lists without defaults inherit user/built-in options. Changing options
 does not overwrite text or selected values in an open capture/editor.
 
 The existing `todo-inbox-v1` database and account object store are retained unchanged.
-Built-in and archived defaults are additive metadata inside the account document;
+Built-in defaults are cached metadata inside the account document;
 old queues, operation IDs, snapshots, cursors and drafts are not reset or rewritten.
 An older offline profile without option metadata must reconnect once before editing
 defaults. Settings records use the new `settings:settings` logical identity.
@@ -243,9 +243,9 @@ defaults. Settings records use the new `settings:settings` logical identity.
    environment confirm `V1_API_ENABLED=true`, exact `APP_ORIGIN` and the existing
    Cosmos connection, hierarchical partition paths and Session consistency/single
    write region.
-2. The owner emptied the legacy database and has opened the new UI. No legacy import
-   is required for that cutover. Preserve any new v1 server records and device data.
-   Retain the old migration tool/checksum fixtures for other archived datasets.
+2. Preserve all current v1 server records and device data. The current v1 format is
+   the only supported server format; restore it only through the rehearsed backup
+   procedure.
 3. Deploy the additive API and native shell together. Test root, inbox bookmark and
    GitHub auth return. Retired pre-v1 HTTP paths must receive the platform's normal
    not-found response for authenticated requests. A disabled API shows an error,
@@ -272,7 +272,8 @@ responsive screenshots and outstanding release gates.
 
 Run `npm test` in `api/` with Node 22.x. Use
 `PLAYWRIGHT_CHANNEL=msedge` on a machine with Edge, or install Playwright Chromium
-as in CI. The native parity, security, transaction and migration checks are described in [Task flow](task-flow.md).
+as in CI. The native parity, security, transaction and recovery checks are
+described in [Task flow](task-flow.md).
 
 The new browser checks exercise real IndexedDB, service workers and the production
 v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitute:
@@ -295,6 +296,6 @@ v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitu
 
 These are browser automation checks, not physical Android/iPhone keyboard or
 OS-eviction evidence.
-Azure auth/Cosmos behavior, staging migration/rollback, real storage exhaustion,
+Azure auth/Cosmos behavior, staging restore/rollback, real storage exhaustion,
 screen readers and physical phone/desktop checks remain unverified release gates
 in #3/#4/#5/#14/#16/#17. Keep #5 open until its real-device evidence is recorded.

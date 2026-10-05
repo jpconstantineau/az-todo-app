@@ -57,8 +57,8 @@ Alternatively use installed Edge with `PLAYWRIGHT_CHANNEL=msedge`.
   and settings conflicts, preserved prior status and custom values.
 - `security.test.mjs`: origin policy, every route's authentication and headers,
   read isolation, no GET writes, shared registration guard.
-- `migration.test.mjs`: original export/checksum/rollback compatibility and migrated
-  fields. No migration is needed for the owner's already-empty legacy database.
+- `account-export.test.mjs`: fixed-cutoff server export, tombstones, concurrent
+  writes, validation and round-trip preservation.
 - `design.test.mjs`: populated layouts at 320–2560px, modal focus, themes and contrast.
 
 These checks are local automation, not evidence of live Azure topology, real Cosmos

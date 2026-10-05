@@ -18,9 +18,6 @@ export async function read(accountId, id) {
   try { return (await container.item(id, partition(accountId)).read()).resource ?? null; }
   catch (error) { if (error.code === 404) return null; throw error; }
 }
-export async function legacyDefaults(accountId) {
-  return (await read(accountId, "legacy-settings"))?.settings?.defaults ?? null;
-}
 const create = resourceBody => ({ operationType: "Create", resourceBody });
 const replace = (resourceBody, ifMatch) => ({ operationType: "Replace", id: resourceBody.id, resourceBody, ifMatch });
 
@@ -92,7 +89,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       return record;
     });
     const settings = records.find(record => record.type === "settings") ?? (await read(accountId, recordId("settings", "settings")))?.record;
-    const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? await legacyDefaults(accountId)) };
+    const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? {}) };
     const lookup = async (type, id) => records.find(r => r.type === type && r.id === id) ?? (await read(accountId, recordId(type, id)))?.record;
     for (const [i, record] of records.entries()) {
       await validateWorkspace(record, current[i]?.record, lookup);

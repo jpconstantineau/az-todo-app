@@ -27,8 +27,8 @@ and selected-day preferences are saved per account. A missing project selection
 is retained for correction instead of silently clearing the intended assignment.
 Projects may be created offline and assigned before reconnecting: the queue sends
 their creation before the action update. No IndexedDB or Cosmos migration is
-needed, and no current data is rewritten. Legacy migration fixtures verify that
-linking an imported action preserves its areas, custom status, deadline and text.
+needed, and no current data is rewritten. Existing project and workflow tests verify
+that linking an action preserves its areas, custom status, deadline and text.
 
 ## Project lifecycle (#79)
 
@@ -48,7 +48,7 @@ reviews; existing review inventories and decision history stay intact. The revie
 editor supports the same lifecycle changes without losing the review position.
 
 Lifecycle edits use the normal offline draft/outbox, version checks, conflict
-comparison and editor undo. `project-lifecycle.test.mjs` covers legacy defaults,
+comparison and editor undo. `project-lifecycle.test.mjs` covers existing projects,
 validation, reactivation, unchanged actions/history, conflicts and offline reloads.
 
 ## Verification
@@ -58,7 +58,7 @@ checks atomic project/link writes, repeat delivery, owner boundaries, invalid
 outcomes/calendar dates, linked-project deletion, concurrent deletion/linking,
 offline creation and editor-draft recovery, view persistence, canonical export
 and independent browser contexts in Honolulu/Auckland. Existing capture,
-security, migration, conflicts and shell-upgrade checks remain in the suite.
+security, recovery, conflicts and shell-upgrade checks remain in the suite.
 
 Layout checks cover 320/390/768/1440/2560 CSS pixels.
 Set `PROJECT_SCREENSHOTS=1` when running the suite to refresh the
