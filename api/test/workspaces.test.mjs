@@ -18,6 +18,9 @@ async function setup(t) {
 }
 const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
 const change = (type, id, expectedVersion, fields, action = 'update') => ({ type, id, action, expectedVersion, ...(fields ? { fields } : {}) });
+const clarification = (step = 'actionable') => ({ flowVersion: 2, step, answers: {}, proposal: {
+  text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: ''
+} });
 
 test('workspaces: atomic archive/delete gates all records, preserves history, and restores without rewriting children', async t => {
   const { post } = await setup(t);
@@ -25,7 +28,7 @@ test('workspaces: atomic archive/delete gates all records, preserves history, an
   await post([create('item', 'personal', { title: 'Milk' })]);
   const original = structuredClone(documents.find(row => row.id === 'record:item:task'));
   await post([change('workspace', 'work', 1, { archived: true })]);
-  for (const mutation of [change('item', 'task', 1, { title: 'Stale edit' }), create('item', 'new', { title: 'Late capture', workspaceId: 'work' }), create('clarification', 'task', { step: 0, answers: {}, proposal: null }), change('item', 'task', 1, null, 'delete')]) {
+  for (const mutation of [change('item', 'task', 1, { title: 'Stale edit' }), create('item', 'new', { title: 'Late capture', workspaceId: 'work' }), create('clarification', 'task', clarification()), change('item', 'task', 1, null, 'delete')]) {
     assert.equal((await post([mutation])).status, 400);
   }
   assert.equal((await post([change('item', 'personal', 1, { title: 'Eggs' })])).status, 200);
@@ -57,7 +60,7 @@ test('workspaces: membership, review scope, foreign IDs, item moves and legacy P
   assert.equal((await post([change('item', 'task', 1, { workspaceId: 'family', listId: null, projectId: null })])).status, 200);
   const records = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
   records['item:legacy'] = { type: 'item', id: 'legacy', title: 'Old task' };
-  records['clarification:task'] = { type: 'clarification', id: 'task' };
+  records['clarification:task'] = { type: 'clarification', id: 'task', ...clarification() };
   records['brief:brief'] = { type: 'brief', id: 'brief', subjectType: 'item', subjectId: 'task' };
   assert.equal(workspaceOf(records['item:legacy'], records), 'personal');
   assert.deepEqual(Object.keys(workspaceRecords(records, 'family')).sort(), ['brief:brief', 'clarification:task', 'item:task']);
@@ -85,7 +88,7 @@ test('workspaces: moving a collection carries its nested records and keeps histo
     create('item', 'task', { title: 'Clarified task', workspaceId: 'work', collectionRefs: [{ type: 'project', id: 'child' }, { type: 'list', id: 'other' }], projectId: 'child', listId: 'other' })
   ])).status, 200);
   const records = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
-  records['clarification:task'] = { type: 'clarification', id: 'task', step: 'complete' };
+  records['clarification:task'] = { type: 'clarification', id: 'task', ...clarification('complete') };
   records['brief:brief'] = { type: 'brief', id: 'brief', subjectType: 'item', subjectId: 'task' };
   const mutations = collectionMoveMutations(records['list:root'], 'family', records, { title: 'Root renamed', workspaceId: 'family', parentRef: null });
   assert.deepEqual(mutations.map(mutation => `${mutation.type}:${mutation.id}`).sort(), ['item:task', 'list:root', 'project:child']);

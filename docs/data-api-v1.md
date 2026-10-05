@@ -29,10 +29,10 @@ validation, calendar versus timed dates, and derived undo metadata. Existing
 receipts remain repeat-safe; unacknowledged incomplete workflow transitions are
 rejected with recoverable field feedback. Deploy that API before the updated client.
 
-The additive [clarification contract](clarification.md#api-compatibility) introduces
+The [current clarification contract](clarification.md#current-record-contract) defines
 `type=clarification` records with the same ID as an owned item. Proposals and
-accepted/unknown answers remain separate from the task; accepted task changes
-and session progress share an atomic operation. Deploy that API before the updated client.
+accepted answers remain separate from the task; final task changes and session
+progress share an atomic operation.
 
 The additive [brief contract](briefs.md#api-and-recovery) introduces immutable
 content revisions with explicit acceptance/rejection. Draft creation and decisions

@@ -1,20 +1,20 @@
 # Optional local guidance (#11)
 
-In Clarify, expand **Optional local guidance** for the outcome, next-action or
-missing-information question. Availability is checked without creating a model
+In Clarify, expand **Optional local guidance** for the next-action question.
+Availability is checked without creating a model
 session. Choose **Suggest with local AI**, **Download model and suggest**, or
 **Continue download and suggest** to start. Download progress, cancellation and
 failures appear inside the panel. There is no automatic inference.
 
 The separate preview is an **unaccepted AI suggestion**, rendered as plain text.
 **Use as proposed answer** replaces the answer only when explicitly chosen and
-journals it in the existing device draft. Edit it, save it as a proposal, accept
-it, skip, or stop using the ordinary clarification controls. Only acceptance can
-change task facts. The last question (next/waiting/deferred) remains manual with
-the existing rules and required dates/dependency fields.
+journals it in the existing device draft. Edit it, save it as a proposal, continue,
+or stop using the ordinary clarification controls. Only the final Apply decision
+can change task facts. Project, disposition, and organization decisions remain
+manual with their existing validation.
 
 The model can make factual mistakes even when the output has valid structure.
-Review every suggestion, especially inferred outcomes and missing information.
+Review every suggestion, especially inferred commitments or missing information.
 No model output becomes accepted facts automatically. Original input is unchanged.
 
 ## Availability and privacy
@@ -62,7 +62,7 @@ Automated local checks cover:
   rejected creation, inference failure and invalid output.
 - Separate preview and explicit use; offline journal/reload/acceptance; no queue
   mutation from generation; released sessions and text-only markup rendering.
-- Typing, skipping, closing and account switching reject delayed results.
+- Typing, continuing, closing and account switching reject delayed results.
 - Responsive screenshots at 320, 390 and 1440 CSS pixels in light/dark themes.
 
 Run from the repository root with PLAYWRIGHT_CHANNEL=msedge on Windows:

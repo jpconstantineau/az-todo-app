@@ -2,7 +2,6 @@ import { validateRefs } from './collection-model.mjs';
 import { ValidationError, text as validateText } from '../shared/validate.mjs';
 import { calendarDate } from './workflow.mjs';
 
-const steps = ['outcome', 'nextAction', 'missingFacts', 'disposition'];
 const fail = message => { throw new ValidationError(message); };
 function shape(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) fail('Invalid clarification fields.');
@@ -12,28 +11,7 @@ function text(value, max = 4000) {
   validateText(value, max, 'Clarification answer'); // Validate without trimming the supplied wording.
 }
 export function clarificationFields(input) {
-  if (input?.flowVersion === 2) return branchingFields(input);
-  shape(input, ['step', 'answers', 'proposal']);
-  if (!Number.isInteger(input.step) || input.step < 0 || input.step > steps.length) fail('Clarification step must be 0–4.');
-  shape(input.answers, steps);
-  for (const [index, name] of steps.entries()) {
-    const answer = input.answers[name];
-    if (index >= input.step) { if (answer !== undefined) fail('Future clarification answers must remain unknown.'); continue; }
-    shape(answer, ['decision', 'value']);
-    if (!['accepted', 'skipped'].includes(answer.decision)) fail('Choose accepted or skipped for each answered question.');
-    if (answer.decision === 'skipped') {
-      if (answer.value !== null) fail('Skipped answers must remain unknown.');
-    } else if (name === 'disposition') {
-      disposition(answer.value);
-    } else {
-      text(answer.value, name === 'nextAction' ? 200 : 4000);
-      if (!answer.value.trim()) fail('Supply an answer or skip the question.');
-    }
-  }
-  shape(input.proposal, ['text', 'status', 'waitingOn', 'reviewDate', 'startDate']);
-  text(input.proposal.text);
-  disposition(input.proposal, true);
-  return structuredClone(input);
+  return branchingFields(input);
 }
 
 const flowKeys = ['text', 'choice', 'projectId', 'projectTitle', 'outcome', 'waitingOn', 'reviewDate', 'startDate', 'plannedDay', 'listId', 'notes'];
@@ -49,6 +27,7 @@ function dates(value) {
 }
 function branchingFields(input) {
   shape(input, ['flowVersion', 'step', 'answers', 'proposal']);
+  if (input.flowVersion !== 2) fail('Clarification flow version must be 2.');
   shape(input.answers, ['actionable', 'nextAction', 'project', 'twoMinutes', 'disposition', 'organize']);
   const a = input.answers, path = pathFor(a), index = path.indexOf(input.step);
   if (index < 0) fail('Invalid clarification step.');
@@ -92,8 +71,7 @@ function branchingFields(input) {
 
 // The accepted v2 decision and the exact item/project changes are one operation.
 export function validateClarification(record, old, mutations, item) {
-  if (old && (old.flowVersion || 1) !== (record.flowVersion || 1)) fail('Keep this clarification in its original flow version.');
-  if (record.flowVersion !== 2) return;
+  if (old && old.flowVersion !== record.flowVersion) fail('Keep this clarification in its original flow version.');
   if (record.deleted) fail('Clarification history cannot be deleted.');
   if (old?.step === 'complete' && (record.step !== 'actionable' || mutations.length !== 1)) fail('Start a new clarification at the first question before applying another decision.');
   const mutation = mutations.find(m => m.type === 'item' && m.id === record.id);
@@ -124,16 +102,4 @@ export function validateClarification(record, old, mutations, item) {
   } else if (mutations.length !== 2) fail('Save only the item and its final clarification decision.');
   if (mutation.action !== 'update' || Object.keys(mutation.fields).length !== Object.keys(expected).length ||
       Object.entries(expected).some(([name, value]) => JSON.stringify(mutation.fields[name]) !== JSON.stringify(value))) fail('Item changes must match the accepted clarification exactly.');
-}
-function disposition(value, draft = false) {
-  shape(value, draft ? ['text', 'status', 'waitingOn', 'reviewDate', 'startDate'] : ['status', 'waitingOn', 'reviewDate', 'startDate']);
-  if (!['', 'keep', 'next', 'waiting', 'deferred', 'someday', 'reference', 'completed', 'dropped'].includes(value.status) || (!draft && !value.status)) fail('Choose a clarification disposition.');
-  text(value.waitingOn);
-  for (const name of ['reviewDate', 'startDate']) {
-    const date = value[name];
-    if (typeof date !== 'string') fail('Choose a valid clarification calendar date.');
-    if (date) calendarDate(date, name);
-  }
-  if (!draft && value.status === 'waiting' && !value.waitingOn.trim()) fail('Waiting needs a dependency.');
-  if (!draft && value.status === 'deferred' && !value.startDate) fail('Deferred needs a start date.');
 }

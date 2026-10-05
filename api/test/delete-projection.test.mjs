@@ -28,7 +28,7 @@ test('only a matching explicit restore projects a tombstone active and survives 
 });
 
 test('queued deletions stay inactive across serialization, acknowledgement and discard for every deletable type', () => {
-  for (const type of ['item', 'list', 'project', 'clarification', 'review', 'brief']) {
+  for (const type of ['item', 'list', 'project', 'review', 'brief']) {
     const original = record(type), state = stateFor(original), id = `${type}:one`;
     enqueue(state, 'alice', [mutation(original, 'delete')]);
     const before = structuredClone(state);

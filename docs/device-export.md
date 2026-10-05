@@ -28,7 +28,7 @@ history invariants in [the API contract](data-api-v1.md) still apply.
 `todo-account.json` uses `format: "az-todo-account-export"`, `formatVersion: 1`,
 `scope: "account"`, and `source: "server-history"`. `state.after` is the fixed
 cutoff. `state.records` preserves all record fields, originals, relationships,
-settings, clarification progress, reviews and every separately stored brief
+settings, current branching clarification progress, reviews and every separately stored brief
 revision/decision, including tombstones. Queue and draft fields are empty: they
 never imply that local work was saved on the server. `exportedAt` records export
 completion.

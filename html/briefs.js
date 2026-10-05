@@ -6,10 +6,10 @@ export const briefSections = [
 ];
 
 export function templateBrief(subject, clarification, records = {}) {
-  const accepted = name => clarification?.answers?.[name]?.decision === 'accepted' ? clarification.answers[name].value : '';
-  const outcome = subject.outcome || accepted('outcome');
+  const outcome = subject.outcome || clarification?.answers?.project?.outcome || '';
+  const notes = clarification?.answers?.organize?.notes || '';
   const missing = [!outcome && 'Desired outcome is not yet specified.', 'Confirm scope, exclusions and acceptance checks.',
-    subject.type === 'project' && 'Choose a concrete next action.', accepted('missingFacts') && `Clarification: ${accepted('missingFacts')}`].filter(Boolean);
+    subject.type === 'project' && 'Choose a concrete next action.', notes && `Clarification: ${notes}`].filter(Boolean);
   return {
     outcome: outcome || 'Unknown — describe what done looks like.',
     context: [subject.title, subject.description, subject.sourceTitle, subject.sourceUrl, ...(subject.referenceLinks || [])].filter(Boolean).join('\n'),

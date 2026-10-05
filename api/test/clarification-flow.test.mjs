@@ -150,8 +150,8 @@ test('v2 lost acknowledgement replays one final decision, and flow versions cann
   const result = await post(server.url, batch, operationId);
   assert.equal(result.status, 200); assert.equal(stored('item').version, 2);
   assert.equal(stored('project', 'new-project').version, 1);
-  const legacy = { step: 0, answers: {}, proposal: { text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' } };
-  assert.equal((await post(server.url, [{ type: 'clarification', id: 'capture', action: 'update', expectedVersion: 1, fields: legacy }])).status, 400);
+  const obsolete = { step: 0, answers: {}, proposal: { text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' } };
+  assert.equal((await post(server.url, [{ type: 'clarification', id: 'capture', action: 'update', expectedVersion: 1, fields: obsolete }])).status, 400);
   assert.equal((await post(server.url, [{ type: 'clarification', id: 'capture', action: 'delete', expectedVersion: 1 }])).status, 400);
 });
 

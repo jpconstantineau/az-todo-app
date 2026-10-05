@@ -57,10 +57,10 @@ test('brief API: immutable revisions, explicit decisions, retries, conflicts, so
 });
 
 test('brief templates use accepted facts, retain unknowns and export exact revision status', () => {
-  const clarification = { answers: { outcome: { decision: 'accepted', value: 'Coverage in place' }, missingFacts: { decision: 'skipped', value: null } }, proposal: { text: 'Unaccepted claim' } };
+  const clarification = { flowVersion: 2, answers: { project: { choice: 'new', projectTitle: 'Insurance', outcome: 'Coverage in place' }, organize: { notes: 'Confirm the policy number' } }, proposal: { text: 'Unaccepted claim' } };
   const generated = templateBrief(item, clarification);
   assert.equal(generated.outcome, 'Coverage in place'); assert.match(generated.context, /https:\/\/example.com\/policy/);
-  assert.match(generated.missingInformation, /Confirm scope/); assert.ok(!JSON.stringify(generated).includes('Unaccepted claim'));
+  assert.match(generated.missingInformation, /Confirm the policy number/); assert.ok(!JSON.stringify(generated).includes('Unaccepted claim'));
   assert.equal(templateBrief({ ...item, type: 'project', outcome: 'Launch complete' }).outcome, 'Launch complete');
   assert.match(templateBrief({ ...item, type: 'project' }).nextAction, /Unknown/);
   for (const change of [f => { f.content.missingInformation = ''; }, f => { f.content.outcome = 'a'.repeat(4001); }, f => { f.content.extra = 'x'; }, f => { f.sourceVersion = 0; }]) {

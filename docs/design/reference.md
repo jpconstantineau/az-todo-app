@@ -12,8 +12,8 @@ The reference regression covers offline filing in a list with custom defaults,
 reload, keyboard opening, notes editing, original text/link preservation,
 reference retrieval, next-action/Inbox/planned-day exclusion, daily and weekly
 review exclusion despite an overdue deadline, reclassification and state undo.
-The clarification API regression also accepts Reference through the direct
-disposition shortcut, with repeat delivery and original capture preservation.
+The clarification API regression also accepts Reference through the non-actionable
+branch, with repeat delivery and original capture preservation.
 
 Automated layout checks found no horizontal overflow at 320, 390, 768 and 1440
 CSS pixels. Screenshots show a focused editable title and an unsynced reference
@@ -26,7 +26,7 @@ and screen readers were not tested for this change.
 - [1440px](reference/reference-1440.png)
 
 Reproduce the focused checks from the repository root with
-`node --experimental-test-module-mocks --test api/test/reference.test.mjs api/test/clarification.test.mjs api/test/reviews.test.mjs`.
+`node --experimental-test-module-mocks --test api/test/reference.test.mjs api/test/clarification-flow.test.mjs api/test/reviews.test.mjs`.
 Set `PLAYWRIGHT_CHANNEL=msedge` to use installed Edge, and optionally set
 `REFERENCE_SCREENSHOTS` to an output directory to regenerate the images.
 
