@@ -10,7 +10,8 @@ const extensionId = 'a'.repeat(32), ticket = 'b'.repeat(32);
 const capture = () => ({ apiVersion: 1, accountId: 'alice', operationId: 'capture-operation', mutations: [
   { type: 'item', id: 'capture-item', action: 'create', expectedVersion: 0, fields: {
     title: 'Read the article', description: 'Compare the examples', originalText: '  Read the article\nwith its examples.  ',
-    sourceTitle: 'An article', sourceUrl: 'https://example.com/article', selectedText: 'Selected passage\nsecond line'
+    sourceTitle: 'An article', sourceUrl: 'https://example.com/article', selectedText: 'Selected passage\nsecond line',
+    workspaceId: 'personal', collectionRefs: []
   } }
 ] });
 
@@ -27,6 +28,7 @@ test('handoff accepts only bounded original capture creates for the verified acc
     o => { o.mutations[0].fields.title = ' '; }, o => { o.mutations[0].fields.title = 'x'.repeat(201); },
     o => { o.mutations[0].fields.originalText = 'x'.repeat(16001); }, o => { o.mutations[0].fields.selectedText = 'x'.repeat(8001); },
     o => { o.mutations[0].fields.description = '\u0000'; }, o => { o.mutations[0].fields.listId = 'foreign'; },
+    o => { o.mutations[0].fields.workspaceId = 'foreign'; }, o => { o.mutations[0].fields.collectionRefs = [{ type: 'list', id: 'foreign' }]; },
     o => { o.mutations[0].fields.sourceUrl = 'javascript:alert(1)'; }, o => { o.mutations[0].fields.sourceUrl = 'https://user:secret@example.com'; },
     o => { o.mutations[0].fields.originalText = '界'.repeat(16000); o.mutations[0].fields.selectedText = '界'.repeat(8000); }
   ]) { const value = capture(); change(value); assert.throws(() => captureOperation(value, 'alice')); }
@@ -106,7 +108,7 @@ test('explicit preview and save preserve source text, use the v1 API and acknowl
   await page.getByRole('button', { name: 'Save to my inbox' }).dblclick();
   await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported and acknowledged'));
   assert.equal(saved().length, 1);
-  for (const [key, value] of Object.entries(capture().mutations[0].fields)) assert.equal(saved()[0].record[key], value);
+  for (const [key, value] of Object.entries(capture().mutations[0].fields)) assert.deepEqual(saved()[0].record[key], value);
   const calls = await page.evaluate(() => bridgeCalls);
   assert.equal(calls.length, 2); assert.ok(calls.every(call => call.id === extensionId));
   assert.equal(calls[1].message.receipt.status, 'committed'); assert.equal(calls[1].message.receipt.itemId, 'capture-item');

@@ -1,6 +1,6 @@
-import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=1';
-import { workspaceOf } from './workspaces.js?v=1';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=1';
+import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=2';
+import { workspaceOf } from './workspaces.js?v=2';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=2';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -79,6 +79,9 @@ export function enqueue(state, accountId, mutations) {
   for (const mutation of mutations) {
     if (!['workspace', 'settings'].includes(mutation.type)) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
+      if (['item', 'list', 'project', 'review'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
+      if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
+      if (record.type === 'project' && !['active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose an active, someday or completed project status.');
       for (const member of [record, ...(old ? [old] : [])]) {
         const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];
         if (id !== 'personal' && (!workspace || workspace.deleted || workspace.archived)) throw new Error('This workspace is unavailable or archived. Restore or unarchive it before saving.');
@@ -158,20 +161,22 @@ export function applyReceipt(state, receipt, accountId) {
   }
 }
 
-export function captureMutations(draft) {
+export function captureMutations(draft, workspaceId = 'personal') {
   const source = draft.original ?? draft.text ?? '';
   const titles = (draft.text ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   if (!titles.length || titles.some(title => title.length > 200)) throw new Error('Enter a title of 1–200 characters on each non-empty line.');
   if (source.length > 16000 || (draft.body ?? '').length > 4000) throw new Error('Capture text is limited to 16,000 characters and notes to 4,000.');
   const mutations = [];
-  let listId = draft.listId?.startsWith('project:') ? null : draft.listId || null;
+  const projectId = draft.listId?.startsWith('project:') ? draft.listId.slice(8) : null;
+  let listId = projectId ? null : draft.listId || null;
   if (draft.newList?.trim()) {
     if (draft.newList.length > 200) throw new Error('List title must be at most 200 characters.');
     listId = crypto.randomUUID();
     mutations.push({ type: 'list', id: listId, action: 'create', expectedVersion: 0,
-      fields: { title: draft.newList.trim(), originalText: draft.newList } });
+      fields: { title: draft.newList.trim(), originalText: draft.newList, workspaceId } });
   }
   for (const title of titles) mutations.push({ type: 'item', id: crypto.randomUUID(), action: 'create', expectedVersion: 0,
-    fields: { title, description: draft.body || '', originalText: source, listId, status: 'inbox' } });
+    fields: { title, description: draft.body || '', originalText: source, workspaceId, listId, projectId,
+      collectionRefs: [['list', listId], ['project', projectId]].filter(([, id]) => id).map(([type, id]) => ({ type, id })), status: 'inbox' } });
   return mutations;
 }

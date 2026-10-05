@@ -5,10 +5,11 @@ import { documents, startServer } from './harness.mjs';
 import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { enqueue, rememberEdit, undoEdit, projected } from '../../html/inbox-store.js';
+import { currentCreate } from './current-record.mjs';
 
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const get = id => records().find(record => record.id === id);
-const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+const create = currentCreate;
 const update = (record, fields) => ({ type: record.type, id: record.id, action: 'update', expectedVersion: record.version, fields });
 const operation = mutations => ({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations });
 async function post(url, body) {
@@ -25,8 +26,6 @@ test('project lifecycle validates states, preserves linked history, and conflict
     create('item', 'action', { title: 'Sort tools', projectId: 'project', status: 'next' })
   ]))).status, 200);
   assert.equal(get('project').status, 'active');
-  // Existing records predate the lifecycle field.
-  delete get('project').status;
   const original = structuredClone(get('project')), action = structuredClone(get('action'));
   for (const status of ['next', 'paused', '', null, 123]) {
     assert.equal((await post(server.url, operation([update(get('project'), { status })]))).status, 400);
@@ -48,14 +47,14 @@ test('project lifecycle validates states, preserves linked history, and conflict
   assert.equal(get('project').version, original.version + 4);
 });
 
-test('undoing a legacy project lifecycle edit restores active rather than an item status', () => {
-  const record = { type: 'project', id: 'legacy', title: 'Old project', outcome: 'Keep', version: 1 };
-  const state = { records: { 'project:legacy': record }, queue: [] };
+test('undoing a project lifecycle edit restores its current status', () => {
+  const record = { type: 'project', id: 'project', title: 'Project', outcome: 'Keep', workspaceId: 'personal', status: 'active', version: 1 };
+  const state = { records: { 'project:project': record }, queue: [] };
   const fields = { status: 'completed' };
   enqueue(state, 'alice', [update(record, fields)]);
   rememberEdit(state, record, fields);
   undoEdit(state, 'alice', state.undoEdit.operationId);
-  assert.equal(projected(state)['project:legacy'].status, 'active');
+  assert.equal(projected(state)['project:project'].status, 'active');
 });
 
 test('project lifecycle stays recoverable offline and separates active and someday reviews', { timeout: 90000 }, async t => {
@@ -68,7 +67,6 @@ test('project lifecycle stays recoverable offline and separates active and somed
     create('item', 'unfinished', { title: 'Unfinished action', status: 'next', projectId: 'legacy' }),
     create('item', 'done', { title: 'Done action', status: 'completed', projectId: 'legacy' })
   ]))).status, 200);
-  delete get('legacy').status;
   const actions = structuredClone(records().filter(record => record.type === 'item'));
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -102,16 +100,16 @@ test('project lifecycle stays recoverable offline and separates active and somed
   assert.deepEqual(await page.locator('#projectStatus option').evaluateAll(options => options.map(option => option.value)), ['active', 'someday', 'completed']);
   assert.match(await page.locator('#projectStatusHelp').textContent(), /Linked actions keep their own statuses/);
   await page.getByLabel('Project status', { exact: true }).selectOption('completed');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.edit?.fields.projectStatus === 'completed');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.projectStatus === 'completed');
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.getByLabel('Project status', { exact: true }).inputValue(), 'completed');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue.some(entry => entry.operation.mutations.some(m => m.id === 'legacy' && m.fields?.status === 'completed')));
-  const queued = await page.evaluate(async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.some(entry => entry.operation.mutations.some(m => m.id === 'legacy' && m.fields?.status === 'completed')));
+  const queued = await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.match(await page.locator('#projectOutcome').textContent(), /Project status: completed/);
-  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue), queued);
+  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue), queued);
   await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', includeHidden: true })); await confirmed(page);
   assert.equal(get('legacy').status, 'completed');
   assert.deepEqual(records().filter(record => record.type === 'item'), actions);

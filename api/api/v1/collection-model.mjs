@@ -14,12 +14,13 @@ export function validateRefs(refs) {
   return result;
 }
 export function memberships(item) {
-  return item.collectionRefs ?? ['list', 'project'].filter(type => item[type + 'Id']).map(type => ({ type, id: item[type + 'Id'] }));
+  return item?.collectionRefs ?? [];
 }
 export const belongsTo = (item, ref) => memberships(item).some(member => refKey(member) === refKey(ref));
 export function normalizeMembership(record, old, fields = {}) {
-  if (!('collectionRefs' in fields) && !old?.collectionRefs && !['listId', 'projectId'].some(name => name in fields)) return record;
-  let refs = validateRefs('collectionRefs' in fields ? fields.collectionRefs : memberships(old || record));
+  if (!['collectionRefs', 'listId', 'projectId'].some(name => name in fields)) return record;
+  if (!('collectionRefs' in fields) && (!old || !Array.isArray(old.collectionRefs))) throw new Error('collectionRefs is required.');
+  let refs = validateRefs('collectionRefs' in fields ? fields.collectionRefs : memberships(old));
   for (const type of ['list', 'project']) {
     const name = type + 'Id', previous = old?.[name] || null;
     if ('collectionRefs' in fields) {

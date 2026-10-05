@@ -9,7 +9,8 @@ test('partition profile: retained history growth, bounded pagination and account
   const operation = (id, version, accountId = 'profile-account') => validateOperation({
     apiVersion: 1, accountId, operationId: `op-${id}-${version}`,
     mutations: [{ type: 'item', id: `item-${id}`, action: version ? 'update' : 'create', expectedVersion: version,
-      fields: { title: `Task ${id} revision ${version}`, description: 'A representative task note. '.repeat(10) } }]
+      fields: { title: `Task ${id} revision ${version}`, description: 'A representative task note. '.repeat(10),
+        ...(!version ? { workspaceId: 'personal', collectionRefs: [] } : {}) } }]
   });
   const measure = () => Object.fromEntries(['record', 'receipt', 'change', 'state'].map(kind => {
     const rows = documents.filter(doc => doc.kind === kind);

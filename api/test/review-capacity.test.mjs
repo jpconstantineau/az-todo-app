@@ -7,9 +7,10 @@ import { reviewHistory } from '../../html/reviews.js';
 import { deviceExport, validateDeviceExport, readableExport, accountExport, validateAccountExport } from '../../html/inbox-export.js';
 import { workspaceRecords } from '../../html/workspaces.js';
 import { clickControl } from './navigation-helper.mjs';
+import { currentCreate } from './current-record.mjs';
 
 const records = () => Object.fromEntries(documents.filter(doc => doc.kind === 'record').map(doc => [`${doc.record.type}:${doc.record.id}`, structuredClone(doc.record)]));
-const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+const create = currentCreate;
 const update = (record, fields) => ({ type: record.type, id: record.id, action: 'update', expectedVersion: record.version, fields });
 const op = mutations => ({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations });
 function decision(session, item, index, choice, fields) {

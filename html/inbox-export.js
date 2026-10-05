@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=2';
+import { readableBrief } from './briefs.js?v=3';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
@@ -59,12 +59,26 @@ function validateExport(value, server = false) {
   const unknown = (entry, allowed, path) => {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
+  const currentShape = (entry, path) => {
+    if (['item', 'list', 'project', 'review'].includes(entry.type)) {
+      require(typeof entry.workspaceId === 'string' && entry.workspaceId.length > 0, `${path}: workspaceId is required.`);
+    }
+    if (entry.type === 'item') {
+      require(Array.isArray(entry.collectionRefs) && typeof entry.status === 'string' && entry.status.length > 0,
+        `${path}: items require collectionRefs and status.`);
+      require(entry.status !== 'waiting' || typeof entry.waitingOn === 'string' && entry.waitingOn.trim(), `${path}: waiting needs a subject.`);
+      require(entry.status !== 'deferred' || entry.startDate || entry.startDateUtc, `${path}: deferred needs a start date.`);
+      for (const name of ['due', 'start', 'review']) require(!(entry[`${name}Date`] && entry[`${name}DateUtc`]), `${path}: ${name} date is ambiguous.`);
+    }
+    if (entry.type === 'project') require(['active', 'someday', 'completed'].includes(entry.status), `${path}: invalid project status.`);
+  };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
   unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace'], 'state');
   function record(entry, path) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
     require(Number.isSafeInteger(entry.version) && entry.version > 0 && typeof entry.deleted === 'boolean', `${path}: version/deletion marker is required.`);
+    currentShape(entry, path);
     if (entry.type === 'clarification') clarification(entry, path);
     if (entry.type === 'review') review(entry, path, true);
     if (entry.type === 'reviewDecision') reviewDecision(entry, path, true);
@@ -101,6 +115,7 @@ function validateExport(value, server = false) {
         require(mutation.action === 'create' && object(mutation.fields), `${path}: review decision mutation must create immutable history.`);
         reviewDecision(mutation.fields, `${path}.fields`);
       }
+      if (mutation.action === 'create') currentShape({ type: mutation.type, ...mutation.fields }, `${path}.fields`);
       if (mutation.fields) unknown(mutation.fields, recordFields, `${path}.fields`);
       unknown(mutation, ['id', 'type', 'action', 'expectedVersion', 'fields'], `${path}.mutation`);
     }

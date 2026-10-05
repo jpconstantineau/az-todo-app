@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { documents, routes, startServer } from './harness.mjs';
+import { fieldsFor } from '../api/v1/contract.mjs';
 
 const retiredRoutes = {
   GET: ['app', 'lists/all', 'lists/editDefaults', 'lists/quickAddForm', 'lists/defaultOptions',
@@ -36,7 +37,7 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /type="module" src="\/inbox.js\?v=3"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=4"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {
@@ -49,4 +50,13 @@ test('canonical shell uses local assets, safe routing and no fragment runtime', 
   assert.deepEqual(config.routes, [{ route: '/api/*', allowedRoles: ['authenticated'] }]);
   assert.doesNotMatch(config.globalHeaders['content-security-policy'], /unsafe-inline|jsdelivr/);
   assert.deepEqual([...routes.keys()].filter(key => key.startsWith('POST /api/v1/')), ['POST /api/v1/operations']);
+});
+
+test('current create contract requires canonical workspace, membership and project lifecycle fields', () => {
+  assert.throws(() => fieldsFor('item', 'create', { title: 'Task', collectionRefs: [] }), /workspaceId/);
+  assert.throws(() => fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal' }), /collectionRefs/);
+  assert.throws(() => fieldsFor('list', 'create', { title: 'List' }), /workspaceId/);
+  assert.throws(() => fieldsFor('project', 'create', { title: 'Project', outcome: 'Done', workspaceId: 'personal' }), /status/);
+  assert.throws(() => fieldsFor('review', 'create', { reviewKind: 'weekly', reviewDay: '2026-10-05', included: [], decisionHeads: [], decisionCount: 0 }), /workspaceId/);
+  assert.deepEqual(fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal', collectionRefs: [] }).collectionRefs, []);
 });

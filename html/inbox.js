@@ -1,13 +1,13 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=1';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=1';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=1';
-import { collectionMoveMutations } from './workspace-move.js?v=1';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=1';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=1';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=3';
-import { clarificationUI } from './clarification.js?v=2';
-import { setupReviews } from './reviews.js?v=2';
-import { setupBriefs } from './briefs.js?v=2';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=2';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=2';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=2';
+import { collectionMoveMutations } from './workspace-move.js?v=2';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=2';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=4';
+import { clarificationUI } from './clarification.js?v=3';
+import { setupReviews } from './reviews.js?v=3';
+import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
 
@@ -123,8 +123,7 @@ edit.elements.workspaceId.onchange = () => {
   void journal();
 };
 function enqueue(local, owner, mutations) {
-  queueMutations(local, owner, mutations.map(mutation => mutation.action === 'create' && ['item', 'list', 'project', 'review'].includes(mutation.type)
-    ? { ...mutation, fields: { ...mutation.fields, workspaceId: mutation.fields.workspaceId || selectedWorkspace } } : mutation));
+  queueMutations(local, owner, mutations);
 }
 function workspaceReadOnly() {
   const space = projected(state)['workspace:' + selectedWorkspace];
@@ -144,7 +143,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
       // even after the operation is acknowledged or an accepted task is deleted.
       if (Object.values(records).some(record => record.captureId === submitted.id)) throw new Error('This capture was already accepted. Reload to see its tasks.');
       if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before accepting this batch.');
-      enqueue(local, owner, extractionMutations(submitted, workspaceRecords(records, selectedWorkspace)));
+      enqueue(local, owner, extractionMutations(submitted, workspaceRecords(records, selectedWorkspace), selectedWorkspace));
       currentDraft(local).extraction = { ...currentDraft(local).extraction, draft: null, clock: null, sourceText: '' }; currentDraft(local).capture = {};
     });
     if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the batch remains with its original account.');
@@ -192,7 +191,7 @@ async function saveClarification(mutations, next) {
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'inbox', status: '' }, lists: { view: '', status: '' }, execute: { kind: 'list', view: '' } });
 let navigation = emptyNavigation();
-const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, journal,
+const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, workspaceId: () => selectedWorkspace, journal,
   edit: record => {
     if (editing && (key(editing) !== key(record) || editing.version !== record.version) && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields)) {
       showDialog($('editor')); error('Finish saving this edit before editing another record. Your draft is still here.');
@@ -488,7 +487,7 @@ function render() {
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
-  $('projectOutcome').textContent = project ? `Project status: ${project.status || 'active'} · Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
+  $('projectOutcome').textContent = project ? `Project status: ${project.status} · Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
@@ -518,7 +517,7 @@ function render() {
     }
     if (reviewReady(record)) metadata.append(' · Ready for review — choose Next or set a new date');
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
-    status.textContent = [record.status || 'inbox', record.localState].filter(Boolean).join(' · ');
+    status.textContent = [record.status, record.localState].filter(Boolean).join(' · ');
     const actions = document.createElement('div'); actions.className = 'actions';
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
     const complete = button(record.status === 'completed' ? '↶' : '✓', () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`);
@@ -681,7 +680,8 @@ function addContextItem(target) {
     edit.elements.title.focus();
     return;
   }
-  openEditor({ type: 'item', id: crypto.randomUUID(), version: 0, title: '', description: '',
+  openEditor({ type: 'item', id: crypto.randomUUID(), version: 0, title: '', description: '', workspaceId: selectedWorkspace,
+    collectionRefs: [target],
     listId: target.type === 'list' ? target.id : null,
     projectId: target.type === 'project' ? target.id : null,
     status: target.type === 'project' ? 'next' : 'inbox' });
@@ -720,13 +720,13 @@ function openEditor(record, focus = true, show = true) {
   edit.elements.parentRef.value = fields.parentRef ? refKey(fields.parentRef) : '';
   edit.elements.parentRef.disabled = false;
   options(edit.elements.workspaceId, availableWorkspaces().filter(space => !space.archived), []);
-  edit.elements.workspaceId.value = fields.workspaceId || selectedWorkspace;
+  edit.elements.workspaceId.value = fields.workspaceId;
   $('editWorkspaceLabel').hidden = false;
   $('editWorkspaceHelp').textContent = record.type === 'item'
     ? 'Moving clears collection memberships; the original text and item history move with it.'
     : 'Moving carries nested collections and linked items, including their history. Links to collections left behind are cleared.';
   refreshOptions();
-  fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status || 'active' : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: memberships(fields), dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: fields.status || 'inbox' });
+  fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: record.type === 'item' ? memberships(fields) : [], dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: record.type === 'item' ? fields.status : 'inbox' });
   editing.initialFields ??= formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
   $('editListLabel').hidden = record.type !== 'item';
@@ -784,7 +784,7 @@ async function updateRecord(record, fields, close = false) {
     const saved = await transact(owner, local => {
       const current = projected(local)[key(record)];
       if (record.version !== 0 && (!current || current.deleted || current.version !== record.version)) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
-      const movingCollection = current && isCollection(current) && fields.workspaceId && fields.workspaceId !== (current.workspaceId || PERSONAL);
+      const movingCollection = current && isCollection(current) && fields.workspaceId && fields.workspaceId !== current.workspaceId;
       const mutations = movingCollection ? collectionMoveMutations(current, fields.workspaceId, projected(local), fields)
         : [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }];
       enqueue(local, owner, mutations);
@@ -827,7 +827,7 @@ capture.addEventListener('submit', event => {
   void (async () => {
     const owner = accountId, submitted = captureDraft();
     try {
-      const mutations = captureMutations(submitted);
+      const mutations = captureMutations(submitted, selectedWorkspace);
       const details = taskFields({ ...submitted, projectId: !submitted.newList?.trim() && submitted.listId?.startsWith('project:') ? submitted.listId.slice(8) : null });
       for (const mutation of mutations) {
         if (mutation.type === 'item') Object.assign(mutation.fields, details, { status: 'inbox' });
@@ -863,7 +863,7 @@ edit.addEventListener('submit', event => {
       ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { workspaceId: values.workspaceId, parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0 && editing.initialFields) {
-      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus || 'active' } : {}) };
+      const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus } : {}) };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { void discardEdit(); return; }
     }
@@ -1007,8 +1007,8 @@ $('resetExecutionFilters').onclick = () => {
   render(); void journal();
 };
 $('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
-  ? editing : { type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '' });
-$('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '' });
+  ? editing : { type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '', workspaceId: selectedWorkspace });
+$('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '', workspaceId: selectedWorkspace, status: 'active' });
 function openDefaults(record, focus = true, show = true) {
   if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
   if (defaultsEditing?.id !== record.id || defaultsEditing?.type !== record.type || defaultsEditing?.version !== record.version) {

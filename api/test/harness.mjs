@@ -57,7 +57,6 @@ const container = {
       }));
       if (query.includes('ARRAY_CONTAINS(c.record.collectionRefs')) rows = documents.filter(doc => doc.UserID === params['@u'] && doc.ObjectType === 'sync' && doc.ObjectID === 'v1' && doc.kind === 'record' && !doc.record.deleted &&
         (doc.record.collectionRefs?.some(ref => ref.type === params['@type'] && ref.id === params['@l']) ||
-         !doc.record.collectionRefs && doc.record[params['@type'] + 'Id'] === params['@l'] ||
          doc.record.parentRef?.type === params['@type'] && doc.record.parentRef.id === params['@l']));
       if (query.includes('ARRAY_CONTAINS(c.members')) rows = documents.filter(doc => doc.kind === 'shared-list' &&
         (doc.ownerId === params['@u'] || !doc.deleted && doc.members.some(member => member.accountId === params['@u'])));

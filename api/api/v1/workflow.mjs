@@ -13,20 +13,16 @@ export function calendarDate(value, field) {
 export function applyWorkflow(record, old, fields = {}) {
   if (record.deleted) return;
   const changed = workflowFields.some(key => key in fields && (fields[key] ?? null) !== (old?.[key] ?? null));
-  // Historic incomplete states stay editable; an explicit workflow edit must repair them.
-  if (!old || changed) {
-    if (record.status === 'waiting' && !record.waitingOn?.trim()) {
-      throw new ValidationError('Waiting needs who/what you are waiting for.');
-    }
-    if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) {
-      throw new ValidationError('Deferred needs a start date; it becomes ready for review on that date.');
-    }
-    const prefix = ['waiting', 'someday'].includes(record.status) ? 'review' : record.status === 'deferred' ? 'start' : null;
-    if (prefix && record[`${prefix}Date`]) calendarDate(record[`${prefix}Date`], `${prefix}Date`);
-    if (prefix && record[`${prefix}DateUtc`]) utcDate(record[`${prefix}DateUtc`]);
+  if (record.status === 'waiting' && !record.waitingOn?.trim()) {
+    throw new ValidationError('Waiting needs who/what you are waiting for.');
+  }
+  if (record.status === 'deferred' && !(record.startDate || record.startDateUtc)) {
+    throw new ValidationError('Deferred needs a start date; it becomes ready for review on that date.');
   }
   for (const name of ['due', 'start', 'review']) {
-    if ((!old || `${name}Date` in fields || `${name}DateUtc` in fields) && record[`${name}Date`] && record[`${name}DateUtc`]) {
+    if (record[`${name}Date`]) calendarDate(record[`${name}Date`], `${name}Date`);
+    if (record[`${name}DateUtc`]) utcDate(record[`${name}DateUtc`]);
+    if (record[`${name}Date`] && record[`${name}DateUtc`]) {
       throw new ValidationError(`Choose a calendar ${name} date or a timed ${name} date, not both.`);
     }
   }

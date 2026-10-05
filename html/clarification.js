@@ -1,7 +1,7 @@
-import { organizer, selectedRefs, membershipFields } from './collections.js?v=1';
-import { memberships, refKey } from './collection-model.js?v=1';
+import { organizer, selectedRefs, membershipFields } from './collections.js?v=2';
+import { memberships, refKey } from './collection-model.js?v=2';
 import { localGuidance } from './local-guidance.js?v=1';
-import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=1';
+import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=2';
 
 export function clarificationUI({ records, save, journal, showDialog }) {
   const $ = id => document.getElementById(id);
@@ -114,7 +114,7 @@ export function clarificationUI({ records, save, journal, showDialog }) {
           if (answers.project?.choice === 'new') {
             edits.projectId = crypto.randomUUID();
             if (edits.collectionRefs) edits.collectionRefs = [...edits.collectionRefs, { type: 'project', id: edits.projectId }];
-            mutations.push({ type: 'project', id: edits.projectId, action: 'create', expectedVersion: 0, fields: { title: answers.project.projectTitle, outcome: answers.project.outcome, workspaceId: current.item.workspaceId || 'personal' } });
+            mutations.push({ type: 'project', id: edits.projectId, action: 'create', expectedVersion: 0, fields: { title: answers.project.projectTitle, outcome: answers.project.outcome, workspaceId: current.item.workspaceId, status: 'active' } });
           }
         }
         mutations.push({ type: 'item', id: current.item.id, action: deleting ? 'delete' : 'update', expectedVersion: current.item.version, ...(!deleting ? { fields: edits } : {}) });

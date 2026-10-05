@@ -190,6 +190,24 @@ to discard a queued operation or assign it to someone else.
 
 ## Routes and payloads
 
+### Current persisted record shape
+
+The first-release contract has no sparse-record compatibility mode. Every `item`,
+`list`, `project`, and `review` create supplies `workspaceId`, including
+`"personal"`. Every item create also supplies `collectionRefs` (an empty array for
+Inbox); `listId` and `projectId` remain optional primary-membership pointers but
+never reconstruct that array. Every project create supplies `status` as `active`,
+`someday`, or `completed`. Clarifications, briefs, and review decisions derive
+their workspace through their required parent record; workspace and settings
+records are account-level exceptions.
+
+Stored items always have a nonblank configured workflow status. Waiting items
+have a nonblank `waitingOn`, deferred items have a calendar or UTC start date,
+and no due/start/review date has both calendar and UTC forms. Creates and updates
+validate the complete resulting shape, so an unrelated edit cannot preserve an
+invalid record. The client outbox, Cosmos records, and device/account exports use
+the same requirements.
+
 | Method and route | Request | Success |
 | --- | --- | --- |
 | GET `v1/session` | No parameters | API version, authenticated account ID and built-in `defaultSettings` |
@@ -218,7 +236,10 @@ changes, including when its `listId` changes or becomes `null` (inbox).
     "fields": {
       "title": "Milk",
       "originalText": "  milk\n",
-      "listId": null
+      "workspaceId": "personal",
+      "collectionRefs": [],
+      "listId": null,
+      "status": "inbox"
     }
   }]
 }
@@ -231,7 +252,10 @@ are rejected rather than clipped. Lists support title (200 characters), descript
 `listId`, `projectId`, calendar-date `plannedDay`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
 `waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority` and HTTP(S)
 `referenceLinks`. Tags are at most 64 characters, arrays at most 20 entries, URLs
-at most 2,048 characters. Statuses allow `inbox`, `next`, `deferred`, `completed` and the destination list/account configured values. Existing status and prior-completion values remain usable even after an option is removed.
+at most 2,048 characters. Statuses allow `inbox`, `next`, `waiting`, `deferred`,
+`someday`, `reference`, `completed`, `dropped`, and the destination list/account
+configured values. A removed custom status must be changed before that record can
+be saved again.
 
 Creation-only fields are `originalText` (16,000 characters), `selectedText` (8,000),
 `sourceTitle` (2,000) and nullable `sourceUrl`. Text retains its whitespace; omitted
@@ -242,9 +266,8 @@ fit in 1.5 MB; larger operations receive a validation error before writing. Thes
 limits also bound stored receipts and change entries.
 
 Projects support title, description, creation-only capture fields and a required,
-nonblank `outcome` (at most 4,000 characters). Project `status` accepts `active`,
-`someday`, or `completed`; it defaults to `active` on create, and absent legacy
-status is treated as active. Updating status preserves linked actions and uses
+nonblank `outcome` (at most 4,000 characters). Project `status` is required and
+accepts `active`, `someday`, or `completed`. Updating status preserves linked actions and uses
 the same expected-version conflict checks as other edits. `projectId` is an optional link to
 an owned, live project; foreign, missing or deleted projects return
 `404 project_not_found`. A project and its action links can commit atomically in

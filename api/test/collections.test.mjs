@@ -6,9 +6,10 @@ import { memberships, normalizeMembership, inCollection } from '../../html/colle
 import { projected, enqueue, rememberEdit, undoEdit } from '../../html/inbox-store.js';
 import { checklistMutations, areaMappingMutations } from '../../html/collections.js';
 import { deviceExport, validateDeviceExport } from '../../html/inbox-export.js';
+import { currentCreate } from './current-record.mjs';
 
 const ref = (type, id) => ({ type, id });
-const create = (type, id, fields = {}) => ({ type, id, action: 'create', expectedVersion: 0, fields: { title: id, ...(type === 'project' ? { outcome: 'Done' } : {}), ...fields } });
+const create = (type, id, fields = {}) => currentCreate(type, id, { title: id, ...(type === 'project' ? { outcome: 'Done' } : {}), ...fields });
 const change = (type, id, expectedVersion, fields, action = 'update') => ({ type, id, expectedVersion, action, ...(fields ? { fields } : {}) });
 async function setup(t) {
   documents.length = 0;
@@ -27,14 +28,14 @@ test('collections: server and offline membership normalization share the same co
   assert.deepEqual(projected(state)['item:task'].collectionRefs, expected.collectionRefs);
   assert.throws(() => normalizeMembership({}, old, { collectionRefs: [], projectId: 'kitchen' }), /Primary/);
   const records = { 'list:home': { type: 'list', id: 'home' }, 'project:kitchen': { parentRef: ref('list', 'home') } };
-  assert.ok(inCollection({ collectionRefs: [ref('project', 'kitchen'), ref('list', 'home')] }, ref('list', 'home'), records, true));
+  assert.ok(inCollection({ type: 'item', collectionRefs: [ref('project', 'kitchen'), ref('list', 'home')] }, ref('list', 'home'), records, true));
 });
-test('collections: multi-membership, legacy edits, workspace boundaries, cycles and atomic unlink/delete', async t => {
+test('collections: multi-membership, primary edits, workspace boundaries, cycles and atomic unlink/delete', async t => {
   const post = await setup(t);
   assert.equal((await post([create('list', 'home', { kind: 'area' }), create('list', 'role', { kind: 'role' }), create('project', 'kitchen', { parentRef: ref('list', 'home') })])).status, 200);
   let result = await post([create('item', 'task', { listId: 'home', projectId: 'kitchen', collectionRefs: [ref('list', 'home'), ref('list', 'role'), ref('project', 'kitchen')] })]);
   assert.equal(result.status, 200);
-  result = await post([change('item', 'task', 1, { listId: null, title: 'Legacy edit' })]);
+  result = await post([change('item', 'task', 1, { listId: null, title: 'Primary edit' })]);
   assert.deepEqual(result.body.records[0].collectionRefs, [ref('list', 'role'), ref('project', 'kitchen')]);
   assert.equal((await post([change('list', 'home', 1, { parentRef: ref('project', 'kitchen') })])).status, 400);
   assert.equal((await post([change('list', 'role', 1, null, 'delete')])).status, 409);
@@ -55,8 +56,8 @@ test('collections: concurrent moves cannot create a cycle; link/delete cannot or
   assert.equal(race.filter(result => result.status === 200).length, 1);
 });
 test('collections: bounded checklist copies, area batches, exports and undo preserve original memberships', () => {
-  const source = { type: 'list', id: 'packing', title: 'Packing', kind: 'reference' };
-  const item = { type: 'item', id: 'passport', version: 1, accountId: 'alice', deleted: false, title: 'Passport', description: 'Expiry', status: 'reference', listId: 'packing', areas: ['Travel'], referenceLinks: ['https://example.com/renew'] };
+  const source = { type: 'list', id: 'packing', title: 'Packing', kind: 'reference', workspaceId: 'personal' };
+  const item = { type: 'item', id: 'passport', version: 1, accountId: 'alice', deleted: false, workspaceId: 'personal', collectionRefs: [ref('list', 'packing')], title: 'Passport', description: 'Expiry', status: 'reference', listId: 'packing', areas: ['Travel'], referenceLinks: ['https://example.com/renew'] };
   const before = structuredClone(item);
   const copies = checklistMutations(source, [item], 'Trip');
   assert.equal(copies[0].fields.kind, 'checklist');

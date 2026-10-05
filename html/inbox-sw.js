@@ -1,14 +1,14 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v3';
+const CACHE = 'todo-inbox-shell-v4';
 // The agent module is public shell code, without model downloads or user data.
 const ASSETS = [
   '/', '/index.html', '/help.html', '/shared.html',
   '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-  '/inbox.js?v=3', '/inbox-store.js?v=1', '/inbox-fields.js?v=1', '/inbox-export.js?v=3',
-  '/collection-model.js?v=1', '/collections.js?v=1', '/workspace-move.js?v=1', '/workspaces.js?v=1',
-  '/clarification.js?v=2', '/clarification-flow.js?v=1', '/reviews.js?v=2', '/briefs.js?v=2',
-  '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=3',
-  '/pwa.js?v=3', '/manifest.json',
+  '/inbox.js?v=4', '/inbox-store.js?v=2', '/inbox-fields.js?v=2', '/inbox-export.js?v=4',
+  '/collection-model.js?v=2', '/collections.js?v=2', '/workspace-move.js?v=2', '/workspaces.js?v=2',
+  '/clarification.js?v=3', '/clarification-flow.js?v=2', '/reviews.js?v=3', '/briefs.js?v=3',
+  '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=4',
+  '/pwa.js?v=4', '/manifest.json',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
 ];
 self.addEventListener('install', event => {

@@ -4,8 +4,13 @@ import { projected, enqueue, applyReceipt } from '../../html/inbox-store.js';
 import { deviceExport } from '../../html/inbox-export.js';
 
 const record = (type = 'item') => ({ accountId: 'alice', type, id: 'one', version: 1,
-  deleted: false, title: 'Original', originalText: '  Original\n', status: 'inbox' });
-const stateFor = value => ({ records: { [`${value.type}:${value.id}`]: value }, queue: [], after: 0, draft: {} });
+  deleted: false, title: 'Original', originalText: '  Original\n',
+  ...(['item', 'list', 'project'].includes(type) ? { workspaceId: 'personal' } : {}),
+  ...(type === 'item' ? { status: 'inbox', collectionRefs: [] } : {}),
+  ...(type === 'project' ? { status: 'active' } : {}),
+  ...(type === 'brief' ? { subjectType: 'item', subjectId: 'source' } : {}) });
+const stateFor = value => ({ records: { [`${value.type}:${value.id}`]: value,
+  ...(value.type === 'brief' ? { 'item:source': { ...record('item'), id: 'source' } } : {}) }, queue: [], after: 0, draft: {} });
 const mutation = (value, action, fields) => ({ type: value.type, id: value.id, action,
   expectedVersion: value.version, ...(fields ? { fields } : {}) });
 
@@ -71,7 +76,7 @@ test('stale queued edits cannot replace a server tombstone, even before conflict
 test('later queued updates cannot reactivate a pending delete; ordinary create/update projection still works', () => {
   const state = { records: {}, queue: [], after: 0, draft: {} };
   enqueue(state, 'alice', [{ type: 'item', id: 'one', action: 'create', expectedVersion: 0,
-    fields: { title: 'Original', originalText: 'Original', status: 'inbox' } }]);
+    fields: { title: 'Original', originalText: 'Original', workspaceId: 'personal', status: 'inbox', collectionRefs: [] } }]);
   let current = projected(state)['item:one'];
   assert.equal(current.deleted, false);
   enqueue(state, 'alice', [mutation(current, 'update', { title: 'Edited' })]);

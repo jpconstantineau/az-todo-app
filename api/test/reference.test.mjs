@@ -6,11 +6,12 @@ import { documents, startServer } from './harness.mjs';
 import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { defaultSettings } from '../api/shared/defaults.mjs';
+import { currentCreate } from './current-record.mjs';
 
 test('reference filing survives offline reload, stays retrievable, and leaves execution and review queues', { timeout: 90000 }, async t => {
   documents.length = 0;
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
-  const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+  const create = currentCreate;
   const original = 'Printer uses A4 paper; keep this information for the next refill.';
   const response = await fetch(server.url + '/api/v1/operations', {
     method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
@@ -39,7 +40,7 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await page.locator('#statusFilter').selectOption('reference');
   assert.deepEqual(await rows(), ['printer']);
   assert.match(await page.locator('#items').innerText(), /pending/);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.navigation?.work.status === 'reference');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.navigation?.work.status === 'reference');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.deepEqual(await rows(), ['printer']);
   assert.equal(await page.getByRole('button', { name: 'Clarify Printer paper specification', exact: true, includeHidden: true }).count(), 1);

@@ -5,8 +5,9 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
+import { currentCreate } from './current-record.mjs';
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
 async function setup(t) {
   documents.length = 0;
   let user = 'alice';
@@ -14,8 +15,8 @@ async function setup(t) {
   const response = await fetch(server.url + '/api/v1/operations', {
     method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
-      ...['item', 'list', 'project'].map(type => ({ type, id: type, action: 'create', expectedVersion: 0,
-        fields: { title: type, ...(type === 'project' ? { outcome: 'Finished outcome' } : {}) } })),
+      ...['item', 'list', 'project'].map(type => currentCreate(type, type,
+        { title: type, ...(type === 'project' ? { outcome: 'Finished outcome' } : {}) })),
       { type: 'workspace', id: 'work', action: 'create', expectedVersion: 0, fields: { title: 'Work' } }
     ] })
   });
@@ -37,7 +38,7 @@ async function open(page, type) {
 }
 const closedAndJournaled = async page => {
   await page.locator('#editor').waitFor({ state: 'hidden' });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.editOpen === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.editOpen === false);
 };
 
 test('interrupted edits restore and dismissed list/project drafts resume with their text intact', { timeout: 90000 }, async t => {
@@ -45,7 +46,7 @@ test('interrupted edits restore and dismissed list/project drafts resume with th
   for (const type of ['item', 'list', 'project']) {
     await open(page, type);
     await page.locator('#edit [name=description]').fill('Unfinished ' + type);
-    await waitForBrowser(page, async type => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.edit?.fields.description === 'Unfinished ' + type, type);
+    await waitForBrowser(page, async type => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.description === 'Unfinished ' + type, type);
     await page.reload(); await page.locator('#editor').waitFor();
     assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Unfinished ' + type);
     await page.locator('#cancelEdit').click(); await closedAndJournaled(page);
@@ -125,7 +126,7 @@ test('dismissed unsaved text can be resumed or discarded offline and stays in it
   await page.locator('#cancelEdit').click(); await closedAndJournaled(page);
   await page.locator('#workspaceSelect').selectOption('work');
   // Selecting the option dispatches change; the IndexedDB-backed switch finishes later.
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).selectedWorkspace === 'work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).selectedWorkspace === 'work');
   assert.equal(await page.locator('#savedEdit').isVisible(), false);
   await page.locator('#workspaceSelect').selectOption('personal');
   await page.locator('#resumeEdit').waitFor();

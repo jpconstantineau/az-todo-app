@@ -5,9 +5,10 @@ import { documents, startServer } from './harness.mjs';
 import { workflowSnapshot } from '../api/v1/reviews.mjs';
 import { clickControl } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
+import { currentCreate } from './current-record.mjs';
 
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
-const create = (type, id, fields) => ({ type, id, action: 'create', expectedVersion: 0, fields });
+const create = currentCreate;
 const update = (record, fields) => ({ type: record.type, id: record.id, action: 'update', expectedVersion: record.version, fields });
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const operation = mutations => ({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations });
@@ -118,7 +119,7 @@ test('review actions edit, clarify and add project actions in place with offline
   await page.locator('#reviewRecord').selectOption(index('shelf')); await page.locator('#reviewComplete').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 4'));
   await page.locator('#reviewRecord').selectOption(index('garage')); await page.locator('#reviewDefer').fill('2027-02-01');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.review?.deferUntil === '2027-02-01');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.review?.deferUntil === '2027-02-01');
   await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#openReviews'));
   assert.equal(await page.locator('#reviewRecord').inputValue(), index('garage'));
   assert.equal(await page.locator('#reviewDefer').inputValue(), '2027-02-01');

@@ -1,9 +1,9 @@
-import { belongsTo, memberships, refKey } from './collection-model.js?v=1';
-import { key, projected } from './inbox-store.js?v=1';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=1';
+import { belongsTo, memberships, refKey } from './collection-model.js?v=2';
+import { key, projected } from './inbox-store.js?v=2';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=2';
 
 const $ = id => document.getElementById(id);
-const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
+const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : null)]));
 const latest = (session, index) => [...session.history].reverse().find(entry => entry.index === index);
 const done = (session, index) => { const decision = latest(session, index); return decision && decision.choice !== 'undo'; };
 export function reviewHistory(session, records) {
@@ -11,7 +11,7 @@ export function reviewHistory(session, records) {
     .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }));
 }
 
-export function setupReviews({ current, save, journal, edit, clarify, addAction, records: scopedRecords }) {
+export function setupReviews({ current, save, journal, edit, clarify, addAction, workspaceId, records: scopedRecords }) {
   let active = null, selected = null, displayed, busy = false;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
   const message = value => { $('reviewError').textContent = value; };
@@ -24,7 +24,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const tomorrow = new Date(year, month - 1, date + 1).getTime();
     return Object.values(records).filter(record => {
       if (record.deleted || seen.has(key(record))) return false;
-      if (record.type === 'project') return reviewKind === 'weekly' && (record.status || 'active') === 'active' || reviewKind === 'someday' && record.status === 'someday';
+      if (record.type === 'project') return reviewKind === 'weekly' && record.status === 'active' || reviewKind === 'someday' && record.status === 'someday';
       if (reviewKind === 'someday' || record.type !== 'item' || ['completed', 'dropped', 'reference'].includes(record.status)) return false;
       return reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) ||
         record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow;
@@ -60,7 +60,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
     $('reviewDetails').textContent = !ref ? 'This review is empty. Start another review after capturing work or changing your focus.' : !target || target.deleted
       ? 'This record was deleted or is unavailable. Acknowledge it to continue; it will not be recreated.'
-      : [target.type === 'project' ? `Project status: ${target.status || 'active'} · Project outcome: ${target.outcome}` : `Status: ${target.status}`, target.description,
+      : [target.type === 'project' ? `Project status: ${target.status} · Project outcome: ${target.outcome}` : `Status: ${target.status}`, target.description,
         memberships(target).map(ref => `Membership: ${records[refKey(ref)]?.title || 'Unavailable collection'}`).join(' · '),
         ...['waitingOn', 'plannedDay', 'dueDate', 'dueDateUtc', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'].filter(name => target[name]).map(name => `${name}: ${target[name]}`),
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');
@@ -123,7 +123,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const included = candidates(records, reviewKind, day, previous).slice(0, 200);
     // A deterministic continuation ID makes concurrent next-batch starts conflict safely.
     const id = previous ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(previous.id))), byte => byte.toString(16).padStart(2, '0')).join('') : crypto.randomUUID();
-    await save([{ type: 'review', id, action: 'create', expectedVersion: 0, fields: { reviewKind, reviewDay: day, included,
+    await save([{ type: 'review', id, action: 'create', expectedVersion: 0, fields: { workspaceId: workspaceId(), reviewKind, reviewDay: day, included,
       decisionHeads: included.map(() => null), decisionCount: 0,
       ...(previous ? { previousReviewId: previous.id } : {}) } }]);
     if (!current()) return;

@@ -11,7 +11,13 @@ import { deviceExport, readableExport, validateDeviceExport } from '../../html/i
 
 const item = { type: 'item', id: 'insurance', version: 1, title: 'Call the insurer', originalText: 'sort out insurance', sourceUrl: 'https://example.com/policy' };
 const fields = () => ({ subjectType: 'item', subjectId: item.id, sourceVersion: 1, previousBriefId: null, status: 'draft', content: templateBrief(item) });
-const mutation = (type, id, version, fields, action = version ? 'update' : 'create') => ({ type, id, expectedVersion: version, action, ...(fields ? { fields } : {}) });
+const mutation = (type, id, version, fields, action = version ? 'update' : 'create') => {
+  const next = fields && action === 'create' ? { ...fields,
+    ...(['item', 'list', 'project', 'review'].includes(type) ? { workspaceId: fields.workspaceId ?? 'personal' } : {}),
+    ...(type === 'item' ? { status: fields.status ?? 'inbox', collectionRefs: fields.collectionRefs ?? [] } : {}),
+    ...(type === 'project' ? { status: fields.status ?? 'active' } : {}) } : fields;
+  return { type, id, expectedVersion: version, action, ...(next ? { fields: next } : {}) };
+};
 const record = id => documents.find(doc => doc.UserID === 'alice' && doc.id === `record:brief:${id}`)?.record;
 async function post(url, mutations, operationId = crypto.randomUUID(), user = 'alice') {
   const response = await fetch(url + '/api/v1/operations', { method: 'POST', headers: { origin: url, 'content-type': 'application/json',
@@ -81,13 +87,13 @@ async function confirmedRevision(page, status) {
   // The global idle message can still describe the state before the click's save.
   await waitForBrowser(page, async status => {
     const id = document.querySelector('#briefRevisions').value;
-    const state = await (await import('/inbox-store.js?v=1')).transact('alice');
+    const state = await (await import('/inbox-store.js?v=2')).transact('alice');
     return !!id && state.records[`brief:${id}`]?.status === status &&
       !state.queue.some(entry => entry.operation.mutations.some(mutation => mutation.type === 'brief' && mutation.id === id));
   }, status);
   await confirmed(page);
 }
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
 async function setup(t) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close); await seed(server.url);
@@ -108,14 +114,14 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await context.setOffline(true);
   await page.locator('#briefForm [name=outcome]').fill('Coverage in place');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
   await page.reload(); await page.locator('#briefs').waitFor();
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Coverage in place');
   assert.equal(await page.locator('#briefAccept').isDisabled(), true);
   await page.getByRole('button', { name: 'Save new draft revision' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue.length === 1);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.length === 1);
   await page.locator('#briefAccept').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue.length === 2);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.length === 2);
   assert.match(await download(page), /UNCONFIRMED REVISION/);
   await context.setOffline(false); await page.locator('#closeBriefs').click(); await clickControl(page.locator('#sync')); await confirmedRevision(page, 'accepted');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Call the insurer', exact: true }));
@@ -146,12 +152,12 @@ test('brief browser: offline edit/resume, revision-specific decisions, export, p
   await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Brief Call the insurer');
   await post(url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Launch complete' })]);
   await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=1')).transact('alice')).records['project:launch']);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=2')).transact('alice')).records['project:launch']);
   await page.locator('#view').selectOption('project:launch');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Launch', exact: true }));
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Launch complete');
   await page.locator('#closeBriefs').click(); setUser('bob'); await clickControl(page.locator('#sync')); await confirmed(page);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact(null)).accountId === 'bob' && !document.querySelector('#workspace').hidden);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob' && !document.querySelector('#workspace').hidden);
   assert.equal(await page.locator('#briefOriginal').textContent(), '');
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), '');
   assert.deepEqual(errors, []);
@@ -162,7 +168,7 @@ test('brief browser: competing decisions and storage failure retain recoverable 
   await page.getByRole('button', { name: 'Save new draft revision' }).click(); await confirmedRevision(page, 'draft');
   const id = await page.locator('#briefRevisions').inputValue();
   await context.setOffline(true); await page.locator('#briefAccept').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue.length === 1);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.length === 1);
   assert.equal((await post(url, [mutation('brief', id, 1, { status: 'rejected' })])).status, 200);
   await page.locator('#closeBriefs').click(); await context.setOffline(false); await clickControl(page.locator('#sync')); await page.locator('#failure').waitFor();
   assert.equal(record(id).status, 'rejected'); assert.equal((await local(page)).queue.length, 1);
@@ -170,7 +176,7 @@ test('brief browser: competing decisions and storage failure retain recoverable 
   page.once('dialog', dialog => dialog.accept()); await page.locator('#discard').click(); await confirmed(page);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Call the insurer', exact: true }));
   await page.locator('#briefForm [name=outcome]').fill('Private recovery text');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.brief?.content.outcome === 'Private recovery text');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.brief?.content.outcome === 'Private recovery text');
   await page.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }; });
   await page.getByRole('button', { name: 'Save new draft revision' }).click(); await page.locator('#recovery').waitFor();
   assert.match(await page.locator('#recoveryText').inputValue(), /Private recovery text/);

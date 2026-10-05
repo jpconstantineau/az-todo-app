@@ -69,7 +69,8 @@ export function fieldsFor(type, action, input) {
   }
   if (type === 'review' && action === 'create') {
     const { workspaceId, ...fields } = input || {};
-    return { ...reviewFields(action, fields), ...(workspaceId === undefined ? {} : { workspaceId: identifier(workspaceId, 'workspaceId') }) };
+    if (workspaceId === undefined) throw new ValidationError('workspaceId is required.');
+    return { ...reviewFields(action, fields), workspaceId: identifier(workspaceId, 'workspaceId') };
   }
   if (type === 'brief') return briefFields(action, input);
   if (type === 'review') return reviewFields(action, input);
@@ -83,6 +84,11 @@ export function fieldsFor(type, action, input) {
   const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status"] : ["defaults", "kind", "parentRef"])];
   object(input, allowed, "fields");
+  if (action === 'create') {
+    if (!('workspaceId' in input)) throw new ValidationError('workspaceId is required.');
+    if (type === 'item' && !('collectionRefs' in input)) throw new ValidationError('collectionRefs is required.');
+    if (type === 'project' && !('status' in input)) throw new ValidationError('status is required for a project.');
+  }
   const result = {};
   for (const [key, value] of Object.entries(input)) {
     if (key === 'collectionRefs' || key === 'parentRef') {
@@ -136,8 +142,7 @@ export function fieldsFor(type, action, input) {
     return {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
-      ...(type === 'project' ? { status: 'active' } : {}),
-      ...(type === "item" ? { listId: null, projectId: null, plannedDay: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
+      ...(type === "item" ? { collectionRefs: [], listId: null, projectId: null, plannedDay: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,
         priority: null, referenceLinks: [] } : {}), ...result
     };

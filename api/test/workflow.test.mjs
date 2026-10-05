@@ -17,7 +17,8 @@ test('workflow API: atomic validation, waiting/deferred, completion, undo and st
   async function save(fields, expectedVersion = record?.version || 0) {
     const response = await fetch(`${server.url}/api/v1/operations`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
       body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
-        { type: 'item', id: 'action', action: expectedVersion ? 'update' : 'create', expectedVersion, fields }
+        { type: 'item', id: 'action', action: expectedVersion ? 'update' : 'create', expectedVersion,
+          fields: expectedVersion ? fields : { workspaceId: 'personal', collectionRefs: [], ...fields } }
       ] }) });
     const body = await response.json();
     if (response.status === 200) record = body.records[0];
@@ -56,14 +57,10 @@ test('workflow API: atomic validation, waiting/deferred, completion, undo and st
   assert.equal((await save({ reviewDateUtc: '2026-11-01T06:30:00.000Z' })).status, 400, 'one date representation at a time');
   assert.equal((await save({ reviewDate: null, reviewDateUtc: '2026-11-01T06:30:00.000Z' })).status, 200);
   assert.equal((await save({ nextAction: true })).status, 400, 'nextAction is derived, never client-writable');
-  // Existing custom status/date values survive ordinary edits and completion/reopening.
+  // An invalid stored workflow cannot survive an unrelated edit.
   const stored = documents.find(doc => doc.id === 'record:item:action').record;
   stored.status = 'historic'; stored.startDateUtc = 'old date text';
-  assert.equal((await save({ description: 'Keep legacy fields' })).status, 200);
-  assert.equal(record.status, 'historic'); assert.equal(record.startDateUtc, 'old date text');
-  assert.equal((await save({ status: 'deferred' })).status, 400, 'a required inherited cue must be valid');
-  await save({ status: 'completed' }); await save({ status: record.statusBeforeCompletion });
-  assert.equal(record.status, 'historic'); assert.equal(record.nextAction, false);
+  assert.equal((await save({ description: 'Unrelated edit' })).status, 400);
 });
 
 test('undated waiting capture and edits survive offline reload, weekly retain/undo and reconnect', { timeout: 60000 }, async t => {
@@ -122,7 +119,7 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
 });
 
 test('workflow projection validates before journaling and preserves offline undo metadata', () => {
-  const state = { records: { 'item:a': { type: 'item', id: 'a', version: 1, status: 'next', nextAction: true, dueDate: '2026-10-20' } }, queue: [] };
+  const state = { records: { 'item:a': { type: 'item', id: 'a', workspaceId: 'personal', collectionRefs: [], version: 1, status: 'next', nextAction: true, dueDate: '2026-10-20' } }, queue: [] };
   const save = fields => enqueue(state, 'alice', [{ type: 'item', id: 'a', action: 'update', expectedVersion: projected(state)['item:a'].version, fields }]);
   assert.throws(() => save({ status: 'waiting' }), /Waiting needs/); assert.equal(state.queue.length, 0);
   save({ status: 'waiting', waitingOn: 'Permit' });
@@ -141,16 +138,13 @@ test('workflow projection validates before journaling and preserves offline undo
   assert.equal(item.startDate, null); assert.equal(item.dueDate, '2026-10-20');
 });
 
-test('calendar dates, explicit DST offsets, ready-for-review rules and unchanged historic dates', () => {
+test('calendar dates, explicit DST offsets and ready-for-review rules', () => {
   assert.equal(taskFields({ dueDate: '2026-11-01' }).dueDate, '2026-11-01');
   assert.throws(() => taskFields({ startDate: '2026-02-30' }), /calendar date/);
   assert.throws(() => taskFields({ reviewDateUtc: '2026-11-01T01:30:00' }), /explicit offset/);
   assert.equal(taskFields({ reviewDateUtc: '2026-11-01T01:30:00-04:00' }).reviewDateUtc, '2026-11-01T05:30:00.000Z');
   assert.equal(taskFields({ reviewDateUtc: '2026-11-01T01:30:00-05:00' }).reviewDateUtc, '2026-11-01T06:30:00.000Z');
   assert.throws(() => taskFields({ reviewDateUtc: '2026-02-30T01:30:00Z' }), /ISO time/);
-  const initial = { status: 'custom', startDateUtc: 'historic invalid date', dueLocal: '2026-11-01T01:30' };
-  const patch = taskFields({ ...initial, title: 'Edited' }, initial);
-  assert.equal('startDateUtc' in patch, false); assert.equal('dueDateUtc' in patch, false);
   const now = new Date(2026, 9, 5, 0, 0);
   assert.equal(reviewReady({ status: 'deferred', startDate: '2026-10-05' }, now), true);
   assert.equal(reviewReady({ status: 'deferred', startDate: '2026-10-06' }, now), false);
@@ -212,7 +206,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   await showView(page, 'work');
   assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.navigation?.work.status === '@review-ready');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.navigation?.work.status === '@review-ready');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
   assert.equal(await page.locator('#items article').count(), 1);
@@ -230,7 +224,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   }
   // Spring-forward gaps are rejected instead of silently shifting the deadline.
   const gap = await page.evaluate(async () => {
-    try { (await import('/inbox-fields.js?v=1')).taskFields({ dueLocal: '2026-03-08T02:30' }); return ''; }
+    try { (await import('/inbox-fields.js?v=2')).taskFields({ dueLocal: '2026-03-08T02:30' }); return ''; }
     catch (error) { return error.message; }
   });
   assert.match(gap, /valid local due date/);
