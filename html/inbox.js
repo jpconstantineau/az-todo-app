@@ -4,10 +4,10 @@ import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './works
 import { collectionMoveMutations } from './workspace-move.js?v=1';
 import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=1';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=1';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=1';
-import { clarificationUI } from './clarification.js?v=1';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=2';
+import { clarificationUI } from './clarification.js?v=2';
 import { setupReviews } from './reviews.js?v=1';
-import { setupBriefs } from './briefs.js?v=1';
+import { setupBriefs } from './briefs.js?v=2';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
 

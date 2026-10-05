@@ -66,6 +66,21 @@ test('export rejects mixed accounts, corrupt identities, unsupported envelope ve
   }
 });
 
+test('export accepts only the current clarification record and mutation shape', () => {
+  const current = { flowVersion: 2, step: 'actionable', answers: {}, proposal: { text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: '' } };
+  const record = { accountId: 'alice', type: 'clarification', id: 'milk', version: 1, deleted: false, ...current };
+  const value = deviceExport('alice', { records: { 'clarification:milk': record }, after: 1, queue: [], draft: {} }, {});
+  assert.deepEqual(validateDeviceExport(value).warnings, []);
+  const legacy = structuredClone(value); delete legacy.state.records['clarification:milk'].flowVersion;
+  legacy.state.records['clarification:milk'].step = 0;
+  assert.throws(() => validateDeviceExport(legacy), /current flow version and shape/);
+  const pending = fixture(); pending.state.queue[0].operation.mutations[0] = { type: 'clarification', id: 'milk', action: 'create', expectedVersion: 0,
+    fields: { step: 0, answers: {}, proposal: { text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' } } };
+  assert.throws(() => validateDeviceExport(pending), /current flow version and shape/);
+  pending.state.queue[0].operation.mutations[0] = { type: 'clarification', id: 'milk', action: 'delete', expectedVersion: 1 };
+  assert.throws(() => validateDeviceExport(pending), /clarification mutation must use the current shape/);
+});
+
 test('unsupported fields and future record types are reported and preserved without claiming workflow support', () => {
   const value = fixture();
   value.state.records['item:milk'].futureWorkflow = { step: 2, unknowns: ['Budget'] };

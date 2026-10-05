@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=1';
+import { readableBrief } from './briefs.js?v=2';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
@@ -27,6 +27,13 @@ function validateExport(value, server = false) {
   if (server) require(state.queue.length === 0 && Object.keys(state.draft).length === 0 && Object.keys(value.draft).length === 0,
     'a server snapshot cannot contain device drafts or pending saves.');
   const warnings = [];
+  const clarification = (entry, path) => {
+    require(entry.deleted !== true && entry.flowVersion === 2 && typeof entry.step === 'string' && object(entry.answers) && object(entry.proposal),
+      `${path}: clarification must use the current flow version and shape.`);
+    const pathFor = ['actionable', ...(entry.answers.actionable === 'yes' ? ['nextAction', 'project', 'twoMinutes'] : []),
+      'disposition', ...(entry.answers.disposition?.choice === 'trash' ? [] : ['organize']), 'summary', 'complete'];
+    require(pathFor.includes(entry.step), `${path}: invalid clarification step.`);
+  };
   const unknown = (entry, allowed, path) => {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
@@ -36,6 +43,7 @@ function validateExport(value, server = false) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
     require(Number.isSafeInteger(entry.version) && entry.version > 0 && typeof entry.deleted === 'boolean', `${path}: version/deletion marker is required.`);
+    if (entry.type === 'clarification') clarification(entry, path);
     if (!knownTypes.includes(entry.type)) warnings.push(`${path}: record type ${entry.type} preserved, interpretation unsupported`);
     unknown(entry, recordFields, path);
   }
@@ -56,6 +64,10 @@ function validateExport(value, server = false) {
         (mutation.action === 'create' ? mutation.expectedVersion === 0 : mutation.expectedVersion > 0) &&
         (['delete', 'restore'].includes(mutation.action) ? mutation.fields === undefined : object(mutation.fields)), `${path}: malformed mutation.`);
       if (!knownTypes.includes(mutation.type)) warnings.push(`${path}: mutation type ${mutation.type} preserved, interpretation unsupported`);
+      if (mutation.type === 'clarification') {
+        require(['create', 'update'].includes(mutation.action) && object(mutation.fields), `${path}: clarification mutation must use the current shape.`);
+        clarification(mutation.fields, `${path}.fields`);
+      }
       if (mutation.fields) unknown(mutation.fields, recordFields, `${path}.fields`);
       unknown(mutation, ['id', 'type', 'action', 'expectedVersion', 'fields'], `${path}.mutation`);
     }

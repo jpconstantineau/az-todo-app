@@ -59,7 +59,7 @@ the deployed candidate, not the separate local regression run.
 | Fast browser/keyboard capture #5/#6 | `inbox.test.mjs`, [durable capture](durable-inbox.md) | Actually load TaskGem MV3; title/selection/source saved before popup closes; acknowledged import exactly once | BLOCKED: extension handoff absent from baseline |
 | Persistent inbox/ordinary editing #2/#4/#5 | `inbox.test.mjs`, `browser.test.mjs`, `v1.test.mjs` | Phone offline process restart, edit/move/complete/reopen, reconnect without duplicates; quota recovery | UNVERIFIED |
 | Actions, projects, optional areas #7 | `projects.test.mjs`, [project flow](projects.md) | One canonical action across inbox/project/day; ordinary list remains optional and usable | UNVERIFIED |
-| Progressive clarification #9 | `clarification.test.mjs`, [procedure](clarification.md) | Accept/edit/skip/stop, reload midway, retain exact original and account-bound proposals | UNVERIFIED |
+| Branching clarification #107 | `clarification-flow.test.mjs`, [procedure](clarification.md) | Continue/edit/Back/Stop, reload midway, retain exact original and account-bound proposals | UNVERIFIED |
 | Next/waiting/deferred #8 | `workflow.test.mjs`, `status-filters.test.mjs`, [date semantics](workflow-states.md) | Who/what awaited and review cue persist; timezone/date-only semantics and undo | UNVERIFIED |
 | Daily/weekly review #10 | `reviews.test.mjs`, [review procedure](reviews.md) | Interrupt/resume; intentional keep/drop/defer; concurrent change blocks stale decisions | UNVERIFIED |
 | Local AI and rules fallback #11 | `local-guidance.test.mjs`, [model procedure](local-guidance.md) | Real supported desktop download/inference/cancel/offline; unsupported phones retain manual flow | UNVERIFIED |

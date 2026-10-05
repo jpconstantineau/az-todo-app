@@ -9,12 +9,12 @@ to the originating task/project button.
 ## Generate, review and decide
 
 The template copies the current task title, notes and supplied source links.
-For tasks it uses explicitly accepted clarification outcomes, ignoring proposals
-and skipped answers; projects use their saved desired outcome. The task title
-is a proposed next action, not a new commitment. Scope, exclusions and acceptance
-checks remain explicitly unknown until the user supplies them. Missing information
-lists known gaps and any accepted clarification answer. Edit it to **None known**
-only after reviewing the brief. Dates and assignees are never invented.
+For tasks it can use a project outcome and missing-information notes accepted by
+the current clarification flow, while ignoring unaccepted proposals; projects use
+their saved desired outcome. The task title is a proposed next action, not a new
+commitment. Scope, exclusions and acceptance checks remain explicitly unknown
+until the user supplies them. Edit missing information to **None known** only after
+reviewing the brief. Dates and assignees are never invented.
 
 Typing saves an account-bound device draft. Closing, going offline or reloading
 retains that text. **Save new draft revision** queues an immutable content revision

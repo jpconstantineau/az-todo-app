@@ -3,62 +3,21 @@ import { memberships, refKey } from './collection-model.js?v=1';
 import { localGuidance } from './local-guidance.js?v=1';
 import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=1';
 
-// Proposals stay separate from action fields until the user accepts a question.
-export const questions = [
-  ['outcome', 'What outcome would resolve this?', 'Describe what done looks like. This records an outcome here; it does not create a project.'],
-  ['nextAction', 'What is one concrete next action?', 'Accepting replaces the task title with your wording. Its status stays unchanged until you decide below.'],
-  ['missingFacts', 'What information is still missing?', 'Name the unknowns, or intentionally enter “None known”. Skipping leaves this unanswered.'],
-  ['disposition', 'What should happen next?', 'Choose Next, Waiting, Deferred, Someday, Reference, Already done, or Drop. Reference keeps useful information outside action queues and reviews. You can also keep the current state.']
-];
-export const emptyProposal = () => ({ text: '', status: '', waitingOn: '', reviewDate: '', startDate: '' });
-
-export function decision(session, proposal, choice) {
-  const name = questions[session.step]?.[0];
-  if (!name) throw new Error('This clarification is complete.');
-  if (choice === 'disposition') {
-    if (session.step >= 3) throw new Error('The disposition is already open.');
-    if (proposal.text) throw new Error('Accept your proposed answer or clear it before skipping the remaining questions. Your wording is still here.');
-    let next = session;
-    while (next.step < 3) next = decision(next, emptyProposal(), 'skipped').session;
-    return { session: next, fields: null };
-  }
-  let value = null, fields = null;
-  if (choice === 'accepted') {
-    if (name === 'disposition') {
-      const { status, waitingOn, reviewDate, startDate } = proposal;
-      if (!['keep', 'next', 'waiting', 'deferred', 'someday', 'reference', 'completed', 'dropped'].includes(status)) throw new Error('Choose what should happen next, or skip.');
-      if (status === 'waiting' && !waitingOn.trim()) throw new Error('Waiting needs who/what you await.');
-      if (status === 'deferred' && !startDate) throw new Error('Deferred needs a start date.');
-      value = { status, waitingOn: status === 'waiting' ? waitingOn : '', reviewDate: status === 'waiting' ? reviewDate : '', startDate: status === 'deferred' ? startDate : '' };
-      if (status !== 'keep') fields = { status,
-        ...(status === 'waiting' ? { waitingOn, ...(reviewDate ? { reviewDate, reviewDateUtc: null } : {}) } : {}),
-        ...(status === 'deferred' ? { startDate, startDateUtc: null } : {}) };
-    } else {
-      value = proposal.text;
-      if (!value.trim() || value.length > (name === 'nextAction' ? 200 : 4000)) throw new Error(`Enter an answer of 1–${name === 'nextAction' ? 200 : 4000} characters, or skip.`);
-      if (name === 'nextAction') fields = { title: value };
-    }
-  } else if (choice !== 'skipped') throw new Error('Choose accept or skip.');
-  return { session: { step: session.step + 1, answers: { ...session.answers, [name]: { decision: choice, value } }, proposal: emptyProposal() }, fields };
-}
-
 export function clarificationUI({ records, save, journal, showDialog }) {
   const $ = id => document.getElementById(id);
   const dialog = $('clarifier'), form = $('clarifyForm');
   let active = null, busy = false;
-  const branching = () => active?.session.flowVersion === 2;
-  const complete = () => [questions.length, 'complete'].includes(active?.session.step);
-  const values = () => branching() ? { ...active.proposal, ...Object.fromEntries([...form.elements]
-    .filter(input => input.name.startsWith('flow_') && (input.type !== 'radio' || input.checked)).map(input => [input.name.slice(5), input.multiple ? selectedRefs(input) : input.value])) }
-    : Object.fromEntries([...form.elements].filter(input => input.name && !input.name.startsWith('flow_')).map(input => [input.name, input.value]));
+  const complete = () => active?.session.step === 'complete';
+  const values = () => ({ ...active.proposal, ...Object.fromEntries([...form.elements]
+    .filter(input => input.name.startsWith('flow_') && (input.type !== 'radio' || input.checked)).map(input => [input.name.slice(5), input.multiple ? selectedRefs(input) : input.value])) });
   const snapshot = () => active ? { ...structuredClone(active), proposal: values(), open: dialog.open } : null;
   const guidance = localGuidance({
-    context: () => active && dialog.open && !busy && (branching() ? active.session.step === 'nextAction' : active.session.step < 3) ? {
-      question: branching() ? 'What is one concrete next action?' : questions[active.session.step][1], limit: branching() || active.session.step === 1 ? 200 : 4000,
+    context: () => active && dialog.open && !busy && active.session.step === 'nextAction' ? {
+      question: 'What is one concrete next action?', limit: 200,
       task: { title: active.item.title, description: active.item.description || '', originalText: active.item.originalText || active.item.title },
       acceptedAnswers: active.session.answers, proposedAnswer: values().text
     } : null,
-    use(text) { const input = form.elements[branching() ? 'flow_text' : 'text']; input.value = text; input.focus(); void journal(); }
+    use(text) { const input = form.elements.flow_text; input.value = text; input.focus(); void journal(); }
   });
   function drawFlow() {
     const { step, answers } = active.session, p = active.proposal, container = $('clarifyFlow');
@@ -131,34 +90,9 @@ export function clarificationUI({ records, save, journal, showDialog }) {
   }
   function draw() {
     $('clarifyRestart').hidden = !complete();
-    $('clarifyFlow').hidden = !branching(); $('clarifyBack').hidden = true;
-    if (branching()) {
-      $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
-      $('clarifyTask').textContent = `Current item: ${active.item.title}`;
-      for (const id of ['clarifyTextLabel', 'clarifyDisposition', 'clarifyDirect', 'clarifySkip']) $(id).hidden = true;
-      drawFlow(); $('clarifyError').hidden = true; $('clarifyDraftStatus').textContent = ''; $('clarifyQuestion').focus(); return;
-    }
-    $('clarifyFlow').replaceChildren(); $('clarifyAccept').textContent = 'Accept answer';
-    const step = active.session.step, question = questions[step];
-    $('clarifyHeading').textContent = question ? `Question ${step + 1} of ${questions.length}` : 'Clarification complete';
     $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
-    $('clarifyTask').textContent = `Current task: ${active.item.title}`;
-    $('clarifyQuestion').textContent = question?.[1] || 'Your decisions';
-    $('clarifyHelp').textContent = question?.[2] || 'Accepted decisions are saved below. Choose Clarify again to make new decisions using the current task.';
-    $('clarifyTextLabel').hidden = !question || step === 3;
-    $('clarifyDisposition').hidden = step !== 3;
-    $('clarifyDirect').hidden = step >= 3;
-    $('clarifyStop').textContent = question ? 'Stop for now' : 'Done';
-    $('clarifyAccept').hidden = $('clarifySkip').hidden = $('clarifySave').hidden = !question;
-    form.elements.text.maxLength = step === 1 ? 200 : 4000;
-    for (const [name, value] of Object.entries(active.proposal)) form.elements.namedItem(name).value = value;
-    $('clarifyAnswers').textContent = questions.map(([name, label]) => {
-      const answer = active.session.answers[name];
-      return `${label}\n${answer?.decision === 'accepted' ? (typeof answer.value === 'string' ? answer.value : Object.entries(answer.value).filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`).join('; ')) : answer ? 'Unknown — skipped' : 'Unknown — unanswered'}`;
-    }).join('\n\n');
-    $('clarifyError').hidden = true;
-    $('clarifyDraftStatus').textContent = '';
-    $('clarifyQuestion').focus();
+    $('clarifyTask').textContent = `Current item: ${active.item.title}`;
+    drawFlow(); $('clarifyError').hidden = true; $('clarifyDraftStatus').textContent = ''; $('clarifyQuestion').focus();
   }
   async function commit(choice) {
     if (busy || !active || (complete() ? choice !== 'restart' : choice === 'restart')) return;
@@ -167,39 +101,27 @@ export function clarificationUI({ records, save, journal, showDialog }) {
     const current = active, proposal = values(), focused = document.activeElement;
     [...form.elements].forEach(input => { input.disabled = true; });
     try {
-      if (branching()) {
-        if (choice === 'back' && !confirm('Go back and clear the preceding answer? Current unsaved wording will be discarded; task changes have not been applied.')) return;
-        const applying = choice === 'accepted' && current.session.step === 'summary';
-        const session = choice === 'restart' ? newFlow() : applying ? { ...current.session, step: 'complete', proposal: flowProposal() } : choice ? flowDecision(current.session, proposal, choice, current.item) : { ...current.session, proposal };
-        const { flowVersion, step, answers } = session, fields = { flowVersion, step, answers, proposal: session.proposal };
-        const mutations = [{ type: 'clarification', id: current.item.id, action: current.session.version ? 'update' : 'create', expectedVersion: current.session.version, fields }];
-        let edits = null;
-        if (applying) {
-          const deleting = answers.disposition.choice === 'trash';
-          if (!deleting) {
-            edits = flowEdits(answers);
-            if (answers.project?.choice === 'new') {
-              edits.projectId = crypto.randomUUID();
-              if (edits.collectionRefs) edits.collectionRefs = [...edits.collectionRefs, { type: 'project', id: edits.projectId }];
-              mutations.push({ type: 'project', id: edits.projectId, action: 'create', expectedVersion: 0, fields: { title: answers.project.projectTitle, outcome: answers.project.outcome, workspaceId: current.item.workspaceId || 'personal' } });
-            }
-          }
-          mutations.push({ type: 'item', id: current.item.id, action: deleting ? 'delete' : 'update', expectedVersion: current.item.version, ...(!deleting ? { fields: edits } : {}) });
-        }
-        const next = { item: { ...current.item, ...edits, version: current.item.version + (applying ? 1 : 0) }, session: { ...fields, version: current.session.version + 1 }, proposal: fields.proposal, open: true };
-        if (!await save(mutations, next) || active !== current) return;
-        active = next; draw(); $('clarifyDraftStatus').textContent = 'Saved on device — pending server confirmation.'; return;
-      }
-      const result = choice === 'restart' ? { session: { step: 0, answers: {}, proposal: emptyProposal() }, fields: null } : choice ? decision(current.session, proposal, choice) : { session: { ...current.session, proposal }, fields: null };
-      const { step, answers } = result.session;
-      const fields = { step, answers, proposal: result.session.proposal };
+      if (choice === 'back' && !confirm('Go back and clear the preceding answer? Current unsaved wording will be discarded; task changes have not been applied.')) return;
+      const applying = choice === 'accepted' && current.session.step === 'summary';
+      const session = choice === 'restart' ? newFlow() : applying ? { ...current.session, step: 'complete', proposal: flowProposal() } : choice ? flowDecision(current.session, proposal, choice, current.item) : { ...current.session, proposal };
+      const { flowVersion, step, answers } = session, fields = { flowVersion, step, answers, proposal: session.proposal };
       const mutations = [{ type: 'clarification', id: current.item.id, action: current.session.version ? 'update' : 'create', expectedVersion: current.session.version, fields }];
-      if (result.fields) mutations.push({ type: 'item', id: current.item.id, action: 'update', expectedVersion: current.item.version, fields: result.fields });
-      const next = { item: { ...current.item, ...result.fields, version: current.item.version + (result.fields ? 1 : 0) },
-        session: { ...fields, version: current.session.version + 1 }, proposal: fields.proposal, open: true };
+      let edits = null;
+      if (applying) {
+        const deleting = answers.disposition.choice === 'trash';
+        if (!deleting) {
+          edits = flowEdits(answers);
+          if (answers.project?.choice === 'new') {
+            edits.projectId = crypto.randomUUID();
+            if (edits.collectionRefs) edits.collectionRefs = [...edits.collectionRefs, { type: 'project', id: edits.projectId }];
+            mutations.push({ type: 'project', id: edits.projectId, action: 'create', expectedVersion: 0, fields: { title: answers.project.projectTitle, outcome: answers.project.outcome, workspaceId: current.item.workspaceId || 'personal' } });
+          }
+        }
+        mutations.push({ type: 'item', id: current.item.id, action: deleting ? 'delete' : 'update', expectedVersion: current.item.version, ...(!deleting ? { fields: edits } : {}) });
+      }
+      const next = { item: { ...current.item, ...edits, version: current.item.version + (applying ? 1 : 0) }, session: { ...fields, version: current.session.version + 1 }, proposal: fields.proposal, open: true };
       if (!await save(mutations, next) || active !== current) return;
-      active = next; draw();
-      $('clarifyDraftStatus').textContent = 'Saved on device — pending server confirmation. Close to see sync status.';
+      active = next; draw(); $('clarifyDraftStatus').textContent = 'Saved on device — pending server confirmation.';
     } catch (error) {
       if (active === current) { $('clarifyError').textContent = error.message; $('clarifyError').hidden = false; }
     } finally {
@@ -210,15 +132,13 @@ export function clarificationUI({ records, save, journal, showDialog }) {
   }
   form.addEventListener('input', () => { guidance.invalidate(); void journal(); });
   form.addEventListener('change', event => {
-    if (!branching() || event.target.name !== 'flow_choice') return;
+    if (event.target.name !== 'flow_choice') return;
     active.proposal = values(); drawFlow();
     const control = form.elements.flow_choice;
     if (control?.focus) control.focus(); else [...control || []].find(input => input.checked)?.focus();
     void journal();
   });
   form.addEventListener('submit', event => { event.preventDefault(); void commit('accepted'); });
-  $('clarifySkip').onclick = () => { void commit('skipped'); };
-  $('clarifyDirect').onclick = () => { void commit('disposition'); };
   $('clarifySave').onclick = () => { void commit(); };
   $('clarifyBack').onclick = () => { void commit('back'); };
   $('clarifyRestart').onclick = () => { void commit('restart'); };

@@ -15,7 +15,7 @@ choose a state and dates; ordinary lists and custom statuses continue to work.
 | Custom | Configured and historic values remain available; no automatic reinterpretation. |
 
 To file reference material, choose **Reference (non-actionable)** in Task details
-or Clarify's disposition (the earlier questions can be skipped). Find it under
+or answer No in Clarify and choose Reference. Find it under
 Your Work → All items → Status → reference, or All statuses; the same filters
 work within its list or project. Reference stays out of the default Incomplete
 items filter, Inbox, planned-day view, and newly started daily/weekly reviews,
