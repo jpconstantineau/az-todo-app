@@ -4,7 +4,7 @@ import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './works
 import { collectionMoveMutations } from './workspace-move.js?v=2';
 import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=2';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=4';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=5';
 import { clarificationUI } from './clarification.js?v=3';
 import { setupReviews } from './reviews.js?v=3';
 import { setupBriefs } from './briefs.js?v=3';
@@ -214,10 +214,7 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save remains with its original account.');
   state = saved; clearError(); render(); broadcast(); void sync();
 } });
-addTaskControls($('captureFields')); addTaskControls($('editFields'));
-capture.elements.projectId.closest('label').remove();
-capture.elements.areas.closest('label').remove();
-$('captureOptions').insertBefore(capture.elements.contexts.closest('label'), $('previewSplit'));
+addTaskControls($('editFields'));
 const editOrganizer = organizer($('editOrganizer'), {}, []);
 const primaryMemberships = document.createElement('details'), primarySummary = document.createElement('summary');
 primarySummary.textContent = 'Primary memberships (defaults and older apps)'; primaryMemberships.append(primarySummary, $('editListLabel'), edit.elements.projectId.closest('label')); $('editOrganizer').append(primaryMemberships);
@@ -238,7 +235,6 @@ edit.elements.kind.onchange = () => {
   $('editProjectLifecycle').hidden = editing.type !== 'project';
   $('editOutcomeLabel').hidden = editing.type !== 'project'; edit.elements.outcome.required = editing.type === 'project'; void journal();
 };
-capture.elements.status.closest('label').hidden = true;
 $('includeNested').onchange = () => { navigation.lists.nested = $('includeNested').checked; render(); void journal(); };
 
 for (const [name, title] of Object.entries(optionFields)) {
@@ -378,13 +374,12 @@ function options(select, lists, first, keepMissing = false) {
 function restoreDraft() {
   capture.reset(); edit.reset(); editing = null; originalInput = undefined;
   const saved = projected(state)['workspace:' + selectedWorkspace]?.deleted ? {} : currentDraft(state);
-  fillValues(capture, { ...saved.capture, listId: saved.capture?.projectId ? `project:${saved.capture.projectId}` : saved.capture?.listId });
+  fillValues(capture, saved.capture || {});
   originalInput = saved.capture?.original;
   extraction.restore(saved.extraction); restoreUtility(saved.collectionUtility);
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
-  // Preserve the former review filter when upgrading an existing device draft.
-  Object.assign(navigation.work, saved.navigation?.work || { view: saved.view || 'inbox', status: saved.status || '' });
+  Object.assign(navigation.work, saved.navigation?.work);
   Object.assign(navigation.lists, saved.navigation?.lists || {});
   Object.assign(navigation.execute, saved.navigation?.execute || {});
   $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
@@ -392,7 +387,7 @@ function restoreDraft() {
   // Keep unfinished list creation available through New list without opening it on arrival.
   if (saved.edit) openEditor(saved.edit, false, saved.editOpen === true && !(saved.edit.type === 'list' && saved.edit.version === 0));
   else $('editor').close();
-  if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen !== false);
+  if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen === true);
   refreshOptions(); render();
   reviews.restore(saved.review);
   clarification.restore(saved.clarification);
@@ -688,6 +683,9 @@ function addContextItem(target) {
   $('createdDestination').replaceChildren();
 }
 function openEditor(record, focus = true, show = true) {
+  if (record.fields && (!record.initialFields || typeof record.initialFields !== 'object' || Array.isArray(record.initialFields))) {
+    throw new Error('This editor draft has no saved baseline. Export a device copy before clearing unsupported development data.');
+  }
   if (focus && editing && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields) &&
       (editing.id !== record.id || editing.type !== record.type || editing.version !== record.version)) {
     showDialog($('editor'));
@@ -706,7 +704,8 @@ function openEditor(record, focus = true, show = true) {
   editing = { type: record.type, id: record.id, version: record.version, initialFields: record.initialFields };
   edit.reset();
   edit.querySelectorAll('details').forEach(section => { section.open = false; });
-  const fields = record.fields ? projected(state)[key(record)] || record.fields : record;
+  const fields = record.fields ? { ...record.fields, parentRef: record.fields.parentRef ? parseRef(record.fields.parentRef) : null,
+    status: record.type === 'project' ? record.fields.projectStatus : record.fields.status } : record;
   edit.elements.title.value = fields.title;
   edit.elements.description.value = fields.description || '';
   edit.elements.listId.value = fields.listId || '';
@@ -727,7 +726,7 @@ function openEditor(record, focus = true, show = true) {
     : 'Moving carries nested collections and linked items, including their history. Links to collections left behind are cleared.';
   refreshOptions();
   fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: record.type === 'item' ? memberships(fields) : [], dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: record.type === 'item' ? fields.status : 'inbox' });
-  editing.initialFields ??= formValues(edit);
+  editing.initialFields = record.fields ? structuredClone(record.initialFields) : formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
   $('editListLabel').hidden = record.type !== 'item';
   $('editAdvanced').hidden = record.type !== 'item';
@@ -862,7 +861,7 @@ edit.addEventListener('submit', event => {
     fields = { title: values.title, description: values.description,
       ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { workspaceId: values.workspaceId, parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
-    else if (editing.version > 0 && editing.initialFields) {
+    else if (editing.version > 0) {
       const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus } : {}) };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
       if (!Object.keys(fields).length) { void discardEdit(); return; }
