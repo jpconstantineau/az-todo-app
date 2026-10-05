@@ -25,8 +25,29 @@ function fixture() {
     after: 8, draft: { capture: { text: 'Saved unfinished draft' } }, queue: [{ operation, failure: 'Review competing edits',
       receipt: { apiVersion: 1, accountId: 'alice', operationId: 'pending-id', sequence: 8, status: 'conflict',
         records: [], proposed: [mutation], conflicts: [{ proposed: mutation, current: item }] } }] },
-  { capture: { text: 'Unpersisted current draft' }, edit: { fields: { description: 'Unsent edit' } } });
+  { capture: { text: 'Unpersisted current draft', body: '', listId: '', newList: '', contexts: [] },
+    edit: { type: 'item', id: 'milk', version: 2, initialFields: { title: 'Milk', description: 'Two cartons' }, fields: { title: 'Milk', description: 'Unsent edit' } } });
 }
+
+test('device exports retain current workspace drafts, editor baselines and undo without interpreting unsupported state', () => {
+  const value = fixture();
+  value.state.selectedWorkspace = 'work';
+  value.state.workspaceDrafts = { work: { ...structuredClone(value.draft), workspaceId: 'work', editOpen: false,
+    navigation: { work: { view: 'inbox', status: '' }, lists: { view: '', status: '' }, execute: { kind: 'list', view: '' } },
+    review: { active: 'review-one', selected: 1, deferUntil: '' } } };
+  value.state.undoEdit = { type: 'item', id: 'milk', title: 'Milk', expectedVersion: 3, operationId: 'pending-id', expiresAt: 1792000000000, fields: { description: 'Two cartons' } };
+  value.state.defaultSettings = { contexts: ['Home'] };
+  assert.deepEqual(validateDeviceExport(value).warnings, []);
+  const text = readableExport(value);
+  for (const expected of ['WORKSPACE DRAFTS', 'initialFields', 'review-one', 'LAST DEVICE EDIT RECOVERY', 'CACHED DEFAULTS']) assert.ok(text.includes(expected), expected);
+  value.draft.capture.futureOption = 'Preserve for recovery';
+  delete value.state.workspaceDrafts.work.edit.initialFields;
+  const before = structuredClone(value);
+  const warnings = validateDeviceExport(value).warnings;
+  assert.ok(warnings.some(warning => warning.includes('draft.capture.futureOption')));
+  assert.ok(warnings.some(warning => warning.includes('editor restore unsupported')));
+  assert.deepEqual(value, before);
+});
 
 test('portable export round-trips originals, relationships, tombstones, exact queue and both drafts', async t => {
   const value = fixture(), before = structuredClone(value);

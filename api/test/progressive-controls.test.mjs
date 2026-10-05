@@ -47,16 +47,15 @@ test('progressive controls keep capture and editor actions reachable without exp
   assert.equal(await page.locator('#capture [name=projectId], #capture [name=areas]').count(), 0);
   assert.equal(await page.locator('#captureOptions > summary').innerText(), 'Notes, list, or context');
   assert.equal(await page.locator('#capture [name=contexts]').isVisible(), true);
-  for (const name of ['dueLocal', 'waitingOn', 'energy', 'timeRequired']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), false);
+  for (const name of ['dueLocal', 'dueDate', 'waitingOn', 'energy', 'timeRequired']) assert.equal(await page.locator(`#capture [name=${name}]`).count(), 0);
   await page.locator('#capture [name=newList]').fill('Home');
-  assert.equal(await page.locator('#capture [name=status]').isVisible(), false);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Prepare the room');
-  await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=2');
-    await transact('alice', local => { local.draft.capture.dueDate = '2026-12-01'; });
-  });
+  assert.equal(await page.locator('#capture [name=status]').count(), 0);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.newList === 'Home');
   await page.reload(); await page.locator('#workspace').waitFor();
-  assert.equal(await page.locator('#capture [name=dueDate]').inputValue(), '2026-12-01', 'an existing draft retains its date after the UI moves');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Prepare the room');
+  assert.equal(await page.locator('#capture [name=newList]').inputValue(), 'Home');
+  const savedCapture = await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture);
+  assert.deepEqual(Object.keys(savedCapture).sort(), ['body', 'contexts', 'listId', 'newList', 'text']);
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await showView(page, 'work'); await page.locator('#view').selectOption('all');
@@ -65,6 +64,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   assert.equal(await page.locator('#edit [name=dueLocal]').isVisible(), false);
   await page.locator('#edit [name=status]').selectOption('waiting');
   assert.equal(await page.locator('#edit [name=waitingOn]').isVisible(), true);
+  await page.locator('#edit [name=dueDate]').fill('2026-12-01');
   await page.locator('#edit [type=submit]').click();
   assert.match(await page.locator('#editError').innerText(), /Waiting needs/);
   await page.locator('#edit [name=waitingOn]').fill('Alex');

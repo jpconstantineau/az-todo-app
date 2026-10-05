@@ -122,6 +122,9 @@ are retained. Additional metadata records `exportedAt`, `scope: "device"` and
 - `state.queue` retains exact operation IDs, expected versions, proposed fields,
   failures and conflict receipts, including competing server versions. A failed
   pending edit never replaces the confirmed record in the exported snapshot.
+- The [browser-state contract](browser-state.md) defines current session, account,
+  workspace and editor drafts. Unsupported draft fields are preserved with warnings;
+  a missing editor baseline is recovery data, not a restorable editor draft.
 - `state.draft` is the stored draft; top-level `draft` is the form at the moment
   export was requested, including text whose local save failed. Both are kept.
 - The remaining account state, including cached defaults and the change cursor,

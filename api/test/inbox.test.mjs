@@ -85,14 +85,6 @@ test('capture: one List selector includes projects and areas and saves the selec
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   const areaItem = records().find(record => record.title === 'Clear desk');
   assert.equal(areaItem.listId, 'home'); assert.equal(areaItem.projectId, null);
-  await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice', state => {
-    state.draft.capture = { text: 'Legacy project draft', listId: '', projectId: 'garage' };
-  }));
-  await page.reload(); await showView(page, 'capture');
-  assert.equal(await selector.inputValue(), 'project:garage');
-  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
-  assert.equal(records().find(record => record.title === 'Legacy project draft').projectId, 'garage');
 });
 
 test('inbox: groceries capture, offline editing/moving/completion, original input and mobile keyboard layout', { timeout: 90000 }, async t => {
@@ -175,15 +167,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v4')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v5')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=4', '/inbox-store.js?v=2', '/inbox-fields.js?v=2', '/inbox-export.js?v=4',
+    '/inbox.js?v=5', '/inbox-store.js?v=2', '/inbox-fields.js?v=2', '/inbox-export.js?v=5',
     '/collection-model.js?v=2', '/collections.js?v=2', '/workspace-move.js?v=2', '/workspaces.js?v=2',
     '/clarification.js?v=3', '/clarification-flow.js?v=2', '/reviews.js?v=3', '/briefs.js?v=3',
-    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=4',
-    '/pwa.js?v=4', '/manifest.json',
+    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=5',
+    '/pwa.js?v=5', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -405,7 +397,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const root = new URL('../../html/', import.meta.url);
   const nextAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('?v=1', '?v=4').replaceAll('?v=2', '?v=4').replaceAll('?v=3', '?v=4').replaceAll('shell-v3', 'shell-v4'),
+    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v5', 'shell-next'),
   ])));
   nextAssets.set('/', nextAssets.get('/index.html'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
@@ -452,7 +444,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   })).status, before.queue[0].operation), 503, 'the outage still applies under the newly active worker');
   assert.equal(records().length, 0, 'no pending write reached storage during the upgrade');
   await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Queued across upgrade', includeHidden: true }).waitFor({ state: 'attached' });
-  const offline = await page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
+  const offline = await page.evaluate(async () => (await import('/inbox-store.js?v=next')).transact('alice'));
   assert.deepEqual(offline.queue, before.queue);
   assert.deepEqual(offline.draft, before.draft);
   rejectOperations = false; await context.setOffline(false);

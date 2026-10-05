@@ -37,11 +37,10 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#capture [name=listId]').selectOption(list.id);
   await showView(page, 'capture'); await page.locator('#captureText').fill('<img src=x onerror=alert(1)>');
   await page.locator('#capture [name=body]').fill('Two cartons');
-  assert.equal(await page.locator('#capture [name=status]').isVisible(), false);
+  assert.equal(await page.locator('#capture [name=status]').count(), 0);
   await page.locator('#capture [name=contexts]').selectOption(['@Kitchen', '@Shop']);
   assert.equal(await page.locator('#capture [name=areas]').count(), 0);
-  assert.equal(await page.locator('#capture .task-dates').isVisible(), false);
-  assert.equal(await page.locator('#capture .task-metadata').isVisible(), false);
+  assert.equal(await page.locator('#capture .task-dates, #capture .task-metadata, #captureFields').count(), 0);
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   let item = records().find(r => r.type === 'item');
@@ -93,36 +92,32 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   assert.equal(item.originalText, '<img src=x onerror=alert(1)>');
   assert.deepEqual(records().find(r => r.type === 'list').defaults.contexts, ['@Offline']);
   assert.ok(records().find(r => r.type === 'settings').defaults.contexts.includes('@Home'));
-  // Pre-upgrade editor drafts have no initialFields or advanced controls.
-  await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=2');
-    await transact('alice', local => {
-      const record = Object.values(local.records).find(r => r.type === 'item');
-      local.draft.edit = { type: 'item', id: record.id, version: record.version,
-        fields: { title: 'Milk', description: 'Draft from the old client', listId: record.listId } };
-    });
-  });
+  // Restore an actual current draft, including its original comparison baseline.
+  await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
+  await page.locator('#edit [name=description]').fill('Unfinished current edit');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.description === 'Unfinished current edit');
+  const savedEdit = await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit);
+  assert.equal(savedEdit.initialFields.description, 'Two cartons');
+  await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.editOpen === false);
   await page.reload(); await page.locator('#workspace').waitFor();
   await page.locator('#resumeEdit').click(); await page.locator('#editor').waitFor();
+  assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Unfinished current edit');
   assert.equal(await page.locator('#edit [name=energy]').inputValue(), 'Low');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.editOpen === true);
+  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit), savedEdit);
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
-  assert.equal(records().find(r => r.type === 'item').description, 'Draft from the old client');
+  assert.equal(records().find(r => r.type === 'item').description, 'Unfinished current edit');
   assert.deepEqual(records().find(r => r.type === 'item').contexts, ['@Kitchen', '@Shop']);
-  // A migrated record can omit optional fields; don't show the previous editor's values.
+  // A fresh capture has empty metadata; don't show the previous editor's values.
   await showView(page, 'work'); await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
   assert.equal(await page.locator('#edit [name=energy]').inputValue(), 'Low');
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
-  await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=2');
-    await transact('alice', local => {
-      const record = Object.values(local.records).find(r => r.type === 'item');
-      record.version++;
-      record.title = 'Sparse Milk';
-      for (const field of ['contexts', 'areas', 'energy', 'priority', 'timeRequired']) delete record[field];
-    });
-    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
-  });
-  await showView(page, 'work'); await page.getByRole('button', { name: 'Edit Sparse Milk', exact: true }).click();
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Fresh Milk');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
+  await showView(page, 'work'); await page.locator('#statusFilter').selectOption('@all');
+  await page.getByRole('button', { name: 'Edit Fresh Milk', exact: true }).click();
   assert.equal(await page.locator('#edit [name=energy]').inputValue(), '');
   assert.deepEqual(await page.locator('#edit [name=contexts]').evaluate(control => [...control.selectedOptions].map(option => option.value)), []);
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();

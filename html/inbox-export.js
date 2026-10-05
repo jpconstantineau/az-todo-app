@@ -74,6 +74,18 @@ function validateExport(value, server = false) {
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
   unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace'], 'state');
+  const draft = (entry, path) => {
+    require(object(entry), `${path}: draft must be an object.`);
+    unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'collectionUtility', 'day', 'navigation', 'review', 'extraction'], path);
+    if (entry.capture) unknown(entry.capture, ['text', 'body', 'listId', 'newList', 'contexts', 'original'], `${path}.capture`);
+    if (entry.edit && !object(entry.edit.initialFields)) warnings.push(`${path}.edit: missing saved baseline; preserved for recovery, editor restore unsupported`);
+  };
+  draft(value.draft, 'draft');
+  draft(state.draft, 'state.draft');
+  if (state.workspaceDrafts !== undefined) {
+    require(object(state.workspaceDrafts), 'workspaceDrafts must be an object.');
+    for (const [id, entry] of Object.entries(state.workspaceDrafts)) draft(entry, `state.workspaceDrafts.${id}`);
+  }
   function record(entry, path) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
