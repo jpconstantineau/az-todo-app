@@ -84,9 +84,8 @@ patches, preserving precision and the original instant even in a repeated hour.
 
 No migration, backfill, partition change or reset is needed. Calendar fields and
 server-derived undo metadata are additive; original capture/source and stable
-IDs are unchanged. The existing migration tool preserves custom statuses and
-date values verbatim, including historic unparseable dates. Its backup/rollback
-path is unchanged and covered by a workflow preservation test. Unrelated edits
+IDs are unchanged. Current records preserve custom statuses and date values
+verbatim, including historic unparseable dates. Unrelated edits
 preserve those values; an explicit workflow change must supply valid required
 metadata. Derived `nextAction` is reconciled on the next live item write.
 
@@ -106,7 +105,7 @@ Cosmos substitute and Playwright on Windows. It covers invalid/atomic transition
 completion/reopening/undo (including undo back to completed), derived flags,
 stale-version conflicts, date validation, explicit DST offsets, spring-forward
 gaps, offline reload/reconnect and Honolulu/Auckland browser contexts. The existing
-project/day, migration, security, account isolation, responsive layout and shell
+project/day, recovery, security, account isolation, responsive layout and shell
 upgrade checks are retained. Real SWA/Cosmos, physical phone keyboards and screen
 reader verification remain unverified release gates.
 

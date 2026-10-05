@@ -1,15 +1,15 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=65';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=65';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=65';
-import { collectionMoveMutations } from './workspace-move.js?v=65';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=65';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=65';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=65';
-import { clarificationUI } from './clarification.js?v=65';
-import { setupReviews } from './reviews.js?v=65';
-import { setupBriefs } from './briefs.js?v=65';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=65';
-import { setupAgentStatus } from './local-agent.js?v=65';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=66';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=66';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=66';
+import { collectionMoveMutations } from './workspace-move.js?v=66';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=66';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=66';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=66';
+import { clarificationUI } from './clarification.js?v=66';
+import { setupReviews } from './reviews.js?v=66';
+import { setupBriefs } from './briefs.js?v=66';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=66';
+import { setupAgentStatus } from './local-agent.js?v=66';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -247,7 +247,7 @@ for (const [name, title] of Object.entries(optionFields)) {
   const input = document.createElement('textarea'); input.name = name; input.rows = 3;
   label.append(input); $('defaultsFields').append(label);
 }
-function userDefaults() { return { ...state.defaultSettings, ...(projected(state)['settings:settings']?.defaults ?? state.legacyDefaults) }; }
+function userDefaults() { return { ...state.defaultSettings, ...(projected(state)['settings:settings']?.defaults ?? {}) }; }
 function effectiveDefaults(listId) { return { ...userDefaults(), ...projected(state)[`list:${listId}`]?.defaults }; }
 function refreshOptions() {
   refreshTaskOptions(capture, effectiveDefaults(capture.elements.listId.value));
@@ -1232,7 +1232,7 @@ async function session({ allowOffline = false } = {}) {
     generation = accountGeneration;
     await transact(null, saved => { saved.accountId = identity.accountId; saved.paused = false; });
     const saved = await transact(identity.accountId, local => {
-      if (identity.defaultSettings) { local.defaultSettings = identity.defaultSettings; local.legacyDefaults = identity.legacyDefaults; }
+      if (identity.defaultSettings) local.defaultSettings = identity.defaultSettings;
     });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
     accountId = identity.accountId; state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL;

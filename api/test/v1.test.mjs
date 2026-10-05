@@ -358,6 +358,9 @@ test("v1 byte-bounded pages resume without dropping a large entry; oversized res
 test('v1 defaults are account-bound, repeat-safe, versioned and validated; custom statuses reopen safely', async t => {
   const f = await fixture(t);
   const { defaultSettings } = await import('../api/shared/defaults.mjs');
+  const session = (await f.request('session')).body;
+  assert.deepEqual(session.defaultSettings, defaultSettings);
+  assert.equal('legacyDefaults' in session, false);
   const defaults = { ...defaultSettings, statuses: ['next', 'custom'], contexts: ['@Kitchen'] };
   const createSettings = edit('settings-create', 'settings', 0, { defaults }, 'create', 'settings');
   faults.loseBatchResponse = true;
@@ -385,19 +388,4 @@ test('v1 defaults are account-bound, repeat-safe, versioned and validated; custo
   assert.equal((await f.post(createSettings, { user: 'bob' })).status, 409);
   assert.equal((await f.request('records?accountId=alice&type=settings&id=settings', { user: 'bob' })).status, 409);
   assert.equal((await f.post(edit('bogus-singleton', 'other', 0, { defaults }, 'create', 'settings'))).status, 400);
-});
-
-test('v1 archived and partial list defaults inherit without changing the archive', async t => {
-  const f = await fixture(t);
-  const { document } = await import('../api/v1/contract.mjs');
-  const archive = document('alice', 'legacy-settings', { kind: 'legacy-settings', settings: { defaults: { statuses: ['archived-custom'] } } });
-  documents.push(structuredClone(archive));
-  const session = (await f.request('session')).body;
-  assert.deepEqual(session.legacyDefaults, archive.settings.defaults);
-  assert.equal((await f.request('session', { user: 'bob' })).body.legacyDefaults, null);
-  assert.deepEqual(documents, [archive], 'session lookup is read-only');
-  await f.post(edit('legacy-list', 'partial', 0, { title: 'Imported list' }, 'create', 'list'));
-  documents.find(d => d.record?.id === 'partial').record.defaults = { priority: ['Historic'] };
-  assert.equal((await f.post(edit('legacy-item', 'legacy', 0, { title: 'Imported choice', listId: 'partial', status: 'archived-custom' }, 'create'))).status, 200);
-  assert.deepEqual(documents.find(d => d.id === 'legacy-settings'), archive);
 });

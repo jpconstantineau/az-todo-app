@@ -120,7 +120,7 @@ Coverage includes:
   waiting-worker notice and unchanged draft/outbox.
 - Upgrades from prior shells without mixed modules or changed queued intent; existing
   offline process restart, exactly-once reconnect, independent-client sync,
-  conflicts, isolation, security and migration checks.
+  conflicts, isolation, security and recovery checks.
 
 Screenshots: [phone dark](design/pwa/install-dark-390.png),
 [phone light](design/pwa/install-light-390.png),

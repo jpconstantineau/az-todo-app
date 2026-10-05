@@ -5,9 +5,8 @@ JSON API. It is disabled unless `V1_API_ENABLED=true`; a disabled API shows a cl
 error without choosing another store. Retired pre-v1 HTTP paths are unregistered
 and receive the platform's normal not-found response. Existing v1 records, outboxes
 and receipts remain compatible; no partition or database version changes are made.
-The owner reset legacy production data before cutover,
-so the migration tool below remains available for archived data rather than being
-a prerequisite for this empty-database release.
+The current v1 format is the only supported server format; retired migration
+tooling and archived-settings fallbacks are not part of the runtime or recovery path.
 
 ## Recoverable deletion (#13)
 
@@ -179,8 +178,8 @@ private/no-store headers from [Request security](request-security.md). JSON erro
 including 401/403, contain `apiVersion`, `error` and `message`. `HX-Request` is not
 authentication. There is no extension CORS exception or direct backend access.
 
-`GET /api/v1/session` returns `apiVersion`, `accountId`, built-in `defaultSettings`
-and any archived `legacyDefaults`. Store that account ID
+`GET /api/v1/session` returns `apiVersion`, `accountId` and built-in
+`defaultSettings`. Store that account ID
 with the local queue when capturing; never substitute a newly signed-in account
 when uploading old work. Every operation and every data read explicitly supplies
 its original `accountId`; the server compares it to the authenticated principal.
@@ -193,7 +192,7 @@ to discard a queued operation or assign it to someone else.
 
 | Method and route | Request | Success |
 | --- | --- | --- |
-| GET `v1/session` | No parameters | API version, authenticated account ID, `defaultSettings` and nullable archived `legacyDefaults` (read-only) |
+| GET `v1/session` | No parameters | API version, authenticated account ID and built-in `defaultSettings` |
 | POST `v1/operations` | JSON operation below | Durable committed receipt (200), or durable conflict receipt (409) |
 | GET `v1/records` | `accountId`, `type=list\|item\|project\|settings\|clarification`, `id` | Current record, including its version and deletion marker; absent IDs return 404 |
 | GET `v1/receipts` | `accountId`, `operationId` | Exact stored receipt (200), whose `status` may be `conflict`; absent receipts return 404 |
@@ -360,69 +359,37 @@ history, so measure storage/RU usage before pilot expansion. Replace this bounde
 pilot design if account volume approaches Cosmos logical-partition limits or
 contention becomes significant; do not silently prune retry receipts/tombstones.
 
-## Migration and rollback rehearsal
+## Current backup, restore and rollback rehearsal
 
 For live storage protocol checks (receipt replay, conflicts, account partitions,
 tombstones, paging and transactional rollback), run the
 [isolated Cosmos rehearsal](cosmos-rehearsal.md). It creates a fresh temporary
-database and records its results; it does not replace the migration/backup
-procedure below or certify deployed authentication.
-
-The offline tool never connects to Azure. Its inputs/outputs contain private data;
-keep them outside Git with the same access controls as a backup. It refuses to
-overwrite output files. It accepts `{formatVersion:1, documents:[...]}` containing
-the **complete, consistent** legacy export, including lists, items and settings.
-
-From `api/`:
-
-```text
-node scripts/migrate-v1.mjs prepare legacy-export.json prepared-v1.json
-node scripts/migrate-v1.mjs rollback prepared-v1.json restored-legacy.json
-node --experimental-test-module-mocks --test test/migration.test.mjs
-```
-
-`prepared-v1.json` contains the unmodified backup, canonical SHA-256 checksum,
-prepared `targetDocuments` and account/count report. Each migrated record begins
-at version 1 with an initial receipt and change entry. IDs, owners, custom status
-values, descriptions, links, dates, list defaults and other persisted fields are
-retained. Settings stay archived in each account's `legacy-settings` document. The session response exposes their defaults as the read-only fallback until the first versioned settings save. If original capture
-text never existed, the tool derives title/description text and marks it
-`originalTextProvenance:"persisted-legacy-title-description"`; it does not claim to
-recover keystrokes that were never stored. Existing original text stays exact.
-
-Owner/partition mismatches, duplicate identities, orphan references, unknown record
-types and records exceeding the limit stop preparation. Reconcile those from the
-backup explicitly; do not discard them. The rollback command verifies both backup
-and generated target against the checksum before reconstructing the legacy export.
-The checksum detects accidental changes; protect the manifest as well as the data.
-Cosmos service metadata/ETags will be regenerated on a real restore.
+database and records its results; it does not replace an Azure backup/restore
+rehearsal or certify deployed authentication. Backup artifacts and device exports
+contain private data; keep them outside Git with the same access controls as the
+live account.
 
 Staging/production procedure:
 
-1. Keep v1 disabled. Confirm #3's trusted ingress and two-account security gates.
-   Freeze legacy writes for the export/cutover window and take an Azure backup plus
-   a complete JSON export. Record the environment, timestamp, commit, counts and
-   backup restore point. A live multi-page export without a write freeze is not a
-   consistent backup.
-2. Prepare the export and retain its checksum/report. Restore the legacy backup
-   into an isolated clone first, then load `targetDocuments` using create-only
-   writes into an empty target with the same hierarchical partition/index settings.
-   Keep the API disabled throughout import. Never upsert into an active v1 store.
-3. Read back and compare every prepared document (excluding regenerated Cosmos
-   metadata), owner counts, initial sequences, links and original text. If import
-   is interrupted, discard/recreate the isolated target and import again. Partial
-   imports must never serve requests. No live migration has been run by this PR.
-4. Enable v1 only in that isolated environment. Exercise the v1 fixture, lost
+1. Pause v1 writes and take a consistent Azure backup of the current container.
+   Record the environment, timestamp, candidate commit, container configuration,
+   account counts and restore point. Export each device copy separately so unsent
+   drafts and queued operations are not lost.
+2. Restore the backup into an isolated target with the same hierarchical partition
+   and index settings. Keep its API disabled until the restore is complete; never
+   import or upsert backup data into an active v1 store.
+3. Read back and compare owners, current records, tombstones, receipts, change rows,
+   state sequences and stored fields. If restore is interrupted, discard/recreate
+   the isolated target and restore again. Partial restores must never serve requests.
+4. Enable the matching v1 API only in that isolated environment. Exercise lost
    acknowledgements, concurrent edits/reference races, bounded pages and a stale
    edit after deletion against **real Cosmos** with two authenticated accounts.
    Inspect actual API headers and RU/latency. Verify the durable inbox from #5
-   before choosing a production cutover; verify that all old mutation paths remain blocked regardless of the obsolete client flag.
-5. Rehearse rollback while writes remain frozen. Disable v1, reconstruct and
-   restore the verified legacy export/backup into another isolated target, and
-   compare application fields/owners/counts before repointing the old release.
-   After v1 has accepted new writes, an old backup alone loses that new work:
-   export and retain the v1 records/history/receipts and reconcile them before a
-   rollback. Do not claim an automatic lossless downgrade after cutover.
+   before choosing a production restore or cutover.
+5. Rehearse application rollback with a known compatible API/client pair while
+   writes remain frozen. Preserve all newer v1 records, history, receipts and device
+   queues before changing deployments. An older database backup alone loses newer
+   work; reconcile it explicitly rather than claiming an automatic lossless rollback.
 
 ## Evidence and remaining gates
 
@@ -432,13 +399,10 @@ substitute, rollback injection at every batch position, lost acknowledgements,
 simultaneous duplicate writes/edits and membership/deletion races, immutable moves,
 tombstones, paging bounded by both entry count and bytes,
 account switching/expiry, malformed input and the native desktop/390px browser flow.
-The migration test runs both CLI commands, checks checksum/round-trip equality,
-loads the prepared fixture into the isolated test store, and edits/reads migrated
-records through the production service.
 
 These checks do not certify actual Cosmos transaction responses, consistency,
 partition/index configuration, Azure backup restoration, deployed authentication,
-or a production client cutover. Keep #4 open until the real staging migration,
+or a production client cutover. Keep #4 open until the real staging restore,
 rollback and data API evidence is recorded, alongside #3/#17 deployment gates.
 
 ## Additive defaults contract (issue #25)
@@ -455,13 +419,13 @@ the form and saved explicitly; retries cannot recalculate against newer defaults
 Settings use the same account partition, receipts, change entries, expected versions
 and conflicts as items. Older inbox clients ignore unfamiliar settings records and
 continue to handle task records; do not downgrade the server after settings writes.
-The existing `legacy-settings` archive is never overwritten by GETs or settings
-saves. Missing fields in historical defaults inherit built-ins in the client.
+Built-in defaults are the base; the current versioned settings record overrides
+them when present. Lists without an override inherit those effective user defaults.
 
 No IndexedDB schema change or record rewrite is required. The session's built-in
-options and archived defaults are cached inside the existing account document for
-offline editing. The first settings save becomes an ordinary change-feed record.
-Existing pending operation IDs/content and migration checksums remain unchanged.
+options are cached inside the existing account document for offline editing. The
+first settings save becomes an ordinary change-feed record. Existing pending
+operation IDs and content remain unchanged.
 
 ## Review sessions
 
@@ -477,8 +441,8 @@ tombstone. See [review behavior, contract and recovery limits](reviews.md).
 ## Read-only account export
 
 `GET /api/v1/export?accountId=...&after=0&limit=50` returns an ordinary bounded
-change page and immutable `legacyDefaults` on the first page. Capture `highWater`
-and supply it as `through` on every continuation, with `after=nextAfter`.
+change page. Capture `highWater` from the first page and supply it as `through` on
+every continuation, with `after=nextAfter`.
 `after > 0` requires `through`; both are safe non-negative integers and `limit`
 is 1–50. The returned `highWater` stays at that cutoff and `hasMore` indicates
 remaining entries through it, even when new writes advance the account state.
@@ -492,7 +456,7 @@ no new documents, writes or sync protocol changes. A cutoff beyond visible
 history returns `409 snapshot_unavailable`, an `after` beyond the cutoff returns
 `409 cursor_ahead`, and a missing intermediate entry returns `503 history_gap`.
 Do not publish a partial export on any error. A reset/restored database must not
-reuse history sequences with different contents; the existing migration and
-rollback restrictions apply. Real Cosmos consistency remains a deployment gate.
+reuse history sequences with different contents; the backup/restore restrictions
+above apply. Real Cosmos consistency remains a deployment gate.
 
 See [export formats, browser bounds and recovery limits](device-export.md).

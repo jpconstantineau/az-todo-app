@@ -100,8 +100,8 @@ independent-client session consistency. Scenario elapsed times are diagnostics,
 not representative latency/RU/capacity measurements for #27.
 
 The new container's index policy is recorded; this does not inspect or certify the
-deployed container's configuration. Legacy migration, Azure backup restoration,
+deployed container's configuration. Azure backup restoration,
 post-backup writes, device-queue recovery, and rollback remain separate checks in
-[the data API procedure](data-api-v1.md#migration-and-rollback-rehearsal).
+[the data API procedure](data-api-v1.md#current-backup-restore-and-rollback-rehearsal).
 Keep #4/#17 open until those gates and actual isolated Cosmos evidence pass.
 No live Cosmos run is claimed by adding this tool.

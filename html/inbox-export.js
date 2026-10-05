@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=65';
+import { readableBrief } from './briefs.js?v=66';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
@@ -31,7 +31,7 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
-  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'legacyDefaults', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace'], 'state');
+  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace'], 'state');
   function record(entry, path) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
@@ -100,7 +100,6 @@ export async function accountExport(accountId, request, { signal, onProgress = (
     // ponytail: bound browser memory/work; use a streaming export for larger histories.
     transferred += new TextEncoder().encode(JSON.stringify(page)).length;
     if (transferred > 50 * 1024 * 1024) throw new Error('Server history exceeds the 50 MiB browser export limit. No partial file was downloaded. Export a device copy and contact support for a full export.');
-    if (state.after === 0) state.legacyDefaults = page.legacyDefaults ?? null;
     for (const entry of page.entries) {
       if (!object(entry) || entry.accountId !== accountId || entry.apiVersion !== 1 || entry.sequence !== state.after + 1 ||
           !['committed', 'conflict'].includes(entry.status) || !Array.isArray(entry.records) ||
@@ -144,10 +143,7 @@ export function readableExport(value) {
     if (!records.length) lines.push('(none)');
     for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`, record.type === 'brief' && record.content ? readableBrief(record) : fields(record));
   }
-  if (server) {
-    lines.push('', 'LEGACY DEFAULTS', JSON.stringify(value.state.legacyDefaults, null, 2));
-    return lines.join('\n') + '\n';
-  }
+  if (server) return lines.join('\n') + '\n';
   lines.push('', 'PENDING SAVES (not server-confirmed)');
   if (!value.state.queue.length) lines.push('(none)');
   for (const entry of value.state.queue) {
@@ -161,7 +157,6 @@ export function readableExport(value) {
     '', 'SAVED DEVICE DRAFT (may differ from current form)', JSON.stringify(value.state.draft, null, 2));
   if (value.state.workspaceDrafts) lines.push('', 'WORKSPACE DRAFTS (not submitted)', JSON.stringify(value.state.workspaceDrafts, null, 2));
   if (value.state.undoEdit) lines.push('', 'LAST DEVICE EDIT RECOVERY (not a restore instruction)', JSON.stringify(value.state.undoEdit, null, 2));
-  if (value.state.defaultSettings || value.state.legacyDefaults) lines.push('', 'CACHED DEFAULTS',
-    JSON.stringify({ defaultSettings: value.state.defaultSettings, legacyDefaults: value.state.legacyDefaults }, null, 2));
+  if (value.state.defaultSettings) lines.push('', 'CACHED DEFAULTS', JSON.stringify(value.state.defaultSettings, null, 2));
   return lines.join('\n') + '\n';
 }

@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { documents, startServer } from './harness.mjs';
-import { document } from '../api/v1/contract.mjs';
 import { accountExport, validateAccountExport, validateDeviceExport, readableExport } from '../../html/inbox-export.js';
 import capture from './fixtures/v1-operations.json' with { type: 'json' };
 
@@ -38,10 +37,10 @@ test('account export pins history across pages and concurrent writes, keeps tomb
   assert.equal((await f.edit('milk', 1, { title: 'Milk at cutoff' })).status, 200);
   assert.equal((await f.edit('bread', 1, undefined, 'delete')).status, 200);
   assert.equal((await f.edit('milk', 1, { title: 'Stale proposal' }, 'update')).status, 409);
-  documents.push(document('alice', 'legacy-settings', { kind: 'legacy-settings', settings: { defaults: { contexts: ['Home'] } } }));
   let calls = 0;
   const value = await accountExport('alice', async path => {
     const page = await f.get(path.replace('limit=50', 'limit=1'));
+    assert.equal('legacyDefaults' in page, false);
     if (++calls === 1) assert.equal((await f.edit('milk', 2, { title: 'Newer than cutoff' })).status, 200);
     return page;
   });
@@ -50,7 +49,6 @@ test('account export pins history across pages and concurrent writes, keeps tomb
   assert.equal(value.state.records['item:milk'].title, 'Milk at cutoff');
   assert.equal(value.state.records['item:milk'].originalText, '  milk\n');
   assert.equal(value.state.records['item:bread'].deleted, true);
-  assert.deepEqual(value.state.legacyDefaults, { contexts: ['Home'] });
   assert.deepEqual(validateAccountExport(value), { records: 4, pendingOperations: 0, warnings: [] });
   assert.throws(() => validateDeviceExport(value), /unsupported format/);
   assert.match(readableExport(value), /Server history cutoff: 4/);

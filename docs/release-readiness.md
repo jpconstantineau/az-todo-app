@@ -69,7 +69,7 @@ the deployed candidate, not the separate local regression run.
 | Phone/desktop PWA #14 | `pwa.test.mjs`, `pwa-assets.test.mjs`, [device checklist](pwa-installation.md) | Physical Android/iPhone/desktop install, auth return, offline reopen, interrupted update and retained queue | UNVERIFIED |
 | HashiCorp styling #15/#26 | `design.test.mjs`, `navigation.test.mjs`, `mobile-workflow.test.mjs`, [design evidence](design/workspace.md) | Light/dark/system, 320/390/768/1440/2560px, 200% zoom, selected/focus/error states | UNVERIFIED |
 | Security and account isolation #3 | `security.test.mjs`, [Azure checks](request-security.md#remaining-azure-verification-gate) | Real SWA accounts, forged ingress, exact origins, foreign references, success/error cache headers | UNVERIFIED |
-| Repeat-safe protocol/backup #4/#27 | `v1.test.mjs`, `migration.test.mjs`, `account-sync.test.mjs`, [protocol/recovery](data-api-v1.md) | Real Cosmos concurrency, lost acknowledgements, backup restore and rollback with post-backup writes | UNVERIFIED |
+| Repeat-safe protocol/backup #4/#27 | `v1.test.mjs`, `account-export.test.mjs`, `account-sync.test.mjs`, [protocol/recovery](data-api-v1.md) | Real Cosmos concurrency, lost acknowledgements, backup restore and rollback with post-backup writes | UNVERIFIED |
 
 ## Reproducible candidate run
 
@@ -128,14 +128,14 @@ separate rows; phone operation must not depend on either feature.
 - Export device-only drafts/outbox as well as server data. Validate exports with
   the existing [round-trip tool](device-export.md). A device snapshot is not proof
   of complete account coverage, server backup or automated restore capability.
-- Rehearse [backup/import/rollback](data-api-v1.md) in an isolated target. Compare
+- Rehearse [backup/restore/rollback](data-api-v1.md) in an isolated target. Compare
   owners, IDs, original text, links, versions, tombstones, receipts/history and
   cursors. Include writes after the backup and stale device queues. Restore must
-  not resurrect erased accounts. Legacy rehearsal must not reset current v1 data.
+  not resurrect erased accounts or reset current v1 data.
 - Record a known compatible API/client SHA and deployment settings before rollout.
   For rollback, preserve all newer records and queues, verify compatibility in
-  staging, then redeploy that pair. Disabling v1 pauses sync; it does not re-enable
-  legacy writes. Never treat a browser-storage clear or stale backup as rollback.
+  staging, then redeploy that pair. Disabling v1 pauses sync. Never treat a
+  browser-storage clear or stale backup as rollback.
 - Measure representative small/large accounts, cold/warm capture and reads,
   catch-up pagination and competing-device writes. Record sample counts, p50/p95
   latency, RU/request, retries/429/503, bytes/pages and history/storage growth.
