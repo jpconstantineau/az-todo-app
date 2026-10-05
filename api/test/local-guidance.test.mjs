@@ -12,7 +12,7 @@ test('local guidance accepts only bounded text suggestions, never record fields'
   for (const raw of ['not json', 'null', '[]', '{"text":2}', '{"text":" "}', '{"text":"Okay","status":"done"}', JSON.stringify({ text: 'a'.repeat(201) }), 'a'.repeat(24001)]) assert.throws(() => validateSuggestion(raw, 200));
 });
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
 async function setup(t, mode = {}) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -47,7 +47,7 @@ async function setup(t, mode = {}) {
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   // Preserve coverage for guidance in an existing, pre-upgrade questionnaire.
   await page.evaluate(async () => {
-    const { transact, enqueue } = await import('/inbox-store.js');
+    const { transact, enqueue } = await import('/inbox-store.js?v=1');
     await transact('alice', local => {
       const item = Object.values(local.records).find(record => record.type === 'item');
       enqueue(local, 'alice', [{ type: 'clarification', id: item.id, action: 'create', expectedVersion: 0,
@@ -98,7 +98,7 @@ test('local suggestion stays separate until chosen, journals offline, reloads an
   }
   await page.locator('#guidanceUse').click();
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Coverage in place');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification.proposal.text === 'Coverage in place');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification.proposal.text === 'Coverage in place');
   assert.equal((await local(page)).queue.length, 0);
   await page.reload(); await page.locator('#clarifier').waitFor();
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Coverage in place');

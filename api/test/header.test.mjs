@@ -40,7 +40,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=66')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -156,7 +156,7 @@ test('unavailable agent has stroke-wide circle clearance and keeps its size when
     return { gap: circle.r.baseVal.value - stroke / 2 - radius, stroke };
   });
   assert.ok(clearance.gap >= clearance.stroke, JSON.stringify(clearance));
-  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=66')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=1')).checkModel(); });
   await agentStatus(page, 'available');
   assert.deepEqual(await robot.boundingBox(), unavailableBounds);
   assert.equal(await page.locator('.agent-unavailable').isVisible(), false);
@@ -167,7 +167,7 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=66').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=1').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');

@@ -6,7 +6,7 @@ import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { showView, clickControl } from './navigation-helper.mjs';
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 async function setup(t, ai = false, seeds = []) {
   documents.length = 0; let user = 'alice';
@@ -41,7 +41,7 @@ async function createSpace(page, title) {
 }
 async function switchTo(page, id) {
   await page.locator('#workspaceSelect').selectOption(id);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js')).transact('alice')).selectedWorkspace === id, id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=1')).transact('alice')).selectedWorkspace === id, id);
 }
 async function capture(page, text) {
   await showView(page, 'capture'); await page.locator('#captureText').fill(text);
@@ -247,8 +247,8 @@ test('workspaces: another device deletes a workspace while offline capture keeps
   await switchTo(page, 'personal'); await capture(page, 'Unrelated Personal work');
   assert.equal((await local(page)).queue.length, 2, 'blocked queue preserves later work without assigning it to the deleted space');
   const copy = await page.evaluate(async () => {
-    const { deviceExport, readableExport } = await import('/inbox-export.js');
-    const state = await (await import('/inbox-store.js')).transact('alice');
+    const { deviceExport, readableExport } = await import('/inbox-export.js?v=1');
+    const state = await (await import('/inbox-store.js?v=1')).transact('alice');
     return readableExport(deviceExport('alice', state, {}));
   });
   assert.match(copy, /Recover this offline report/);

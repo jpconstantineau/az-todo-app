@@ -61,8 +61,9 @@ custom status settings, date semantics, atomic project creation, stale/deleted a
 foreign records, lost acknowledgements, legacy-version protection, Back,
 offline stop/reload/resume, storage failure, workspace/account switches, and Trash
 restoration. The existing clarification/local-guidance tests explicitly start
-legacy sessions to preserve upgrade coverage. Navigation and keyboard tests exercise
-the new flow. Shell upgrade tests preserve exact operations from earlier shells.
+legacy sessions to preserve clarification compatibility. Navigation and keyboard
+tests exercise the new flow. The shell upgrade test preserves an exact operation
+from the release baseline to the next shell.
 
 Screenshots in `docs/design/gtd-clarification` cover the new decision panel.
 Physical devices, spoken screen readers and production Cosmos/SWA behavior require

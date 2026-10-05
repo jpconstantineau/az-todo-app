@@ -11,11 +11,11 @@ substitute. It does not exercise Azure authentication or a deployed Cosmos accou
 | --- | --- |
 | Native feature parity | Pass: capture, empty lists/notes, task edits/moves, optional fields, custom status filter, completion/reopen, defaults save/reset/copy. See [parity matrix](../task-flow.md). |
 | Durable intent | Pass: offline edits/reload, persistent browser close/reopen, lost acknowledgements, duplicate saves, bounded queues, failed transactions and recovery/export. |
-| Upgrade preservation | Pass: old-worker/new-module isolation, failed worker install, delayed activation with old tabs, retained drafts and unchanged queued operation IDs; old editor drafts retain typed edits and existing optional fields. |
+| Upgrade preservation | Pass: release-baseline/next-module isolation, failed worker install, delayed activation with an open tab, retained drafts and unchanged queued operation IDs; old editor drafts retain typed edits and existing optional fields. |
 | Multiple clients | Pass: separate browser contexts retrieve 52 records across change pages; concurrent defaults edits preserve both proposals and require explicit resolution. Existing competing-tab and task conflict checks pass. |
 | Security/isolation | Pass in local harness: authenticated principal, exact origin, account ownership, no-store responses, malicious title rendering, logout/account-switch queue isolation and current-mutation route coverage. |
 | Current data compatibility | Pass: stable IDs, complete field/original/link preservation, account export round trips, built-in/versioned defaults and historical custom-status reopening. |
-| Shell and retirement | Pass: canonical root, inbox bookmark alias, explicit v1 gate states, retired-path not-found responses, offline reopen and cache inspection; runtime/dependency audit finds no HTMX. Only public shell assets are cached. |
+| Shell and retirement | Pass: canonical root, explicit v1 gate states, retired-path not-found responses, offline reopen and cache inspection; runtime/dependency audit finds no HTMX. Only public shell assets are cached. |
 | Layout/appearance | Pass in automated Edge viewports: 320/390/393/768/1366/1440/2560px, 200% reflow equivalent, reduced keyboard viewport, light/dark/system, dialog focus and keyboard saves. Minimum sampled text contrast: light 4.95:1, dark 4.59:1. |
 
 The native parity test covers Regina local/UTC date conversion and clearing;

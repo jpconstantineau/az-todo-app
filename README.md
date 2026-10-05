@@ -43,7 +43,7 @@ flowchart LR
 - [PWA installation, safe updates and device verification](docs/pwa-installation.md)
 - [Design reference](DESIGN.md)
 
-The canonical entry is `/`; `/inbox.html` remains a bookmark alias. Set the backend
+The canonical entry is `/`. Set the backend
 `V1_API_ENABLED=true`, configure `APP_ORIGIN` for the exact environment origin and
 retain the existing Cosmos connection settings. Retired pre-v1 HTTP paths are not
 registered. Disabling v1 shows an unavailable error; it never falls back to another

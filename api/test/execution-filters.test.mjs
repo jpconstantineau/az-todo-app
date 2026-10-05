@@ -93,7 +93,7 @@ test('List Workspace filters combine, reset, stay offline and isolate accounts/w
   assert.equal((await rows()).length, 7, 'Process does not apply execution limits');
   await showView(page, 'lists'); assert.deepEqual(await rows(), ['custom', 'home', 'unknown']);
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=1')).transact('alice');
     return local.draft.navigation?.lists.energy === 'low';
   });
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
@@ -116,7 +116,7 @@ test('List Workspace filters combine, reset, stay offline and isolate accounts/w
       await page.screenshot({ path: `${process.env.EXECUTION_FILTER_SCREENSHOTS}/filters-${width}.png` });
     }
   }
-  const local = await page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
+  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
   assert.deepEqual(local.queue, []); assert.deepEqual(documents, before, 'filters never mutate tasks');
   user = 'bob'; await context.setOffline(false); await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'lists');

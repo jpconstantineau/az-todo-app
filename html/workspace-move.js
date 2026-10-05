@@ -1,4 +1,4 @@
-import { isCollection, memberships, refKey } from './collection-model.js';
+import { isCollection, memberships, refKey } from './collection-model.js?v=1';
 
 export function collectionMoveMutations(record, workspaceId, records, fields) {
   const moving = new Set([refKey(record)]);
