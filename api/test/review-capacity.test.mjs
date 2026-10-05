@@ -13,9 +13,9 @@ const create = (type, id, fields) => ({ type, id, action: 'create', expectedVers
 const update = (record, fields) => ({ type: record.type, id: record.id, action: 'update', expectedVersion: record.version, fields });
 const op = mutations => ({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations });
 function decision(session, item, index, choice, fields) {
-  const id = crypto.randomUUID(), sequence = (session.decisionCount || 0) + 1;
+  const id = crypto.randomUUID(), sequence = session.decisionCount + 1;
   const before = item ? workflowSnapshot(item) : {}, after = item ? workflowSnapshot({ ...item, ...fields }) : {};
-  const decisionHeads = session.decisionHeads ? [...session.decisionHeads] : session.included.map(() => null);
+  const decisionHeads = [...session.decisionHeads];
   decisionHeads[index] = id;
   return op([update(session, { decisionHeads, decisionCount: sequence }), create('reviewDecision', id, {
     reviewId: session.id, sequence, index, choice, recordVersion: item?.version || 0, before,
@@ -45,7 +45,12 @@ test('200-item review finishes with maximum-length IDs, waiting text, undo and r
   for (let i = 0; i < 200; i += 10) await f.commit(op(included.slice(i, i + 10).map(({ id }, offset) => create('item', id, {
     title: `Task ${i + offset}`, status: 'waiting', waitingOn: i + offset === 199 ? '界'.repeat(4000) : 'Supplier'
   }))));
-  await f.commit(op([create('review', 'large', { reviewKind: 'weekly', reviewDay: '2026-10-03', included, decisions: [] })]));
+  await f.commit(op([create('review', 'large', { reviewKind: 'weekly', reviewDay: '2026-10-03', included,
+    decisionHeads: included.map(() => null), decisionCount: 0 })]));
+  let created = records()['review:large'];
+  assert.equal('decisions' in created, false);
+  assert.deepEqual(created.decisionHeads, included.map(() => null));
+  assert.equal(created.decisionCount, 0);
   for (const [index, ref] of included.entries()) {
     const state = records(), item = state[`item:${ref.id}`];
     await f.commit(decision(state['review:large'], item, index, 'retain', { title: item.title }));
@@ -79,7 +84,7 @@ test('200-item review finishes with maximum-length IDs, waiting text, undo and r
 test('separate decisions preserve atomicity, retries, immutability, exact snapshots and workspace/account isolation', async t => {
   const f = await fixture(t);
   await f.commit(op([create('workspace', 'work', { title: 'Work' }), create('item', 'task', { title: 'Task', workspaceId: 'work' })]));
-  await f.commit(op([create('review', 'weekly', { reviewKind: 'weekly', reviewDay: '2026-10-03', workspaceId: 'work', included: [{ type: 'item', id: 'task' }], decisions: [] })]));
+  await f.commit(op([create('review', 'weekly', { reviewKind: 'weekly', reviewDay: '2026-10-03', workspaceId: 'work', included: [{ type: 'item', id: 'task' }], decisionHeads: [null], decisionCount: 0 })]));
   const state = records(), operation = decision(state['review:weekly'], state['item:task'], 0, 'drop', { status: 'dropped' });
   for (const remove of [0, 1, 2]) {
     const invalid = structuredClone(operation); invalid.mutations.splice(remove, 1);
@@ -98,7 +103,7 @@ test('separate decisions preserve atomicity, retries, immutability, exact snapsh
   assert.equal((await f.post(op([update(history, operation.mutations[1].fields)]))).status, 400);
   assert.equal((await f.post(op([{ type: history.type, id: history.id, action: 'delete', expectedVersion: 1 }]))).status, 400);
   let latest = records();
-  assert.equal((await f.post(op([update(latest['review:weekly'], { decisions: [] })]))).status, 400, 'old clients cannot overwrite new history');
+  assert.equal((await f.post(op([update(latest['review:weekly'], { decisions: [] })]))).status, 400, 'inline history is rejected');
   const undo = decision(latest['review:weekly'], latest['item:task'], 0, 'undo', history.before);
   await f.commit(op([update(latest['item:task'], { title: 'Changed elsewhere' })]));
   assert.equal((await f.post(undo)).body.status, 'conflict');
@@ -107,29 +112,6 @@ test('separate decisions preserve atomicity, retries, immutability, exact snapsh
   f.user('bob');
   assert.equal((await fetch(f.url + `/api/v1/records?accountId=bob&type=reviewDecision&id=${history.id}`)).status, 404);
   assert.equal((await f.post(operation)).status, 409);
-});
-
-test('a legacy review at its byte limit resumes without rewriting history', async t => {
-  const f = await fixture(t), included = Array.from({ length: 200 }, (_, i) => ({ type: 'item', id: `task-${i}` }));
-  for (let i = 0; i < 200; i += 20) await f.commit(op(included.slice(i, i + 20).map(ref => create('item', ref.id, { title: ref.id, status: 'next' }))));
-  await f.commit(op([create('review', 'legacy', { reviewKind: 'weekly', reviewDay: '2026-10-03', included, decisions: [] })]));
-  let stopped;
-  for (const [index, ref] of included.entries()) {
-    const state = records(), session = state['review:legacy'], item = state[`item:${ref.id}`];
-    const response = await f.post(op([update(session, { decisions: [...session.decisions, { index, choice: 'retain', recordVersion: item.version, before: workflowSnapshot(item), after: workflowSnapshot(item) }] }), update(item, { title: item.title })]));
-    if (response.status === 400) { stopped = index; break; }
-    assert.equal(response.status, 200);
-  }
-  assert.ok(stopped > 0 && stopped < 200);
-  const preserved = records()['review:legacy'].decisions;
-  for (let index = stopped; index < 200; index++) {
-    const state = records(), item = state[`item:${included[index].id}`];
-    await f.commit(decision(state['review:legacy'], item, index, 'retain', { title: item.title }));
-  }
-  const state = records();
-  assert.deepEqual(state['review:legacy'].decisions, preserved);
-  assert.equal(reviewHistory(state['review:legacy'], state).length, 200);
-  await f.commit(decision(state['review:legacy'], state['item:task-0'], 0, 'undo', { title: 'task-0' }));
 });
 
 test('more than 200 records continue in bounded review batches, survive offline reload and resume on another device', { timeout: 120000 }, async t => {

@@ -62,8 +62,9 @@ Review records cannot be deleted through ordinary operations to bypass history.
 ## Persistence and conflicts
 
 `review` records use the existing account partition. Create fields are
-`reviewKind`, `reviewDay`, `included: [{type,id}]`, empty `decisions`, and optional
-`previousReviewId` for a continuation in the same workspace, kind and day.
+`reviewKind`, `reviewDay`, `included: [{type,id}]`, a parallel `decisionHeads`
+array initialized with nulls, `decisionCount: 0`, and optional `previousReviewId`
+for a continuation in the same workspace, kind and day.
 Continuation IDs are a deterministic SHA-256 of the previous ID so concurrent
 starts conflict instead of duplicating the next batch.
 
@@ -97,25 +98,19 @@ Old decisions cannot resurrect deleted items.
 
 Decision records retain the 32 KiB cap; operations retain 64 KiB, and the device
 queue retains 100 saves / 5 MiB. Sync or export when the queue is full, then
-resume. Review metadata with separate history permits 64 KiB to fit 200 maximum
-length identities, 200 bounded decision IDs, and preserved legacy history. Its
-size no longer grows with repeated undo/redecision. No other record cap changes.
-
-Existing inline decisions remain immutable and visible. A nearly full old
-review resumes by appending separate decisions, including undo of an inline
-decision. Legacy appends still use the original 32 KiB / 200-entry limits; once
-a review uses separate history, old clients receive an update-app error instead
-of overwriting progress. Exports include every decision, session, pending
-operation and local draft in JSON and readable text.
+resume. Bounded review metadata permits 64 KiB to fit 200 maximum-length
+identities and 200 decision IDs. Its size does not grow with repeated
+undo/redecision. No other record cap changes. Exports include every immutable
+decision, session, pending operation and local draft in JSON and readable text;
+inline decision arrays are rejected.
 
 ## Verification and compatibility
 
 Run `npm test` from `api/` with Node 22.x and Playwright Chromium, or set
-`PLAYWRIGHT_CHANNEL=msedge` on Windows. `api/test/reviews.test.mjs` covers atomic
-rollback, duplicate delivery, immutable history, paired edits, version conflicts,
-undo limits, foreign references, concurrent decisions, deletion acknowledgement,
-empty reviews, offline reload, second-device resume, dropped-state recovery and
-account switching. `api/test/daily-review-deadlines.test.mjs` verifies whole-day
+`PLAYWRIGHT_CHANNEL=msedge` on Windows. `api/test/reviews.test.mjs` covers
+empty reviews, offline reload, second-device resume, undo, dropped-state recovery,
+concurrent decisions, deletion acknowledgement and account switching.
+`api/test/daily-review-deadlines.test.mjs` verifies whole-day
 deadline inclusion, local midnight boundaries, spring/fall DST transitions,
 unchanged waiting/deferred cues, and offline review resumption. Layout checks
 cover 320/390/768/1440/2560 CSS pixels.
@@ -128,9 +123,9 @@ linked action creation, daily completion, offline decisions, reload/resume and
 
 `api/test/review-capacity.test.mjs` completes a 200-item production-handler review
 with 128-character IDs and 4,000-character multibyte waiting text, goes beyond
-200 decisions with undo/redecision, resumes a legacy review at its byte cap,
-checks new-history atomicity/isolation/export, and exercises a 201-item browser
-review with offline continuation, reload and another device.
+200 decisions with undo/redecision, checks current-history creation,
+atomicity/isolation/export, and exercises a 201-item browser review with offline
+continuation, reload and another device.
 
 The checks use the existing in-memory Cosmos substitute and simulated authenticated
 accounts. Screenshots are in `docs/design/reviews/`. Physical phone keyboards, screen

@@ -116,6 +116,9 @@ are retained. Additional metadata records `exportedAt`, `scope: "device"` and
 - Brief records retain immutable content, source references, previous revision
   IDs and acceptance/rejection decisions. Readable output labels each revision;
   [selected-revision export](briefs.md) is also available from the brief panel.
+- Review records retain bounded `decisionHeads`/`decisionCount` metadata, and
+  each immutable `reviewDecision` remains a separate exported record. Inline
+  decision arrays are rejected from records and pending operations.
 - `state.queue` retains exact operation IDs, expected versions, proposed fields,
   failures and conflict receipts, including competing server versions. A failed
   pending edit never replaces the confirmed record in the exported snapshot.

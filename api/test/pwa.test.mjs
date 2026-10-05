@@ -142,7 +142,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v2', 'shell-next');
+    const next = worker.replaceAll('shell-v3', 'shell-next');
     return version === 'failure' ? next.replace('const ASSETS = [', "const ASSETS = ['/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -175,7 +175,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v2')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v3')));
 });
 
 test('PWA: update checks report current/offline, prevent duplicate checks, and recover from failure and timeout', async t => {

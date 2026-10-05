@@ -247,7 +247,7 @@ test('workspaces: another device deletes a workspace while offline capture keeps
   await switchTo(page, 'personal'); await capture(page, 'Unrelated Personal work');
   assert.equal((await local(page)).queue.length, 2, 'blocked queue preserves later work without assigning it to the deleted space');
   const copy = await page.evaluate(async () => {
-    const { deviceExport, readableExport } = await import('/inbox-export.js?v=1');
+    const { deviceExport, readableExport } = await import('/inbox-export.js?v=3');
     const state = await (await import('/inbox-store.js?v=1')).transact('alice');
     return readableExport(deviceExport('alice', state, {}));
   });

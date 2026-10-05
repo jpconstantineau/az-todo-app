@@ -8,7 +8,7 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'collectionRefs', 'parentRef', 'kind', 'listId', 'projectId', 'plannedDay', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'decisions', 'flowVersion', 'step', 'answers', 'proposal',
+  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'answers', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes'];
 
@@ -34,6 +34,28 @@ function validateExport(value, server = false) {
       'disposition', ...(entry.answers.disposition?.choice === 'trash' ? [] : ['organize']), 'summary', 'complete'];
     require(pathFor.includes(entry.step), `${path}: invalid clarification step.`);
   };
+  const reviewPointers = (entry, path, length, minimumCount = 0) => {
+    require(!('decisions' in entry) && Number.isSafeInteger(entry.decisionCount) && entry.decisionCount >= minimumCount &&
+      Array.isArray(entry.decisionHeads) && entry.decisionHeads.length <= 200 &&
+      (length === undefined || entry.decisionHeads.length === length) &&
+      entry.decisionHeads.every(id => id === null || typeof id === 'string' && id.length > 0),
+    `${path}: review must use current history pointers.`);
+  };
+  const review = (entry, path, stored = false) => {
+    require(!stored || entry.deleted !== true, `${path}: review history cannot be deleted.`);
+    require(['daily', 'weekly', 'someday'].includes(entry.reviewKind) && /^\d{4}-\d{2}-\d{2}$/.test(entry.reviewDay) &&
+      Array.isArray(entry.included) && entry.included.length <= 200 && entry.included.every(ref => object(ref) &&
+        ['item', 'project'].includes(ref.type) && typeof ref.id === 'string' && ref.id.length > 0), `${path}: invalid review shape.`);
+    reviewPointers(entry, path, entry.included.length);
+    require(entry.decisionCount !== 0 || entry.decisionHeads.every(id => id === null), `${path}: a new review must start with empty history pointers.`);
+  };
+  const reviewDecision = (entry, path, stored = false) => {
+    require(!stored || entry.deleted !== true, `${path}: review decisions are immutable.`);
+    require(typeof entry.reviewId === 'string' && entry.reviewId.length > 0 && Number.isSafeInteger(entry.sequence) && entry.sequence > 0 &&
+      Number.isSafeInteger(entry.index) && entry.index >= 0 && Number.isSafeInteger(entry.recordVersion) && entry.recordVersion >= 0 &&
+      ['retain', 'drop', 'defer', 'complete', 'next', 'unavailable', 'undo'].includes(entry.choice) && object(entry.before) && object(entry.changes),
+    `${path}: invalid review decision shape.`);
+  };
   const unknown = (entry, allowed, path) => {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
@@ -44,6 +66,8 @@ function validateExport(value, server = false) {
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
     require(Number.isSafeInteger(entry.version) && entry.version > 0 && typeof entry.deleted === 'boolean', `${path}: version/deletion marker is required.`);
     if (entry.type === 'clarification') clarification(entry, path);
+    if (entry.type === 'review') review(entry, path, true);
+    if (entry.type === 'reviewDecision') reviewDecision(entry, path, true);
     if (!knownTypes.includes(entry.type)) warnings.push(`${path}: record type ${entry.type} preserved, interpretation unsupported`);
     unknown(entry, recordFields, path);
   }
@@ -67,6 +91,15 @@ function validateExport(value, server = false) {
       if (mutation.type === 'clarification') {
         require(['create', 'update'].includes(mutation.action) && object(mutation.fields), `${path}: clarification mutation must use the current shape.`);
         clarification(mutation.fields, `${path}.fields`);
+      }
+      if (mutation.type === 'review') {
+        require(['create', 'update'].includes(mutation.action) && object(mutation.fields), `${path}: review mutation must use the current shape.`);
+        if (mutation.action === 'create') review(mutation.fields, `${path}.fields`);
+        else reviewPointers(mutation.fields, `${path}.fields`, undefined, 1);
+      }
+      if (mutation.type === 'reviewDecision') {
+        require(mutation.action === 'create' && object(mutation.fields), `${path}: review decision mutation must create immutable history.`);
+        reviewDecision(mutation.fields, `${path}.fields`);
       }
       if (mutation.fields) unknown(mutation.fields, recordFields, `${path}.fields`);
       unknown(mutation, ['id', 'type', 'action', 'expectedVersion', 'fields'], `${path}.mutation`);

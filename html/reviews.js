@@ -4,11 +4,11 @@ import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fiel
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : name === 'status' ? 'inbox' : null)]));
-const latest = (session, index) => [...session.decisions].reverse().find(entry => entry.index === index);
+const latest = (session, index) => [...session.history].reverse().find(entry => entry.index === index);
 const done = (session, index) => { const decision = latest(session, index); return decision && decision.choice !== 'undo'; };
 export function reviewHistory(session, records) {
-  return [...session.decisions, ...Object.values(records).filter(record => record.type === 'reviewDecision' && record.reviewId === session.id)
-    .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }))];
+  return Object.values(records).filter(record => record.type === 'reviewDecision' && record.reviewId === session.id)
+    .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }));
 }
 
 export function setupReviews({ current, save, journal, edit, clarify, addAction, records: scopedRecords }) {
@@ -34,7 +34,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const state = current();
     if (!state) return;
     const records = scopedRecords ? scopedRecords() : projected(state), sessions = Object.values(records).filter(record => record.type === 'review' && !record.deleted)
-      .map(session => ({ ...session, decisions: reviewHistory(session, records) }));
+      .map(session => ({ ...session, history: reviewHistory(session, records) }));
     const select = $('reviewSessions');
     select.replaceChildren(new Option('Choose a saved review', ''), ...sessions.map(session => new Option(`${session.reviewKind} · ${session.reviewDay} · ${session.included.filter((_, i) => done(session, i)).length}/${session.included.length}`, session.id)));
     select.value = active || '';
@@ -90,7 +90,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewUnavailable').hidden = !ref || target && !target.deleted;
     $('reviewUnavailable').disabled = busy || failed || !!done(session, index);
     $('reviewUndo').disabled = busy || failed || !previous || ['undo', 'unavailable'].includes(previous.choice) || !target || target.deleted || target.version !== previous.recordVersion + 1;
-    $('reviewHistory').textContent = session.decisions.length ? session.decisions.map(entry => `${session.included[entry.index].type}:${session.included[entry.index].id} · ${entry.choice} · version ${entry.recordVersion}\nBefore: ${JSON.stringify(entry.before)}\nAfter: ${JSON.stringify(entry.after)}`).join('\n\n') : 'No decisions yet.';
+    $('reviewHistory').textContent = session.history.length ? session.history.map(entry => `${session.included[entry.index].type}:${session.included[entry.index].id} · ${entry.choice} · version ${entry.recordVersion}\nBefore: ${JSON.stringify(entry.before)}\nAfter: ${JSON.stringify(entry.after)}`).join('\n\n') : 'No decisions yet.';
     if (!busy && displayed?.target && target && displayed.target.id === target.id && displayed.target.version !== target.version) message('This record changed. The latest version is shown; review it before deciding.');
     displayed = { session, target, index };
     if (failed) message('A save needs attention. Compare the conflict in the save card above, keep a recovery copy, and use the server version before resuming this review.');
@@ -123,7 +123,8 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const included = candidates(records, reviewKind, day, previous).slice(0, 200);
     // A deterministic continuation ID makes concurrent next-batch starts conflict safely.
     const id = previous ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(previous.id))), byte => byte.toString(16).padStart(2, '0')).join('') : crypto.randomUUID();
-    await save([{ type: 'review', id, action: 'create', expectedVersion: 0, fields: { reviewKind, reviewDay: day, included, decisions: [],
+    await save([{ type: 'review', id, action: 'create', expectedVersion: 0, fields: { reviewKind, reviewDay: day, included,
+      decisionHeads: included.map(() => null), decisionCount: 0,
       ...(previous ? { previousReviewId: previous.id } : {}) } }]);
     if (!current()) return;
     active = id; selected = null; render(); await journal();
@@ -161,8 +162,8 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
       fields = target.type === 'project' || prior.choice === 'retain' ? { title: target.title } : prior.before;
     }
     const before = fields ? snapshot(target) : {}, after = fields ? snapshot({ ...target, ...fields }) : {};
-    const id = crypto.randomUUID(), sequence = (session.decisionCount || 0) + 1;
-    const decisionHeads = session.decisionHeads ? [...session.decisionHeads] : session.included.map(() => null);
+    const id = crypto.randomUUID(), sequence = session.decisionCount + 1;
+    const decisionHeads = [...session.decisionHeads];
     decisionHeads[index] = id;
     const decision = { reviewId: session.id, sequence, index, choice, recordVersion: target?.version ?? 0, before,
       changes: Object.fromEntries(Object.entries(after).filter(([name, value]) => value !== before[name])) };

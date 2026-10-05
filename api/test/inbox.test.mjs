@@ -168,15 +168,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v2')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v3')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=2', '/inbox-store.js?v=1', '/inbox-fields.js?v=1', '/inbox-export.js?v=2',
+    '/inbox.js?v=3', '/inbox-store.js?v=1', '/inbox-fields.js?v=1', '/inbox-export.js?v=3',
     '/collection-model.js?v=1', '/collections.js?v=1', '/workspace-move.js?v=1', '/workspaces.js?v=1',
-    '/clarification.js?v=2', '/clarification-flow.js?v=1', '/reviews.js?v=1', '/briefs.js?v=2',
-    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=2',
-    '/pwa.js?v=2', '/manifest.json',
+    '/clarification.js?v=2', '/clarification-flow.js?v=1', '/reviews.js?v=2', '/briefs.js?v=2',
+    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=3',
+    '/pwa.js?v=3', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -394,7 +394,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const root = new URL('../../html/', import.meta.url);
   const nextAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('?v=1', '?v=3').replaceAll('?v=2', '?v=3').replaceAll('shell-v2', 'shell-v3'),
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('?v=1', '?v=4').replaceAll('?v=2', '?v=4').replaceAll('?v=3', '?v=4').replaceAll('shell-v3', 'shell-v4'),
   ])));
   nextAssets.set('/', nextAssets.get('/index.html'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
@@ -441,7 +441,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   })).status, before.queue[0].operation), 503, 'the outage still applies under the newly active worker');
   assert.equal(records().length, 0, 'no pending write reached storage during the upgrade');
   await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Queued across upgrade', includeHidden: true }).waitFor({ state: 'attached' });
-  const offline = await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
+  const offline = await page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
   assert.deepEqual(offline.queue, before.queue);
   assert.deepEqual(offline.draft, before.draft);
   rejectOperations = false; await context.setOffline(false);

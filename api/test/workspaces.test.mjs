@@ -56,7 +56,7 @@ test('workspaces: membership, review scope, foreign IDs, item moves and legacy P
   }
   assert.equal((await post([create('item', 'task', { title: 'Report', workspaceId: 'work', listId: 'list', projectId: 'project' })])).status, 200);
   assert.equal((await post([change('item', 'task', 1, { workspaceId: 'family' })])).status, 400);
-  assert.equal((await post([create('review', 'bad-review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [{ type: 'item', id: 'task' }], decisions: [], workspaceId: 'family' })])).status, 400);
+  assert.equal((await post([create('review', 'bad-review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [{ type: 'item', id: 'task' }], decisionHeads: [null], decisionCount: 0, workspaceId: 'family' })])).status, 400);
   assert.equal((await post([change('item', 'task', 1, { workspaceId: 'family', listId: null, projectId: null })])).status, 200);
   const records = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
   records['item:legacy'] = { type: 'item', id: 'legacy', title: 'Old task' };
@@ -121,7 +121,7 @@ test('workspaces: concurrent archive and capture serialize; frozen workspace rej
   if (capture.status === 200) assert.ok(capture.body.sequence < archived.body.sequence);
   const count = documents.length;
   assert.equal((await post([change('brief', 'brief', 1, { status: 'accepted' })])).status, 400);
-  assert.equal((await post([create('review', 'review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [], decisions: [], workspaceId: 'work' })])).status, 400);
+  assert.equal((await post([create('review', 'review', { reviewKind: 'weekly', reviewDay: '2026-10-03', included: [], decisionHeads: [], decisionCount: 0, workspaceId: 'work' })])).status, 400);
   assert.equal(documents.length, count, 'rejected derived writes leave no partial records or receipts');
   for (const fields of [{ title: '' }, { title: 'x'.repeat(201) }, { title: 'Valid', archived: 'yes' }, { title: 'Valid', surprise: true }]) {
     assert.equal((await post([create('workspace', 'invalid', fields)])).status, 400);
