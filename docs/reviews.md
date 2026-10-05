@@ -108,9 +108,9 @@ a review uses separate history, old clients receive an update-app error instead
 of overwriting progress. Exports include every decision, session, pending
 operation and local draft in JSON and readable text.
 
-## Verification and rollout
+## Verification and compatibility
 
-Run `npm test --prefix api` with Node 24+ and Playwright Chromium, or
+Run `npm test` from `api/` with Node 22.x and Playwright Chromium, or set
 `PLAYWRIGHT_CHANNEL=msedge` on Windows. `api/test/reviews.test.mjs` covers atomic
 rollback, duplicate delivery, immutable history, paired edits, version conflicts,
 undo limits, foreign references, concurrent decisions, deletion acknowledgement,
@@ -132,9 +132,8 @@ with 128-character IDs and 4,000-character multibyte waiting text, goes beyond
 checks new-history atomicity/isolation/export, and exercises a 201-item browser
 review with offline continuation, reload and another device.
 
-Local verification on 2026-10-02 uses Windows, Node 26.7.0 and headless Edge with
-the existing in-memory Cosmos substitute and simulated authenticated accounts.
-Screenshots are in `docs/design/reviews/`. Physical phone keyboards, screen
+The checks use the existing in-memory Cosmos substitute and simulated authenticated
+accounts. Screenshots are in `docs/design/reviews/`. Physical phone keyboards, screen
 readers and deployed SWA/Cosmos concurrency remain release gates under #17.
 
 Ship API support before or atomically with the updated shell. Older shells keep

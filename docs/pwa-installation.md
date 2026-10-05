@@ -66,15 +66,15 @@ pending operations, or caches. If the check fails or exceeds 30 seconds, it
 reenables retry; the browser may still finish a download and announce readiness.
 Keyboard focus stays on the button during a check, and other controls remain usable.
 
-Shell v26 delivers these controls through fresh module URLs. Local Playwright
+The shell delivers these controls through fresh module URLs. Local Playwright
 checks cover unchanged versions, offline checks, duplicate activation, request
 failure, timeout/late completion, retry after failed initial registration, and
 unsupported browsers. The real local service-worker test retries a failed asset
 download through the button and verifies the waiting worker, saved draft and exact
-outbox contents. Upgrade checks include v24 and v25. Physical-device and deployed update
+outbox contents. Upgrade checks include prior shells. Physical-device and deployed update
 verification remain release gates below.
 
-Shell v16 caches only the public root/index/bookmark shell, local scripts/styles,
+The worker caches only the public root/index/bookmark shell, local scripts/styles,
 manifest and icons. It never caches API/auth responses, task data or arbitrary
 navigation URLs. Root/index navigation query parameters map to the public shell
 offline without storing query-bearing copies.
@@ -98,19 +98,11 @@ browser eviction and device loss; use device export.
 
 ## Automated evidence
 
-Verified October 2, 2026 on Windows `10.0.26200`, Node `v26.7.0`, Playwright
-Chromium `153.0.8010.12`, against the local HTTP harness with disposable in-memory
-records. Revision: the implementation commit introducing this document's install
-flow, based on main `84f49c6`; the PR records the exact tested commit.
-PR #31 merged during implementation; its project/day views are retained, and the
-PWA shell advances from its v6 to v7 to avoid reusing cached module URLs.
-The workflow integration in PR #33 advances the combined shell to v8 and retains
-the installation flow and upgrade coverage through v7.
-This is software verification, not installed-device certification.
+The local HTTP harness uses disposable in-memory records. This is software
+verification, not installed-device certification.
 
 From `api/`, run `npm ci`, `npx playwright install chromium`, then `npm test`.
 
-Result: **60/60 passing** after correcting the CI test synchronization race.
 The multi-device check now waits for persisted changes and matching rendered items;
 asynchronous persistence/worker checks use awaited polling. A deliberately delayed
 change-response consumer and polling regression tests cover the failure.
@@ -126,7 +118,7 @@ Coverage includes:
   offline sign-in guidance for an uninitialized account.
 - Failed asset download, atomic empty failed cache, preserved working shell,
   waiting-worker notice and unchanged draft/outbox.
-- Upgrades from v3/v4/v5/v6 without mixed modules or changed queued intent; existing
+- Upgrades from prior shells without mixed modules or changed queued intent; existing
   offline process restart, exactly-once reconnect, independent-client sync,
   conflicts, isolation, security and migration checks.
 

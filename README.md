@@ -6,6 +6,8 @@ The client is native HTML, CSS and JavaScript ES modules with IndexedDB drafts,
 an account-bound outbox and an offline shell. Private writes use `/api/v1/operations`;
 shared shopping/family lists use `/api/shared/operations` with per-list permissions.
 There is no frontend build step, CDN dependency or HTMX runtime.
+The Functions app is rooted at `api/`: `api/package.json` is the only dependency
+manifest and `api/host.json` is the only Functions host configuration.
 
 ```mermaid
 flowchart LR

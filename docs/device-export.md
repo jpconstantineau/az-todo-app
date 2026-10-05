@@ -91,19 +91,16 @@ exports include it. Server copies exclude device recovery metadata. Downloaded
 exports, server change history, receipts and backups are not purged by expiry.
 Clearing site storage removes this device's recovery slot and pending undo saves.
 
-Shell v23 introduces this additive account-state field without a database or API
-migration. Earlier clients can still submit normal updates; any same-record
-version change makes recovery unavailable. The upgrade suite covers v3–v22.
+This additive account-state field needs no database or API migration. Earlier
+clients can still submit normal updates; any same-record version change makes
+recovery unavailable. The upgrade suite covers prior shells.
 Focused checks cover all three record types, expiry, acknowledgement, invalidation,
 offline reload and sync, drafts, account switching, stale deletion conflicts and
 export preservation. [Layout screenshots](design/edit-undo/) cover 320/390/1440px
 in both appearances. Real SWA/Cosmos, physical devices and screen readers remain
 unverified.
 
-On October 2, 2026, all **153 tests passed**, none skipped, in an isolated Windows
-worktree with Node **22.23.3** and Playwright Chromium **153.0.8010.12**. This run
-includes main at `c897130` (PRs #54 and #55), the final undo conflict checks, and
-shell upgrades through v22. Run from `api/` with Node 22:
+Run from `api/` with Node 22.x:
 `node --experimental-test-module-mocks --test test/*.test.mjs`.
 
 `todo-device-recovery.json` uses `format: "az-todo-device-export"` and
@@ -145,7 +142,7 @@ sign-out, site-storage clearing or deletion of a record.
 
 ## Offline validation and round-trip rehearsal
 
-With Node 24+, from `api/`:
+With Node 22.x, from `api/`:
 
 ```text
 node scripts/validate-device-export.mjs todo-device-recovery.json
@@ -173,14 +170,11 @@ Node and Playwright checks exercise exact JSON round-trip, originals and links,
 relationships/dates/statuses, settings, tombstones, pending conflicts, unsupported
 field reporting, overwrite refusal, two-account isolation, offline reload, latest
 cross-tab state, and storage-read failure with recovery of current form text.
-The existing responsive and shell-upgrade tests cover the added native selector
-and cached export module. No database or IndexedDB schema migration is needed.
-After integrating PRs #32, #33 and #34 from main, local verification on October 2,
-2026 passed all 76 tests with Node 26.7.0 and Playwright Chromium on Windows (`npm test`).
-The combined navigation, workflow, PWA and export shell uses v10; upgrade checks
-cover v3–v9. Export tests verify downloads from all three navigation destinations
+The existing responsive and shell-upgrade tests cover the native selector and
+cached export module. No database or IndexedDB schema migration is needed.
+Export tests verify downloads from all navigation destinations
 while preserving the current capture draft and ignoring the selected filters.
-Export tests use the shared asynchronous browser-state wait helper from main.
+They use the shared asynchronous browser-state wait helper.
 Real-device download UX and deployed Azure data behavior are unverified.
 
 Clarification, review progress and brief revisions are now supported by the device
@@ -193,15 +187,13 @@ Server-copy checks cover fixed-cutoff paging during concurrent writes, tombstone
 conflicts, empty accounts, account isolation, malformed/gapped pages, bounded
 work, JSON round-trip, cancellation, expiry, offline failure and delayed responses
 after account switching. Browser checks confirm remote-only work appears without
-changing device data and inspect 320/390/1440px layouts. Shell v22 includes main's
-status filters and deletion fix and upgrades from v3–v21 without discarding local data. These tests
-use the in-memory Cosmos substitute; deployed Cosmos/authentication, physical
+changing device data and inspect 320/390/1440px layouts. The client includes
+status filters and deletion recovery without discarding local data. These tests use
+the in-memory Cosmos substitute; deployed Cosmos/authentication, physical
 device downloads and assistive technology remain unverified.
 
-On October 2, 2026, all 128 tests passed on Windows with Node 26.7.0 and
-Playwright Edge (`PLAYWRIGHT_CHANNEL=msedge`, `npm test` in `api/`), based on main
-at `2a62689` including PRs #51 and #52. [Layout screenshots](design/account-export/) use
-the browser test's optional `EXPORT_SCREENSHOTS` output directory. The export
+[Layout screenshots](design/account-export/) use the browser test's optional
+`EXPORT_SCREENSHOTS` output directory. The export
 browser cases block service workers to inject request failures; the separate
 PWA suite verifies shell delivery, cache boundaries and upgrades.
 
@@ -243,23 +235,15 @@ restore validation, account isolation, lost acknowledgements, stale versions,
 transaction failure, parent deletion races, export/reload, independent-client
 conflicts, offline delete/restore and 320/390/1440px light/dark layouts. These use
 the in-memory storage substitute. Deployed Cosmos/authentication, physical devices
-and screen-reader behavior remain release gates. Shell v24 includes both edit undo
-and the recovery view, upgrading from v3–v23 without resetting IndexedDB.
+and screen-reader behavior remain release gates. Shell upgrades retain edit undo,
+the recovery view and IndexedDB contents.
 
-Local verification on October 2, 2026 (Windows, Node 26.7.0, Playwright Edge):
-`npm test` in `api/` passed 149/150 tests. The sole failure was Windows `spawn EPERM`
-starting Chromium for the existing unpacked-extension test; rerunning that exact
-test outside the sandbox passed (1/1), covering all 150 tests across both runs.
 The [recovery screenshots](design/deletion/) show the light/dark layouts.
 CI remains responsible for the configured Node 22 Linux run.
 
-After integrating main's edit undo and Cosmos rehearsal on October 3, 2026,
-the combined Chromium run passed 163/164 checks on Windows/Node 26.7.0. The
-offline browser-restart cache assertion missed one unversioned asset; its isolated
-rerun passed. The deletion CI failure was an immediate assertion before IndexedDB
-validation completed; it now waits for the error and completed deletion before
-checking state. The merged browser case also checks that remote deletion clears
-edit undo. Shell v24 gives the combined release distinct module/cache URLs.
+The deletion browser check waits for IndexedDB validation and completed deletion
+before checking state, verifies that remote deletion clears edit undo, and uses
+distinct module/cache URLs for the integrated shell.
 
 Account erasure, permanent purge and backup-erasure/restore policy remain open
 under #13; this change covers recoverable item/list/project deletion only.

@@ -102,7 +102,7 @@ exercises repeat-safe recovery.
 
 ## Historical baseline evidence — October 1, 2026 (before #25)
 
-Run `npm test` in `api/` with Node 24 and installed Playwright Chromium, or set
+Run `npm test` in `api/` with Node 22.x and installed Playwright Chromium, or set
 `PLAYWRIGHT_CHANNEL=msedge` when Edge is installed. `test/security.test.mjs` runs
 through the real registered handlers and Azure HTTP types over loopback HTTP.
 Only storage and function registration are substituted.

@@ -91,17 +91,11 @@ deletion/restoration. The common security suite covers the new routes too.
 `api/test/shared-browser.test.mjs` runs separate owner/member sessions, constrained
 controls, offline reopen, a saved offline conflict, explicit resolution, revoked
 offline actions, account switching, editing/deletion/restoration, safe text,
-export and 320/390/1440px light/dark layouts. Screenshots are in
-[`design/shared-lists`](design/shared-lists). These are local handler/IndexedDB
+export and 320/390/1440px light/dark layouts. Current screenshots are in
+[`design/shared-lists`](design/shared-lists/). These are local handler/IndexedDB
 tests with the existing in-memory Cosmos substitute. Real SWA accounts,
 production Cosmos concurrency/query costs, physical phones and assistive
 technology remain deployment validation gates under #42/#17.
-
-Local verification on October 3, 2026: Windows, Node 26.7.0, Playwright with
-installed Edge; 229 combined tests passed after integrating main's workspace and
-capture-review PRs. The focused shared-list/security checks were also rerun after
-the final input-validation and offline account-pause checks. Shell v30 covers
-upgrades from v3 through v29. `git diff --check` passed.
 
 ## Shared-item keyboard navigation (#16)
 
@@ -116,7 +110,7 @@ Account changes discard the old focus target.
 
 `api/test/shared-keyboard.test.mjs` covers keyboard-only complete/reopen/edit,
 duplicate titles, remote rename/deletion, modal draft retention, delayed refresh,
-offline acknowledgement and account changes. Shell v33 versions the shared
+offline acknowledgement and account changes. The shell versions the shared
 module URL as well as the existing module graph, so an older worker cannot serve
 a stale shared module to the new page. Browser automation does not replace the
 screen-reader and physical-device verification still required by #16/#17.

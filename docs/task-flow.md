@@ -44,7 +44,7 @@ origin of every current mutation; there is no recovery shell or fallback writer.
 
 ## Verification
 
-From `api/`, use Node 24+, `npm ci`, `npx playwright install chromium`, `npm test`.
+From `api/`, use Node 22.x, `npm ci`, `npx playwright install chromium`, `npm test`.
 Alternatively use installed Edge with `PLAYWRIGHT_CHANNEL=msedge`.
 
 - `browser.test.mjs`: replaces the old HTMX flow with native settings, list creation,

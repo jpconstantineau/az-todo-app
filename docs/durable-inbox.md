@@ -93,7 +93,7 @@ the [v1 protocol decision](data-api-v1.md#partition-decision-issue-27).
 
 ### Issue #27 verification
 
-Run from `api/` on Node 24+ with installed Playwright Chromium, or set
+Run from `api/` on Node 22.x with installed Playwright Chromium, or set
 `PLAYWRIGHT_CHANNEL=msedge`: `npm test`. New `account-sync.test.mjs` checks
 matching/renamed/untrusted profile names, malformed/null/mismatched profiles,
 HTTP failure, timeout, delayed account-A responses after switching to B, logout, expiry,
@@ -106,10 +106,8 @@ stale deleted-record edits and recovery; `v1.test.mjs` checks changed-content ID
 reuse, atomic conflicts and isolation. These use production handlers and an
 in-memory transactional storage substitute, not live SWA/Cosmos.
 
-Local evidence: October 2, 2026 (America/Regina), Windows, Node 26.7.0,
-Playwright Chromium 153.0.8010.12; exact tested commit and suite result are
-recorded in the PR. Expected results are the assertions above; actual local
-results must pass before merge. Real Android/iPhone/desktop session and Cosmos
+Expected results are the assertions above; local results must pass before merge.
+Real Android/iPhone/desktop session and Cosmos
 RU/latency evidence remain **unverified**, so #27 remains open for those gates.
 For deployed verification, record commit, disposable environment, OS/browser,
 steps and expected/actual results for each scenario above, using real SWA auth,
@@ -269,10 +267,10 @@ storage clearing is a deliberate fresh start only after exports and user confirm
 
 ## Verification and remaining gates
 
-See the [issue #25 verification report](design/vanilla.md) for the 37-test local
-result, upgrade checks, responsive screenshots and outstanding release gates.
+See the [issue #25 verification report](design/vanilla.md) for upgrade checks,
+responsive screenshots and outstanding release gates.
 
-Run `npm test` in `api/` (Node 24+ for module-mocking tests). Use
+Run `npm test` in `api/` with Node 22.x. Use
 `PLAYWRIGHT_CHANNEL=msedge` on a machine with Edge, or install Playwright Chromium
 as in CI. The native parity, security, transaction and migration checks are described in [Task flow](task-flow.md).
 
@@ -295,8 +293,8 @@ v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitu
 - Defaults/copy/reset, custom states, advanced task fields, previous-status restore,
   persisted settings drafts, old-worker upgrade and exact pending intent retention.
 
-Local verification uses Edge 154 and Node 26.7 on Windows. These are browser
-automation checks, not physical Android/iPhone keyboard or OS-eviction evidence.
+These are browser automation checks, not physical Android/iPhone keyboard or
+OS-eviction evidence.
 Azure auth/Cosmos behavior, staging migration/rollback, real storage exhaustion,
 screen readers and physical phone/desktop checks remain unverified release gates
 in #3/#4/#5/#14/#16/#17. Keep #5 open until its real-device evidence is recorded.

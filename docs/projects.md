@@ -53,17 +53,14 @@ validation, reactivation, unchanged actions/history, conflicts and offline reloa
 
 ## Verification
 
-Run `npm test` from `api/` with Node 24+ and Playwright Chromium. New coverage
+Run `npm test` from `api/` with Node 22.x and Playwright Chromium. New coverage
 checks atomic project/link writes, repeat delivery, owner boundaries, invalid
 outcomes/calendar dates, linked-project deletion, concurrent deletion/linking,
 offline creation and editor-draft recovery, view persistence, canonical export
 and independent browser contexts in Honolulu/Auckland. Existing capture,
 security, migration, conflicts and shell-upgrade checks remain in the suite.
 
-Automated browser evidence was recorded on October 2, 2026, Windows, Node 26.7.0
-and Playwright Chromium 153.0.8010.12. At implementation commit `ac02173`, all
-52 tests passed with none skipped, including merged PR #29 and upgrades from
-shell versions 3, 4 and 5. Layout checks cover 320/390/768/1440/2560 CSS pixels.
+Layout checks cover 320/390/768/1440/2560 CSS pixels.
 Set `PROJECT_SCREENSHOTS=1` when running the suite to refresh the
 [390px day view](design/projects-day-390.png) and
 [1440px project view](design/projects-1440.png). The controls reuse the design

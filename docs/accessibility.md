@@ -51,12 +51,9 @@ list/project/defaults, review decisions, brief revisions, navigation and export 
   no forced timer. The existing 44px control targets, visible focus outlines,
   native modal behavior, responsive layout and light/dark colors are retained.
 
-Shell v25 includes the review/brief focus and announcement fixes.
-Shell v31 adds workspace-manager focus and delayed-create protection with fresh
-module URLs, so an older active worker cannot serve a mixed module graph.
-Shell v32 adds capture-save and task-review focus handling with fresh module URLs.
-Deploy the compatible API first. As before, updates wait for old tabs to close;
-no forced activation, storage reset or outbox rewrite is introduced.
+The shell and module URLs advance together so an older active worker cannot
+serve a mixed module graph. Updates wait for old tabs to close; no forced
+activation, storage reset or outbox rewrite is introduced.
 
 ## Reproducible automated checks
 
@@ -78,10 +75,9 @@ client code with real browser IndexedDB; the API storage is an in-memory fixture
 | Text and focus contrast in both themes | `design.test.mjs`: at least 4.5:1 text and 3:1 control borders/focus on tested surface tokens. |
 | Offline reopen and shell update with pending saves/drafts | Existing `inbox.test.mjs` and `pwa.test.mjs`. |
 
-Local verification date: October 3, 2026 (America/Regina), Windows, Node 26.7.0.
-The PR records the tested commit, browser version and full-suite result. These
-automated checks do not certify spoken announcements, physical touch targets,
-real browser zoom or phone keyboard behavior.
+The PR and CI record the tested commit and full-suite result. These automated
+checks do not certify spoken announcements, physical touch targets, real browser
+zoom or phone keyboard behavior.
 
 ## Remaining release evidence
 
