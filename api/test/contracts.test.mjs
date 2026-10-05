@@ -36,9 +36,9 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /type="module" src="\/inbox.js\?v=66"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=1"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
-  assert.match(await readFile(new URL('inbox.html', root), 'utf8'), /url=\//);
+  await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {
     if (!/\.(html|js)$/.test(path)) continue;
     assert.doesNotMatch(await readFile(new URL(path, root), 'utf8'), /htmx|\bhx-[a-z]|cdn\.jsdelivr|HX-Redirect/);

@@ -26,9 +26,9 @@ async function fixture(url, options) {
 test('deployed PWA checks verify anonymous public assets and accept Git line-ending differences', async () => {
   const report = await verifyDeployment('https://pwa.example', { fetchImpl: fixture });
   assert.equal(report.status, 'PASS');
-  assert.equal(report.checks.length, 8);
+  assert.equal(report.checks.length, 7);
   assert.ok(report.checks.every(check => check.status === 'PASS'));
-  assert.equal(report.checks.filter(check => check.actualSha256 === check.expectedSha256 && check.actualSha256).length, 7);
+  assert.equal(report.checks.filter(check => check.actualSha256 === check.expectedSha256 && check.actualSha256).length, 6);
 });
 
 for (const [name, change, failure] of [
@@ -48,7 +48,7 @@ for (const [name, change, failure] of [
       return selected ? change(response) : response;
     } });
     assert.equal(report.status, 'FAIL');
-    assert.equal(report.checks.length, 8);
+    assert.equal(report.checks.length, 7);
     const failed = report.checks.filter(check => check.status === 'FAIL');
     assert.equal(failed.length, 1);
     assert.ok(failed[0].failures.some(message => message.startsWith(failure)));

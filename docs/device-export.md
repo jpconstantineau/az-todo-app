@@ -92,7 +92,8 @@ Clearing site storage removes this device's recovery slot and pending undo saves
 
 This additive account-state field needs no database or API migration. Earlier
 clients can still submit normal updates; any same-record version change makes
-recovery unavailable. The upgrade suite covers prior shells.
+recovery unavailable. The upgrade suite covers the release baseline advancing to
+the next shell.
 Focused checks cover all three record types, expiry, acknowledgement, invalidation,
 offline reload and sync, drafts, account switching, stale deletion conflicts and
 export preservation. [Layout screenshots](design/edit-undo/) cover 320/390/1440px

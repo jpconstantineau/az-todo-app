@@ -98,7 +98,7 @@ test('clarification rules keep unknowns explicit and reject invented facts or in
 });
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-const local = page => page.evaluate(async () => (await import('/inbox-store.js')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=1')).transact('alice'));
 async function browserSetup(t) {
   documents.length = 0;
   let user = 'alice';
@@ -217,19 +217,19 @@ test('clarification browser: no AI, offline stop/reload/resume, editable proposa
   await context.setOffline(true);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await page.locator('#clarifyForm [name=text]').fill('Coverage in place');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.proposal.text === 'Coverage in place');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.proposal.text === 'Coverage in place');
   await page.locator('#clarifyStop').click(); await page.locator('#clarifier').waitFor({ state: 'hidden' });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.open === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.open === false);
   await page.reload(); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Coverage in place');
   assert.equal((await local(page)).queue.length, 0);
   await page.locator('#clarifyAccept').click(); await question(page, 1);
   await page.locator('#clarifyForm [name=text]').fill('Call someone');
   await page.locator('#clarifySave').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).queue.length === 2);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).queue.length === 2);
   assert.equal((await local(page)).records['item:insurance'].title, 'sort out insurance');
   await page.locator('#clarifyForm [name=text]').fill('Call the insurer');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.proposal.text === 'Call the insurer');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.proposal.text === 'Call the insurer');
   await page.reload(); await page.locator('#clarifier').waitFor(); await question(page, 1);
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Call the insurer');
   if (process.env.CLARIFICATION_SCREENSHOTS) {
@@ -272,7 +272,7 @@ test('clarification browser: independent session conflicts preserve both proposa
   const { page, browser, url } = await browserSetup(t);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await page.locator('#clarifySave').click();
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js')).transact('alice')).records['clarification:insurance']);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=1')).transact('alice')).records['clarification:insurance']);
   const second = await browser.newContext(); const tab = await second.newPage();
   await tab.goto(url + '/#work'); await tab.locator('#workspace').waitFor(); await tab.locator('#view').selectOption('all'); await clickControl(tab.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await second.setOffline(true);
@@ -292,14 +292,14 @@ test('clarification browser: independent session conflicts preserve both proposa
 test('clarification browser: storage failure exposes draft recovery and account switch clears private session content', { timeout: 60000 }, async t => {
   const { page, context, setUser } = await browserSetup(t);
   await page.evaluate(async () => {
-    const { transact, enqueue } = await import('/inbox-store.js');
+    const { transact, enqueue } = await import('/inbox-store.js?v=1');
     await transact('alice', local => enqueue(local, 'alice', [{ type: 'item', id: 'other', action: 'create', expectedVersion: 0, fields: { title: 'Another task' } }]));
   });
   await clickControl(page.locator('#sync')); await page.getByRole('button', { name: 'Edit Another task', exact: true }).waitFor(); await confirmed(page);
   await context.setOffline(true);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify sort out insurance', exact: true }));
   await page.locator('#clarifyForm [name=text]').fill('Private outcome');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.clarification?.proposal.text === 'Private outcome');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.clarification?.proposal.text === 'Private outcome');
   await page.locator('#clarifyStop').click();
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Clarify Another task', exact: true }));
   assert.equal(await page.locator('#clarifyForm [name=text]').inputValue(), 'Private outcome');

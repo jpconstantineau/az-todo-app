@@ -1,7 +1,7 @@
 # Durable inbox (issue #5)
 
-`/` is the native v1 client; `/inbox.html` is a bookmark alias. It uses native JavaScript,
-IndexedDB, Web Locks and a small service worker; it has no build step or new
+`/` is the native v1 client. It uses native JavaScript, IndexedDB, Web Locks and a
+small service worker; it has no build step or new
 dependency. It requires HTTPS (or localhost), a supported modern browser and a
 successful first sign-in while online. See [PWA installation and updates](pwa-installation.md)
 for installation help and safe shell updates. Physical-device certification remains
@@ -200,21 +200,19 @@ destroy unsynced work; the UI explains this and offers an export.
 
 ## Canonical shell and updates
 
-The worker caches only the public root/index/bookmark shell, local CSS, theme
-script, native modules, manifest and icons, never API/auth responses or task data. Wait for
-**Ready to reopen this inbox offline** before relying on offline reload. Both
-root and the inbox alias work offline once worker v16 is active.
+The worker caches only the public root/index, help and shared-list shells, local
+CSS, theme script, native modules, manifest and icons, never API/auth responses or
+task data. Wait for **Ready to reopen this inbox offline** before relying on offline
+reload. Root and `/index.html` work offline once the `todo-inbox-shell-v1` worker is
+active.
 
-Module URLs carry `?v=16`; the v3 worker ignores query URLs and the v4–v15 workers'
-exact allowlists exclude these new URLs, preventing a new shell from importing
-old cached modules. A worker-version handshake reports
-readiness only when the matching worker is active. A waiting worker is not forcibly
-activated: save work locally, close every app tab/window, then reopen online. Old
-shell caches are retained so old clients keep their assets. Cache installation
-failure leaves the old worker/cache usable at its original inbox URL; it does not
-clear IndexedDB. A visible notice explains waiting updates and failed downloads;
-installation help is in Preferences. Old-cache retirement remains deferred until
-client compatibility can be established. Update the shell/module version together
+All native module URLs carry the first-release `?v=1` baseline, with exactly one
+cached URL per module. A worker-version handshake reports readiness only when the
+matching worker is active. A waiting worker is not forcibly activated: save work
+locally, close every app tab/window, then reopen online. Cache installation failure
+leaves the active worker/cache usable and does not clear IndexedDB. A visible notice
+explains waiting updates and failed downloads; installation help is in Preferences.
+Advance the cache name, HTML entry URLs, module import URLs and handshake together
 when changing cached modules. See [PWA verification](pwa-installation.md).
 
 ## Defaults and compatibility
@@ -246,7 +244,7 @@ defaults. Settings records use the new `settings:settings` logical identity.
 2. Preserve all current v1 server records and device data. The current v1 format is
    the only supported server format; restore it only through the rehearsed backup
    procedure.
-3. Deploy the additive API and native shell together. Test root, inbox bookmark and
+3. Deploy the additive API and native shell together. Test the root URL and
    GitHub auth return. Retired pre-v1 HTTP paths must receive the platform's normal
    not-found response for authenticated requests. A disabled API shows an error,
    never old data.
@@ -289,10 +287,11 @@ v1 HTTP handlers, backed by the existing transactional in-memory Cosmos substitu
   rejection, copy/export recovery, queue bounds, quota and transaction abort.
 - Editable split preview, competing-tab saves, duplicate submit guard,
   keyboard shortcut/focus, 390px width and a shortened keyboard viewport.
-- Canonical root/bookmark, explicit v1 gate states and normal not-found responses
+- Canonical root, explicit v1 gate states and normal not-found responses
   for retired pre-v1 paths.
 - Defaults/copy/reset, custom states, advanced task fields, previous-status restore,
-  persisted settings drafts, old-worker upgrade and exact pending intent retention.
+  persisted settings drafts, baseline-to-next-shell upgrade and exact pending intent
+  retention.
 
 These are browser automation checks, not physical Android/iPhone keyboard or
 OS-eviction evidence.

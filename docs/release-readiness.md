@@ -82,9 +82,8 @@ the deployed candidate, not the separate local regression run.
 2. Deploy the same candidate to the isolated SWA environment. Record the deployment
    URL/run and settings above. Inspect HTTPS `/`, `/manifest.json`, icons and a
    deliberately missing icon: correct bodies/MIME types, a real missing-asset
-   failure, and CSP. The canonical client is `/`; `/inbox.html` is an alias.
-   Read current shell version/asset URLs from `html/inbox-sw.js` and `html/pwa.js`;
-   historical shell numbers in feature reports are not the current release.
+   failure, and CSP. The canonical client is `/`. Read the current shell baseline
+   and asset URLs from `html/inbox-sw.js` and `html/pwa.js`.
 3. Sign in normally as disposable A. Verify health/runtime, `/.auth/me` matching
    `/api/v1/session`, then capture a list with milk/bread/eggs, edit/move/complete/
    reopen, reload and confirm the same IDs and server-confirmed state. Do not

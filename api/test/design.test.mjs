@@ -32,7 +32,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   async function fits() {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal page overflow');
   }
-  await page.goto(server.url + '/inbox.html');
+  await page.goto(server.url);
   await page.locator('#workspace').waitFor();
   if (!baseline) {
     await page.emulateMedia({ colorScheme: 'light' });
@@ -91,7 +91,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   assert.ok(await page.locator('#editor').evaluate(el => el.contains(document.activeElement)), 'focus stays inside modal');
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
   await waitForBrowser(page, async () => {
-    const { transact } = await import('/inbox-store.js');
+    const { transact } = await import('/inbox-store.js?v=1');
     return (await transact((await transact(null)).accountId)).draft.editOpen === false;
   });
   await page.reload();
@@ -195,7 +195,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   const blocked = await browser.newContext({ colorScheme: 'light' });
   await blocked.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('Storage blocked'); } }));
   const blockedPage = await blocked.newPage();
-  await blockedPage.goto(server.url + '/inbox.html');
+  await blockedPage.goto(server.url);
   await blockedPage.locator('#workspace').waitFor();
   assert.equal(await blockedPage.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(0, 0, 0)');
   await appearance('light', blockedPage);

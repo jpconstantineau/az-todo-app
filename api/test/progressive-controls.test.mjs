@@ -50,9 +50,9 @@ test('progressive controls keep capture and editor actions reachable without exp
   for (const name of ['dueLocal', 'waitingOn', 'energy', 'timeRequired']) assert.equal(await page.locator(`#capture [name=${name}]`).isVisible(), false);
   await page.locator('#capture [name=newList]').fill('Home');
   assert.equal(await page.locator('#capture [name=status]').isVisible(), false);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.capture.text === 'Prepare the room');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.capture.text === 'Prepare the room');
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js');
+    const { transact } = await import('/inbox-store.js?v=1');
     await transact('alice', local => { local.draft.capture.dueDate = '2026-12-01'; });
   });
   await page.reload(); await page.locator('#workspace').waitFor();
@@ -89,7 +89,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   await page.locator('#edit [type=submit]').click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   // Projected state includes the offline edit and retains the collapsed deadline.
   const item = await page.evaluate(async () => {
-    const { transact, projected } = await import('/inbox-store.js');
+    const { transact, projected } = await import('/inbox-store.js?v=1');
     return Object.values(projected(await transact('alice'))).find(record => record.type === 'item');
   });
   assert.equal(item.status, 'waiting'); assert.equal(item.waitingOn, 'Alex'); assert.equal(item.dueDate, '2026-12-01');

@@ -9,7 +9,6 @@ const sha256 = (bytes, file) => createHash('sha256')
   .update(file.endsWith('.png') ? bytes : bytes.toString('utf8').replace(/\r\n/g, '\n')).digest('hex');
 const assets = [
   ['/', 'index.html', ['text/html']],
-  ['/inbox.html', 'inbox.html', ['text/html']],
   ['/manifest.json', 'manifest.json', ['application/json', 'application/manifest+json']],
   ['/icons/icon-192.png', 'icons/icon-192.png', ['image/png']],
   ['/icons/icon-512.png', 'icons/icon-512.png', ['image/png']],

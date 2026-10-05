@@ -1,7 +1,7 @@
 # Native task flow and parity verification
 
-Implementation for issue #25. `/` serves `html/index.html`; `/inbox.html` is a native
-redirect to the same workspace. Capture is the default. [Capture, Your Work and List Workspace](navigation.md)
+Implementation for issue #25. `/` serves `html/index.html` and is the canonical
+workspace URL. Capture is the default. [Capture, Your Work and List Workspace](navigation.md)
 are separate addressable views that keep drafts intact.
 
 ## User flow
@@ -52,7 +52,7 @@ Alternatively use installed Edge with `PLAYWRIGHT_CHANNEL=msedge`.
   completion/reopen parity.
 - `contracts.test.mjs`: v1 gate states, retired-path not-found responses, local shell and CSP.
 - `inbox.test.mjs`: persistent browser restart, exact queued retries, conflicts,
-  isolation, transaction/quota failure, competing tabs, old-worker upgrade and drafts.
+  isolation, transaction/quota failure, competing tabs, shell upgrade and drafts.
 - `v1.test.mjs`: atomic batches, bounded changes, validation, repeat-safe settings
   and settings conflicts, preserved prior status and custom values.
 - `security.test.mjs`: origin policy, every route's authentication and headers,

@@ -212,7 +212,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   await showView(page, 'work');
   assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js')).transact('alice')).draft.navigation?.work.status === '@review-ready');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=1')).transact('alice')).draft.navigation?.work.status === '@review-ready');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), '@review-ready');
   assert.equal(await page.locator('#items article').count(), 1);
@@ -230,7 +230,7 @@ test('workflow browser: actionable validation, offline reload/reopen/undo and ca
   }
   // Spring-forward gaps are rejected instead of silently shifting the deadline.
   const gap = await page.evaluate(async () => {
-    try { (await import('/inbox-fields.js')).taskFields({ dueLocal: '2026-03-08T02:30' }); return ''; }
+    try { (await import('/inbox-fields.js?v=1')).taskFields({ dueLocal: '2026-03-08T02:30' }); return ''; }
     catch (error) { return error.message; }
   });
   assert.match(gap, /valid local due date/);

@@ -1,7 +1,6 @@
 # PWA installation and updates (issue #14)
 
-The canonical native client at `/` now links the manifest and touch icon from
-PR #28. The `/inbox.html` bookmark redirects to the same app. Installation
+The canonical native client at `/` links the manifest and touch icon. Installation
 controls live in **Preferences → Install To-Do**, using the existing dialog,
 disclosure, buttons and DESIGN.md styles. Capture and synchronization continue
 using the existing account-bound IndexedDB/outbox.
@@ -71,30 +70,32 @@ checks cover unchanged versions, offline checks, duplicate activation, request
 failure, timeout/late completion, retry after failed initial registration, and
 unsupported browsers. The real local service-worker test retries a failed asset
 download through the button and verifies the waiting worker, saved draft and exact
-outbox contents. Upgrade checks include prior shells. Physical-device and deployed update
-verification remain release gates below.
+outbox contents. One forward-looking baseline-to-next-shell check covers failed
+installation, natural activation and offline reopening. Physical-device and deployed
+update verification remain release gates below.
 
-The worker caches only the public root/index/bookmark shell, local scripts/styles,
-manifest and icons. It never caches API/auth responses, task data or arbitrary
+The worker caches only the public root/index, help and shared-list shells, local
+scripts/styles, manifest and icons. It never caches API/auth responses, task data or arbitrary
 navigation URLs. Root/index navigation query parameters map to the public shell
 offline without storing query-bearing copies.
 
 The PWA script registers independently of account initialization, so a signed-out
 visitor can prepare the public shell. Account verification still gates task data.
-The shell/module URLs and worker handshake advance together. Fresh versioned
-module URLs bypass old workers' exact allowlists during an upgrade.
+The first-release cache and module graph use the `v1` baseline. The cache name,
+HTML entry URLs, module import URLs and worker handshake advance together for each
+future shell so a controlling baseline worker does not substitute older modules.
 
 Asset installation uses atomic `cache.addAll`. A failed download leaves the active
 worker/cache usable. Successful updates wait until every app tab/window closes;
 there is no forced activation or automatic reload. The update notice asks the
 user to wait for their draft to save on device before closing. No IndexedDB reset,
-outbox rewrite or old-cache deletion occurs. Pending operations synchronize
-normally after reopening. A failed update reports online retry guidance.
+outbox rewrite or cache deletion occurs during installation. Pending operations
+synchronize normally after reopening. A failed update reports online retry guidance.
 
-Old caches are deliberately retained for compatibility. A future retirement policy
-needs evidence that no client uses retired assets; do not clear site storage as an
-update workaround. Unsynced data remains vulnerable to explicit storage clearing,
-browser eviction and device loss; use device export.
+The first release does not carry pre-release cache fixtures. A future cache-retirement
+policy needs evidence that no supported client uses the retired assets; do not clear
+site storage as an update workaround. Unsynced data remains vulnerable to explicit
+storage clearing, browser eviction and device loss; use device export.
 
 ## Automated evidence
 
@@ -114,11 +115,11 @@ Coverage includes:
   failure, blocked preferences and simulated iPhone/standalone behavior.
 - Existing controls at 320/390/768/1440px in light/dark themes without horizontal
   overflow; keyboard focus returns to installation help or Close.
-- Root/query/bookmark offline reopen, auth/API exclusion from Cache Storage and
+- Root/query offline reopen, auth/API exclusion from Cache Storage and
   offline sign-in guidance for an uninitialized account.
 - Failed asset download, atomic empty failed cache, preserved working shell,
   waiting-worker notice and unchanged draft/outbox.
-- Upgrades from prior shells without mixed modules or changed queued intent; existing
+- A baseline-to-next-shell upgrade without mixed modules or changed queued intent; existing
   offline process restart, exactly-once reconnect, independent-client sync,
   conflicts, isolation, security and recovery checks.
 
@@ -133,7 +134,7 @@ manual guidance; they are not Safari or physical-device evidence. Set
 
 ## Remaining release evidence
 
-### Read-only deployed asset verification (October 3, 2026)
+### Read-only deployed asset verification
 
 Run from `api/` with Node 22+ against an explicit HTTPS origin:
 
@@ -141,23 +142,14 @@ Run from `api/` with Node 22+ against an explicit HTTPS origin:
 node scripts/verify-pwa-deployment.mjs https://todo.jpto.dev > pwa-deployment.json
 ```
 
-The command makes eight anonymous GET requests: the root and bookmark shells,
-manifest, three icons, service worker, and a unique nonexistent icon. It checks
+The command makes seven anonymous GET requests: the root shell, manifest, three
+icons, service worker, and a unique nonexistent icon. It checks
 HTTP status, MIME type, exact repository CSP and SHA-256 content agreement with
 the checkout (text CRLF is normalized to LF; PNG bytes are unchanged). Redirects,
 HTML navigation fallbacks, stale assets, missing/different CSP and 15-second
 timeouts fail with exit code 1. JSON evidence includes the source commit, whether
 `html/` is dirty, UTC timestamp and per-path results; it records no response bodies.
 It never accesses API/auth endpoints, uses a signed-in browser or changes data.
-
-The [recorded live report](pwa-deployment-2026-10-03.json) passed all eight checks
-against `https://todo.jpto.dev` on Windows with Node 26.7.0. All seven public asset
-bodies matched clean `html/` files at the report's `sourceCommit`; the random
-missing icon returned 404. The deployed CSP matches the reviewed policy:
-same-origin manifest/worker loading inherits `default-src 'self'`, and icons are
-allowed by `img-src 'self' data:`. This checks delivered headers, not browser CSP
-enforcement or installation. The checker deliberately fails on policy drift;
-review a legitimate policy change before updating the checkout and rerunning.
 
 `test/pwa-deployment.test.mjs` covers successful deployment evidence and injected
 failure responses without network access. Existing `pwa-assets.test.mjs` checks
@@ -171,9 +163,9 @@ environment, OS/browser version, steps, expected/actual result and evidence:
 
 | Check | Status |
 | --- | --- |
-| Deployed HTTPS manifest/icon paths, MIME types, missing-asset behavior and CSP headers | Pass, October 3, 2026; [live report](pwa-deployment-2026-10-03.json). Browser enforcement remains unverified. |
+| Deployed HTTPS manifest/icon paths, MIME types, missing-asset behavior and CSP headers | Unverified for the first-release shell baseline |
 | Physical Android Chrome (including Pixel 4a), iPhone Safari and desktop Chrome/Edge install, name/icon and launcher reopen | Unverified |
-| Standalone auth return, root/bookmark links, refresh, back and account switching | Unverified |
+| Standalone auth return, root links, refresh, back and account switching | Unverified |
 | Installed offline save/edit, process restart and one acknowledgement on a second physical device | Unverified |
 | Real deployed shell update and interrupted download with drafts/outbox | Unverified |
 | Real screen reader, 200% zoom and phone software keyboard in installed mode | Unverified |
