@@ -25,14 +25,6 @@ function seed() {
   }
 }
 const mutationCases = {
-  "lists/create": { title: "New list" },
-  "items/create": { title: "New item", listId: "alice-list" },
-  "items/toggleComplete": { id: "alice-item", listId: "alice-list" },
-  "lists/updateDefaults": { listId: "alice-list", "statuses[]": "next\nwaiting" },
-  "lists/resetDefaults": { listId: "alice-list" },
-  "settings/update": { "contexts[]": "@Home" },
-  "settings/reset": {},
-  "settings/ensure": {},
   "v1/operations": capture,
   "shared/operations": { accountId: 'alice', listId: 'shared-fixture', operationId: 'create-shared', expectedRevision: 0, action: 'create', fields: { title: 'Shared groceries' } }
 };
@@ -62,7 +54,7 @@ async function fixture(t) {
   };
 }
 
-test("every mutation rejects untrusted browser origins without writing, and accepts v1 writes and rejects retired writes without depending on HX-Request", async t => {
+test("every mutation rejects untrusted browser origins without writing and accepts current writes without depending on HX-Request", async t => {
   const f = await fixture(t);
   assert.deepEqual([...routes.keys()].filter(key => !key.startsWith("GET ")).sort(),
     Object.keys(mutationCases).map(path => `POST /api/${path}`).sort(), "add a valid fixture for every new mutation");
@@ -89,10 +81,10 @@ test("every mutation rejects untrusted browser origins without writing, and acce
     }
     for (const headers of [{}, { referer: f.url + "/page?view=tasks", "sec-fetch-site": "same-origin" }]) {
       seed();
-      assert.equal((await f.request(path, { data, headers })).status, /^(v1|shared)\//.test(path) ? 200 : 409, path);
+      assert.equal((await f.request(path, { data, headers })).status, 200, path);
     }
     seed();
-    assert.equal((await f.request(path, { data, origin: null, headers: { referer: f.url + "/page" } })).status, /^(v1|shared)\//.test(path) ? 200 : 409, `${path}: Referer fallback`);
+    assert.equal((await f.request(path, { data, origin: null, headers: { referer: f.url + "/page" } })).status, 200, `${path}: Referer fallback`);
   }
 });
 
@@ -116,7 +108,7 @@ test("explicit origin configuration rejects lookalikes, malformed entries and co
   }
 });
 
-test("all routes require an authenticated principal except the read-only sign-in shell", async t => {
+test("all routes require an authenticated principal", async t => {
   const f = await fixture(t);
   const invalid = [null, "not-base64!", encode(null), encode({ userId: "alice" }),
     encode({ userId: 123, userRoles: ["authenticated"] }),
@@ -131,8 +123,7 @@ test("all routes require an authenticated principal except the read-only sign-in
     for (const value of invalid) {
       const response = await f.request(path, { user: null, method, data: method === "POST" ? {} : undefined,
         headers: value === null ? { "HX-Request": "true" } : { "x-ms-client-principal": value } });
-      assert.equal(response.status, path === "app" ? 410 : 401, path);
-      if (path === "app") assert.match(response.html, /durable inbox/);
+      assert.equal(response.status, 401, path);
     }
   }
   assert.deepEqual(documents, before);
@@ -150,7 +141,7 @@ test("all read routes isolate accounts and never initialize data", async t => {
     if (!route.startsWith("GET ")) continue;
     const path = route.slice(9), active = reads[path];
     const response = await f.request(active || path);
-    assert.equal(response.status, active ? 200 : path === 'shared/list' ? 400 : 410, path);
+    assert.equal(response.status, active ? 200 : 400, path);
     assert.doesNotMatch(response.html, /bob-private/);
     if (active?.includes('accountId=')) assert.equal((await f.request(active, { user: 'bob' })).status, 409);
   }

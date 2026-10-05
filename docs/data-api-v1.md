@@ -2,10 +2,10 @@
 
 The native client at `/` (also reachable via `/inbox.html`) exclusively uses this
 JSON API. It is disabled unless `V1_API_ENABLED=true`; a disabled API shows a clear
-error without choosing another store. Legacy routes are permanently read-only
-retirement responses. `V1_CLIENT_ENABLED` no longer changes behavior. Existing
-v1 records, outboxes and receipts remain compatible; no partition or database
-version changes are made. The owner reset legacy production data before cutover,
+error without choosing another store. Retired pre-v1 HTTP paths are unregistered
+and receive the platform's normal not-found response. Existing v1 records, outboxes
+and receipts remain compatible; no partition or database version changes are made.
+The owner reset legacy production data before cutover,
 so the migration tool below remains available for archived data rather than being
 a prerequisite for this empty-database release.
 

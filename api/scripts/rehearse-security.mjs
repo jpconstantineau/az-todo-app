@@ -3,8 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-const retired = ['lists/create', 'items/create', 'items/toggleComplete', 'lists/updateDefaults',
-  'lists/resetDefaults', 'settings/update', 'settings/reset', 'settings/ensure'];
 const principal = userId => Buffer.from(JSON.stringify({ userId, userRoles: ['authenticated'] })).toString('base64');
 const failureCode = error => error?.code === 'ERR_ASSERTION' ? 'assertion_failed' : 'request_failed';
 
@@ -168,16 +166,15 @@ export async function rehearse({ origin, cookies, backendOrigin = null, report, 
         { origin: 'https://foreign.invalid', referer: origin + '/' },
         { origin, 'sec-fetch-site': 'cross-site' }, { origin, 'sec-fetch-site': 'same-site' },
         { 'HX-Request': 'true', 'x-forwarded-host': new URL(origin).host }];
-      for (const route of ['v1/operations', 'shared/operations', ...retired]) {
+      for (const route of ['v1/operations', 'shared/operations']) {
         for (const headers of invalid) {
           const body = operation(account, [mutation]);
           const shared = { accountId: account.id, listId: id, operationId: randomUUID(), expectedRevision: 0,
             action: 'add', fields: { id: randomUUID(), title: 'Rejected origin probe' } };
           const reply = await call(route, { account, headers, body: route === 'v1/operations' ? body : route === 'shared/operations' ? shared : {} });
-          expect(reply, 403, retired.includes(route) ? undefined : 'untrusted_origin');
+          expect(reply, 403, 'untrusted_origin');
           if (route === 'v1/operations') expect(await call('v1/receipts?' + new URLSearchParams({ accountId: account.id, operationId: body.operationId }), { account }), 404, 'receipt_not_found');
         }
-        if (retired.includes(route)) expect(await call(route, { account, headers: { origin }, body: {} }), 409);
       }
       expect(await read(account, 'item', id), 404, 'record_not_found');
       assert.equal(expect(await history(), 200).highWater, before);

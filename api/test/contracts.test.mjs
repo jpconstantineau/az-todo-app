@@ -2,27 +2,34 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { documents, routes, startServer } from './harness.mjs';
-import { retiredRoutes } from '../api/legacy.mjs';
 
-test('all rollout flag combinations keep legacy writes retired and v1 gating explicit', async t => {
+const retiredRoutes = {
+  GET: ['app', 'lists/all', 'lists/editDefaults', 'lists/quickAddForm', 'lists/defaultOptions',
+    'items/byList', 'items/filterByStatus', 'settings/edit'],
+  POST: ['lists/create', 'lists/updateDefaults', 'lists/resetDefaults', 'items/create',
+    'items/toggleComplete', 'settings/ensure', 'settings/update', 'settings/reset']
+};
+
+test('v1 gating stays explicit and retired paths use the normal not-found response', async t => {
   const server = await startServer({ browserUser: true }); t.after(server.close);
-  const api = process.env.V1_API_ENABLED, client = process.env.V1_CLIENT_ENABLED;
+  const api = process.env.V1_API_ENABLED;
   const before = structuredClone(documents);
   try {
-    for (const enabled of ['true', 'false', undefined]) for (const oldFlag of ['true', 'false', undefined]) {
+    for (const enabled of ['true', 'false', undefined]) {
       if (enabled === undefined) delete process.env.V1_API_ENABLED; else process.env.V1_API_ENABLED = enabled;
-      if (oldFlag === undefined) delete process.env.V1_CLIENT_ENABLED; else process.env.V1_CLIENT_ENABLED = oldFlag;
       const response = await fetch(server.url + '/api/v1/session');
       assert.equal(response.status, enabled === 'true' ? 200 : 503);
-      for (const path of retiredRoutes.POST) {
-        const response = await fetch(`${server.url}/api/${path}`, { method: 'POST', headers: { origin: server.url } });
-        assert.equal(response.status, 409); assert.match(await response.text(), /entered text/);
+      for (const [method, paths] of Object.entries(retiredRoutes)) {
+        for (const path of paths) {
+          const response = await fetch(`${server.url}/api/${path}`, { method });
+          assert.equal(response.status, 404, `${method} ${path}`);
+          assert.equal(await response.text(), 'Not found');
+        }
       }
     }
     assert.deepEqual(documents, before);
   } finally {
     if (api === undefined) delete process.env.V1_API_ENABLED; else process.env.V1_API_ENABLED = api;
-    if (client === undefined) delete process.env.V1_CLIENT_ENABLED; else process.env.V1_CLIENT_ENABLED = client;
   }
 });
 
@@ -39,6 +46,7 @@ test('canonical shell uses local assets, safe routing and no fragment runtime', 
   const config = JSON.parse(await readFile(new URL('staticwebapp.config.json', root), 'utf8'));
   assert.ok(config.navigationFallback.exclude.includes('/api/*'));
   assert.ok(config.navigationFallback.exclude.includes('/.auth/*'));
+  assert.deepEqual(config.routes, [{ route: '/api/*', allowedRoles: ['authenticated'] }]);
   assert.doesNotMatch(config.globalHeaders['content-security-policy'], /unsafe-inline|jsdelivr/);
   assert.deepEqual([...routes.keys()].filter(key => key.startsWith('POST /api/v1/')), ['POST /api/v1/operations']);
 });

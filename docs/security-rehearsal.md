@@ -76,7 +76,7 @@ are recorded separately rather than assumed to exist at the edge.
 | Real A/B sessions; A supplies B's principal and vice versa | Distinct account identities; client-supplied principal cannot change either identity |
 | Exact Origin, matching Referer, Referer-only | Synthetic writes commit in each account |
 | Every current mutation route | Missing/empty/null/malformed/foreign/lookalike/wrong scheme/wrong port/path Origin, conflicting/malformed Referer, cross-site/same-site and HX/forwarded-header bypass attempts fail with 403 |
-| Rejected origin writes | No new v1 account sequence, fixture record or operation receipt; valid-origin retired routes remain 409 |
+| Rejected origin writes | No new v1 account sequence, fixture record or operation receipt; every current mutation route returns 403 |
 | Foreign account parameters | Records, receipts, changes, exports and update/delete operations reject account mismatch |
 | Guessed IDs under the attacker's own account | Foreign list/project/item/receipt absent; update/delete produces a conflict with no foreign current record |
 | Foreign list/project references, owner fields and invalid input | Moves, forged fields, oversized title and unconfigured status fail; both original items remain unchanged |

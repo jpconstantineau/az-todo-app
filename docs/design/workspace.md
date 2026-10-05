@@ -115,9 +115,8 @@ workspace switch, panels/sheets, and dark default. Preferences remains local to
 the browser; account synchronization was not requested.
 
 The list switch uses v1 records rather than reconnecting the legacy writer.
-The existing migration gate is preserved: when `V1_CLIENT_ENABLED=true`, `/`
-already opens the inbox; before migration, the legacy entry point remains in
-place. This design PR does not enable production flags or migrate user data.
+The retired HTTP entry point and its migration flag have since been removed.
+This design PR did not enable production flags or migrate user data.
 
 AI extraction is a requested follow-up, not simulated by this UI. The large box
 still saves one item per non-empty line and preserves the original input. The

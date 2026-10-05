@@ -15,13 +15,10 @@ export const app = {
           ? new Response(JSON.stringify({ apiVersion: 1, error, message }), { status, headers: { "content-type": "application/json; charset=utf-8" } })
           : new Response(message, { status });
         try {
-          const publicShell = config.route === "app" && req.method === "GET";
-          if (!publicShell && !getUserId(req.headers)) {
+          if (!getUserId(req.headers)) {
             response = failure("Unauthorized", 401, "unauthorized");
           } else if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !checkCsrf(req)) {
             response = failure("Request origin could not be verified. Your entered text has been kept. Reload this site before retrying.", 403, "untrusted_origin");
-          } else if (!jsonRoute && !["GET", "HEAD", "OPTIONS"].includes(req.method)) {
-            response = failure("This workspace has moved to the durable inbox. Keep a copy of your entered text and open /inbox.html.", 409, "legacy_read_only");
           } else {
             response = await config.handler(req, context);
           }
