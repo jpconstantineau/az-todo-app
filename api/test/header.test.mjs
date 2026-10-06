@@ -40,7 +40,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
   await mkdir(process.env.HEADER_SCREENSHOTS, { recursive: true });
@@ -48,6 +48,7 @@ async function shot(page, name) {
 }
 
 async function signedOut(page) {
+  await page.waitForFunction(() => document.title === 'Sign in');
   assert.equal(await page.title(), 'Sign in');
   assert.equal(await page.locator('#signIn').isVisible(), true);
   assert.equal(await page.locator('#signedOut h1').innerText(), 'Welcome');

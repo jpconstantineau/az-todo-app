@@ -2,11 +2,11 @@ import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, 
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=2';
 import { collectionMoveMutations } from './workspace-move.js?v=2';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=3';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=4';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=6';
 import { clarificationUI } from './clarification.js?v=4';
-import { setupReviews } from './reviews.js?v=4';
+import { setupReviews } from './reviews.js?v=5';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
@@ -1358,6 +1358,29 @@ $('signOut').onclick = guard(async () => {
   await pauseSession('Signed out locally. Pending work remains bound to its original account.');
   location.href = '/.auth/logout?post_logout_redirect_uri=/';
 });
+const resetDevice = $('resetDeviceData'), resetStatus = $('resetDeviceDataStatus');
+resetDevice.onclick = async () => {
+  if (resetDevice.getAttribute('aria-disabled') === 'true') return;
+  resetDevice.setAttribute('aria-disabled', 'true');
+  try {
+    resetStatus.textContent = 'Checking cloud sign-in…';
+    if (!accountId || !navigator.onLine) throw new Error('Sign in online before restoring your cloud copy.');
+    if (!navigator.locks) throw new Error('This browser cannot coordinate a safe device reset between tabs.');
+    const owner = accountId, identity = await request('session');
+    if (identity.accountId !== owner) throw new Error('The signed-in account changed. Reload before clearing this device.');
+    if (!confirm('Delete this browser’s To-Do database and reload from the cloud? Pending saves and unfinished drafts stored only on this device will be permanently lost. Export them first if needed.')) { resetStatus.textContent = ''; return; }
+    resetStatus.textContent = 'Clearing the device database…';
+    await navigator.locks.request(`todo-sync:${owner}`, async () => {
+      if (owner !== accountId) throw new Error('The account changed. Reload before clearing this device.');
+      await clearDeviceDatabase(() => { resetStatus.textContent = 'Close other To-Do tabs and app windows to finish clearing this device.'; });
+    });
+    location.reload();
+  } catch (failure) {
+    resetStatus.textContent = `Device database was not cleared: ${failure.message}`;
+  } finally {
+    resetDevice.removeAttribute('aria-disabled');
+  }
+};
 channel.onmessage = guard(async () => {
   const saved = await transact(null);
   if (saved.paused || (accountId && saved.accountId !== accountId)) {

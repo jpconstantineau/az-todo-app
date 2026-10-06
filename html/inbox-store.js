@@ -5,14 +5,51 @@ import { workflowFields, validateWorkflow } from './inbox-fields.js?v=2';
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
 const size = value => new TextEncoder().encode(JSON.stringify(value)).length;
-let connection;
+let connection, resetting = false;
+const resetChannel = new BroadcastChannel('todo-inbox-device-reset');
+resetChannel.unref?.(); // Node's channel must not keep storage unit tests running.
+async function closeConnection() {
+  const current = connection;
+  connection = null;
+  try { (await current)?.close(); } catch { /* A failed open has no connection to close. */ }
+}
+resetChannel.onmessage = event => {
+  if (event.data === 'start') { resetting = true; void closeConnection(); }
+  if (event.data === 'cancel') resetting = false;
+  if (event.data === 'done') location.reload();
+};
 function database() {
+  if (resetting) return Promise.reject(new Error('The device database is being cleared. Wait for the app to reload.'));
   return connection ??= new Promise((resolve, reject) => {
     const request = indexedDB.open('todo-inbox-v1', 1);
     request.onupgradeneeded = () => request.result.createObjectStore('accounts');
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => { request.result.close(); connection = null; };
+      if (resetting) request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => { connection = null; reject(request.error); };
   });
+}
+
+export async function clearDeviceDatabase(onBlocked) {
+  if (resetting) throw new Error('The device database is already being cleared.');
+  resetting = true;
+  resetChannel.postMessage('start');
+  try {
+    await closeConnection();
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase('todo-inbox-v1');
+      request.onblocked = () => onBlocked?.();
+      request.onsuccess = resolve;
+      request.onerror = () => reject(request.error);
+    });
+    resetChannel.postMessage('done');
+  } catch (failure) {
+    resetting = false;
+    resetChannel.postMessage('cancel');
+    throw failure;
+  }
 }
 
 // One transaction journals the intent and draft together. Resolve only on commit,

@@ -9,7 +9,7 @@ import { documents, startServer } from './harness.mjs';
 import { showView } from './navigation-helper.mjs';
 import { currentCreate } from './current-record.mjs';
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 async function setup(t, hash = '') {
   documents.length = 0;
@@ -53,7 +53,7 @@ test('navigation: reviews stay in a page card with history, editing, offline rel
   await page.waitForFunction(() => document.activeElement.id === 'reviewEdit');
   assert.match(await page.locator('#reviewDetails').textContent(), /Keep these review notes/);
   await page.locator('#reviewDefer').fill('2027-02-01');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.review.deferUntil === '2027-02-01');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.review.deferUntil === '2027-02-01');
   await showView(page, 'work');
   await page.goBack();
   await page.waitForFunction(() => document.querySelector('#openReviews').getAttribute('aria-current') === 'page');
@@ -104,21 +104,21 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   assert.equal(await page.locator('#items article').count(), 0, 'processed work leaves the default Inbox');
   await page.getByRole('combobox', { name: 'View', exact: true }).selectOption(list.id);
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this']);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.work.view === id, list.id);
-  await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice', local => {
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.work.view === id, list.id);
+  await page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice', local => {
     local.draft.navigation.work.context = 'context:Former filter';
   }));
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), list.id);
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Process this'], 'old Process filters no longer hide work');
   await page.evaluate(async id => {
-    await (await import('/inbox-store.js?v=3')).transact('alice', local => { local.records['list:' + id].deleted = true; });
+    await (await import('/inbox-store.js?v=4')).transact('alice', local => { local.records['list:' + id].deleted = true; });
   }, list.id);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), 'inbox');
   assert.equal(await page.locator('#items article').count(), 0);
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact(null)).accountId === 'bob');
   await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   await showView(page, 'work');
@@ -154,14 +154,14 @@ test('navigation: Execute selects a list, opens details and completes exact item
   await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).focus();
   await page.keyboard.press('Space');
   await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).waitFor({ state: 'detached' });
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === id && mutation.fields?.status === 'completed')), milk.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=4')).transact('alice')).queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === id && mutation.fields?.status === 'completed')), milk.id);
   const pending = (await local(page)).queue;
   assert.equal(pending.length, 1);
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Bread']);
   await page.locator('#executeList').selectOption(chores.id);
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Laundry']);
   await page.locator('#executeList').selectOption(groceries.id);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.execute.view === id, groceries.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.execute.view === id, groceries.id);
   await showView(page, 'work');
   assert.equal(await page.locator('#view').inputValue(), 'inbox', 'Execute has an independent list selection');
   await page.goBack();
@@ -172,7 +172,7 @@ test('navigation: Execute selects a list, opens details and completes exact item
   assert.deepEqual((await local(page)).queue, pending);
   await page.getByRole('checkbox', { name: 'Complete Bread', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#executeItems').textContent.includes('No ready items'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue.length === 2);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).queue.length === 2);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const records = documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
   assert.equal(records.length, 6, 'completion preserves one canonical record per item and list');
@@ -197,7 +197,7 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   const response = await fetch(url + '/api/v1/operations', { method: 'POST', headers: { origin: url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execute-kinds', mutations }) });
   assert.equal(response.status, 200, await response.text());
   await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).records['list:checklist']?.kind === 'checklist');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).records['list:checklist']?.kind === 'checklist');
   await page.locator('#executeList option[value="regular"]').waitFor({ state: 'attached' }); await confirmed(page);
   await showView(page, 'execute');
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a list', 'Errands']);
@@ -208,7 +208,7 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   await page.locator('#executeTimeFilter').selectOption('30');
   await page.locator('#executeEnergyFilter').selectOption('low');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.execute.energy === 'low');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.execute.energy === 'low');
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), 'regular');
   assert.equal(await page.locator('#executeTimeFilter').inputValue(), '30');
@@ -253,7 +253,7 @@ test('navigation: Execute offers existing collection kinds, including an Area wi
   assert.deepEqual(area.collectionRefs, [{ type: 'list', id: 'area' }]);
   await page.locator('[data-execute-kind="area"]').click();
   await page.locator('#executeList').selectOption('area');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.execute.view === 'area');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.execute.view === 'area');
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('[data-execute-kind="area"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('#executeList').inputValue(), 'area');
@@ -315,7 +315,7 @@ test('navigation: Execute offers only ready work in every collection and opens e
   await showView(page, 'execute');
   await page.locator('[data-execute-kind="checklist"]').click();
   await page.locator('#executeList').selectOption('checklist');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.execute.view === 'checklist');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.execute.view === 'checklist');
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), 'checklist');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['checklist inbox', 'checklist next']);
@@ -326,7 +326,7 @@ test('navigation: Execute keeps failed completions unchecked, clears deleted lis
   await capture(page, 'Private task', 'Private list'); await confirmed(page);
   const list = documents.find(doc => doc.record?.type === 'list').record;
   await showView(page, 'execute'); await page.locator('#executeList').selectOption(list.id);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.execute.view === id, list.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.execute.view === id, list.id);
   await context.setOffline(true);
   await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
   await page.getByRole('checkbox', { name: 'Complete Private task', exact: true }).click();
@@ -336,13 +336,13 @@ test('navigation: Execute keeps failed completions unchecked, clears deleted lis
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.getByRole('checkbox', { name: 'Complete Private task', exact: true }).isChecked(), false);
   await page.evaluate(async id => {
-    await (await import('/inbox-store.js?v=3')).transact('alice', local => { local.records['list:' + id].deleted = true; });
+    await (await import('/inbox-store.js?v=4')).transact('alice', local => { local.records['list:' + id].deleted = true; });
   }, list.id);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), '');
   assert.equal(await page.locator('#executeItems article').count(), 0);
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact(null)).accountId === 'bob');
   await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   await showView(page, 'execute');
@@ -365,23 +365,23 @@ test('navigation: Execute scopes lists and saved selection to each workspace and
   });
   assert.equal(response.status, 200);
   await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).records['item:work-task']?.version === 1);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).records['item:work-task']?.version === 1);
   await confirmed(page);
   await showView(page, 'execute'); await page.locator('#executeList').selectOption(personalList.id);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.execute.view === id, personalList.id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.execute.view === id, personalList.id);
   await page.locator('#workspaceSelect').selectOption('work');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).selectedWorkspace === 'work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).selectedWorkspace === 'work');
   assert.equal(await page.locator('#executeList').inputValue(), '');
   assert.equal(await page.locator('#executeList option[value="' + personalList.id + '"]').count(), 0);
   await page.locator('#executeList').selectOption('work-list');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Work task']);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).workspaceDrafts.work.navigation.execute.view === 'work-list');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).workspaceDrafts.work.navigation.execute.view === 'work-list');
   await page.locator('#workspaceSelect').selectOption('personal');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).selectedWorkspace === 'personal');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).selectedWorkspace === 'personal');
   assert.equal(await page.locator('#executeList').inputValue(), personalList.id);
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Personal task']);
   await page.locator('#workspaceSelect').selectOption('work');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).selectedWorkspace === 'work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).selectedWorkspace === 'work');
   await clickControl(page.locator('#manageWorkspaces'));
   await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor();
@@ -444,7 +444,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
   assert.equal(await page.locator('#statusFilter').inputValue(), 'completed');
   assert.equal(await page.locator('#items article').count(), 2);
   await page.locator('#statusFilter').selectOption('@all');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.work.status === '@all');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.work.status === '@all');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), '@all');
   assert.equal(await page.locator('#items article').count(), 2);
@@ -452,7 +452,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   assert.equal(await page.locator('#items article').count(), 0);
   await page.locator('#statusFilter').selectOption('completed');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.lists.status === 'completed');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.lists.status === 'completed');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#statusFilter').inputValue(), 'completed');
   await page.getByRole('button', { name: 'Reopen Next task', exact: true }).click();
@@ -465,7 +465,7 @@ test('navigation: incomplete defaults, completed recovery and all statuses work 
   assert.equal(records.find(record => record.id === 'next').status, 'next');
   assert.equal(records.find(record => record.id === 'done').status, 'completed');
   setUser('bob'); await page.reload(); await page.locator('#workspace').waitFor();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact(null)).accountId === 'bob');
   await showView(page, 'work');
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   assert.equal(await page.locator('#items article').count(), 0);
@@ -532,7 +532,7 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   assert.match(await page.locator('#items').innerText(), /No unprocessed captures/);
   await page.locator('#view').selectOption('unfiled');
   assert.ok((await rows()).includes('filed'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation.work.view === 'unfiled');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.navigation.work.view === 'unfiled');
   const queued = (await local(page)).queue;
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), 'unfiled');
@@ -543,7 +543,7 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   await page.getByRole('button', { name: 'Edit other-inbox', exact: true }).waitFor();
   await page.locator('#view').selectOption('inbox'); assert.deepEqual(await rows(), ['other-inbox']);
   await page.locator('#workspaceSelect').selectOption('personal');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).selectedWorkspace === 'personal');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).selectedWorkspace === 'personal');
   assert.deepEqual(await rows(), []);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const items = documents.filter(doc => doc.record?.type === 'item').map(doc => doc.record);
@@ -563,7 +563,7 @@ test('navigation: new lists open only on request and resume the same draft after
   await showView(page, 'lists');
   assert.equal(await page.locator('#editor').isVisible(), false);
   await page.locator('#newList').click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.type === 'list');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.edit?.type === 'list');
   const id = (await local(page)).draft.edit.id;
   await page.locator('#cancelEdit').click();
   await page.reload(); await confirmed(page);
@@ -571,7 +571,7 @@ test('navigation: new lists open only on request and resume the same draft after
   await page.locator('#newList').click();
   await page.locator('#edit [name=title]').fill('Weekend groceries');
   await page.locator('#edit [name=description]').fill('Keep these unsaved notes');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.fields.description === 'Keep these unsaved notes');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.edit?.fields.description === 'Keep these unsaved notes');
   assert.equal((await local(page)).draft.edit.id, id);
   await context.setOffline(true);
   // Even an interrupted open panel stays closed on the next visit.
@@ -599,7 +599,7 @@ test('navigation: new lists open only on request and resume the same draft after
   await page.locator('#newList').click();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), '');
   await page.locator('#edit [name=title]').fill('Alice private list draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.fields.title === 'Alice private list draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.edit?.fields.title === 'Alice private list draft');
   await page.locator('#cancelEdit').click();
   // Hold Bob's device copy after the session ID changes but before its view restores.
   await page.evaluate(() => {
@@ -620,7 +620,7 @@ test('navigation: new lists open only on request and resume the same draft after
   });
   setUser('bob'); await clickControl(page.locator('#sync'));
   await page.waitForFunction(() => !!window.releaseAccountOpen);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact(null)).accountId === 'bob');
   assert.equal(await page.locator('#workspace').isVisible(), false);
   let navigated = false;
   const navigation = showView(page, 'lists').then(() => { navigated = true; });
@@ -750,13 +750,13 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   await page.reload(); await page.locator('#workspace').waitFor();
   // Simulate the normal change feed replacing a selected list with its tombstone.
   await page.evaluate(async id => {
-    await (await import('/inbox-store.js?v=3')).transact('alice', local => { local.records['list:' + id].deleted = true; });
+    await (await import('/inbox-store.js?v=4')).transact('alice', local => { local.records['list:' + id].deleted = true; });
   }, list.id);
   await page.reload(); await page.locator('#workspace').waitFor(); await showView(page, 'lists');
   assert.equal(await page.locator('#view').inputValue(), '');
   assert.match(await page.locator('#items').innerText(), /No lists yet/);
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact(null)).accountId === 'bob');
   await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#quickFocus').getAttribute('aria-current') === 'page');
   assert.doesNotMatch(await page.locator('body').innerText(), /Private list|Private task|Rejected private task|Recover this draft/);
