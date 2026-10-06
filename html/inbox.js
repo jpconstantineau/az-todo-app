@@ -2,11 +2,11 @@ import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, 
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=2';
 import { collectionMoveMutations } from './workspace-move.js?v=2';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=4';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=5';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=6';
 import { clarificationUI } from './clarification.js?v=4';
-import { setupReviews } from './reviews.js?v=5';
+import { setupReviews } from './reviews.js?v=6';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
@@ -837,8 +837,9 @@ capture.addEventListener('submit', event => {
         if (mutation.type === 'item') Object.assign(mutation.fields, details, { status: 'inbox' });
         else mutation.fields.defaults = structuredClone(userDefaults());
       }
+      let pendingSaves;
       const saved = await transact(owner, local => {
-        enqueue(local, owner, mutations);
+        pendingSaves = enqueueCapture(local, owner, mutations);
         if (JSON.stringify(currentDraft(local).capture) === JSON.stringify(submitted)) { currentDraft(local).capture = {}; currentDraft(local).extraction = { enabled: currentDraft(local).extraction?.enabled === true, includeLists: currentDraft(local).extraction?.includeLists === true }; }
       });
       if (owner !== accountId) return;
@@ -847,7 +848,8 @@ capture.addEventListener('submit', event => {
         capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
         extraction.reset(true);
       }
-      clearError(); statusText('draftStatus', 'Saved on device');
+      const itemCount = mutations.filter(mutation => mutation.type === 'item').length;
+      clearError(); statusText('draftStatus', `Saved ${itemCount} item${itemCount === 1 ? '' : 's'} on this device in ${pendingSaves} pending save${pendingSaves === 1 ? '' : 's'}.`);
       render();
       if (destination === 'capture' && !document.querySelector('dialog[open]') &&
           (document.activeElement === document.body || document.activeElement === focused)) capture.elements.text.focus();

@@ -121,15 +121,19 @@ performance or as proof of the production authentication boundary.
   non-empty newline becomes one item, in input order, with surrounding title
   whitespace removed. The exact original input is retained separately.
 - For groceries, enter `milk`, `bread`, `eggs` on separate lines, expand the
-  options and enter `Groceries` as the new list. One save creates the list and
-  all three items atomically. Each item retains the original capture, even after
+  options and enter `Groceries` as the new list. One device transaction journals
+  the list and all three items. Each item retains the original capture, even after
   its title, notes or list changes.
 - Commas and semicolons do not split automatically. The optional preview button
   converts them to editable lines; **Save on device** confirms those lines. It
   does not attempt to infer sentence meaning. The pre-preview text is preserved.
-- A save accepts up to 20 items, or 19 with a new list, within the API's 64 KiB
-  operation limit. Larger input stays in the form with a visible error. Titles
-  are limited to 200 characters, notes to 4,000 and original capture to 16,000.
+- A manual save accepts up to 1,000 non-empty lines. It journals ordered pending
+  operations of at most 20 records and 64 KiB each; with a new list, the first
+  operation creates it before later item batches refer to it. The whole capture
+  and draft update are atomic on this device, while cloud confirmation is atomic
+  per operation and may finish a prefix before retrying the remainder. Local-AI
+  extraction review remains limited to 20 tasks. Titles are limited to 200
+  characters, notes to 4,000 and original capture to 16,000.
 - Edit titles/notes, move items between existing lists or back to the inbox,
   complete, and reopen offline. Reopen restores `statusBeforeCompletion`; older
   completed records without a prior status use `next`. List titles and
