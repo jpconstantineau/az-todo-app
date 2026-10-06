@@ -200,15 +200,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v8')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v9')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
     '/inbox.js?v=8', '/inbox-store.js?v=5', '/inbox-fields.js?v=2', '/inbox-export.js?v=6',
     '/collection-model.js?v=2', '/collections.js?v=3', '/workspace-move.js?v=2', '/workspaces.js?v=2',
     '/clarification.js?v=4', '/clarification-flow.js?v=3', '/reviews.js?v=6', '/briefs.js?v=3',
-    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=7',
-    '/pwa.js?v=7', '/manifest.json',
+    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=8',
+    '/pwa.js?v=8', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -432,7 +432,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const root = new URL('../../html/', import.meta.url);
   const nextAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v8', 'shell-next'),
+    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v9', 'shell-next'),
   ])));
   nextAssets.set('/', nextAssets.get('/index.html'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;

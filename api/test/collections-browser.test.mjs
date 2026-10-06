@@ -6,6 +6,7 @@ import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { showView, clickControl } from './navigation-helper.mjs';
 import { currentCreate } from './current-record.mjs';
+import { defaultSettings } from '../api/shared/defaults.mjs';
 
 const create = currentCreate;
 const ref = (type, id) => ({ type, id });
@@ -62,6 +63,36 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
     }
   }
 });
+test('collections browser: changing collection type preserves the collection and its items', async t => {
+  const defaults = { ...structuredClone(defaultSettings), contexts: ['@Store'] };
+  const { page } = await setup(t, [
+    create('list', 'groceries', { title: 'Groceries', parentRef: ref('list', 'home'), defaults }),
+    create('item', 'buy-milk', { title: 'Buy milk', status: 'next', listId: 'groceries', collectionRefs: [ref('list', 'groceries')] })
+  ]);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('groceries');
+  await page.getByRole('button', { name: 'Edit list: Groceries', exact: true }).click();
+  const type = page.getByRole('combobox', { name: 'Collection type', exact: true });
+  assert.equal(await type.inputValue(), 'list');
+  assert.equal(await type.locator('option[value="project"]').evaluate(option => option.disabled), true);
+  await type.selectOption('checklist'); await saveEdit(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).records['list:groceries']?.kind === 'checklist');
+  const localRecords = (await local(page)).records;
+  assert.deepEqual(localRecords['list:groceries'].parentRef, ref('list', 'home'));
+  assert.deepEqual(localRecords['list:groceries'].defaults, defaults);
+  assert.equal(localRecords['item:buy-milk'].listId, 'groceries');
+  assert.deepEqual(localRecords['item:buy-milk'].collectionRefs, [ref('list', 'groceries')]);
+  await synced(page);
+  const savedLists = documents.filter(doc => doc.id === 'record:list:groceries');
+  assert.equal(savedLists.length, 1); assert.equal(savedLists[0].record.kind, 'checklist');
+  assert.deepEqual(savedLists[0].record.parentRef, ref('list', 'home'));
+  assert.equal(documents.filter(doc => doc.id === 'record:item:buy-milk').length, 1);
+  await showView(page, 'execute');
+  assert.equal(await page.locator('#executeList option[value="groceries"]').count(), 0);
+  await page.locator('[data-execute-kind="checklist"]').click();
+  await page.locator('#executeList').selectOption('groceries');
+  await page.getByRole('button', { name: 'Edit Buy milk', exact: true }).waitFor();
+});
+
 test('collections browser: reusable reference checklist and resumable area mapping preserve source and tags', async t => {
   const entries = Array.from({ length: 21 }, (_, i) => create('item', `tag-${i}`, { title: `Tagged ${i}`, areas: ['Household'], status: 'inbox' }));
   const { page, context } = await setup(t, [create('item', 'passport', { title: 'Passport', description: 'Check expiry', status: 'reference', listId: 'packing', referenceLinks: ['https://example.com/passport'] }), ...entries]);

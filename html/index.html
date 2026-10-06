@@ -8,7 +8,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=7" defer></script>
+  <script src="/pwa.js?v=8" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
   <script type="module" src="/inbox.js?v=8"></script>
@@ -238,7 +238,7 @@
           <select id="projectStatus" name="projectStatus" aria-describedby="projectStatusHelp"><option value="draft">Needs outcome</option><option value="active">Active</option><option value="someday">Someday / on hold</option><option value="completed">Completed</option></select>
           <p id="projectStatusHelp" class="muted">Needs outcome is linkable but remains unfinished clarification and appears in weekly review. Add a desired outcome before choosing Active, Someday or Completed. Changing status keeps notes and history; linked actions keep their own statuses.</p></div>
         <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span id="editWorkspaceHelp" class="muted"></span></label>
-        <div id="editCollectionFields" hidden><label>Kind<select name="kind"></select></label><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
+        <div id="editCollectionFields" hidden><label>Collection type<select name="kind" aria-describedby="collectionTypeHelp"></select></label><p id="collectionTypeHelp" class="muted">Changing a collection’s type keeps its items, defaults, parent and history. Projects retain their own type.</p><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
         <div id="editAdvanced"><div id="editFields"></div></div>
         <details><summary>Original capture</summary><pre id="original"></pre></details>
         </div>
