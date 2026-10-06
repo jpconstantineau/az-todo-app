@@ -154,7 +154,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   const menu = document.activeElement.closest('details');
-  if (menu?.open && (menu.id === 'connection' || menu.classList.contains('task-menu') || menu.classList.contains('responsive-menu'))) {
+  if (menu?.open && (menu.id === 'connection' || menu.classList.contains('responsive-menu'))) {
     menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
   }
 });
@@ -401,10 +401,25 @@ function button(text, handler, label = text, focusKey) {
   if (focusKey) element.dataset.focusKey = focusKey;
   element.addEventListener('click', guard(handler)); return element;
 }
+const taskIcons = {
+  complete: ['M5 12l4 4L19 6'],
+  reopen: ['M4 10h11a5 5 0 0 1 0 10h-1', 'M4 10l4-4M4 10l4 4'],
+  clarify: ['M9.1 9a3 3 0 1 1 5.1 2.1c-1.2 1.2-2.2 1.7-2.2 3.4', 'M12 18h.01', 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z'],
+  brief: ['M3 8h18v12H3V8Z', 'M8 8V5h8v3', 'M3 13h18'],
+  delete: ['M3 6h18', 'M8 6V4h8v2', 'M19 6l-1 14H6L5 6', 'M10 10v6M14 10v6'],
+  undo: ['M4 10h11a5 5 0 0 1 0 10h-1', 'M4 10l4-4M4 10l4 4']
+};
+function taskIcon(control, name, title) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('task-icon'); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+  for (const data of taskIcons[name]) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', data); svg.append(path);
+  }
+  control.replaceChildren(svg); control.classList.add('icon-button'); control.title = title; return control;
+}
 function render() {
   if (!accountId || !state) return;
   const focused = document.activeElement;
-  const expandedActions = new Set([...document.querySelectorAll('.task-menu[open]')].map(menu => menu.dataset.recordKey));
   const records = Object.values(scopedRecords()).filter(record => !record.deleted);
   const lists = records.filter(record => record.type === 'list');
   const projects = records.filter(record => record.type === 'project');
@@ -504,7 +519,7 @@ function render() {
     if (view === 'day') return !!$('day').value && record.plannedDay === $('day').value;
     return !!context && inCollection(record, context, scopedRecords(), listMode && !!filters.nested);
   }).map(record => {
-    const article = document.createElement('article'); article.dataset.id = record.id;
+    const article = document.createElement('article'); article.className = 'task-row'; article.dataset.id = record.id;
     const title = document.createElement('h3'); title.append(titleButton(record));
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
     const metadata = document.createElement('p'); metadata.className = 'notes';
@@ -518,22 +533,15 @@ function render() {
     if (reviewReady(record)) metadata.append(' · Ready for review — choose Next or set a new date');
     const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
     status.textContent = [record.status, record.localState].filter(Boolean).join(' · ');
-    const actions = document.createElement('div'); actions.className = 'actions';
+    const content = document.createElement('div'); content.className = 'task-content'; content.append(title, notes, metadata, status);
+    const actions = document.createElement('div'); actions.className = 'task-actions'; actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', `Actions for ${record.title}`);
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
-    const complete = button(record.status === 'completed' ? '↶' : '✓', () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`);
-    complete.className = 'icon-button'; complete.title = action;
-    const menu = document.createElement('details'); menu.className = 'task-menu responsive-menu'; menu.dataset.recordKey = key(record);
-    menu.open = expandedActions.has(key(record));
-    const summary = document.createElement('summary'); summary.textContent = '•••'; summary.setAttribute('aria-label', `More actions for ${record.title}`); summary.title = 'More actions'; summary.dataset.focusKey = `${key(record)}:more`;
-    actions.append(button('Clarify', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`));
-    if (record.status !== 'reference') actions.append(button('Brief', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`));
-    actions.append(deleteButton(record));
-    if (record.workflowBeforeTransition) actions.append(button('Undo state change', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`));
-    menu.append(summary, actions);
-    const heading = document.createElement('div'); heading.className = 'task-heading'; heading.append(title);
-    if (record.status !== 'reference') heading.append(complete);
-    heading.append(menu);
-    article.append(heading, notes, metadata, status); return article;
+    if (record.status !== 'reference') actions.append(taskIcon(button('', () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`), record.status === 'completed' ? 'reopen' : 'complete', action));
+    actions.append(taskIcon(button('', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`), 'clarify', 'Clarify'));
+    if (record.status !== 'reference') actions.append(taskIcon(button('', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`), 'brief', 'Brief'));
+    actions.append(taskIcon(deleteButton(record), 'delete', 'Delete'));
+    if (record.workflowBeforeTransition) actions.append(taskIcon(button('', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`), 'undo', 'Undo state change'));
+    article.append(content, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
     ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')

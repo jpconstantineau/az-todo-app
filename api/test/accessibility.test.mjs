@@ -29,13 +29,6 @@ async function capture(page, text) {
 }
 const expectFocus = (page, selector) => page.waitForFunction(selector => document.activeElement.matches(selector), selector);
 async function keyboardActivate(page, selector) {
-  // Open the task disclosure using the keyboard before reaching its actions.
-  const summaries = await page.locator(selector).locator('xpath=ancestor::details[contains(@class, "task-menu") and not(@open)]/summary').all();
-  for (const summary of summaries) {
-    // Keyboard navigation may return before hashchange reveals the task panel.
-    await summary.waitFor({ state: 'visible' });
-    await summary.focus(); await page.keyboard.press('Enter');
-  }
   for (let i = 0; i < 80; i++) {
     if (await page.locator(selector).evaluate(control => control === document.activeElement)) {
       await page.keyboard.press('Enter'); return;
@@ -109,8 +102,6 @@ test('accessibility: review decisions and brief revisions keep a keyboard path t
   await keyboardActivate(page, '#closeReviews'); await expectFocus(page, '#openReviews');
   await keyboardActivate(page, 'a[href="#work"]');
   await expectFocus(page, '#itemsHeading');
-  const menu = page.locator('[aria-label="More actions for Insurance"]');
-  if (await menu.isVisible()) await keyboardActivate(page, '[aria-label="More actions for Insurance"]');
   await keyboardActivate(page, '[aria-label="Brief Insurance"]');
   await expectFocus(page, '#briefHeading');
   await keyboardActivate(page, '#briefForm [type=submit]');
@@ -217,17 +208,17 @@ test('accessibility: keyboard actions and editor return focus survive background
   assert.equal(await page.locator(`${row} button`).first().getAttribute('aria-label'), 'Edit Renamed task');
   await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Reopen Renamed task', exact: true }).waitFor();
-  await expectFocus(page, `${row} .icon-button`);
+  await expectFocus(page, `${row} [data-focus-key$=":complete"]`);
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Complete Renamed task', exact: true }).waitFor();
-  await expectFocus(page, `${row} .icon-button`);
+  await expectFocus(page, `${row} [data-focus-key$=":complete"]`);
   await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Enter');
   await page.locator('#editor').waitFor(); await refresh(page);
   await page.keyboard.press('Escape');
   await expectFocus(page, `${row} button:first-child`);
   // If a completed row leaves the current filter, use the visible view heading.
   await page.locator('#statusFilter').selectOption('inbox');
-  await page.locator(`${row} .icon-button`).focus(); await page.keyboard.press('Enter');
+  await page.locator(`${row} [data-focus-key$=":complete"]`).focus(); await page.keyboard.press('Enter');
   await page.locator(row).waitFor({ state: 'detached' });
   await expectFocus(page, '#itemsHeading');
 });
