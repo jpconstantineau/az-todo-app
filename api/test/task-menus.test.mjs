@@ -86,7 +86,7 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.getByRole('button', { name: 'Reopen Bread', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Bread', exact: true }).waitFor();
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=3');
+    const { transact } = await import('/inbox-store.js?v=4');
     await transact('alice', local => {
       const entry = local.queue[0], mutation = entry.operation.mutations[0];
       entry.failure = 'Conflict — inspect the server version';

@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=5" defer></script>
+  <script src="/pwa.js?v=6" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=6"></script>
+  <script type="module" src="/inbox.js?v=7"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -56,6 +56,11 @@
       <button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button>
       <p id="checkAppUpdateStatus" role="status"></p>
       <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
+    </section>
+    <section aria-labelledby="deviceResetHeading"><p class="eyebrow">Device recovery</p><h2 id="deviceResetHeading">Restore from cloud</h2>
+      <button id="resetDeviceData" type="button" aria-describedby="resetDeviceDataHelp">Clear device database</button>
+      <p id="resetDeviceDataStatus" role="status"></p>
+      <p id="resetDeviceDataHelp" class="muted">Delete this browser's To-Do database and reload your cloud copy. Pending saves and unfinished drafts stored only on this device will be lost. Export anything you need first. Online sign-in is required.</p>
     </section><button type="button" data-close-preferences>Close preferences</button></dialog>
   <section id="signedOut" aria-label="Sign in"><h1>Welcome</h1><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
   <p id="appUpdateStatus" role="status" hidden></p>

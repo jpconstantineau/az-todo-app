@@ -60,7 +60,7 @@ test('mobile workflow: compact menus, title editing, focus, offline help and rec
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Edit list: Shopping');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this help draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Keep this help draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.capture.text === 'Keep this help draft');
   await openMenu(page);
   const popup = page.waitForEvent('popup');
   await page.getByRole('link', { name: 'Help (opens in a new tab)', exact: true }).click();

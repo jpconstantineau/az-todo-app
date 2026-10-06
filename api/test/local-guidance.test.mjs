@@ -11,7 +11,7 @@ test('local guidance accepts only bounded text suggestions, never record fields'
   for (const raw of ['not json', 'null', '[]', '{"text":2}', '{"text":" "}', '{"text":"Okay","status":"done"}', JSON.stringify({ text: 'a'.repeat(201) }), 'a'.repeat(24001)]) assert.throws(() => validateSuggestion(raw, 200));
 });
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
 async function setup(t, mode = {}) {
   documents.length = 0;
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);

@@ -142,7 +142,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v6', 'shell-next');
+    const next = worker.replaceAll('shell-v7', 'shell-next');
     return version === 'failure' ? next.replace('const ASSETS = [', "const ASSETS = ['/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -150,8 +150,8 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Draft across update');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Draft across update');
-  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.capture.text === 'Draft across update');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
   const before = await local();
   assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
@@ -175,7 +175,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v6')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v7')));
 });
 
 test('PWA: update checks report current/offline, prevent duplicate checks, and recover from failure and timeout', async t => {
@@ -226,6 +226,43 @@ test('PWA: update checks report current/offline, prevent duplicate checks, and r
   assert.equal(await page.locator('#appUpdateStatus').textContent(), '');
   await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep working while checking');
+});
+
+test('PWA: device reset requires confirmation, closes other tabs, and restores the cloud copy', { timeout: 90000 }, async t => {
+  const { page, context, server } = await setup(t);
+  await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
+  await page.locator('#captureText').fill('Cloud copy');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=4')).transact('alice');
+    return Object.values(local.records).some(record => record.title === 'Cloud copy') && local.queue.length === 0;
+  });
+  await page.locator('#captureText').fill('Unfinished device draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('alice')).draft.capture.text === 'Unfinished device draft');
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+  const reset = page.getByRole('button', { name: 'Clear device database' });
+  page.once('dialog', dialog => { assert.match(dialog.message(), /Pending saves and unfinished drafts/); void dialog.dismiss(); });
+  await reset.click();
+  assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=4')).transact('alice')))).draft.capture.text, 'Unfinished device draft');
+
+  const second = await context.newPage();
+  await second.goto(server.url); await ready(second); await second.locator('#workspace').waitFor();
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=4');
+    await transact('alice', local => { local.records = {}; });
+  });
+  const firstReload = page.waitForEvent('framenavigated', frame => frame === page.mainFrame());
+  const secondReload = second.waitForEvent('framenavigated', frame => frame === second.mainFrame());
+  page.once('dialog', dialog => { void dialog.accept(); });
+  await reset.click();
+  await Promise.all([firstReload, secondReload]);
+  await ready(page); await page.locator('#workspace').waitFor();
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=4')).transact('alice');
+    return Object.values(local.records).some(record => record.title === 'Cloud copy') && local.queue.length === 0;
+  });
+  assert.equal(await page.locator('#captureText').inputValue(), '');
+  assert.equal((await page.locator('#items').innerText()).includes('Unfinished device draft'), false);
 });
 
 test('PWA: a failed initial registration can be retried without reloading or losing capture', async t => {
