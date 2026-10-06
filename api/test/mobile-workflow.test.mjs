@@ -6,7 +6,7 @@ import { documents, startServer } from './harness.mjs';
 import { showView, openMenu, clickControl } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 
-test('mobile workflow: compact menus, title editing, focus, offline help and recovery', { timeout: 90000 }, async t => {
+test('mobile workflow: visible task actions, title editing, focus, offline help and recovery', { timeout: 90000 }, async t => {
   documents.length = 0;
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
@@ -37,22 +37,18 @@ test('mobile workflow: compact menus, title editing, focus, offline help and rec
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await showView(page, 'work');
-  assert.equal(await page.locator('.task-menu').evaluate(el => el.open), false);
-  assert.equal(await page.getByRole('button', { name: 'Clarify Milk', includeHidden: true }).isVisible(), false);
+  assert.equal(await page.locator('.task-menu').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Clarify Milk', exact: true }).isVisible(), true);
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).focus(); await page.keyboard.press('Enter');
   await page.locator('#edit [name=title]').fill('Oat milk');
   await page.locator('#edit [type=submit]').click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Edit Oat milk');
   assert.equal(await page.locator('#items h3').textContent(), 'Oat milk');
-  await page.locator('.task-menu > summary').click();
   await page.getByRole('button', { name: 'Clarify Oat milk', exact: true }).focus();
   await page.evaluate(() => { window.beforeRefresh = document.activeElement; const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close(); });
   await page.waitForFunction(() => !window.beforeRefresh.isConnected);
-  assert.equal(await page.locator('.task-menu').evaluate(el => el.open), true);
   assert.equal(await page.getByRole('button', { name: 'Clarify Oat milk', exact: true }).evaluate(el => el === document.activeElement), true);
-  await page.keyboard.press('Escape');
-  assert.equal(await page.locator('.task-menu').evaluate(el => el.open), false);
   await showView(page, 'lists');
   await page.locator('#view').selectOption({ label: 'Groceries' });
   await page.getByRole('button', { name: 'Edit list: Groceries', exact: true }).click();

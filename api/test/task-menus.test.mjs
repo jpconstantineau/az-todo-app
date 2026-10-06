@@ -7,7 +7,7 @@ import { showView, clickControl } from './navigation-helper.mjs';
 
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 
-test('task menus stay compact at every width and retain keyboard focus, recovery and immediate undo', { timeout: 90000 }, async t => {
+test('task rows keep actions visible at every width and retain keyboard focus, recovery and immediate undo', { timeout: 90000 }, async t => {
   documents.length = 0;
   let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -22,37 +22,37 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await synced(page);
   await showView(page, 'work'); await page.locator('#view').selectOption('all');
-  const cards = page.locator('#items article'), menu = cards.first().locator('.task-menu'), summary = menu.locator('summary');
+  const cards = page.locator('#items article');
   assert.equal(await cards.count(), 3);
   assert.ok((await cards.locator('.record-state').allTextContents()).every(text => !text.includes('Server-confirmed')));
   if (process.env.TASK_MENU_SCREENSHOTS) await mkdir(process.env.TASK_MENU_SCREENSHOTS, { recursive: true });
   for (const width of [767, 768, 936, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    assert.equal(await page.locator('.task-menu[open]').count(), 0);
-    assert.equal(await cards.locator('button:visible').count(), 6, 'only title and completion buttons are exposed');
-    assert.equal(await cards.locator('summary:visible').count(), 3);
-    assert.ok(await summary.evaluate(el => el.getBoundingClientRect().height >= 44));
+    assert.equal(await page.locator('.task-menu').count(), 0);
+    assert.equal(await cards.locator('button:visible').count(), 15, 'title and four actions are exposed for every task');
+    for (const [name, title] of [[`Complete ${longTitle}`, 'Complete'], [`Clarify ${longTitle}`, 'Clarify'], [`Brief ${longTitle}`, 'Brief'], [`Delete item: ${longTitle}`, 'Delete']]) {
+      const action = page.getByRole('button', { name, exact: true });
+      assert.equal(await action.isVisible(), true, name);
+      assert.equal(await action.getAttribute('title'), title);
+      assert.equal(await action.locator('svg[aria-hidden=true]').count(), 1);
+    }
+    assert.ok(await cards.locator('.task-actions button').evaluateAll(controls => controls.every(control => {
+      const bounds = control.getBoundingClientRect(); return bounds.width >= 44 && bounds.height >= 44;
+    })));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await summary.focus(); await page.keyboard.press('Enter');
-    assert.equal(await page.locator('.task-menu[open]').count(), 1);
-    await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Clarify');
+    const clarify = page.getByRole('button', { name: `Clarify ${longTitle}`, exact: true });
+    await clarify.focus();
     await page.evaluate(() => { window.beforeRefresh = document.activeElement; const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close(); });
     await page.waitForFunction(() => !window.beforeRefresh.isConnected);
-    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Clarify');
-    await page.keyboard.press('Escape');
-    assert.equal(await menu.evaluate(el => el.open), false);
-    assert.equal(await summary.evaluate(el => el === document.activeElement), true);
+    assert.equal(await clarify.evaluate(el => el === document.activeElement), true);
     if (process.env.TASK_MENU_SCREENSHOTS) await page.screenshot({ path: `${process.env.TASK_MENU_SCREENSHOTS}/tasks-${width}.png`, fullPage: true });
   }
-  await summary.click();
   await page.setViewportSize({ width: 767, height: 900 });
   await page.setViewportSize({ width: 936, height: 900 });
-  assert.equal(await page.locator('.task-menu[open]').count(), 1, 'resizing preserves only the chosen menu');
-  await menu.getByRole('button', { name: `Brief ${longTitle}`, exact: true }).click();
+  const brief = page.getByRole('button', { name: `Brief ${longTitle}`, exact: true });
+  await brief.click();
   await page.locator('#closeBriefs').click();
-  assert.equal(await menu.getByRole('button', { name: `Brief ${longTitle}`, exact: true }).evaluate(el => el === document.activeElement), true);
-  await page.keyboard.press('Escape');
+  assert.equal(await brief.evaluate(el => el === document.activeElement), true);
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor({ state: 'hidden' });
@@ -62,7 +62,7 @@ test('task menus stay compact at every width and retain keyboard focus, recovery
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
   assert.equal(await page.locator('#recentTaskChange').isVisible(), false);
   assert.match(await cards.filter({ hasText: 'Milk' }).locator('.record-state').textContent(), /pending/);
-  assert.equal(await cards.locator('button:visible').count(), 6, 'historical Undo stays in the menu');
+  assert.equal(await cards.locator('button:visible').count(), 16, 'historical Undo stays visible on its task');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Undo state change Milk', exact: true }));
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor({ state: 'hidden' });
   await page.locator('#statusFilter').selectOption('completed');
