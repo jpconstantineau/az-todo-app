@@ -1,6 +1,7 @@
 import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=2';
 import { workspaceOf } from './workspaces.js?v=2';
 import { workflowFields, validateWorkflow } from './inbox-fields.js?v=2';
+import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=3';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -104,7 +105,7 @@ export function projected(state) {
       }
     }
   }
-  return records;
+  return projectCollectionMove(records, state.workspaceMove);
 }
 
 function operationFor(state, accountId, mutations, operationId = crypto.randomUUID()) {
@@ -165,12 +166,47 @@ function addEntries(state, entries, capture = false) {
 }
 
 export function enqueue(state, accountId, mutations) {
+  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before saving more changes.');
   const operation = operationFor(state, accountId, mutations);
   addEntries(state, [{ operation }]);
   if (state.undoEdit && mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
 }
 
+function advanceCollectionMove(state, accountId) {
+  const plan = state.workspaceMove;
+  if (!plan || plan.failure || state.queue.length) return;
+  try {
+    const next = nextCollectionMoveOperation(plan, state.records, accountId, MAX_OPERATION_BYTES);
+    if (!next) { delete state.workspaceMove; return; }
+    const operation = operationFor({ ...state, workspaceMove: undefined }, accountId, next.operation.mutations, next.operation.operationId);
+    addEntries(state, [{ operation, workspaceMoveId: plan.id, workspaceMovePhase: next.phase }]);
+  } catch (failure) {
+    plan.failure = failure.message;
+  }
+}
+
+export function beginCollectionMove(state, accountId, plan) {
+  if (state.workspaceMove) throw new Error('Another collection move is already in progress.');
+  state.workspaceMove = plan;
+  advanceCollectionMove(state, accountId);
+}
+
+export function continueCollectionMove(state, accountId) {
+  advanceCollectionMove(state, accountId);
+}
+
+export function resumeCollectionMove(state, accountId) {
+  const plan = state.workspaceMove;
+  if (!plan) throw new Error('There is no collection move to resume.');
+  const failed = state.queue[0];
+  if (failed?.workspaceMoveId === plan.id && failed.failure) state.queue.shift();
+  delete plan.failure;
+  advanceCollectionMove(state, accountId);
+  if (plan.failure) throw new Error(plan.failure);
+}
+
 export function enqueueCapture(state, accountId, mutations) {
+  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before saving more changes.');
   const batches = [];
   for (const mutation of mutations) {
     const current = batches.at(-1);

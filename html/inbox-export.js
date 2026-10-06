@@ -73,7 +73,7 @@ function validateExport(value, server = false) {
       (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
-  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace'], 'state');
+  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove'], 'state');
   const draft = (entry, path) => {
     require(object(entry), `${path}: draft must be an object.`);
     unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'collectionUtility', 'day', 'navigation', 'review', 'extraction'], path);
@@ -85,6 +85,16 @@ function validateExport(value, server = false) {
   if (state.workspaceDrafts !== undefined) {
     require(object(state.workspaceDrafts), 'workspaceDrafts must be an object.');
     for (const [id, entry] of Object.entries(state.workspaceDrafts)) draft(entry, `state.workspaceDrafts.${id}`);
+  }
+  if (state.workspaceMove !== undefined) {
+    const move = state.workspaceMove;
+    require(object(move) && move.version === 1 && typeof move.id === 'string' && move.id.length > 0 &&
+      ['detach', 'move', 'attach', 'complete'].includes(move.phase) && Number.isSafeInteger(move.step) && move.step >= 0 &&
+      object(move.root) && ['list', 'project'].includes(move.root.type) && typeof move.root.id === 'string' &&
+      typeof move.sourceWorkspaceId === 'string' && typeof move.destinationWorkspaceId === 'string' &&
+      Array.isArray(move.entries) && move.entries.length > 20 && Array.isArray(move.skipped), 'workspaceMove has an invalid resumable move shape.');
+    for (const entry of move.entries) require(object(entry) && ['list', 'project', 'item'].includes(entry.type) &&
+      typeof entry.id === 'string' && object(entry.final), 'workspaceMove contains a malformed record.');
   }
   function record(entry, path) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
@@ -143,7 +153,9 @@ function validateExport(value, server = false) {
       }
     }
     unknown(operation, ['apiVersion', 'accountId', 'operationId', 'mutations'], `${path}.operation`);
-    unknown(entry, ['operation', 'failure', 'receipt'], path);
+    if (entry.workspaceMoveId !== undefined) require(typeof entry.workspaceMoveId === 'string' &&
+      ['detach', 'move', 'attach'].includes(entry.workspaceMovePhase), `${path}: malformed collection move metadata.`);
+    unknown(entry, ['operation', 'failure', 'receipt', 'workspaceMoveId', 'workspaceMovePhase'], path);
   }
   return { records: Object.keys(state.records).length, pendingOperations: state.queue.length, warnings };
 }
@@ -229,6 +241,7 @@ export function readableExport(value) {
     '', 'SAVED DEVICE DRAFT (may differ from current form)', JSON.stringify(value.state.draft, null, 2));
   if (value.state.workspaceDrafts) lines.push('', 'WORKSPACE DRAFTS (not submitted)', JSON.stringify(value.state.workspaceDrafts, null, 2));
   if (value.state.undoEdit) lines.push('', 'LAST DEVICE EDIT RECOVERY (not a restore instruction)', JSON.stringify(value.state.undoEdit, null, 2));
+  if (value.state.workspaceMove) lines.push('', 'RESUMABLE COLLECTION MOVE (not server-confirmed until complete)', JSON.stringify(value.state.workspaceMove, null, 2));
   if (value.state.defaultSettings) lines.push('', 'CACHED DEFAULTS', JSON.stringify(value.state.defaultSettings, null, 2));
   return lines.join('\n') + '\n';
 }

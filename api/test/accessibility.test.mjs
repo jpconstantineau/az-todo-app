@@ -66,7 +66,7 @@ async function delayDeviceSave(page) {
 test('accessibility: capture save preserves a later control choice and still supports quick-add', { timeout: 30000 }, async t => {
   const { page } = await setup(t);
   await page.locator('#captureText').fill('First task');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.capture.text === 'First task');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.capture.text === 'First task');
   await delayDeviceSave(page);
   await page.keyboard.press('Control+Enter');
   await page.waitForFunction(() => !!window.releaseCaptureSave);
@@ -174,13 +174,13 @@ test('accessibility: brief storage errors return focus and unchanged review/brie
   await keyboardActivate(page, 'a[href="#work"]');
   await keyboardActivate(page, '[aria-label="Brief Insurance"]');
   await page.locator('#briefForm [name=outcome]').fill('Coverage');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.brief?.content.outcome === 'Coverage');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.brief?.content.outcome === 'Coverage');
   await page.evaluate(() => {
     window.announcements = [];
     for (const id of ['briefState', 'reviewProgress']) new MutationObserver(() => announcements.push(id)).observe(document.getElementById(id), { childList: true, subtree: true, characterData: true });
   });
   await page.locator('#briefForm [name=outcome]').fill('Coverage in place');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
   await page.evaluate(() => { window.oldRow = document.querySelector('#items article'); });
   await refresh(page);
   await page.waitForFunction(() => !window.oldRow.isConnected);
@@ -235,7 +235,7 @@ test('accessibility: keyboard actions and editor return focus survive background
 test('accessibility: typing and unchanged refreshes do not repeat live-region announcements', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await page.locator('#captureText').fill('First draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.capture?.text === 'First draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.capture?.text === 'First draft');
   assert.equal(await page.locator('#draftStatus').textContent(), '');
   await page.evaluate(() => {
     window.announcements = [];
@@ -244,7 +244,7 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
     }
   });
   await page.locator('#captureText').fill('Second draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.capture?.text === 'Second draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.capture?.text === 'Second draft');
   await clickControl(page.locator('#sync'));
   assert.deepEqual(await page.evaluate(() => window.announcements), []);
   await page.locator('#captureText').focus(); await page.keyboard.press('Control+Enter');
