@@ -5,7 +5,8 @@ import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js
 import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=6';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=7';
-import { clarificationUI } from './clarification.js?v=4';
+import { clarificationUI } from './clarification.js?v=5';
+import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
 import { setupReviews } from './reviews.js?v=7';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
@@ -13,6 +14,7 @@ import { setupAgentStatus } from './local-agent.js?v=1';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
+setupClarificationPreferences();
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
@@ -171,7 +173,7 @@ const briefs = setupBriefs({ records: () => accountId ? scopedRecords() : {}, jo
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save stays with its original account.');
   state = saved; render(); broadcast(); void sync();
 } });
-const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog });
+const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog, actions: currentClarificationActions });
 async function saveClarification(mutations, next) {
   const owner = accountId;
   if (!owner) return false;

@@ -91,7 +91,7 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
   assert.equal((await post(server.url, [create('list', 'family', { title: 'Family', kind: 'area' }), createItem('capture'), createItem('second', { title: 'Call electrician', description: '', originalText: 'Call electrician', sourceUrl: null })], undefined, 'disposable-test-user')).status, 200);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
-  assert.equal(await (await fetch(server.url + '/clarification.js?v=4')).text(), await readFile(new URL('../../html/clarification.js', import.meta.url), 'utf8'));
+  assert.equal(await (await fetch(server.url + '/clarification.js?v=5')).text(), await readFile(new URL('../../html/clarification.js', import.meta.url), 'utf8'));
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } }), page = await context.newPage(), errors = [];
   await page.addInitScript(() => { window.__earlyErrors = []; addEventListener('error', event => window.__earlyErrors.push(`${event.filename}:${event.lineno}:${event.colno} ${event.message}`)); });
   page.on('pageerror', error => errors.push(error.stack || error.message)); t.after(() => assert.deepEqual(errors, []));
@@ -102,6 +102,7 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   assert.ok(await page.getByRole('button', { name: 'File Dad in Family' }).isVisible());
   await page.getByRole('button', { name: 'Parent', exact: true }).click();
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
+  await page.locator('#clarifyFlow details > summary').click();
   await page.getByRole('button', { name: 'Make role under Family' }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
   assert.equal(await page.locator('#clarifyProgress').textContent(), '2 of 2');
@@ -111,6 +112,7 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   await page.waitForFunction(() => document.querySelector('#clarifyTask').textContent === 'Dad');
   await page.getByRole('button', { name: 'Parent', exact: true }).click();
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
+  await page.locator('#clarifyFlow details > summary').click();
   await page.getByRole('button', { name: 'Make role under Family' }).click();
   await page.waitForFunction(() => document.querySelector('#clarifyTask').textContent === 'Call electrician');
   assert.equal(await page.locator('[data-proposal="title"]').inputValue(), 'Call licensed electrician');
@@ -124,4 +126,59 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.locator('#clarifier').evaluate(element => element.scrollWidth <= element.clientWidth));
   }
+});
+
+test('clarification preferences persist order and a custom alias dispatches its supported behavior', { timeout: 60000 }, async t => {
+  documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
+  await post(server.url, [createItem('capture', { title: 'Groceries', description: '', originalText: 'Groceries', sourceUrl: null })], undefined, 'disposable-test-user');
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await clickControl(page.getByRole('button', { name: 'Preferences', exact: true, includeHidden: true }));
+  const rows = page.locator('#clarifyActionPreferences > li');
+  assert.deepEqual(await rows.locator('[data-field="label"]').evaluateAll(inputs => inputs.slice(0, 6).map(input => input.value)),
+    ['Make project', 'Make list', 'Make checklist', 'Action', 'Reference', 'Someday']);
+  await page.locator('#addClarifyAction [name="label"]').fill('Make shopping list');
+  await page.locator('#addClarifyAction [name="behavior"]').selectOption('make-checklist');
+  await page.locator('#addClarifyAction [type="submit"]').click();
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await clickControl(page.getByRole('button', { name: 'Preferences', exact: true, includeHidden: true }));
+  assert.equal(await page.locator('#clarifyActionPreferences [data-field="label"]').last().inputValue(), 'Make shopping list');
+  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
+  await page.getByRole('button', { name: 'Make shopping list', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=6');
+    return Object.values(projected(await transact('disposable-test-user'))).some(record => record.type === 'list' && record.kind === 'checklist');
+  });
+  await confirmed(page);
+  assert.equal(documents.find(doc => doc.UserID === 'disposable-test-user' && doc.id.startsWith('record:list:'))?.record.kind, 'checklist');
+});
+
+test('clarification skip advances, Parent saves membership, and the completed pass can restart skipped work', { timeout: 60000 }, async t => {
+  documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
+  await post(server.url, [create('list', 'family', { title: 'Family', kind: 'area' }),
+    createItem('capture', { title: 'Dad', description: '', originalText: 'Dad', sourceUrl: null }),
+    createItem('second', { title: 'Call electrician', description: '', originalText: 'Call electrician', sourceUrl: null })], undefined, 'disposable-test-user');
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
+  assert.equal(await page.locator('#clarifyTask').textContent(), 'Dad');
+  await page.locator('#clarifySkip').click();
+  await page.waitForFunction(() => document.querySelector('#clarifyTask').textContent === 'Call electrician');
+  await page.getByRole('button', { name: 'Action', exact: true }).click();
+  await page.getByRole('button', { name: 'Parent', exact: true }).click();
+  await page.getByRole('button', { name: 'Use Family as parent' }).click();
+  await page.getByRole('button', { name: 'Save linked to Family', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent === 'All inbox items viewed'); await confirmed(page);
+  const second = documents.find(doc => doc.UserID === 'disposable-test-user' && doc.id === 'record:item:second').record;
+  assert.deepEqual(second.collectionRefs, [{ type: 'list', id: 'family' }]); assert.equal(second.listId, 'family');
+  await page.getByRole('button', { name: 'Return to first unprocessed item', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#clarifyTask').textContent === 'Dad');
+  assert.equal(await page.locator('#clarifyProgress').textContent(), '1 of 1');
+  await page.getByRole('button', { name: 'Reference', exact: true }).click();
+  await page.getByRole('button', { name: 'Save without a new destination', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent === 'Clarify inbox complete'); await confirmed(page);
+  assert.equal(documents.find(doc => doc.UserID === 'disposable-test-user' && doc.id === 'record:item:capture').record.status, 'reference');
 });

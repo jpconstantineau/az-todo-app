@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=11" defer></script>
+  <script src="/pwa.js?v=12" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=10"></script>
+  <script type="module" src="/inbox.js?v=11"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -44,6 +44,12 @@
   <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
     <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
     <p class="muted">Saved for this browser.</p>
+    <section aria-labelledby="clarifyActionsHeading"><p class="eyebrow">Clarify</p><h2 id="clarifyActionsHeading">Clarify actions</h2>
+      <p>Choose the order and whether each action appears in the primary grid or under More. Custom types are labels for an existing Clarify behavior.</p>
+      <ol id="clarifyActionPreferences" class="clarify-preferences"></ol>
+      <form id="addClarifyAction" class="form-grid"><label>Custom label<input name="label" required maxlength="64"></label><label>Behavior<select name="behavior"></select></label><label>Section<select name="placement"><option value="primary">Primary</option><option value="more">More</option></select></label><button type="submit">Add custom type</button></form>
+      <div class="actions"><button id="resetClarifyActions" type="button">Restore Clarify defaults</button></div><p id="clarifyActionStatus" class="muted" role="status" aria-live="polite"></p>
+    </section>
     <section aria-labelledby="installHeading"><p class="eyebrow">On this device</p><h2 id="installHeading">Install To-Do</h2>
       <button id="installApp" type="button" hidden>Install app</button>
       <p id="installStatus" role="status"></p>
