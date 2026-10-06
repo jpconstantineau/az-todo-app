@@ -84,10 +84,11 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
     window.pendingExport = document.querySelector('#export').onclick();
   });
   await page.waitForFunction(() => !!window.releaseExport);
+  const bobPull = page.waitForResponse(response => response.url().includes('/api/v1/changes?') && new URL(response.url()).searchParams.get('accountId') === 'bob');
   user = 'bob'; await context.setOffline(false);
-  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now', exact: true }));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact(null)).accountId === 'bob');
-  await page.locator('#workspace').waitFor();
+  await (await bobPull).finished();
+  await page.waitForFunction(() => !document.querySelector('#menuDeviceTools').hidden);
   await page.evaluate(async () => { window.releaseExport(); await window.pendingExport; });
   assert.equal(downloads.length, 0, 'a delayed Alice export cannot download in Bob’s session');
   const bob = await download(page);
