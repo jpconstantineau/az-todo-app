@@ -119,7 +119,7 @@ test('review actions edit, clarify and add project actions in place with offline
   await page.locator('#reviewRecord').selectOption(index('shelf')); await page.locator('#reviewComplete').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 4'));
   await page.locator('#reviewRecord').selectOption(index('garage')); await page.locator('#reviewDefer').fill('2027-02-01');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.review?.deferUntil === '2027-02-01');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).draft.review?.deferUntil === '2027-02-01');
   await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#openReviews'));
   assert.equal(await page.locator('#reviewRecord').inputValue(), index('garage'));
   assert.equal(await page.locator('#reviewDefer').inputValue(), '2027-02-01');

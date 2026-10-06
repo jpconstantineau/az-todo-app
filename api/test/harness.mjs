@@ -15,7 +15,7 @@ const clone = value => structuredClone(value);
 function failWrite() {
   if (faults.nextWrite) { faults.nextWrite = false; throw new Error("Injected storage failure"); }
 }
-const container = {
+export const container = {
   items: {
     async batch(operations, partition) {
       failWrite();
@@ -23,19 +23,23 @@ const container = {
       const result = [];
       for (const [i, operation] of operations.entries()) {
         const doc = operation.resourceBody;
-        const index = staged.findIndex(d => d.id === (operation.id ?? doc.id) && [d.UserID, d.ObjectType, d.ObjectID].every((v, j) => v === partition[j]));
+        const index = staged.findIndex(d => d.id === (operation.id ?? doc?.id) && [d.UserID, d.ObjectType, d.ObjectID].every((v, j) => v === partition[j]));
         let code = i === faults.batchIndex ? 503 : 200;
         if (operation.operationType === "Create" && index >= 0) code = 409;
         if (operation.operationType === "Replace" && (index < 0 || staged[index]._etag !== operation.ifMatch)) code = 412;
-        if (!["Create", "Replace"].includes(operation.operationType)) throw new Error("Unsupported mock batch operation");
-        assertPartition(doc, partition);
+        if (operation.operationType === 'Delete' && (index < 0 || staged[index]._etag !== operation.ifMatch)) code = 412;
+        if (!["Create", "Replace", 'Delete'].includes(operation.operationType)) throw new Error("Unsupported mock batch operation");
+        if (doc) assertPartition(doc, partition);
         if (code !== 200) {
           faults.batchIndex = -1;
           return { code, result: operations.map((_, j) => ({ statusCode: i === j ? code : 424 })) };
         }
-        const saved = { ...clone(doc), _etag: String(++etag) };
-        if (index < 0) staged.push(saved); else staged[index] = saved;
-        result.push({ statusCode: operation.operationType === "Create" ? 201 : 200 });
+        if (operation.operationType === 'Delete') staged.splice(index, 1);
+        else {
+          const saved = { ...clone(doc), _etag: String(++etag) };
+          if (index < 0) staged.push(saved); else staged[index] = saved;
+        }
+        result.push({ statusCode: operation.operationType === "Create" ? 201 : operation.operationType === 'Delete' ? 204 : 200 });
       }
       documents.splice(0, documents.length, ...staged);
       if (faults.loseBatchResponse) { faults.loseBatchResponse = false; throw new Error("Injected lost acknowledgement"); }

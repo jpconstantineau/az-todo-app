@@ -2,6 +2,7 @@
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 import { readableBrief } from './briefs.js?v=3';
+import { purgeWorkspaceState } from './workspaces.js?v=3';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
@@ -73,7 +74,7 @@ function validateExport(value, server = false) {
       (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
-  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove'], 'state');
+  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');
   const draft = (entry, path) => {
     require(object(entry), `${path}: draft must be an object.`);
     unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'collectionUtility', 'day', 'navigation', 'review', 'extraction'], path);
@@ -96,6 +97,9 @@ function validateExport(value, server = false) {
     for (const entry of move.entries) require(object(entry) && ['list', 'project', 'item'].includes(entry.type) &&
       typeof entry.id === 'string' && object(entry.final), 'workspaceMove contains a malformed record.');
   }
+  if (state.workspaceErasureNotice !== undefined) require(object(state.workspaceErasureNotice) &&
+    typeof state.workspaceErasureNotice.workspaceId === 'string' && state.workspaceErasureNotice.workspaceId !== 'personal' &&
+    Number.isFinite(Date.parse(state.workspaceErasureNotice.erasedUtc)), 'workspaceErasureNotice is invalid.');
   function record(entry, path) {
     require(object(entry) && entry.accountId === value.accountId, `${path}: record belongs to another account or has no owner.`);
     require(typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.type === 'string' && entry.type.length > 0, `${path}: record identity is required.`);
@@ -188,6 +192,9 @@ export async function accountExport(accountId, request, { signal, onProgress = (
       if (!object(entry) || entry.accountId !== accountId || entry.apiVersion !== 1 || entry.sequence !== state.after + 1 ||
           !['committed', 'conflict'].includes(entry.status) || !Array.isArray(entry.records) ||
           (entry.status === 'conflict' && entry.records.length)) invalid();
+      if (entry.erasedWorkspaces !== undefined && (!Array.isArray(entry.erasedWorkspaces) || entry.erasedWorkspaces.some(erasure =>
+        typeof erasure?.workspaceId !== 'string' || erasure.workspaceId === 'personal' || !Number.isFinite(Date.parse(erasure.erasedUtc))))) invalid();
+      for (const erasure of entry.erasedWorkspaces || []) purgeWorkspaceState(state, erasure.workspaceId, erasure.erasedUtc);
       for (const record of entry.records) {
         if (!object(record) || record.accountId !== accountId) invalid();
         const key = `${record.type}:${record.id}`;

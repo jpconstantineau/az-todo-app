@@ -93,7 +93,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   assert.ok(await page.locator('#editor').evaluate(el => el.contains(document.activeElement)), 'focus stays inside modal');
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
   await waitForBrowser(page, async () => {
-    const { transact } = await import('/inbox-store.js?v=6');
+    const { transact } = await import('/inbox-store.js?v=7');
     return (await transact((await transact(null)).accountId)).draft.editOpen === false;
   });
   await page.reload();

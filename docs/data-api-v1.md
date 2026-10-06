@@ -150,6 +150,11 @@ old clients, device queues/cursors, cutover and rollback before deployment.
 
 ### Recovery before any explicit reset or migration
 
+Completed non-Personal workspace erasures are durable restore inputs. Before serving
+a restored target, reapply every protected erasure plan and verify it as described in
+[workspace erasure](workspace-erasure.md). Never let a restored pre-erasure snapshot
+accept ordinary traffic first.
+
 1. Pause writes and preserve a consistent server backup including records,
    tombstones, receipts, change rows and state. Record the high-water sequence.
    Export **each device's** account-bound cache, cursor, draft and pending queue;

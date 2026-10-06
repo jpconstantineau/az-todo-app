@@ -19,3 +19,23 @@ export function workspaceDraft(state, workspaceId) {
   }
   return state.workspaceDrafts[workspaceId];
 }
+
+function mutationWorkspace(mutation, records) {
+  if (mutation.type === 'workspace') return mutation.id;
+  const current = records[`${mutation.type}:${mutation.id}`];
+  return mutation.fields?.workspaceId ?? workspaceOf({ ...current, ...mutation.fields, type: mutation.type, id: mutation.id }, records);
+}
+
+export function purgeWorkspaceState(state, workspaceId, erasedUtc) {
+  const records = structuredClone(state.records);
+  const scoped = new Set(Object.entries(records).filter(([, record]) =>
+    record.type === 'workspace' ? record.id === workspaceId : workspaceOf(record, records) === workspaceId).map(([key]) => key));
+  for (const key of scoped) delete state.records[key];
+  state.queue = state.queue.filter(entry => !entry.operation.mutations.some(mutation =>
+    scoped.has(`${mutation.type}:${mutation.id}`) || mutationWorkspace(mutation, records) === workspaceId));
+  if (state.undoEdit && scoped.has(`${state.undoEdit.type}:${state.undoEdit.id}`)) delete state.undoEdit;
+  if (state.workspaceMove && [state.workspaceMove.sourceWorkspaceId, state.workspaceMove.destinationWorkspaceId].includes(workspaceId)) delete state.workspaceMove;
+  if (state.workspaceDrafts) delete state.workspaceDrafts[workspaceId];
+  if (state.selectedWorkspace === workspaceId) state.selectedWorkspace = PERSONAL;
+  state.workspaceErasureNotice = { workspaceId, erasedUtc };
+}

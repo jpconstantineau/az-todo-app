@@ -7,6 +7,7 @@ import { validateReview, validateReviewDecision } from "./reviews.mjs";
 import { validateBrief } from "./briefs.mjs";
 
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
+import { erasedWorkspaceIds } from './workspace-erasure.mjs';
 import { validateClarification } from './clarification.mjs';
 
 import { normalizeMembership, memberships, isCollection, collectionContents, refKey } from './collection-model.mjs';
@@ -20,6 +21,13 @@ export async function read(accountId, id) {
 }
 const create = resourceBody => ({ operationType: "Create", resourceBody });
 const replace = (resourceBody, ifMatch) => ({ operationType: "Replace", id: resourceBody.id, resourceBody, ifMatch });
+async function hasErasureFence(accountId) {
+  const { resources } = await container.items.query({
+    query: "SELECT TOP 1 c.id FROM c WHERE c.UserID=@u AND c.ObjectType='sync' AND c.ObjectID='v1' AND c.kind='workspace-erasure'",
+    parameters: [{ name: '@u', value: accountId }]
+  }, { partitionKey: partition(accountId) }).fetchAll();
+  return resources.length > 0;
+}
 
 async function hasContents(accountId, target, pending, workspaceId = null) {
   const { resources } = await container.items.query({
@@ -68,11 +76,19 @@ export async function commit(accountId, input, requestHash = digest(input)) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const state = await read(accountId, "state");
     const previous = await read(accountId, receiptId);
+    const current = await Promise.all(input.mutations.map(m => read(accountId, recordId(m.type, m.id))));
+    const lookupForFence = async (type, id) => current.find((row, index) =>
+      input.mutations[index].type === type && input.mutations[index].id === id)?.record ?? (await read(accountId, recordId(type, id)))?.record;
+    if ((await erasedWorkspaceIds(accountId, input, current, lookupForFence, read)).length) {
+      throw new ApiError(410, 'workspace_erased', 'This workspace was permanently erased. Remove its saved local operations.');
+    }
+    if (input.mutations.some((mutation, index) => mutation.action !== 'create' && !current[index]) && await hasErasureFence(accountId)) {
+      throw new ApiError(404, 'record_not_found', 'The record is unavailable and cannot be changed or replayed.');
+    }
     if (previous) {
       if (previous.requestHash !== requestHash) throw new ApiError(409, "operation_reused", "Use a new operationId for different content.");
       return previous.response;
     }
-    const current = await Promise.all(input.mutations.map(m => read(accountId, recordId(m.type, m.id))));
     const conflicts = input.mutations.flatMap((proposed, i) => {
       const record = current[i]?.record ?? null;
       return ((proposed.action === "restore" ? !record?.deleted : record?.deleted) || (record?.version ?? 0) !== proposed.expectedVersion)

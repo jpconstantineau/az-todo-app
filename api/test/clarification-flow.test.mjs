@@ -104,7 +104,7 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
   await page.locator('#clarifyFlow details > summary').click();
   await page.getByRole('button', { name: 'Make role under Family' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
   assert.equal(await page.locator('#clarifyProgress').textContent(), '2 of 2');
   await page.locator('[data-proposal="title"]').fill('Call licensed electrician');
   assert.ok(await page.getByRole('button', { name: 'Undo previous decision' }).isVisible());
@@ -148,7 +148,7 @@ test('clarification preferences persist order and a custom alias dispatches its 
   await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
   await page.getByRole('button', { name: 'Make shopping list', exact: true }).click();
   await waitForBrowser(page, async () => {
-    const { transact, projected } = await import('/inbox-store.js?v=6');
+    const { transact, projected } = await import('/inbox-store.js?v=7');
     return Object.values(projected(await transact('disposable-test-user'))).some(record => record.type === 'list' && record.kind === 'checklist');
   });
   await confirmed(page);
