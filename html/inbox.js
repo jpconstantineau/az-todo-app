@@ -1,12 +1,12 @@
 import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=2';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=2';
-import { collectionMoveMutations } from './workspace-move.js?v=2';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=4';
+import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=5';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=6';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=7';
 import { clarificationUI } from './clarification.js?v=4';
-import { setupReviews } from './reviews.js?v=5';
+import { setupReviews } from './reviews.js?v=6';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
@@ -314,9 +314,10 @@ function statusText(id, text) {
 }
 function connectionStatus() {
   if (!accountId || !state) return;
-  const needsAttention = state.queue.some(entry => entry.failure) || !$('error').hidden;
-  $('saveStatus').dataset.state = !navigator.onLine ? 'offline' : needsAttention ? 'error' : state.queue.length || syncing ? 'pending' : 'confirmed';
-  const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : 'Saved to cloud';
+  const needsAttention = state.queue.some(entry => entry.failure) || state.workspaceMove?.failure || !$('error').hidden;
+  const pending = state.queue.length || state.workspaceMove;
+  $('saveStatus').dataset.state = !navigator.onLine ? 'offline' : needsAttention ? 'error' : pending || syncing ? 'pending' : 'confirmed';
+  const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.workspaceMove ? 'Collection move pending' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : 'Saved to cloud';
   $('saveStatus').title = label;
   statusText('connectionLabel', label);
 }
@@ -469,7 +470,9 @@ function render() {
     label.append(input, document.createTextNode(status === 'completed' ? 'Completed' : status));
     return label;
   }) : []));
-  statusText('syncStatus', state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
+  statusText('syncStatus', state.workspaceMove
+    ? `Collection move ${state.workspaceMove.failure || state.queue.some(entry => entry.workspaceMoveId && entry.failure) ? 'paused — review and resume it.' : 'saved on device — pending server confirmation.'}`
+    : state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
   connectionStatus();
   $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Defaults', () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
   const view = $('view').value;
@@ -539,16 +542,21 @@ function render() {
     : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
     : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
-  $('failure').hidden = !failed;
-  if (failed) {
-    $('failureMessage').textContent = failed.failure;
+  const moveFailure = state.workspaceMove?.failure;
+  $('failure').hidden = !failed && !moveFailure;
+  $('resumeMove').hidden = !state.workspaceMove || !failed?.workspaceMoveId && !moveFailure;
+  if (failed || moveFailure) {
+    $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
       [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
-    $('comparison').textContent = failed.operation.mutations.map(mutation =>
-      `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
-    $('resolve').hidden = !failed.receipt || failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
-    $('discard').textContent = failed.receipt ? 'Use server version for this save' : 'Remove this rejected save';
+    $('comparison').textContent = failed ? failed.operation.mutations.map(mutation =>
+      `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n')
+      : 'The move plan and its acknowledged progress remain saved on this device.';
+    const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
+    $('resolve').hidden = move || !failed?.receipt || failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('discard').hidden = move;
+    $('discard').textContent = failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
   reviews.render();
   briefs.render();
@@ -789,9 +797,11 @@ async function updateRecord(record, fields, close = false) {
       const current = projected(local)[key(record)];
       if (record.version !== 0 && (!current || current.deleted || current.version !== record.version)) throw new Error('This record changed while you were editing. Your draft is still here; copy it, then reopen the latest record to compare.');
       const movingCollection = current && isCollection(current) && fields.workspaceId && fields.workspaceId !== current.workspaceId;
-      const mutations = movingCollection ? collectionMoveMutations(current, fields.workspaceId, projected(local), fields)
-        : [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }];
-      enqueue(local, owner, mutations);
+      if (movingCollection) {
+        const records = projected(local), plan = collectionMovePlan(current, fields.workspaceId, records, fields);
+        if (plan) beginCollectionMove(local, owner, plan);
+        else enqueue(local, owner, collectionMoveMutations(current, fields.workspaceId, records, fields));
+      } else enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }]);
       if (close && current && record.version > 0 && !movingCollection) rememberEdit(local, current, fields);
       if (close) currentDraft(local).edit = null;
     });
@@ -1268,6 +1278,7 @@ async function sync() {
         await transact(owner, current => {
           for (const receipt of changes.entries) applyReceipt(current, receipt, owner);
           current.after = changes.nextAfter;
+          continueCollectionMove(current, owner);
         });
         continueSync = changes.hasMore;
         if (!changes.hasMore) break;
@@ -1283,13 +1294,16 @@ async function sync() {
           if (failure.status >= 400 && failure.status < 500 && ![401, 403, 408, 429].includes(failure.status) && failure.code !== 'account_mismatch') {
             await transact(owner, current => {
               const pending = current.queue.find(item => item.operation.operationId === entry.operation.operationId);
-              if (pending) pending.failure = failure.message;
+              if (pending) {
+                pending.failure = failure.message;
+                if (pending.workspaceMoveId && pending.workspaceMoveId === current.workspaceMove?.id) current.workspaceMove.failure = failure.message;
+              }
             });
           }
           throw failure;
         }
         if (receipt.operationId !== entry.operation.operationId) throw new Error('Acknowledgement does not match this save.');
-        await transact(owner, current => applyReceipt(current, receipt, owner));
+        await transact(owner, current => { applyReceipt(current, receipt, owner); continueCollectionMove(current, owner); });
       }
     });
     if (accountId === owner) {
@@ -1320,6 +1334,12 @@ async function sync() {
   }
 }
 $('sync').onclick = () => { render(); void sync(); };
+$('resumeMove').onclick = guard(async () => {
+  const owner = accountId;
+  const saved = await transact(owner, local => resumeCollectionMove(local, owner));
+  if (owner !== accountId) return;
+  state = saved; render(); broadcast(); void sync();
+});
 $('resolve').onclick = guard(async () => {
   const owner = accountId, id = state.queue[0].operation.operationId;
   const reviewed = structuredClone(state.records);

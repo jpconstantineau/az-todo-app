@@ -37,9 +37,15 @@ test('device exports retain current workspace drafts, editor baselines and undo 
     review: { active: 'review-one', selected: 1, deferUntil: '' } } };
   value.state.undoEdit = { type: 'item', id: 'milk', title: 'Milk', expectedVersion: 3, operationId: 'pending-id', expiresAt: 1792000000000, fields: { description: 'Two cartons' } };
   value.state.defaultSettings = { contexts: ['Home'] };
+  value.state.workspaceMove = { version: 1, id: 'move-id', phase: 'detach', step: 1,
+    root: { type: 'list', id: 'groceries' }, sourceWorkspaceId: 'personal', destinationWorkspaceId: 'work', skipped: [],
+    entries: Array.from({ length: 21 }, (_, index) => ({ type: index ? 'item' : 'list', id: index ? `task-${index}` : 'groceries',
+      final: index ? { workspaceId: 'work', collectionRefs: [{ type: 'list', id: 'groceries' }], listId: 'groceries', projectId: null }
+        : { workspaceId: 'work', parentRef: null } })) };
+  value.state.queue[0].workspaceMoveId = 'move-id'; value.state.queue[0].workspaceMovePhase = 'detach';
   assert.deepEqual(validateDeviceExport(value).warnings, []);
   const text = readableExport(value);
-  for (const expected of ['WORKSPACE DRAFTS', 'initialFields', 'review-one', 'LAST DEVICE EDIT RECOVERY', 'CACHED DEFAULTS']) assert.ok(text.includes(expected), expected);
+  for (const expected of ['WORKSPACE DRAFTS', 'initialFields', 'review-one', 'LAST DEVICE EDIT RECOVERY', 'CACHED DEFAULTS', 'RESUMABLE COLLECTION MOVE']) assert.ok(text.includes(expected), expected);
   value.draft.capture.futureOption = 'Preserve for recovery';
   delete value.state.workspaceDrafts.work.edit.initialFields;
   const before = structuredClone(value);

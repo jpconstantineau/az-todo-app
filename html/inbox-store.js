@@ -1,6 +1,7 @@
 import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=2';
 import { workspaceOf } from './workspaces.js?v=2';
 import { workflowFields, validateWorkflow } from './inbox-fields.js?v=2';
+import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=3';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -102,10 +103,11 @@ export function projected(state) {
       }
     }
   }
-  return records;
+  return projectCollectionMove(records, state.workspaceMove);
 }
 
 export function enqueue(state, accountId, mutations) {
+  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before saving more changes.');
   if (!mutations.length || mutations.length > 20) throw new Error('Save 1–20 items at a time (19 with a new list).');
   const records = projected(state);
   const proposed = { ...records };
@@ -146,6 +148,39 @@ export function enqueue(state, accountId, mutations) {
   }
   state.queue.push({ operation });
   if (state.undoEdit && mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
+}
+
+function advanceCollectionMove(state, accountId) {
+  const plan = state.workspaceMove;
+  if (!plan || plan.failure || state.queue.length) return;
+  try {
+    const next = nextCollectionMoveOperation(plan, state.records, accountId);
+    if (!next) { delete state.workspaceMove; return; }
+    if (size(next.operation) > 65536) throw new Error('A collection-move batch exceeds the save limit.');
+    state.queue.push({ operation: next.operation, workspaceMoveId: plan.id, workspaceMovePhase: next.phase });
+  } catch (failure) {
+    plan.failure = failure.message;
+  }
+}
+
+export function beginCollectionMove(state, accountId, plan) {
+  if (state.workspaceMove) throw new Error('Another collection move is already in progress.');
+  state.workspaceMove = plan;
+  advanceCollectionMove(state, accountId);
+}
+
+export function continueCollectionMove(state, accountId) {
+  advanceCollectionMove(state, accountId);
+}
+
+export function resumeCollectionMove(state, accountId) {
+  const plan = state.workspaceMove;
+  if (!plan) throw new Error('There is no collection move to resume.');
+  const failed = state.queue[0];
+  if (failed?.workspaceMoveId === plan.id && failed.failure) state.queue.shift();
+  delete plan.failure;
+  advanceCollectionMove(state, accountId);
+  if (plan.failure) throw new Error(plan.failure);
 }
 
 // One editor save per account on this device; the outbox and inverse commit together.

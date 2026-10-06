@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { documents, faults, startServer } from './harness.mjs';
 import { workspaceOf, workspaceRecords, workspaceDraft } from '../../html/workspaces.js';
-import { collectionMoveMutations } from '../../html/workspace-move.js';
+import { collectionMoveMutations, collectionMovePlan, nextCollectionMoveOperation } from '../../html/workspace-move.js';
 import { currentCreate } from './current-record.mjs';
 
 async function setup(t) {
@@ -105,6 +105,58 @@ test('workspaces: moving a collection carries its nested records and keeps histo
   moved['clarification:task'] = records['clarification:task']; moved['brief:brief'] = records['brief:brief'];
   assert.equal(workspaceOf(moved['clarification:task'], moved), 'family');
   assert.equal(workspaceOf(moved['brief:brief'], moved), 'family');
+});
+
+test('workspaces: large collection moves detach, move and reattach in repeat-safe bounded batches', async t => {
+  const { post } = await setup(t);
+  assert.equal((await post([
+    create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' }),
+    create('list', 'root', { title: 'Root', workspaceId: 'work' }), create('list', 'other', { title: 'Other', workspaceId: 'work' })
+  ])).status, 200);
+  for (let start = 0; start < 21; start += 20) {
+    const batch = Array.from({ length: Math.min(20, 21 - start) }, (_, offset) => {
+      const id = `task-${start + offset}`;
+      return create('item', id, { title: id, originalText: `Original ${id}`, workspaceId: 'work', listId: 'other',
+        collectionRefs: [{ type: 'list', id: 'root' }, { type: 'list', id: 'other' }] });
+    });
+    assert.equal((await post(batch)).status, 200);
+  }
+  const read = () => Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
+  let records = read();
+  const plan = collectionMovePlan(records['list:root'], 'family', records, { title: 'Moved root', workspaceId: 'family', parentRef: null }, 'large-move');
+  assert.equal(plan.entries.length, 22);
+  assert.equal(collectionMovePlan(records['list:root'], 'family',
+    Object.fromEntries(Object.entries(records).filter(([id]) => id === 'list:root' || id.startsWith('workspace:') || /^item:task-(?:[0-9]|1[0-8])$/.test(id))),
+    { title: 'Moved root', workspaceId: 'family', parentRef: null }), null, '20 affected records retain the atomic path');
+  const phases = [];
+  let lost = false;
+  while (true) {
+    const next = nextCollectionMoveOperation(plan, records, 'alice');
+    if (!next) break;
+    assert.ok(next.operation.mutations.length <= 20);
+    phases.push(next.phase);
+    if (!lost) {
+      lost = true; faults.loseBatchResponse = true;
+      assert.equal((await post(next.operation.mutations, { operationId: next.operation.operationId })).status, 503);
+    }
+    assert.equal((await post(next.operation.mutations, { operationId: next.operation.operationId })).status, 200);
+    records = read();
+    for (const record of Object.values(records).filter(record => !record.deleted)) {
+      for (const ref of record.type === 'item' ? record.collectionRefs : record.parentRef ? [record.parentRef] : []) {
+        assert.equal(records[`${ref.type}:${ref.id}`].workspaceId, record.workspaceId, 'an intermediate batch cannot expose a cross-workspace relationship');
+      }
+    }
+  }
+  assert.deepEqual([...new Set(phases)], ['detach', 'move', 'attach']);
+  assert.equal(records['list:root'].title, 'Moved root');
+  for (let index = 0; index < 21; index++) {
+    const item = records[`item:task-${index}`];
+    assert.equal(item.workspaceId, 'family');
+    assert.equal(item.originalText, `Original task-${index}`);
+    assert.deepEqual(item.collectionRefs, [{ type: 'list', id: 'root' }]);
+    assert.equal(item.listId, 'root');
+  }
+  assert.equal(records['list:other'].workspaceId, 'work');
 });
 
 test('workspaces: concurrent archive and capture serialize; frozen workspace rejects derived history changes', async t => {

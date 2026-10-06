@@ -49,12 +49,29 @@ ID and original text. Clarification and brief history follow that item (or their
 project source). An existing review retains its decision history, but a moved
 item is unavailable to further decisions in its former workspace.
 
-List/project/review membership is fixed. Moving an entire populated list or
-project is outside this change; it needs a separately defined atomic move
-protocol. Items can be moved individually today. User defaults, the outbox,
-conflict recovery and device/server exports remain account-wide. Both export
-formats include all workspace records and retained contents; device exports
-also preserve every workspace draft. Exports are recovery copies, not imports.
+Lists and projects can also move. A tree of at most 20 affected records (the
+root plus up to 19 nested collections or linked items) moves in one atomic
+operation. A larger tree is saved as a resumable device plan: the app first
+detaches its internal relationships, moves the original records in batches of
+at most 20, and restores only relationships whose endpoints are both in the
+moved tree. Links to collections left in the source workspace are deliberately
+cleared. Record IDs, original captures and clarification/brief history are not
+copied or rewritten.
+
+The initiating device projects the final tree immediately, including offline.
+During server replay another device can temporarily see detached records, but
+never a relationship crossing workspace boundaries. Each batch has a stable
+operation ID, so a lost acknowledgement is retried without duplication. Reload
+or reconnect continues after acknowledged batches. A stale relationship,
+concurrent edit, deletion, or unavailable workspace pauses the move with its
+plan retained; restore/unarchive if needed, inspect the conflict, and choose
+**Resume collection move**. Recovery proceeds forward rather than restarting
+completed work. Device exports preserve the active plan as recovery data.
+
+User defaults, the outbox, conflict recovery and device/server exports remain
+account-wide. Both export formats include all workspace records and retained
+contents; device exports also preserve every workspace draft. Exports are
+recovery copies, not imports.
 
 ## Protocol and upgrade
 
@@ -62,7 +79,8 @@ The account partition, record IDs, receipts, history cursor and IndexedDB schema
 are unchanged. `workspace` is an account-owned v1 record type with a required
 `title` and boolean `archived`. It supports create/update/delete/restore using the
 same expected-version rules. Every item, list, project and review has an explicit
-`workspaceId`; `personal` names the built-in workspace. Only items allow membership updates. Clarifications derive membership
+`workspaceId`; `personal` names the built-in workspace. Items allow membership
+updates and collections allow parent changes. Clarifications derive membership
 from their item; briefs derive it from their source.
 
 Every mutation validates workspace existence and writable state, plus matching

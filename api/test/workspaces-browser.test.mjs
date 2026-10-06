@@ -2,19 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { documents, startServer } from './harness.mjs';
+import { documents, faults, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { showView, clickControl } from './navigation-helper.mjs';
 import { currentCreate } from './current-record.mjs';
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'));
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 async function setup(t, ai = false, seeds = []) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
-  if (seeds.length) {
+  for (let start = 0; start < seeds.length; start += 20) {
     const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
-      body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'workspace-move-seed', mutations: seeds }) });
+      body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: `workspace-move-seed-${start / 20}`, mutations: seeds.slice(start, start + 20) }) });
     assert.equal(response.status, 200, await response.text());
   }
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
@@ -42,7 +42,7 @@ async function createSpace(page, title) {
 }
 async function switchTo(page, id) {
   await page.locator('#workspaceSelect').selectOption(id);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=4')).transact('alice')).selectedWorkspace === id, id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=5')).transact('alice')).selectedWorkspace === id, id);
 }
 async function capture(page, text) {
   await showView(page, 'capture'); await page.locator('#captureText').fill(text);
@@ -115,6 +115,82 @@ test('workspaces: list move carries a nested project and clarified item through 
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
   assert.equal(documents.find(row => row.id === 'record:item:task').record.originalText, 'Original task');
   assert.equal(documents.find(row => row.id === 'record:item:task').record.workspaceId, 'family');
+});
+
+test('workspaces: large list move survives offline reload and a lost acknowledgement without restarting', { timeout: 90000 }, async t => {
+  const seeds = [
+    create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' }),
+    create('list', 'root', { title: 'Root', workspaceId: 'work' }), create('list', 'other', { title: 'Other', workspaceId: 'work' }),
+    ...Array.from({ length: 21 }, (_, index) => create('item', `task-${index}`, { title: `Task ${index}`, originalText: `Original ${index}`,
+      workspaceId: 'work', listId: 'other', collectionRefs: [{ type: 'list', id: 'root' }, { type: 'list', id: 'other' }] }))
+  ];
+  const { page, context } = await setup(t, false, seeds);
+  await switchTo(page, 'work'); await showView(page, 'lists'); await page.locator('#view').selectOption('root');
+  await page.getByRole('button', { name: 'Edit list: Root' }).click();
+  await context.setOffline(true);
+  await page.locator('#edit [name=workspaceId]').selectOption('family');
+  await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  let saved = await local(page);
+  assert.equal(saved.workspaceMove.entries.length, 22);
+  assert.equal(saved.queue.length, 1);
+  assert.equal(saved.queue[0].workspaceMovePhase, 'detach');
+  assert.ok(saved.queue[0].operation.mutations.length <= 20);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  saved = await local(page);
+  assert.equal(saved.workspaceMove.id.length > 0, true);
+  await switchTo(page, 'family'); await showView(page, 'lists'); await page.locator('#view').selectOption('root');
+  assert.equal(await page.locator('#items article').count(), 21, 'the initiating device projects the complete destination tree');
+
+  faults.loseBatchResponse = true;
+  await context.setOffline(false); await clickControl(page.locator('#sync'));
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sync paused'));
+  await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => {
+    const state = await (await import('/inbox-store.js?v=5')).transact('alice');
+    return !state.workspaceMove && state.queue.length === 0 && state.records['item:task-20']?.workspaceId === 'family';
+  });
+  await synced(page);
+  const moved = documents.filter(row => row.kind === 'record' && row.record.type === 'item').map(row => row.record);
+  assert.equal(moved.length, 21);
+  for (const item of moved) {
+    assert.equal(item.workspaceId, 'family');
+    assert.deepEqual(item.collectionRefs, [{ type: 'list', id: 'root' }]);
+    assert.match(item.originalText, /^Original /);
+  }
+  assert.equal(documents.find(row => row.id === 'record:list:other').record.workspaceId, 'work');
+});
+
+test('workspaces: large move pauses on a concurrent edit and resumes without overwriting it', { timeout: 90000 }, async t => {
+  const seeds = [
+    create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' }),
+    create('list', 'root', { title: 'Root', workspaceId: 'work' }),
+    ...Array.from({ length: 21 }, (_, index) => create('item', `task-${index}`, { title: `Task ${index}`, workspaceId: 'work',
+      listId: 'root', collectionRefs: [{ type: 'list', id: 'root' }] }))
+  ];
+  const { page, context, server } = await setup(t, false, seeds);
+  await switchTo(page, 'work'); await showView(page, 'lists'); await page.locator('#view').selectOption('root');
+  await page.getByRole('button', { name: 'Edit list: Root' }).click(); await context.setOffline(true);
+  await page.locator('#edit [name=workspaceId]').selectOption('family');
+  await page.getByRole('button', { name: 'Save edit on device' }).click();
+  const changed = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'concurrent-move-edit',
+      mutations: [{ type: 'item', id: 'task-0', action: 'update', expectedVersion: 1, fields: { title: 'Concurrent title' } }] }) });
+  assert.equal(changed.status, 200);
+  await context.setOffline(false); await clickControl(page.locator('#sync'));
+  await page.locator('#failure').waitFor();
+  assert.equal(await page.locator('#resumeMove').isVisible(), true);
+  assert.equal((await local(page)).workspaceMove.phase, 'detach');
+  await page.locator('#resumeMove').click();
+  await waitForBrowser(page, async () => {
+    const state = await (await import('/inbox-store.js?v=5')).transact('alice');
+    return !state.workspaceMove && state.queue.length === 0;
+  });
+  await synced(page);
+  const item = documents.find(row => row.id === 'record:item:task-0').record;
+  assert.equal(item.title, 'Concurrent title');
+  assert.equal(item.workspaceId, 'family');
+  assert.deepEqual(item.collectionRefs, [{ type: 'list', id: 'root' }]);
 });
 
 test('workspaces: AI capture cancels on switching and restored reviewed batches keep their original workspace', { timeout: 60000 }, async t => {
@@ -239,6 +315,8 @@ test('workspaces: another device deletes a workspace while offline capture keeps
   });
   assert.equal(deleted.status, 200);
   await context.setOffline(false);
+  await clickControl(page.locator('#sync'));
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=5')).transact('alice')).queue[0]?.failure);
   await page.locator('#failure').waitFor();
   const retained = await local(page);
   assert.deepEqual(retained.queue[0].operation, intent);
@@ -249,7 +327,7 @@ test('workspaces: another device deletes a workspace while offline capture keeps
   assert.equal((await local(page)).queue.length, 2, 'blocked queue preserves later work without assigning it to the deleted space');
   const copy = await page.evaluate(async () => {
     const { deviceExport, readableExport } = await import('/inbox-export.js?v=5');
-    const state = await (await import('/inbox-store.js?v=4')).transact('alice');
+    const state = await (await import('/inbox-store.js?v=5')).transact('alice');
     return readableExport(deviceExport('alice', state, {}));
   });
   assert.match(copy, /Recover this offline report/);
