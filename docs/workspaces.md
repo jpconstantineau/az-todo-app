@@ -33,6 +33,9 @@ display and cannot carry the workspace selection into another account.
 - This is recoverable deletion, **not erasure**. There is no purge or retention
   deadline. Records, review/brief/clarification history, receipts, exports and
   backups remain stored. Individual record deletion still has its existing rules.
+- Permanent removal of one named non-Personal workspace uses the separate,
+  operator-assisted [workspace erasure procedure](workspace-erasure.md). It is not
+  exposed by the recoverable Delete control; Personal remains part of #144.
 - Offline saves made before a workspace change may already have committed.
   Later saves against an archived/deleted workspace are rejected by the server;
   the device retains the failed intent and stops its queue. Export a copy before

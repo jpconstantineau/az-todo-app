@@ -253,3 +253,9 @@ distinct module/cache URLs for the integrated shell.
 
 Account erasure, permanent purge and backup-erasure/restore policy remain open
 under #13; this change covers recoverable item/list/project deletion only.
+
+One named non-Personal workspace can instead use the operator-assisted
+[workspace erasure procedure](workspace-erasure.md). Updated clients purge that
+workspace after receiving the server fence. Exports downloaded before erasure and
+offline/unupgraded device copies cannot be remotely recalled and must be deleted by
+whoever controls them.

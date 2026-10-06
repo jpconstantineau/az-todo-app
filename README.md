@@ -19,6 +19,7 @@ flowchart LR
 
 - [Capture, Your Work and List Workspace navigation](docs/navigation.md)
 - [Separate workspaces, offline drafts, archive and recovery](docs/workspaces.md)
+- [Operator-assisted permanent erasure for one non-Personal workspace](docs/workspace-erasure.md)
 - [Shared shopping/family lists, invitations and granular permissions](docs/shared-lists.md)
 - [Task flow and parity verification](docs/task-flow.md)
 - [Optional projects and planned-day views](docs/projects.md)

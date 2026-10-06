@@ -1,5 +1,5 @@
 import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=2';
-import { workspaceOf } from './workspaces.js?v=2';
+import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=3';
 import { workflowFields, validateWorkflow } from './inbox-fields.js?v=2';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=3';
 
@@ -259,6 +259,11 @@ export function applyReceipt(state, receipt, accountId) {
   if (receipt.apiVersion !== 1 || receipt.accountId !== accountId || !['committed', 'conflict'].includes(receipt.status)) {
     throw new Error('Unexpected acknowledgement. Pending work has been kept.');
   }
+  if (receipt.erasedWorkspaces !== undefined && (!Array.isArray(receipt.erasedWorkspaces) || receipt.erasedWorkspaces.some(entry =>
+    typeof entry?.workspaceId !== 'string' || entry.workspaceId === PERSONAL || !Number.isFinite(Date.parse(entry.erasedUtc))))) {
+    throw new Error('Unexpected workspace erasure acknowledgement. Pending work has been kept.');
+  }
+  for (const entry of receipt.erasedWorkspaces || []) purgeWorkspaceState(state, entry.workspaceId, entry.erasedUtc);
   for (const record of receipt.records) {
     if (record.accountId !== accountId) throw new Error('Account mismatch in response.');
     if (state.undoEdit && key(record) === key(state.undoEdit) &&

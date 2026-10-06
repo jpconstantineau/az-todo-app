@@ -1,10 +1,10 @@
 import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=2';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=2';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=3';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=6';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=7';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=7';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=8';
 import { clarificationUI } from './clarification.js?v=5';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
 import { setupReviews } from './reviews.js?v=7';
@@ -319,7 +319,7 @@ function connectionStatus() {
   const needsAttention = state.queue.some(entry => entry.failure) || state.workspaceMove?.failure || !$('error').hidden;
   const pending = state.queue.length || state.workspaceMove;
   $('saveStatus').dataset.state = !navigator.onLine ? 'offline' : needsAttention ? 'error' : pending || syncing ? 'pending' : 'confirmed';
-  const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.workspaceMove ? 'Collection move pending' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : 'Saved to cloud';
+  const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.workspaceMove ? 'Collection move pending' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : state.workspaceErasureNotice ? 'Workspace permanently erased; local copies removed after sync' : 'Saved to cloud';
   $('saveStatus').title = label;
   statusText('connectionLabel', label);
 }
@@ -1321,7 +1321,7 @@ async function sync() {
     if (accountId === owner) {
       const saved = await transact(owner);
       if (accountId === owner) {
-        state = saved; render(); $('workspace').hidden = false;
+        state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL; render(); $('workspace').hidden = false;
         continueSync ||= !!state.queue.length && !state.queue[0].failure;
       }
     }
