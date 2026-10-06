@@ -88,7 +88,7 @@ test('export rejects mixed accounts, corrupt identities, unsupported envelope ve
 });
 
 test('export accepts only the current clarification record and mutation shape', () => {
-  const current = { flowVersion: 2, step: 'actionable', answers: {}, proposal: { text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: '' } };
+  const current = { flowVersion: 3, step: 'classify', decision: null, proposal: { view: 'classify', mode: 'file', title: 'Milk', parentRef: null, search: '', status: 'next', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '' } };
   const record = { accountId: 'alice', type: 'clarification', id: 'milk', version: 1, deleted: false, ...current };
   const value = deviceExport('alice', { records: { 'clarification:milk': record }, after: 1, queue: [], draft: {} }, {});
   assert.deepEqual(validateDeviceExport(value).warnings, []);

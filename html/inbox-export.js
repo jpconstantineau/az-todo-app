@@ -8,7 +8,7 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'collectionRefs', 'parentRef', 'kind', 'listId', 'projectId', 'plannedDay', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'answers', 'proposal',
+  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes'];
 
@@ -28,11 +28,10 @@ function validateExport(value, server = false) {
     'a server snapshot cannot contain device drafts or pending saves.');
   const warnings = [];
   const clarification = (entry, path) => {
-    require(entry.deleted !== true && entry.flowVersion === 2 && typeof entry.step === 'string' && object(entry.answers) && object(entry.proposal),
+    require(entry.deleted !== true && entry.flowVersion === 3 && ['classify', 'complete', 'reversed'].includes(entry.step) &&
+      (entry.decision === null || object(entry.decision)) && object(entry.proposal),
       `${path}: clarification must use the current flow version and shape.`);
-    const pathFor = ['actionable', ...(entry.answers.actionable === 'yes' ? ['nextAction', 'project', 'twoMinutes'] : []),
-      'disposition', ...(entry.answers.disposition?.choice === 'trash' ? [] : ['organize']), 'summary', 'complete'];
-    require(pathFor.includes(entry.step), `${path}: invalid clarification step.`);
+    require(entry.step === 'classify' || entry.decision, `${path}: completed clarification needs a decision.`);
   };
   const reviewPointers = (entry, path, length, minimumCount = 0) => {
     require(!('decisions' in entry) && Number.isSafeInteger(entry.decisionCount) && entry.decisionCount >= minimumCount &&
@@ -70,7 +69,8 @@ function validateExport(value, server = false) {
       require(entry.status !== 'deferred' || entry.startDate || entry.startDateUtc, `${path}: deferred needs a start date.`);
       for (const name of ['due', 'start', 'review']) require(!(entry[`${name}Date`] && entry[`${name}DateUtc`]), `${path}: ${name} date is ambiguous.`);
     }
-    if (entry.type === 'project') require(['active', 'someday', 'completed'].includes(entry.status), `${path}: invalid project status.`);
+    if (entry.type === 'project') require(['draft', 'active', 'someday', 'completed'].includes(entry.status) &&
+      (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
   unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace'], 'state');

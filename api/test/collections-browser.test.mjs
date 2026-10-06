@@ -10,7 +10,7 @@ import { currentCreate } from './current-record.mjs';
 const create = currentCreate;
 const ref = (type, id) => ({ type, id });
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
 async function setup(t, items = []) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -41,7 +41,7 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
   await page.getByRole('button', { name: 'Edit Measure cabinets', exact: true }).click();
   await context.setOffline(true);
   await page.locator('#edit [name=collectionRefs]').selectOption(['project:kitchen', 'list:home', 'list:role']);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.collectionRefs?.length === 3);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.fields.collectionRefs?.length === 3);
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=collectionRefs] option:checked').count(), 3);
   await saveEdit(page);
@@ -71,7 +71,7 @@ test('collections browser: reusable reference checklist and resumable area mappi
   await page.locator('#collectionUtilityForm [name=entries]').selectOption('passport');
   await page.locator('#collectionUtilityForm [name=title]').fill('November trip');
   await context.setOffline(true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.collectionUtility?.title === 'November trip');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.collectionUtility?.title === 'November trip');
   await page.evaluate(() => {
     window.collectionPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (value, ...args) {
@@ -107,11 +107,11 @@ test('collections browser: clarification uses the organizer and account changes 
   const { page, setUser } = await setup(t, [create('item', 'note', { title: 'Private travel note' })]);
   await showView(page, 'work');
   await clickControl(page.getByRole('button', { name: 'Clarify Private travel note', exact: true, includeHidden: true }));
-  await page.locator('[name=flow_choice][value=no]').check(); await page.locator('#clarifyAccept').click();
-  await page.locator('select[name=flow_choice]').selectOption('reference'); await page.locator('#clarifyAccept').click();
-  await page.locator('[name=flow_collectionRefs]').selectOption(['list:packing', 'list:role']);
-  await page.locator('#clarifyAccept').click(); await page.locator('#clarifyAccept').click();
-  await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Clarification complete');
+  await page.getByRole('button', { name: /File Private travel note in .*Packing/ }).click();
+  await page.getByRole('button', { name: /File Private travel note in .*Parent/ }).click();
+  await page.getByRole('button', { name: 'Reference', exact: true }).click();
+  await page.getByRole('button', { name: 'Save without a new destination', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Session summary');
   await page.locator('#clarifyStop').click(); await synced(page);
   const item = (await local(page)).records['item:note'];
   assert.equal(item.status, 'reference'); assert.deepEqual(item.collectionRefs.map(ref => ref.id).sort(), ['packing', 'role']);
@@ -120,11 +120,11 @@ test('collections browser: clarification uses the organizer and account changes 
   const selection = page.locator('#edit [name=collectionRefs]');
   await selection.focus(); await page.keyboard.press('Home'); await page.keyboard.press('Shift+ArrowDown');
   assert.equal(await selection.evaluate(el => el === document.activeElement), true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.collectionRefs?.length > 0);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.fields.collectionRefs?.length > 0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Edit Private travel note', exact: true }).waitFor();
   setUser('bob'); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob'); await synced(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob'); await synced(page);
   assert.equal(await page.locator('#edit [name=collectionRefs] option').count(), 0);
   assert.doesNotMatch(await page.locator('#collectionOutline').textContent(), /Home|Packing|Parent/);
   assert.equal(await page.locator('#collectionUtilityForm [name=title]').inputValue(), '');

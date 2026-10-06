@@ -117,14 +117,13 @@ export function fieldsFor(type, action, input) {
       if (!value.trim()) throw new ValidationError("title is required.");
     } else if (key === "outcome") {
       result[key] = exactText(value, 4000, key);
-      if (!value.trim()) throw new ValidationError("outcome is required for a project.");
     } else if (["description", "originalText", "sourceTitle", "selectedText", "waitingOn"].includes(key)) {
       result[key] = exactText(value, ({ originalText: 16000, selectedText: 8000, sourceTitle: 2000 })[key] || 4000, key);
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
     else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
     else if (key === "plannedDay") result[key] = calendarDate(value, key);
     else if (key === "status") {
-      if (type === 'project' && !['active', 'someday', 'completed'].includes(value)) throw new ValidationError('Choose an active, someday or completed project status.');
+      if (type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(value)) throw new ValidationError('Choose a draft, active, someday or completed project status.');
       result[key] = cleanTag(exactText(value, 64, key), key);
       if (!result[key]) throw new ValidationError("status is required.");
     } else if (["dueDate", "startDate", "reviewDate"].includes(key)) result[key] = calendarDate(value, key);
@@ -138,10 +137,11 @@ export function fieldsFor(type, action, input) {
   }
   if (action === "create") {
     if (!result.title) throw new ValidationError("title is required.");
-    if (type === "project" && !result.outcome) throw new ValidationError("outcome is required for a project.");
+    if (type === "project" && result.status !== 'draft' && !result.outcome?.trim()) throw new ValidationError("outcome is required for an active, someday or completed project.");
     return {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
+      ...(type === 'project' ? { outcome: '' } : {}),
       ...(type === "item" ? { collectionRefs: [], listId: null, projectId: null, plannedDay: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,
         priority: null, referenceLinks: [] } : {}), ...result

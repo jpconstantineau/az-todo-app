@@ -1,174 +1,282 @@
-import { organizer, selectedRefs, membershipFields } from './collections.js?v=2';
-import { memberships, refKey } from './collection-model.js?v=2';
+import { collectionKinds, collectionKind, isCollection, memberships, ancestry, refKey } from './collection-model.js?v=2';
 import { localGuidance } from './local-guidance.js?v=1';
-import { flowProposal, newFlow, flowDecision, flowEdits } from './clarification-flow.js?v=2';
+import { newFlow, flowProposal, requireTitle, membershipChange, itemFields, beforeFields } from './clarification-flow.js?v=3';
 
 export function clarificationUI({ records, save, journal, showDialog }) {
   const $ = id => document.getElementById(id);
   const dialog = $('clarifier'), form = $('clarifyForm');
   let active = null, busy = false;
-  const complete = () => active?.session.step === 'complete';
-  const values = () => ({ ...active.proposal, ...Object.fromEntries([...form.elements]
-    .filter(input => input.name.startsWith('flow_') && (input.type !== 'radio' || input.checked)).map(input => [input.name.slice(5), input.multiple ? selectedRefs(input) : input.value])) });
+  const currentSession = item => {
+    const saved = records()[`clarification:${item.id}`];
+    const fresh = newFlow(item);
+    return { ...fresh, version: saved?.version || 0 };
+  };
   const snapshot = () => active ? { ...structuredClone(active), proposal: values(), open: dialog.open } : null;
+  const values = () => {
+    if (!active?.item) return active?.proposal || flowProposal();
+    const proposal = { ...active.proposal };
+    for (const input of form.querySelectorAll('[data-proposal]')) {
+      proposal[input.dataset.proposal] = input.type === 'radio' ? (input.checked ? input.value : proposal[input.dataset.proposal]) : input.value;
+    }
+    return proposal;
+  };
   const guidance = localGuidance({
-    context: () => active && dialog.open && !busy && active.session.step === 'nextAction' ? {
-      question: 'What is one concrete next action?', limit: 200,
+    context: () => active?.item && dialog.open && !busy && values().view === 'action' ? {
+      question: 'What is the next visible action?', limit: 200,
       task: { title: active.item.title, description: active.item.description || '', originalText: active.item.originalText || active.item.title },
-      acceptedAnswers: active.session.answers, proposedAnswer: values().text
+      acceptedAnswers: {}, proposedAnswer: values().title
     } : null,
-    use(text) { const input = form.elements.flow_text; input.value = text; input.focus(); void journal(); }
+    use(text) {
+      active.proposal.title = text;
+      const input = form.querySelector('[data-proposal=title]');
+      if (input) { input.value = text; input.focus(); }
+      void journal();
+    }
   });
-  function drawFlow() {
-    const { step, answers } = active.session, p = active.proposal, container = $('clarifyFlow');
-    container.replaceChildren();
-    const labels = { actionable: 'Is it actionable?', nextAction: 'What is one concrete next action?', project: 'Does it require multiple steps, or belong to a project?', twoMinutes: 'Will it take less than two minutes?', disposition: answers.actionable === 'no' ? 'What should happen to this information?' : 'What happens to this action?', organize: 'Where does it belong?', summary: 'Review and apply your decision', complete: 'Clarification complete' };
-    $('clarifyHeading').textContent = step === 'complete' ? labels.complete : answers.actionable === 'no' ? 'Clarify · Non-actionable' : answers.actionable === 'yes' ? 'Clarify · Actionable' : 'Clarify · What is it?';
-    $('clarifyQuestion').textContent = labels[step];
-    $('clarifyHelp').textContent = step === 'complete' ? 'Your decision has been applied. Clarify again starts a fresh pass; the current item stays saved until you apply another decision.' : step === 'twoMinutes' ? 'If yes, do it now. Confirm you have done it on the next step, or choose to do it later.' : step === 'project' ? 'For multi-step work, choose or create its project. For a single action, a project is optional. Stop for now if you have not decided.' : step === 'summary' ? 'Only Apply decision changes the item. Existing links and dates are retained unless shown as changed.' : 'Your answers remain a proposal until the final confirmation. Stop for now to keep your place.';
-    function field(name, label, options, type = 'text', max = 4000) {
-      const wrapper = document.createElement('label'); wrapper.textContent = label;
-      const input = document.createElement(options ? 'select' : type === 'textarea' ? 'textarea' : 'input');
-      input.name = 'flow_' + name;
-      if (options) input.replaceChildren(...options.map(([value, title]) => new Option(title, value)));
-      else if (type !== 'textarea') input.type = type;
-      if (type === 'date') { input.min = '0001-01-01'; input.max = '9999-12-31'; }
-      else input.maxLength = max;
-      input.value = p[name] || ''; wrapper.append(input); container.append(wrapper);
-      return input;
+
+  const element = (name, properties = {}) => Object.assign(document.createElement(name), properties);
+  function control(text, handler, className = '') {
+    const button = element('button', { type: 'button', textContent: text, className });
+    button.onclick = () => void perform(handler);
+    return button;
+  }
+  function labeledInput(name, label, type = 'text', required = false) {
+    const wrapper = element('label', { textContent: label }), input = element('input', { type, value: active.proposal[name] || '', required });
+    input.dataset.proposal = name;
+    if (type === 'date') { input.min = '0001-01-01'; input.max = '9999-12-31'; }
+    else input.maxLength = name === 'title' ? 200 : 4000;
+    wrapper.append(input); return wrapper;
+  }
+  function collectionPath(record) {
+    const parents = ancestry(record, records()).slice(1).reverse().map(ref => records()[refKey(ref)]?.title).filter(Boolean);
+    return [...parents, record.title].join(' / ');
+  }
+  function availableCollections() {
+    const query = active.proposal.search.trim().toLocaleLowerCase();
+    const recent = new Set(active.recentRefs || []);
+    return Object.values(records()).filter(record => isCollection(record) && !record.deleted && (!query || `${record.title} ${collectionKind(record)} ${collectionPath(record)}`.toLocaleLowerCase().includes(query)))
+      .sort((a, b) => Number(memberships(active.item).some(ref => refKey(ref) === refKey(b))) - Number(memberships(active.item).some(ref => refKey(ref) === refKey(a))) ||
+        Number(recent.has(refKey(b))) - Number(recent.has(refKey(a))) || a.title.localeCompare(b.title));
+  }
+  function destinationSurface(container) {
+    const mode = element('fieldset', { className: 'clarify-mode' }), legend = element('legend', { textContent: 'Destination mode' });
+    const file = control('File item', () => setMode('file')), parent = control('Parent', () => setMode('parent'));
+    file.setAttribute('aria-pressed', String(active.proposal.mode === 'file'));
+    parent.setAttribute('aria-pressed', String(active.proposal.mode === 'parent'));
+    mode.append(legend, file, parent, element('span', { className: 'muted', textContent: active.proposal.mode === 'parent' && active.proposal.parentRef ? collectionPath(records()[refKey(active.proposal.parentRef)]) : 'Root — no parent' }));
+    const search = labeledInput('search', 'Search lists and projects');
+    const list = element('div', { className: 'clarify-destinations' });
+    for (const destination of availableCollections()) {
+      const selected = memberships(active.item).some(ref => refKey(ref) === refKey(destination));
+      const row = control(`${destination.title} · ${collectionKinds[collectionKind(destination)]}${collectionPath(destination) === destination.title ? '' : ` · ${collectionPath(destination)}`}`, () => chooseDestination(destination), 'clarify-destination');
+      if (active.proposal.mode === 'file') {
+        row.setAttribute('aria-label', `File ${active.item.title} in ${collectionPath(destination)}`);
+        if (selected) { row.textContent = `✓ ${row.textContent}`; row.disabled = true; }
+      } else {
+        row.setAttribute('aria-label', `Use ${collectionPath(destination)} as parent`);
+        row.setAttribute('aria-pressed', String(refKey(active.proposal.parentRef || {}) === refKey(destination)));
+      }
+      list.append(row);
     }
-    function destinations(type, selected) {
-      const list = Object.values(records()).filter(record => record.type === type && !record.deleted).map(record => [record.id, record.title]);
-      if (selected && !list.some(([id]) => id === selected)) list.push([selected, 'Unavailable — choose another destination']);
-      return list;
-    }
-    if (['actionable', 'twoMinutes'].includes(step)) {
-      const group = document.createElement('fieldset'), legend = document.createElement('legend'); legend.textContent = labels[step]; group.append(legend);
-      for (const choice of ['yes', 'no']) { const label = document.createElement('label'), radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'flow_choice'; radio.value = choice; radio.checked = p.choice === choice; label.append(radio, choice === 'yes' ? 'Yes' : 'No'); group.append(label); }
-      container.append(group);
-    }
-    if (step === 'nextAction') field('text', 'Proposed next action', null, 'textarea', 200);
-    if (step === 'project') {
-      field('choice', 'Project relationship', [['', 'Choose a relationship'], ...(active.item.projectId ? [['keep', 'Keep current project']] : []), ['none', 'Standalone action'], ['existing', 'Choose existing project'], ['new', 'Create a project']]);
-      if (p.choice === 'existing') field('projectId', 'Project', [['', 'Choose a project'], ...destinations('project', p.projectId)]);
-      if (p.choice === 'new') { field('projectTitle', 'New project title', null, 'text', 200); field('outcome', 'Desired outcome', null, 'textarea'); }
-    }
-    if (step === 'disposition') {
-      field('choice', 'Decision', [['', 'Choose a decision'], ...(answers.actionable === 'no' ? [['someday', 'Incubate — Someday / maybe'], ['reference', 'File as reference'], ['trash', 'Move to Deleted (recoverable)']] : [...(answers.twoMinutes === 'yes' ? [['completed', 'I have done it']] : []), ['next', 'Do when possible / do later instead'], ['waiting', 'Delegate — Waiting'], ['planned', 'Schedule — Plan for a day'], ['deferred', 'Schedule — Not before a date'], ['dropped', 'Drop — abandon this action']])]);
-      if (p.choice === 'waiting') field('waitingOn', 'Waiting for (person or dependency)');
-      if (['waiting', 'someday'].includes(p.choice)) field('reviewDate', p.choice === 'someday' ? 'Reconsider on (optional; blank means no date)' : 'Follow up on (optional; blank keeps the existing cue)', null, 'date');
-      if (p.choice === 'planned') field('plannedDay', 'Planned day (not a deadline)', null, 'date');
-      if (p.choice === 'deferred') field('startDate', 'Not before', null, 'date');
-    }
-    if (step === 'organize') {
-      field('text', 'Working title', null, 'text', 200);
-      const refs = p.collectionRefs || memberships(active.item);
-      const selection = organizer(container, records(), refs, 'flow_collectionRefs');
-      const primaryList = field('listId', 'Primary list (defaults)', [['', 'No list'], ...destinations('list', p.listId)]);
-      const primaryProject = field('projectId', 'Primary project', [['', 'No project'], ...destinations('project', p.projectId)]);
-      primaryList.closest('label').hidden = primaryProject.closest('label').hidden = true;
-      selection.onchange = () => {
-        const fields = membershipFields(selectedRefs(selection), { listId: primaryList.value, projectId: primaryProject.value });
-        primaryList.value = fields.listId || ''; primaryProject.value = fields.projectId || ''; void journal();
-      };
-      field('notes', 'Missing information / clarification notes (optional)', null, 'textarea');
-    }
-    if (['summary', 'complete'].includes(step)) {
-      const d = answers.disposition, fields = d.choice === 'trash' ? {} : flowEdits(answers), final = { ...active.item, ...fields };
-      const name = (type, id) => id ? records()[`${type}:${id}`]?.title || 'Unavailable destination' : 'None';
-      const summary = document.createElement('pre');
-      summary.textContent = [d.choice === 'trash' ? 'Move the original item to Deleted. It can be restored.' : `Title: ${final.title}\nState: ${final.status}\nList: ${name('list', final.listId)}\nProject: ${answers.project?.choice === 'new' ? answers.project.projectTitle + '\nDesired outcome: ' + answers.project.outcome : name('project', final.projectId)}`,
-        `Organize in: ${memberships(final).map(ref => records()[refKey(ref)]?.title || 'Unavailable collection').join(', ') || 'None'}`,
-        ...['waitingOn', 'plannedDay', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc', 'dueDate', 'dueDateUtc'].filter(key => final[key]).map(key => `${({ waitingOn: 'Waiting for', plannedDay: 'Planned day', startDate: 'Not before', startDateUtc: 'Not before (UTC)', reviewDate: 'Review date', reviewDateUtc: 'Review time (UTC)', dueDate: 'Deadline', dueDateUtc: 'Deadline (UTC)' })[key]}: ${final[key]}`), answers.organize?.notes ? `Clarification notes: ${answers.organize.notes}` : '', 'Original capture and existing item notes are preserved.'].filter(Boolean).join('\n');
-      container.append(summary);
-    }
-    $('clarifyBack').hidden = ['actionable', 'complete'].includes(step);
-    $('clarifyAccept').textContent = step === 'summary' ? answers.disposition.choice === 'trash' ? 'Move to Deleted' : 'Apply decision' : 'Continue';
-    $('clarifyStop').textContent = step === 'complete' ? 'Done' : 'Stop for now';
-    $('clarifyAccept').hidden = $('clarifySave').hidden = step === 'complete';
-    $('clarifyAnswers').textContent = Object.entries(answers).map(([name, value]) => `${labels[name] || name}\n${typeof value === 'string' ? value : Object.entries(value).filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`).join('\n')}`).join('\n\n');
+    if (!list.childElementCount) list.textContent = 'No matching destinations.';
+    container.append(mode, search, list);
+  }
+  function drawClassify(container) {
+    container.append(labeledInput('title', 'Title', 'text', true));
+    const grid = element('div', { className: 'clarify-grid' });
+    for (const [kind, label] of [['project', 'Make project'], ['area', 'Make area'], ['role', 'Make role'], ['list', 'Make list']]) grid.append(control(makeLabel(label), () => convert(kind)));
+    grid.append(control('Action', () => setView('action')), control('Reference', () => setView('reference')), control('Someday', () => setView('someday')));
+    const more = element('details'), summary = element('summary', { textContent: 'More' }), extras = element('div', { className: 'clarify-grid' });
+    for (const kind of ['checklist', 'initiative', 'program', 'reference']) extras.append(control(makeLabel(`Make ${collectionKinds[kind].toLocaleLowerCase()}`), () => convert(kind)));
+    extras.append(control('Move to Deleted', trash, 'danger-button')); more.append(summary, extras); grid.append(more);
+    container.append(grid); destinationSurface(container);
+  }
+  function drawItemDecision(container) {
+    const back = control('Back to choices', () => setView('classify'));
+    container.append(back, labeledInput('title', active.proposal.view === 'action' ? 'Action wording' : 'Title', 'text', true));
+    if (active.proposal.view === 'action') {
+      const choices = element('fieldset', { className: 'clarify-dispositions' }), legend = element('legend', { textContent: 'Disposition' }); choices.append(legend);
+      for (const [status, label] of [['next', 'Next'], ['waiting', 'Waiting'], ['planned', 'Plan'], ['deferred', 'Defer'], ['completed', 'Done']]) {
+        const button = control(label, () => setStatus(status)); button.setAttribute('aria-pressed', String(active.proposal.status === status)); choices.append(button);
+      }
+      container.append(choices);
+      if (active.proposal.status === 'waiting') container.append(labeledInput('waitingOn', 'Waiting for', 'text', true), labeledInput('reviewDate', 'Follow up on (optional)', 'date'));
+      if (active.proposal.status === 'planned') container.append(labeledInput('plannedDay', 'Planned day', 'date', true));
+      if (active.proposal.status === 'deferred') container.append(labeledInput('startDate', 'Not before', 'date', true));
+      const reminder = element('p', { className: 'muted', textContent: 'If it takes less than two minutes, do it now and choose Done only after it is finished.' }); container.append(reminder);
+    } else if (active.proposal.view === 'someday') container.append(labeledInput('reviewDate', 'Reconsider on (optional)', 'date'));
+    destinationSurface(container);
+    container.append(control('Save without a new destination', () => saveItem(null), 'clarify-save-without'));
+  }
+  function drawResult() {
+    const strip = $('clarifyResult'); strip.replaceChildren(); strip.hidden = !active?.previous;
+    if (!active?.previous) return;
+    strip.append(element('span', { textContent: active.previous.message }), control('Undo previous decision', undo));
   }
   function draw() {
-    $('clarifyRestart').hidden = !complete();
-    $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
-    $('clarifyTask').textContent = `Current item: ${active.item.title}`;
-    drawFlow(); $('clarifyError').hidden = true; $('clarifyDraftStatus').textContent = ''; $('clarifyQuestion').focus();
-  }
-  async function commit(choice) {
-    if (busy || !active || (complete() ? choice !== 'restart' : choice === 'restart')) return;
-    guidance.hide();
-    busy = true;
-    const current = active, proposal = values(), focused = document.activeElement;
-    [...form.elements].forEach(input => { input.disabled = true; });
-    try {
-      if (choice === 'back' && !confirm('Go back and clear the preceding answer? Current unsaved wording will be discarded; task changes have not been applied.')) return;
-      const applying = choice === 'accepted' && current.session.step === 'summary';
-      const session = choice === 'restart' ? newFlow() : applying ? { ...current.session, step: 'complete', proposal: flowProposal() } : choice ? flowDecision(current.session, proposal, choice, current.item) : { ...current.session, proposal };
-      const { flowVersion, step, answers } = session, fields = { flowVersion, step, answers, proposal: session.proposal };
-      const mutations = [{ type: 'clarification', id: current.item.id, action: current.session.version ? 'update' : 'create', expectedVersion: current.session.version, fields }];
-      let edits = null;
-      if (applying) {
-        const deleting = answers.disposition.choice === 'trash';
-        if (!deleting) {
-          edits = flowEdits(answers);
-          if (answers.project?.choice === 'new') {
-            edits.projectId = crypto.randomUUID();
-            if (edits.collectionRefs) edits.collectionRefs = [...edits.collectionRefs, { type: 'project', id: edits.projectId }];
-            mutations.push({ type: 'project', id: edits.projectId, action: 'create', expectedVersion: 0, fields: { title: answers.project.projectTitle, outcome: answers.project.outcome, workspaceId: current.item.workspaceId, status: 'active' } });
-          }
-        }
-        mutations.push({ type: 'item', id: current.item.id, action: deleting ? 'delete' : 'update', expectedVersion: current.item.version, ...(!deleting ? { fields: edits } : {}) });
-      }
-      const next = { item: { ...current.item, ...edits, version: current.item.version + (applying ? 1 : 0) }, session: { ...fields, version: current.session.version + 1 }, proposal: fields.proposal, open: true };
-      if (!await save(mutations, next) || active !== current) return;
-      active = next; draw(); $('clarifyDraftStatus').textContent = 'Saved on device — pending server confirmation.';
-    } catch (error) {
-      if (active === current) { $('clarifyError').textContent = error.message; $('clarifyError').hidden = false; }
-    } finally {
-      busy = false; [...form.elements].forEach(input => { input.disabled = false; });
-      if (dialog.open && active) void guidance.check();
-      if (dialog.open && active === current && document.activeElement === document.body) focused.focus();
+    const container = $('clarifyFlow'); container.replaceChildren();
+    $('clarifyError').hidden = true; $('clarifyDraftStatus').textContent = '';
+    drawResult();
+    if (active.finished) {
+      $('clarifyHeading').textContent = 'Clarify inbox complete'; $('clarifyQuestion').textContent = 'Session summary';
+      $('clarifyProgress').textContent = `${active.processed} processed · ${active.skipped} skipped · ${Object.values(records()).filter(record => record.type === 'project' && !record.deleted && record.status === 'draft').length} project(s) need outcomes`;
+      $('clarifyHelp').textContent = 'Skipped captures remain in Inbox. Draft projects are listed as Needs outcome and included in weekly review.';
+      $('clarifyTask').textContent = ''; $('clarifyOriginal').textContent = '';
+      $('clarifySkip').hidden = true; $('clarifyStop').textContent = 'Done'; $('clarifyStop').focus(); return;
     }
+    const total = active.ids.length;
+    $('clarifyHeading').textContent = 'Clarify'; $('clarifyProgress').textContent = active.sessionMode ? `${active.index + 1} of ${total}` : 'One item';
+    $('clarifyQuestion').textContent = active.proposal.view === 'classify' ? 'What is this?' : active.proposal.view === 'action' ? 'Action' : active.proposal.view === 'reference' ? 'Reference' : 'Someday';
+    $('clarifyHelp').textContent = active.proposal.mode === 'parent' ? 'Choose a parent, then Make. Selecting a parent does not save.' : 'Choose a meaning or file this item directly. Filing keeps the item here for classification.';
+    $('clarifyTask').textContent = active.item.title; $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
+    $('clarifySkip').hidden = false; $('clarifyStop').textContent = 'Stop';
+    if (active.proposal.view === 'classify') drawClassify(container); else drawItemDecision(container);
+    $('clarifyQuestion').focus();
   }
-  form.addEventListener('input', () => { guidance.invalidate(); void journal(); });
-  form.addEventListener('change', event => {
-    if (event.target.name !== 'flow_choice') return;
-    active.proposal = values(); drawFlow();
-    const control = form.elements.flow_choice;
-    if (control?.focus) control.focus(); else [...control || []].find(input => input.checked)?.focus();
+  function makeLabel(label) {
+    const parent = active.proposal.parentRef && records()[refKey(active.proposal.parentRef)];
+    return parent ? `${label} under ${parent.title}` : label;
+  }
+  function setMode(mode) { active.proposal = { ...values(), mode, ...(mode === 'file' ? { parentRef: null } : {}) }; draw(); void journal(); }
+  function setView(view) { active.proposal = { ...values(), view, mode: 'file', status: view === 'action' ? 'next' : active.proposal.status }; draw(); void journal(); }
+  function setStatus(status) { active.proposal = { ...values(), status }; draw(); void journal(); }
+  function chooseDestination(destination) {
+    if (active.proposal.mode === 'parent') { active.proposal = { ...values(), parentRef: { type: destination.type, id: destination.id } }; draw(); void journal(); return;
+    }
+    if (active.proposal.view === 'classify') return file(destination);
+    return saveItem(destination);
+  }
+  function clarificationMutation(item, fields) {
+    const saved = records()[`clarification:${item.id}`];
+    return { type: 'clarification', id: item.id, action: saved ? 'update' : 'create', expectedVersion: saved?.version || 0, fields };
+  }
+  function sourceMetadata(item) {
+    return Object.fromEntries(['originalText', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone']
+      .filter(name => item[name] !== undefined).map(name => [name, item[name]]));
+  }
+  function nextActive(decision, message, advance, updatedItem) {
+    const resuming = advance && active.resume;
+    const nextIndex = resuming ? active.resume.index : advance ? active.index + 1 : active.index;
+    const nextItem = resuming ? active.resume.item : advance ? records()[`item:${active.ids[nextIndex]}`] : updatedItem;
+    const common = { ids: active.ids, index: nextIndex, sessionMode: active.sessionMode, processed: active.processed + (advance ? 1 : 0), skipped: active.skipped,
+      recentRefs: active.recentRefs || [], previous: { itemId: active.item.id, decision, message }, resume: null };
+    return nextItem ? { ...common, item: nextItem, session: currentSession(nextItem), proposal: resuming ? active.resume.proposal : advance ? flowProposal(nextItem) : flowProposal(updatedItem), finished: false, open: true }
+      : { ...common, item: null, session: null, proposal: flowProposal(), finished: true, open: true };
+  }
+  async function convert(kind) {
+    const item = active.item, title = requireTitle(values().title), id = crypto.randomUUID(), type = kind === 'project' ? 'project' : 'list';
+    const parentRef = values().parentRef || null, containerRef = { type, id }, decision = { type: 'convert', containerRef, containerKind: kind, parentRef, title };
+    const fields = { title, description: item.description || '', workspaceId: item.workspaceId, parentRef, ...sourceMetadata(item),
+      ...(type === 'project' ? { outcome: '', status: 'draft' } : { kind }) };
+    const session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
+    const mutations = [clarificationMutation(item, session), { type, id, action: 'create', expectedVersion: 0, fields }, { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }];
+    const next = nextActive(decision, `Converted to ${collectionKinds[kind]}: ${title}`, true);
+    if (!await save(mutations, next)) return; active = next; draw(); announce(next.previous.message);
+  }
+  async function file(destination) {
+    const item = active.item, destinationRef = { type: destination.type, id: destination.id }, after = membershipChange(item, destinationRef);
+    if (!after) { announce(`Already filed in ${destination.title}.`); return; }
+    const decision = { type: 'file', destinationRef, before: beforeFields(item, after), after };
+    const session = { flowVersion: 3, step: 'classify', decision, proposal: flowProposal(item) };
+    const updated = { ...item, ...after, version: item.version + 1 }, next = nextActive(decision, `Filed in ${destination.title}`, false, updated);
+    next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
+    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next)) return;
+    active = next; draw(); announce(next.previous.message);
+  }
+  async function saveItem(destination) {
+    const item = active.item, proposal = values(), destinationRef = destination ? { type: destination.type, id: destination.id } : null;
+    const after = itemFields(item, proposal, destinationRef), decision = { type: 'item', before: beforeFields(item, after), after };
+    const session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
+    const next = nextActive(decision, `Saved ${after.status}: ${after.title}`, true);
+    if (destinationRef) next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
+    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next)) return;
+    active = next; draw(); announce(next.previous.message);
+  }
+  async function trash() {
+    if (!confirm(`Move “${active.item.title}” to Deleted? It can be restored.`)) return;
+    const item = active.item, decision = { type: 'trash' }, session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
+    const next = nextActive(decision, `Moved to Deleted: ${item.title}`, true);
+    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }], next)) return;
+    active = next; draw(); announce(next.previous.message);
+  }
+  async function undo() {
+    const previous = active.previous, all = records(), item = all[`item:${previous.itemId}`], clarification = all[`clarification:${previous.itemId}`], d = previous.decision;
+    if (!item || !clarification || clarification.decision?.type !== d.type) throw new Error('This decision changed and can no longer be undone.');
+    const session = { flowVersion: 3, step: 'reversed', decision: d, proposal: flowProposal(item) };
+    const mutations = [{ type: 'clarification', id: item.id, action: 'update', expectedVersion: clarification.version, fields: session }];
+    if (d.type === 'convert') {
+      const target = all[refKey(d.containerRef)];
+      if (!item.deleted || !target || target.deleted || target.version !== 1) throw new Error('The created container changed and can no longer be undone safely.');
+      mutations.push({ type: 'item', id: item.id, action: 'restore', expectedVersion: item.version }, { type: target.type, id: target.id, action: 'delete', expectedVersion: target.version });
+    } else if (d.type === 'trash') mutations.push({ type: 'item', id: item.id, action: 'restore', expectedVersion: item.version });
+    else mutations.push({ type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: d.before });
+    const restored = { ...item, ...(d.before || {}), version: item.version + 1, deleted: false };
+    const resume = active.item && active.item.id !== item.id ? { item: active.item, proposal: values(), index: active.index } : null;
+    const next = { ...active, item: restored, index: Math.max(0, active.ids.indexOf(item.id)), finished: false, processed: Math.max(0, active.processed - (d.type === 'file' ? 0 : 1)),
+      session: { ...session, version: clarification.version + 1 }, proposal: flowProposal(restored), previous: null, resume, open: true };
+    if (!await save(mutations, next)) return; active = next; draw(); announce('Previous clarification decision undone.');
+  }
+  async function skip() {
+    if (!active?.item || busy) return;
+    active = { ...nextActive(null, '', true), processed: active.processed, skipped: active.skipped + 1, previous: active.previous };
+    await journal(); draw(); announce(active.finished ? 'Clarification session complete.' : `Skipped. ${active.item.title}`);
+  }
+  function announce(message) { $('clarifyDraftStatus').textContent = `${message} · Saved on device; sync pending.`; }
+  async function perform(action) {
+    if (busy || !active) return;
+    guidance.hide(); busy = true; active.proposal = values();
+    for (const input of form.elements) input.disabled = true;
+    try { await action(); }
+    catch (error) { $('clarifyError').textContent = error.message; $('clarifyError').hidden = false; }
+    finally { busy = false; for (const input of form.elements) input.disabled = false; if (dialog.open) void guidance.check(); }
+  }
+  form.addEventListener('submit', event => event.preventDefault());
+  form.addEventListener('input', event => {
+    if (!active) return;
+    active.proposal = values(); guidance.invalidate();
+    if (event.target.dataset.proposal === 'search') {
+      draw(); const search = form.querySelector('[data-proposal=search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length);
+    } else drawResult();
     void journal();
   });
-  form.addEventListener('submit', event => { event.preventDefault(); void commit('accepted'); });
-  $('clarifySave').onclick = () => { void commit(); };
-  $('clarifyBack').onclick = () => { void commit('back'); };
-  $('clarifyRestart').onclick = () => { void commit('restart'); };
+  $('clarifySkip').onclick = () => void perform(skip);
   $('clarifyStop').onclick = () => { guidance.hide(); dialog.close(); };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); else guidance.hide(); });
-  dialog.addEventListener('close', () => { guidance.hide(); if (active) void journal(); });
+  dialog.addEventListener('close', () => { guidance.hide(); if (active) { active.open = false; void journal(); } });
   window.addEventListener('pagehide', () => guidance.hide());
   document.addEventListener('visibilitychange', () => { if (document.hidden) guidance.hide(); else if (dialog.open) void guidance.check(); });
+
+  function begin(items, sessionMode) {
+    if (!items.length) throw new Error('No unprocessed captures are available to clarify.');
+    const item = items[0];
+    active = { item, ids: items.map(entry => entry.id), index: 0, sessionMode, processed: 0, skipped: 0, recentRefs: [], previous: null,
+      session: currentSession(item), proposal: flowProposal(item), finished: false, open: true };
+    showDialog(dialog); draw(); void journal(); void guidance.check();
+  }
   return {
     snapshot,
     open(item) {
-      // ponytail: one active form, like the editor; keep it until saved before switching tasks.
-      if (active && active.item.id !== item.id && JSON.stringify(values()) !== JSON.stringify(active.session.proposal)) {
-        showDialog(dialog);
-        $('clarifyError').textContent = 'Save this proposal before clarifying another task. Your answer is still here.';
-        $('clarifyError').hidden = false; $('clarifyQuestion').focus(); return;
+      const saved = records()[`clarification:${item.id}`];
+      if (item.deleted && saved?.step === 'complete' && saved.decision?.type === 'convert') {
+        active = { item: null, ids: [item.id], index: 1, sessionMode: false, processed: 1, skipped: 0, recentRefs: [], session: saved,
+          proposal: flowProposal(item), finished: true, open: true, previous: { itemId: item.id, decision: saved.decision, message: `Converted to ${collectionKinds[saved.decision.containerKind]}: ${saved.decision.title}` } };
+        showDialog(dialog); draw(); return;
       }
-      const session = records()[`clarification:${item.id}`];
-      if (active?.item.id !== item.id || active.session.version !== (session?.version || 0)) {
-        active = { item: structuredClone(item), session: session || { version: 0, ...newFlow() }, proposal: session?.proposal || flowProposal() };
-      } else { active.proposal = values(); active.item = structuredClone(item); }
-      showDialog(dialog);
-      draw(); void guidance.check(); void journal();
+      begin([item], false);
+    },
+    openInbox() {
+      const items = Object.values(records()).filter(record => record.type === 'item' && !record.deleted && record.status === 'inbox')
+        .sort((a, b) => (a.createdUtc || '').localeCompare(b.createdUtc || '') || a.id.localeCompare(b.id));
+      begin(items, true);
     },
     restore(saved) {
       if (!saved) return;
-      active = saved; draw();
-      if (saved.open) { showDialog(dialog); $('clarifyQuestion').focus(); void guidance.check(); }
+      const item = saved.item?.id ? records()[`item:${saved.item.id}`] || saved.item : null;
+      active = { ...saved, item, proposal: { ...flowProposal(item || {}), ...saved.proposal }, open: saved.open === true };
+      if (!active.finished && (!item || item.deleted)) { active = null; return; }
+      if (active.open) { showDialog(dialog); draw(); void guidance.check(); }
     },
-    hide() { guidance.hide(); active = null; dialog.close(); form.reset(); $('clarifyFlow').replaceChildren(); $('clarifyTask').textContent = $('clarifyOriginal').textContent = $('clarifyAnswers').textContent = $('clarifyError').textContent = $('clarifyDraftStatus').textContent = ''; },
-    close() { guidance.hide(); dialog.close(); }
+    hide() { guidance.hide(); active = null; if (dialog.open) dialog.close(); form.reset(); $('clarifyFlow').replaceChildren(); $('clarifyResult').replaceChildren(); },
+    close() { guidance.hide(); if (dialog.open) dialog.close(); }
   };
 }

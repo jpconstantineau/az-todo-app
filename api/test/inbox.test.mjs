@@ -36,7 +36,7 @@ async function confirmed(page) {
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 }
 async function local(page) {
-  return page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
+  return page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
 }
 async function capture(page, text, newList) {
   await showView(page, 'capture'); await page.locator('#captureText').fill(text);
@@ -71,7 +71,7 @@ test('capture: one List selector includes projects and areas and saves the selec
   assert.deepEqual(await selector.locator('option').allTextContents(), expectedOptions);
   assert.equal(await page.locator('#capture [name=projectId], #capture [name=areas]').count(), 0);
   await selector.selectOption('project:garage'); await page.locator('#captureText').fill('Sort tools');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.listId === 'project:garage');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.listId === 'project:garage');
   assert.equal(await page.locator('#draftStatus').textContent(), '');
   await page.reload(); await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   assert.equal(await selector.inputValue(), 'project:garage');
@@ -157,8 +157,8 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await capture(page, 'Survive termination');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Still thinking about this');
   // Inspect the same module instance as the app before closing its persistent profile.
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Still thinking about this');
-  const beforeClose = await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Still thinking about this');
+  const beforeClose = await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
   assert.equal(beforeClose.queue.length, 1);
   await context.close();
   context = await chromium.launchPersistentContext(profile, { channel, offline: true });
@@ -166,14 +166,14 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.goto(server.url);
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v5')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'))).queue, beforeClose.queue);
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v6')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=5', '/inbox-store.js?v=2', '/inbox-fields.js?v=2', '/inbox-export.js?v=5',
-    '/collection-model.js?v=2', '/collections.js?v=2', '/workspace-move.js?v=2', '/workspaces.js?v=2',
-    '/clarification.js?v=3', '/clarification-flow.js?v=2', '/reviews.js?v=3', '/briefs.js?v=3',
+    '/inbox.js?v=6', '/inbox-store.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=6',
+    '/collection-model.js?v=2', '/collections.js?v=3', '/workspace-move.js?v=2', '/workspaces.js?v=2',
+    '/clarification.js?v=4', '/clarification-flow.js?v=3', '/reviews.js?v=4', '/briefs.js?v=3',
     '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=5',
     '/pwa.js?v=5', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
@@ -204,10 +204,10 @@ test('inbox: switching accounts and expired login never display or upload anothe
   const { page, context, setUser } = await setup(t);
   await context.setOffline(true); await capture(page, 'Alice private');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Alice unfinished');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Alice unfinished');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Alice unfinished');
   setUser('bob'); await context.setOffline(false);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
   assert.doesNotMatch(await page.locator('body').innerText(), /Alice private|Alice unfinished/);
   assert.equal(await page.locator('#captureText').inputValue(), '');
   await capture(page, 'Bob work'); await confirmed(page);
@@ -215,7 +215,7 @@ test('inbox: switching accounts and expired login never display or upload anothe
   assert.equal((await local(page)).queue.length, 1);
   setUser(null); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).paused);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).paused);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true); await page.reload();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sign in online'));
@@ -265,7 +265,7 @@ test('inbox: failed local transaction keeps entered text and recovery copy; queu
   const { page, context } = await setup(t);
   await context.setOffline(true);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep me after quota failure');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Keep me after quota failure');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Keep me after quota failure');
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function () { throw new DOMException('Storage quota exceeded', 'QuotaExceededError'); };
@@ -280,7 +280,7 @@ test('inbox: failed local transaction keeps entered text and recovery copy; queu
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.getByRole('button', { name: 'Edit Keep me after quota failure', includeHidden: true }).waitFor({ state: 'attached' });
   await page.evaluate(async () => {
-    const { transact, enqueue, captureMutations } = await import('/inbox-store.js?v=2');
+    const { transact, enqueue, captureMutations } = await import('/inbox-store.js?v=3');
     await transact('alice', state => {
       for (let index = state.queue.length; index < 100; index++) {
         const mutations = captureMutations({ text: `Bounded ${index}` });
@@ -306,7 +306,7 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
   await showView(page, 'capture'); await page.locator('#captureText').fill('oat milk\nbread\neggs');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
   await page.reload();
   await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'oat milk\nbread\neggs');
@@ -330,7 +330,7 @@ test('inbox: editor storage failure closes the sheet and exposes a recovery copy
   await context.setOffline(true);
   await showView(page, 'work'); await page.getByRole('button', { name: 'Edit Original task', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Recover this sheet draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.title === 'Recover this sheet draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.fields.title === 'Recover this sheet draft');
   await page.evaluate(() => {
     IDBObjectStore.prototype.put = function () { throw new DOMException('Storage quota exceeded', 'QuotaExceededError'); };
   });
@@ -347,7 +347,7 @@ test('inbox: aborted transaction never reports saved; keyboard double activation
   const { page, context } = await setup(t);
   await context.setOffline(true);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Atomic save');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Atomic save');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Atomic save');
   await page.evaluate(() => {
     window.originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (...args) {
@@ -397,7 +397,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const root = new URL('../../html/', import.meta.url);
   const nextAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v5', 'shell-next'),
+    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v6', 'shell-next'),
   ])));
   nextAssets.set('/', nextAssets.get('/index.html'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
@@ -415,14 +415,14 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   await page.evaluate(() => navigator.serviceWorker.ready);
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Draft across upgrade');
-  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Draft across upgrade');
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
   assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
   nextShell = true; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'))).queue, before.queue);
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'))).draft, before.draft);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'))).draft, before.draft);
   rejectUpgrade = false;
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   const nextWorker = context.waitForEvent('serviceworker');
@@ -430,7 +430,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const upgradedWorker = await nextWorker;
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
-  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'))).queue, before.queue);
   await page.close();
   // Closing a tab and releasing its worker client are asynchronous in Chromium.
   // Reopening early can attach the new page to the old worker and prevent activation.
@@ -458,7 +458,7 @@ test('defaults draft survives reload and failed storage remains recoverable; dat
   const { page } = await setup(t, { timezoneId: 'America/New_York' });
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
   await page.locator('#defaultsForm [name=contexts]').fill('@Draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.defaults?.values.contexts === '@Draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.defaults?.values.contexts === '@Draft');
   await page.reload(); await page.locator('#defaultsEditor').waitFor();
   assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Draft');
   await page.evaluate(() => {
@@ -503,6 +503,6 @@ test('independent clients page through all work and resolve defaults conflicts w
   const originalReceipt = documents.find(doc => doc.id === 'receipt:' + pending.operationId).response;
   assert.equal(originalReceipt.status, 'conflict'); assert.deepEqual(originalReceipt.proposed[0].fields.defaults.contexts, ['@Laptop']);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).records['settings:settings'].version === 3);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).records['settings:settings'].version === 3);
   assert.equal(await page.locator('#items article').count(), 52);
 });

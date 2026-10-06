@@ -1,105 +1,106 @@
-import { validateRefs } from './collection-model.mjs';
+import { validateRef, validateRefs } from './collection-model.mjs';
 import { ValidationError, text as validateText } from '../shared/validate.mjs';
 import { calendarDate } from './workflow.mjs';
 
 const fail = message => { throw new ValidationError(message); };
-function shape(value, keys) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) fail('Invalid clarification fields.');
+const itemFields = ['title', 'status', 'collectionRefs', 'listId', 'projectId', 'waitingOn', 'reviewDate',
+  'reviewDateUtc', 'startDate', 'startDateUtc', 'plannedDay'];
+function shape(value, keys, label = 'clarification fields') {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key))) fail(`Invalid ${label}.`);
 }
 function text(value, max = 4000) {
-  if (typeof value !== 'string') fail('Clarification answers must be text.');
-  validateText(value, max, 'Clarification answer'); // Validate without trimming the supplied wording.
+  if (typeof value !== 'string') fail('Clarification values must be text.');
+  validateText(value, max, 'Clarification value');
 }
-export function clarificationFields(input) {
-  return branchingFields(input);
+function ref(value) { try { return validateRef(value); } catch (error) { fail(error.message); } }
+function optionalRef(value) { if (value !== null) ref(value); }
+function itemPatch(value, label) {
+  shape(value, itemFields, label);
+  if (!Object.keys(value).length) fail(`${label} cannot be empty.`);
+  if ('title' in value) { text(value.title, 200); if (!value.title.trim()) fail('Title is required.'); }
+  if ('status' in value && !['inbox', 'next', 'waiting', 'deferred', 'someday', 'reference', 'completed', 'dropped'].includes(value.status)) fail('Choose a valid item status.');
+  if ('collectionRefs' in value) { try { validateRefs(value.collectionRefs); } catch (error) { fail(error.message); } }
+  for (const name of ['listId', 'projectId']) if (name in value && value[name] !== null && (typeof value[name] !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value[name]))) fail(`Choose a valid ${name}.`);
+  if ('waitingOn' in value) text(value.waitingOn);
+  for (const name of ['reviewDate', 'startDate', 'plannedDay']) if (name in value && value[name] !== null && value[name] !== '') calendarDate(value[name], name);
+  for (const name of ['reviewDateUtc', 'startDateUtc']) if (name in value && value[name] !== null) fail(`${name} must be cleared by this decision.`);
 }
 
-const flowKeys = ['text', 'choice', 'projectId', 'projectTitle', 'outcome', 'waitingOn', 'reviewDate', 'startDate', 'plannedDay', 'listId', 'notes'];
-const pathFor = answers => ['actionable', ...(answers.actionable === 'yes' ? ['nextAction', 'project', 'twoMinutes'] : []), 'disposition', ...(answers.disposition?.choice === 'trash' ? [] : ['organize']), 'summary', 'complete'];
-const choose = (value, options) => { if (!options.includes(value)) fail('Choose a valid clarification decision.'); };
-const nonblank = (value, max) => { text(value, max); if (!value.trim()) fail('Supply an answer before continuing.'); };
-const id = value => { if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) fail('Choose a valid destination.'); };
-function dates(value) {
-  for (const key of ['reviewDate', 'startDate', 'plannedDay']) if (key in value) {
-    if (typeof value[key] !== 'string') fail('Choose a valid clarification calendar date.');
-    if (value[key]) calendarDate(value[key], key);
+export function clarificationFields(input) {
+  shape(input, ['flowVersion', 'step', 'decision', 'proposal']);
+  if (input.flowVersion !== 3) fail('Clarification flow version must be 3.');
+  if (!['classify', 'complete', 'reversed'].includes(input.step)) fail('Invalid clarification step.');
+  shape(input.proposal, ['view', 'mode', 'title', 'parentRef', 'search', 'status', 'waitingOn', 'reviewDate', 'startDate', 'plannedDay'], 'clarification proposal');
+  if (!['classify', 'action', 'reference', 'someday'].includes(input.proposal.view) || !['file', 'parent'].includes(input.proposal.mode)) fail('Invalid clarification proposal mode.');
+  text(input.proposal.title, 200); text(input.proposal.search, 200); text(input.proposal.waitingOn);
+  optionalRef(input.proposal.parentRef);
+  for (const name of ['reviewDate', 'startDate', 'plannedDay']) if (input.proposal[name]) calendarDate(input.proposal[name], name);
+  const d = input.decision;
+  if (d === null) {
+    if (input.step !== 'classify') fail('Completed clarification requires a decision.');
+    return structuredClone(input);
   }
-}
-function branchingFields(input) {
-  shape(input, ['flowVersion', 'step', 'answers', 'proposal']);
-  if (input.flowVersion !== 2) fail('Clarification flow version must be 2.');
-  shape(input.answers, ['actionable', 'nextAction', 'project', 'twoMinutes', 'disposition', 'organize']);
-  const a = input.answers, path = pathFor(a), index = path.indexOf(input.step);
-  if (index < 0) fail('Invalid clarification step.');
-  const answered = path.slice(0, Math.min(index, path.indexOf('summary')));
-  if (Object.keys(a).length !== answered.length || answered.some(key => !(key in a))) fail('Answers must match the chosen clarification branch and step.');
-  for (const key of answered) {
-    const value = a[key];
-    if (['actionable', 'twoMinutes'].includes(key)) choose(value, ['yes', 'no']);
-    if (key === 'nextAction') nonblank(value, 200);
-    if (key === 'project') {
-      shape(value, ['choice', 'projectId', 'projectTitle', 'outcome']);
-      choose(value.choice, ['keep', 'none', 'existing', 'new']);
-      for (const name of ['projectId', 'projectTitle', 'outcome']) text(value[name], name === 'projectId' ? 128 : name === 'projectTitle' ? 200 : 4000);
-      if (value.choice === 'existing') id(value.projectId);
-      else if (value.projectId) fail('Only an existing-project choice supplies a project ID.');
-      if (value.choice === 'new') { nonblank(value.projectTitle, 200); nonblank(value.outcome, 4000); }
-      else if (value.projectTitle || value.outcome) fail('Only a new project supplies its title and outcome.');
-    }
-    if (key === 'disposition') {
-      shape(value, ['choice', 'waitingOn', 'reviewDate', 'startDate', 'plannedDay']);
-      choose(value.choice, a.actionable === 'no' ? ['someday', 'reference', 'trash'] : ['next', 'waiting', 'planned', 'deferred', 'dropped', ...(a.twoMinutes === 'yes' ? ['completed'] : [])]);
-      text(value.waitingOn); dates(value);
-      if (value.choice === 'waiting') nonblank(value.waitingOn, 4000);
-      else if (value.waitingOn) fail('Only Waiting supplies a dependency.');
-      if (!['waiting', 'someday'].includes(value.choice) && value.reviewDate) fail('Review date does not apply to this decision.');
-      if (value.choice === 'deferred' ? !value.startDate : value.startDate) fail('Only Deferred requires a start date.');
-      if (value.choice === 'planned' ? !value.plannedDay : value.plannedDay) fail('Only Plan for a day requires a planned day.');
-    }
-    if (key === 'organize') {
-      shape(value, ['text', 'listId', 'notes', 'collectionRefs', 'projectId']);
-      if ('collectionRefs' in value) { try { validateRefs(value.collectionRefs); } catch (error) { fail(error.message); } if (value.projectId !== '') id(value.projectId); } nonblank(value.text, 200); text(value.notes);
-      if (value.listId !== '') id(value.listId);
-    }
+  shape(d, ['type', 'destinationRef', 'containerRef', 'containerKind', 'parentRef', 'title', 'before', 'after']);
+  if (!['file', 'item', 'convert', 'trash'].includes(d.type)) fail('Invalid clarification decision.');
+  if (d.type === 'convert') {
+    shape(d, ['type', 'containerRef', 'containerKind', 'parentRef', 'title'], 'clarification conversion decision');
+    ref(d.containerRef); optionalRef(d.parentRef); text(d.title, 200);
+    if (!d.title.trim() || !['project', 'list', 'checklist', 'area', 'role', 'initiative', 'program', 'reference'].includes(d.containerKind)) fail('Choose a supported container kind and title.');
+  } else if (d.type === 'trash') {
+    if (Object.keys(d).length !== 1) fail('Trash does not accept item or destination fields.');
+  } else {
+    shape(d, d.type === 'file' ? ['type', 'destinationRef', 'before', 'after'] : ['type', 'before', 'after'], 'clarification item decision');
+    if (d.type === 'file') ref(d.destinationRef);
+    itemPatch(d.before, 'clarification before fields'); itemPatch(d.after, 'clarification after fields');
+    if (Object.keys(d.before).sort().join() !== Object.keys(d.after).sort().join()) fail('Before and after fields must describe the same item fields.');
   }
-  shape(input.proposal, [...flowKeys, 'collectionRefs']);
-  if ('collectionRefs' in input.proposal) { try { validateRefs(input.proposal.collectionRefs); } catch (error) { fail(error.message); } }
-  for (const name of flowKeys) text(input.proposal[name], ['text', 'projectTitle'].includes(name) ? 200 : ['projectId', 'listId'].includes(name) ? 128 : 4000);
-  dates(input.proposal);
   return structuredClone(input);
 }
 
-// The accepted v2 decision and the exact item/project changes are one operation.
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const exactMutation = (mutation, action, expectedVersion, fields) => mutation && mutation.action === action && mutation.expectedVersion === expectedVersion && (fields === undefined ? mutation.fields === undefined : same(mutation.fields, fields));
+
 export function validateClarification(record, old, mutations, item) {
-  if (old && old.flowVersion !== record.flowVersion) fail('Keep this clarification in its original flow version.');
+  if (old && old.flowVersion !== 3) fail('Replace the obsolete clarification before saving a v3 decision.');
   if (record.deleted) fail('Clarification history cannot be deleted.');
-  if (old?.step === 'complete' && (record.step !== 'actionable' || mutations.length !== 1)) fail('Start a new clarification at the first question before applying another decision.');
-  const mutation = mutations.find(m => m.type === 'item' && m.id === record.id);
-  if (record.step !== 'complete') {
-    if (mutation) fail('Apply task changes only with the final clarification decision.');
+  const d = record.decision;
+  if (record.step === 'classify' && !d) {
+    if (mutations.length !== 1) fail('A blank clarification cannot change another record.');
     return;
   }
-  if (!item || item.deleted || !mutation || mutation.expectedVersion !== item.version) fail('Apply clarification to the current live item.');
-  const a = record.answers, d = a.disposition;
-  if (d.choice === 'trash') {
-    if (mutation.action !== 'delete' || mutations.length !== 2) fail('Save the Trash decision and item deletion together.');
+  if (record.step === 'reversed') {
+    if (!old?.decision || !same(d, old.decision)) fail('Undo the latest clarification decision exactly.');
+    if (d.type === 'convert') {
+      const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+      const target = mutations.find(m => m.type === d.containerRef.type && m.id === d.containerRef.id);
+      if (!item?.deleted || !exactMutation(source, 'restore', item.version) || !exactMutation(target, 'delete', 1) || mutations.length !== 3) fail('Undo conversion by restoring its source and deleting its unchanged empty container together.');
+    } else if (d.type === 'trash') {
+      const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+      if (!item?.deleted || !exactMutation(source, 'restore', item.version) || mutations.length !== 2) fail('Undo Trash by restoring its current tombstone.');
+    } else {
+      const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+      if (!item || item.deleted || Object.entries(d.after).some(([name, value]) => !same(item[name] ?? null, value)) ||
+          !exactMutation(source, 'update', item.version, d.before) || mutations.length !== 2) fail('Undo only the unchanged fields from the latest clarification decision.');
+    }
     return;
   }
-  const expected = { title: a.organize.text, listId: a.organize.listId || null, status: d.choice === 'planned' ? 'next' : d.choice };
-  if (a.organize.collectionRefs) Object.assign(expected, { collectionRefs: a.organize.collectionRefs, projectId: a.organize.projectId || null });
-  if (!a.organize.collectionRefs && a.project?.choice === 'none') expected.projectId = null;
-  if (!a.organize.collectionRefs && a.project?.choice === 'existing') expected.projectId = a.project.projectId;
-  if (d.choice === 'waiting') Object.assign(expected, { waitingOn: d.waitingOn, ...(d.reviewDate ? { reviewDate: d.reviewDate, reviewDateUtc: null } : {}) });
-  if (d.choice === 'someday') Object.assign(expected, { reviewDate: d.reviewDate || null, reviewDateUtc: null });
-  if (d.choice === 'deferred') Object.assign(expected, { startDate: d.startDate, startDateUtc: null });
-  if (d.choice === 'planned') expected.plannedDay = d.plannedDay;
-  if (a.project?.choice === 'new') {
-    const project = mutations.find(m => m.type === 'project' && m.id === mutation.fields?.projectId);
-    if (!project || project.action !== 'create' || project.fields.title !== a.project.projectTitle || project.fields.outcome !== a.project.outcome ||
-      project.fields.workspaceId !== item.workspaceId || project.fields.status !== 'active' || mutations.length !== 3) fail('Create and assign the proposed project with the final decision.');
-    expected.projectId = project.id;
-    if (expected.collectionRefs) expected.collectionRefs = [...expected.collectionRefs, { type: 'project', id: project.id }];
-  } else if (mutations.length !== 2) fail('Save only the item and its final clarification decision.');
-  if (mutation.action !== 'update' || Object.keys(mutation.fields).length !== Object.keys(expected).length ||
-      Object.entries(expected).some(([name, value]) => JSON.stringify(mutation.fields[name]) !== JSON.stringify(value))) fail('Item changes must match the accepted clarification exactly.');
+  if (!item || item.deleted) fail('Clarification requires the current live source item.');
+  if (d.type === 'convert') {
+    const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+    const target = mutations.find(m => m.type === d.containerRef.type && m.id === d.containerRef.id);
+    const type = d.containerKind === 'project' ? 'project' : 'list';
+    if (d.containerRef.type !== type || !exactMutation(source, 'delete', item.version) || !target || target.action !== 'create' || target.expectedVersion !== 0 || mutations.length !== 3 ||
+        target.fields.title !== d.title || !same(target.fields.parentRef ?? null, d.parentRef) || target.fields.workspaceId !== item.workspaceId ||
+        (type === 'project' ? target.fields.status !== 'draft' || target.fields.outcome !== '' : target.fields.kind !== d.containerKind)) fail('Convert the source and create the selected container together.');
+    return;
+  }
+  const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+  if (d.type === 'trash') {
+    if (!exactMutation(source, 'delete', item.version) || mutations.length !== 2) fail('Save Trash and the source tombstone together.');
+    return;
+  }
+  if (Object.entries(d.before).some(([name, value]) => !same(item[name] ?? null, value)) || !exactMutation(source, 'update', item.version, d.after) || mutations.length !== 2) fail('Item changes must match the accepted clarification exactly.');
+  if (d.type === 'file') {
+    if (record.step !== 'classify' || !d.after.collectionRefs?.some(candidate => same(candidate, d.destinationRef))) fail('Filing must add the selected destination without completing clarification.');
+  } else if (record.step !== 'complete') fail('An item decision must complete clarification.');
 }

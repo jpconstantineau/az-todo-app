@@ -55,9 +55,10 @@ function validateCurrentShape(record) {
     throw new ValidationError('workspaceId is required.');
   }
   if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
-  if (record.type === 'project' && !['active', 'someday', 'completed'].includes(record.status)) {
-    throw new ValidationError('Choose an active, someday or completed project status.');
+  if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) {
+    throw new ValidationError('Choose a draft, active, someday or completed project status.');
   }
+  if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new ValidationError('Add a desired outcome before activating this project.');
 }
 
 export async function commit(accountId, input, requestHash = digest(input)) {
@@ -116,8 +117,15 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         validateClarification(record, current[i]?.record, input.mutations, originalItem);
         const item = records.find(r => r.type === "item" && r.id === record.id)
           ?? (await read(accountId, recordId("item", record.id)))?.record;
-        const trash = record.step === 'complete' && record.answers.disposition.choice === 'trash';
-        if (!item || item.deleted && !trash) throw new ApiError(404, "item_not_found", "Clarification requires an existing item in this account.");
+        const sourceDeleted = record.step === 'complete' && ['trash', 'convert'].includes(record.decision?.type);
+        if (!item || item.deleted && !sourceDeleted && record.step !== 'reversed') throw new ApiError(404, "item_not_found", "Clarification requires an existing item in this account.");
+      }
+      if (record.type === 'item' && input.mutations[i].action === 'restore') {
+        const clarification = records.find(candidate => candidate.type === 'clarification' && candidate.id === record.id)
+          ?? (await read(accountId, recordId('clarification', record.id)))?.record;
+        if (clarification?.step === 'complete' && clarification.decision?.type === 'convert') {
+          throw new ValidationError('Undo the conversion through Clarify; an ordinary restore would duplicate the active container.');
+        }
       }
       let list;
       if (record.type === "item" && !record.deleted && record.listId) {

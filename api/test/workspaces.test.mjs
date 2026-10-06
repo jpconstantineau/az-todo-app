@@ -19,8 +19,8 @@ async function setup(t) {
 }
 const create = currentCreate;
 const change = (type, id, expectedVersion, fields, action = 'update') => ({ type, id, action, expectedVersion, ...(fields ? { fields } : {}) });
-const clarification = (step = 'actionable') => ({ flowVersion: 2, step, answers: {}, proposal: {
-  text: '', choice: '', projectId: '', projectTitle: '', outcome: '', waitingOn: '', reviewDate: '', startDate: '', plannedDay: '', listId: '', notes: ''
+const clarification = (step = 'classify') => ({ flowVersion: 3, step, decision: null, proposal: {
+  view: 'classify', mode: 'file', title: 'Report', parentRef: null, search: '', status: 'next', waitingOn: '', reviewDate: '', startDate: '', plannedDay: ''
 } });
 
 test('workspaces: atomic archive/delete gates all records, preserves history, and restores without rewriting children', async t => {

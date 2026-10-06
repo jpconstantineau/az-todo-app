@@ -81,7 +81,8 @@ export function enqueue(state, accountId, mutations) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
       if (['item', 'list', 'project', 'review'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
       if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
-      if (record.type === 'project' && !['active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose an active, someday or completed project status.');
+      if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose a draft, active, someday or completed project status.');
+      if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new Error('Add a desired outcome before activating this project.');
       for (const member of [record, ...(old ? [old] : [])]) {
         const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];
         if (id !== 'personal' && (!workspace || workspace.deleted || workspace.archived)) throw new Error('This workspace is unavailable or archived. Restore or unarchive it before saving.');

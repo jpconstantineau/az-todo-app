@@ -1,12 +1,12 @@
 import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=2';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=2';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=2';
 import { collectionMoveMutations } from './workspace-move.js?v=2';
-import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=2';
+import { transact, key, projected, enqueue as queueMutations, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit } from './inbox-store.js?v=3';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=5';
-import { clarificationUI } from './clarification.js?v=3';
-import { setupReviews } from './reviews.js?v=3';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=6';
+import { clarificationUI } from './clarification.js?v=4';
+import { setupReviews } from './reviews.js?v=4';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
@@ -177,10 +177,10 @@ async function saveClarification(mutations, next) {
   if (!owner) return false;
   const saved = await transact(owner, local => {
     const records = projected(local);
-    if (!records[`item:${next.item.id}`] || records[`item:${next.item.id}`].deleted) throw new Error('This item is no longer available. Your proposal remains in the device draft.');
     for (const mutation of mutations) {
       const current = records[key(mutation)];
-      if (current?.deleted || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This item or clarification changed. Your draft is kept. Stop, export a copy, and reopen the latest clarification to compare.');
+      const expectedDeleted = mutation.action === 'restore';
+      if (!!current?.deleted !== expectedDeleted && mutation.action !== 'create' || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This item or clarification changed. Your draft is kept. Stop, export a copy, and reopen the latest clarification to compare.');
     }
     enqueue(local, owner, mutations);
     currentDraft(local).clarification = next;
@@ -235,6 +235,7 @@ edit.elements.kind.onchange = () => {
   $('editProjectLifecycle').hidden = editing.type !== 'project';
   $('editOutcomeLabel').hidden = editing.type !== 'project'; edit.elements.outcome.required = editing.type === 'project'; void journal();
 };
+edit.elements.projectStatus.addEventListener('change', () => { edit.elements.outcome.required = edit.elements.projectStatus.value !== 'draft'; void journal(); });
 $('includeNested').onchange = () => { navigation.lists.nested = $('includeNested').checked; render(); void journal(); };
 
 for (const [name, title] of Object.entries(optionFields)) {
@@ -437,6 +438,7 @@ function render() {
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'inbox';
   filters.view = $('view').value;
   $('collectionBrowser').hidden = $('collectionUtilities').hidden = !listMode;
+  $('clarifyInbox').hidden = listMode;
   $('includeNested').checked = !!filters.nested;
   if (listMode) drawOutline($('collectionOutline'), scopedRecords(), record => { navigation.lists.view = viewKey(record); render(); void journal(); });
   if (editing?.type === 'item') pickerOptions(editOrganizer, moving ? {} : scopedRecords(), selectedRefs(editOrganizer));
@@ -482,7 +484,7 @@ function render() {
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
-  $('projectOutcome').textContent = project ? `Project status: ${project.status} · Desired outcome: ${project.outcome} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
+  $('projectOutcome').textContent = project ? `Project status: ${project.status === 'draft' ? 'Needs outcome' : project.status} · Desired outcome: ${project.outcome || 'Not supplied yet'} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
@@ -541,7 +543,7 @@ function render() {
   if (failed) {
     $('failureMessage').textContent = failed.failure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n');
@@ -622,7 +624,10 @@ function renderDeleted() {
     const article = document.createElement('article'), title = document.createElement('h3'), status = document.createElement('p');
     title.textContent = `${record.type}: ${record.title}`;
     status.textContent = record.localState || 'Deletion server-confirmed';
-    article.append(title, status, button('Restore', () => changeDeletion(record, 'restore'), `Restore ${record.type}: ${record.title}`, `${key(record)}:restore`));
+    const conversion = record.type === 'item' && Object.values(scopedRecords()).find(entry => entry.type === 'clarification' && entry.id === record.id && entry.step === 'complete' && entry.decision?.type === 'convert');
+    article.append(title, status, conversion
+      ? button('Undo conversion in Clarify', () => clarification.open(record), `Undo conversion of ${record.title}`, `${key(record)}:restore`)
+      : button('Restore', () => changeDeletion(record, 'restore'), `Restore ${record.type}: ${record.title}`, `${key(record)}:restore`));
     return article;
   }));
   if (!deleted.length) $('deletedItems').textContent = 'No deleted items, lists or projects on this device. Sync to retrieve changes from other devices.';
@@ -732,7 +737,7 @@ function openEditor(record, focus = true, show = true) {
   $('editAdvanced').hidden = record.type !== 'item';
   $('editProjectLifecycle').hidden = record.type !== 'project';
   $('editOutcomeLabel').hidden = record.type !== 'project';
-  edit.elements.outcome.required = record.type === 'project';
+  edit.elements.outcome.required = record.type === 'project' && fields.status !== 'draft';
   $('editHeading').textContent = `${record.version ? 'Edit' : 'New'} ${record.type}`;
   if (record.type === 'item' && record.version === 0) {
     const target = scopedRecords()[fields.projectId ? `project:${fields.projectId}` : `list:${fields.listId}`];
@@ -1008,6 +1013,7 @@ $('resetExecutionFilters').onclick = () => {
 $('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
   ? editing : { type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '', workspaceId: selectedWorkspace });
 $('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '', workspaceId: selectedWorkspace, status: 'active' });
+$('clarifyInbox').onclick = guard(() => clarification.openInbox());
 function openDefaults(record, focus = true, show = true) {
   if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
   if (defaultsEditing?.id !== record.id || defaultsEditing?.type !== record.type || defaultsEditing?.version !== record.version) {
