@@ -7,7 +7,7 @@ const record = (type = 'item') => ({ accountId: 'alice', type, id: 'one', versio
   deleted: false, title: 'Original', originalText: '  Original\n',
   ...(['item', 'list', 'project'].includes(type) ? { workspaceId: 'personal' } : {}),
   ...(type === 'item' ? { status: 'inbox', collectionRefs: [] } : {}),
-  ...(type === 'project' ? { status: 'active' } : {}),
+  ...(type === 'project' ? { status: 'active', outcome: 'Original is complete' } : {}),
   ...(type === 'brief' ? { subjectType: 'item', subjectId: 'source' } : {}) });
 const stateFor = value => ({ records: { [`${value.type}:${value.id}`]: value,
   ...(value.type === 'brief' ? { 'item:source': { ...record('item'), id: 'source' } } : {}) }, queue: [], after: 0, draft: {} });

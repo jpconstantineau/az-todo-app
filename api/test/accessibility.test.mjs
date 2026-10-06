@@ -66,7 +66,7 @@ async function delayDeviceSave(page) {
 test('accessibility: capture save preserves a later control choice and still supports quick-add', { timeout: 30000 }, async t => {
   const { page } = await setup(t);
   await page.locator('#captureText').fill('First task');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'First task');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'First task');
   await delayDeviceSave(page);
   await page.keyboard.press('Control+Enter');
   await page.waitForFunction(() => !!window.releaseCaptureSave);
@@ -174,13 +174,13 @@ test('accessibility: brief storage errors return focus and unchanged review/brie
   await keyboardActivate(page, 'a[href="#work"]');
   await keyboardActivate(page, '[aria-label="Brief Insurance"]');
   await page.locator('#briefForm [name=outcome]').fill('Coverage');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.brief?.content.outcome === 'Coverage');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.brief?.content.outcome === 'Coverage');
   await page.evaluate(() => {
     window.announcements = [];
     for (const id of ['briefState', 'reviewProgress']) new MutationObserver(() => announcements.push(id)).observe(document.getElementById(id), { childList: true, subtree: true, characterData: true });
   });
   await page.locator('#briefForm [name=outcome]').fill('Coverage in place');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
   await page.evaluate(() => { window.oldRow = document.querySelector('#items article'); });
   await refresh(page);
   await page.waitForFunction(() => !window.oldRow.isConnected);
@@ -235,7 +235,7 @@ test('accessibility: keyboard actions and editor return focus survive background
 test('accessibility: typing and unchanged refreshes do not repeat live-region announcements', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await page.locator('#captureText').fill('First draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture?.text === 'First draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture?.text === 'First draft');
   assert.equal(await page.locator('#draftStatus').textContent(), '');
   await page.evaluate(() => {
     window.announcements = [];
@@ -244,7 +244,7 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
     }
   });
   await page.locator('#captureText').fill('Second draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture?.text === 'Second draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture?.text === 'Second draft');
   await clickControl(page.locator('#sync'));
   assert.deepEqual(await page.evaluate(() => window.announcements), []);
   await page.locator('#captureText').focus(); await page.keyboard.press('Control+Enter');
@@ -260,20 +260,8 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await keyboardActivate(page, '[aria-label="Clarify Insurance"]');
   await expectFocus(page, '#clarifyQuestion');
   await page.keyboard.press('Tab');
-  await expectFocus(page, '[name=flow_choice][value=yes]');
-  // Empty acceptance reports an error without losing the triggering control.
-  await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
-  await page.locator('#clarifyError').waitFor();
-  await expectFocus(page, '#clarifyAccept');
-  await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Space');
-  await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'What is one concrete next action?');
-  await expectFocus(page, '#clarifyQuestion');
-  await page.keyboard.press('Tab'); await expectFocus(page, '[name=flow_text]');
-  await page.keyboard.type('Call insurer');
-  await page.keyboard.press('Tab'); await expectFocus(page, '#clarifyBack');
-  await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent.startsWith('Does it require'));
+  await expectFocus(page, '[data-proposal=title]');
+  await page.keyboard.press('Tab'); await expectFocus(page, '#clarifyFlow .clarify-grid > button:first-child');
   await page.keyboard.press('Escape');
   await expectFocus(page, '[aria-label="Clarify Insurance"]');
   await page.locator('#newProject').focus(); await page.keyboard.press('Enter');

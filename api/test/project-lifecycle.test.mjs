@@ -21,6 +21,10 @@ const confirmed = page => page.waitForFunction(() => document.querySelector('#sy
 test('project lifecycle validates states, preserves linked history, and conflicts without overwriting', async t => {
   documents.length = 0;
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  assert.equal((await post(server.url, operation([create('project', 'draft', { title: 'Kitchen', status: 'draft' })]))).status, 200);
+  assert.equal(get('draft').outcome, '');
+  assert.equal((await post(server.url, operation([update(get('draft'), { status: 'active' })]))).status, 400);
+  assert.equal((await post(server.url, operation([update(get('draft'), { outcome: 'Kitchen is usable', status: 'active' })]))).status, 200);
   assert.equal((await post(server.url, operation([
     create('project', 'project', { title: 'Garage', outcome: 'Ready for winter', description: 'Keep notes' }),
     create('item', 'action', { title: 'Sort tools', projectId: 'project', status: 'next' })
@@ -62,6 +66,7 @@ test('project lifecycle stays recoverable offline and separates active and somed
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
   assert.equal((await post(server.url, operation([
     create('project', 'legacy', { title: 'Legacy', outcome: 'Original outcome', description: 'Original notes' }),
+    create('project', 'draft-review', { title: 'Needs outcome', status: 'draft' }),
     create('project', 'incubated', { title: 'Incubated', outcome: 'Future outcome', status: 'someday' }),
     create('project', 'finished', { title: 'Finished', outcome: 'Achieved outcome', status: 'completed' }),
     create('item', 'unfinished', { title: 'Unfinished action', status: 'next', projectId: 'legacy' }),
@@ -75,9 +80,9 @@ test('project lifecycle stays recoverable offline and separates active and somed
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await clickControl(page.locator('#openReviews')); await page.locator('#startWeekly').click();
-  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2')); await confirmed(page);
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 3')); await confirmed(page);
   const weekly = structuredClone(records().find(record => record.reviewKind === 'weekly'));
-  assert.deepEqual(weekly.included.map(ref => ref.id).sort(), ['legacy', 'unfinished']);
+  assert.deepEqual(weekly.included.map(ref => ref.id).sort(), ['draft-review', 'legacy', 'unfinished']);
   await page.locator('#startSomeday').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('someday review: 0 of 1')); await confirmed(page);
   assert.deepEqual(records().find(record => record.reviewKind === 'someday').included, [{ type: 'project', id: 'incubated' }]);
@@ -97,26 +102,26 @@ test('project lifecycle stays recoverable offline and separates active and somed
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Edit project: Legacy', exact: true }).click();
   assert.equal(await page.getByLabel('Project status', { exact: true }).inputValue(), 'active');
-  assert.deepEqual(await page.locator('#projectStatus option').evaluateAll(options => options.map(option => option.value)), ['active', 'someday', 'completed']);
-  assert.match(await page.locator('#projectStatusHelp').textContent(), /Linked actions keep their own statuses/);
+  assert.deepEqual(await page.locator('#projectStatus option').evaluateAll(options => options.map(option => option.value)), ['draft', 'active', 'someday', 'completed']);
+  assert.match(await page.locator('#projectStatusHelp').textContent(), /linked actions keep their own statuses/i);
   await page.getByLabel('Project status', { exact: true }).selectOption('completed');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.edit?.fields.projectStatus === 'completed');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.edit?.fields.projectStatus === 'completed');
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.getByLabel('Project status', { exact: true }).inputValue(), 'completed');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.some(entry => entry.operation.mutations.some(m => m.id === 'legacy' && m.fields?.status === 'completed')));
-  const queued = await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue.some(entry => entry.operation.mutations.some(m => m.id === 'legacy' && m.fields?.status === 'completed')));
+  const queued = await page.evaluate(async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.match(await page.locator('#projectOutcome').textContent(), /Project status: completed/);
-  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue), queued);
+  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue), queued);
   await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', includeHidden: true })); await confirmed(page);
   assert.equal(get('legacy').status, 'completed');
   assert.deepEqual(records().filter(record => record.type === 'item'), actions);
   assert.deepEqual(records().filter(record => ['review', 'reviewDecision'].includes(record.type)), history);
   await clickControl(page.locator('#openReviews')); await page.locator('#startWeekly').click();
-  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('weekly review: 0 of 2')); await confirmed(page);
-  assert.deepEqual(records().filter(record => record.reviewKind === 'weekly').at(-1).included.map(ref => ref.id).sort(), ['incubated', 'unfinished']);
+  await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('weekly review: 0 of 3')); await confirmed(page);
+  assert.deepEqual(records().filter(record => record.reviewKind === 'weekly').at(-1).included.map(ref => ref.id).sort(), ['draft-review', 'incubated', 'unfinished']);
 
   await showView(page, 'work'); await page.locator('#view').selectOption('project:legacy');
   await page.getByRole('button', { name: 'Edit project: Legacy', exact: true }).click();

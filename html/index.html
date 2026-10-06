@@ -11,7 +11,7 @@
   <script src="/pwa.js?v=5" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=5"></script>
+  <script type="module" src="/inbox.js?v=6"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -118,6 +118,7 @@
     </section>
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
       <p class="eyebrow" id="workEyebrow" hidden>Organize</p><h2 id="itemsHeading" tabindex="-1">Process</h2>
+      <button id="clarifyInbox" type="button">Clarify inbox</button>
       <div id="collectionBrowser" hidden><details class="collection-outline"><summary>Browse lists and their children</summary><nav id="collectionOutline" aria-label="Collection outline"></nav></details><p id="collectionBreadcrumbs" class="muted"></p><div id="collectionChildren" class="actions"></div><label class="collection-check"><input id="includeNested" type="checkbox"> Include nested items</label></div>
       <label><span id="viewLabel" class="sr-only">View</span> <select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
@@ -229,8 +230,8 @@
         <label id="editOutcomeLabel" hidden>Desired outcome <textarea name="outcome" rows="3" maxlength="4000"></textarea></label>
         <div id="editProjectLifecycle" hidden>
           <label for="projectStatus">Project status</label>
-          <select id="projectStatus" name="projectStatus" aria-describedby="projectStatusHelp"><option value="active">Active</option><option value="someday">Someday / on hold</option><option value="completed">Completed</option></select>
-          <p id="projectStatusHelp" class="muted">Changing project status keeps its outcome, notes and history. Linked actions keep their own statuses and remain in their existing views and reviews, including unfinished actions. Edit those actions individually if needed. Choose Active to reactivate this project.</p></div>
+          <select id="projectStatus" name="projectStatus" aria-describedby="projectStatusHelp"><option value="draft">Needs outcome</option><option value="active">Active</option><option value="someday">Someday / on hold</option><option value="completed">Completed</option></select>
+          <p id="projectStatusHelp" class="muted">Needs outcome is linkable but remains unfinished clarification and appears in weekly review. Add a desired outcome before choosing Active, Someday or Completed. Changing status keeps notes and history; linked actions keep their own statuses.</p></div>
         <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span id="editWorkspaceHelp" class="muted"></span></label>
         <div id="editCollectionFields" hidden><label>Kind<select name="kind"></select></label><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
         <div id="editAdvanced"><div id="editFields"></div></div>
@@ -239,16 +240,16 @@
         <div class="editor-actions"><button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button></div>
       </form>
     </dialog>
-    <dialog class="side-panel" id="clarifier" aria-labelledby="clarifyHeading">
-      <p class="eyebrow">Clarify at your pace</p><h2 id="clarifyHeading">Clarification</h2>
-      <details><summary>Original request</summary><pre id="clarifyOriginal"></pre></details>
-      <p id="clarifyTask"></p>
-      <h3 id="clarifyQuestion" tabindex="-1"></h3><p id="clarifyHelp"></p>
-      <p id="clarifyError" role="alert" hidden></p><p id="clarifyDraftStatus" role="status"></p>
+    <dialog class="side-panel clarify-sheet" id="clarifier" aria-labelledby="clarifyHeading">
+      <div class="clarify-header"><div><p class="eyebrow">One item at a time</p><h2 id="clarifyHeading">Clarify</h2></div><p id="clarifyProgress"></p></div>
+      <h3 id="clarifyTask"></h3>
+      <details><summary>Original</summary><pre id="clarifyOriginal"></pre></details>
+      <h3 id="clarifyQuestion" tabindex="-1">What is this?</h3><p id="clarifyHelp"></p>
+      <p id="clarifyError" role="alert" hidden></p><p id="clarifyDraftStatus" role="status" aria-live="polite"></p>
+      <div id="clarifyResult" class="clarify-result" role="status" hidden></div>
       <form id="clarifyForm">
         <div id="clarifyFlow"></div>
-        <button id="clarifyBack" type="button" hidden>Back</button>
-        <div class="actions"><button id="clarifyAccept" type="submit">Continue</button><button id="clarifySave" type="button">Save proposal without accepting</button><button id="clarifyRestart" type="button" hidden>Clarify again</button><button id="clarifyStop" type="button">Stop for now</button></div>
+        <div class="actions clarify-footer"><button id="clarifySkip" type="button">Skip</button><button id="clarifyStop" type="button">Stop</button></div>
       </form>
       <p><a href="/help.html#clarification" target="_blank" rel="noopener">Clarification help (new tab)</a></p>
       <details id="localGuidance" hidden>
@@ -259,7 +260,6 @@
         <pre id="guidancePreview" hidden></pre>
         <button id="guidanceUse" type="button" hidden>Use as proposed answer</button>
       </details>
-      <details><summary>Accepted answers and unknowns</summary><pre id="clarifyAnswers"></pre></details>
     </dialog>
     <dialog class="side-panel" id="briefs" aria-labelledby="briefHeading">
       <p class="eyebrow">Prepare a brief</p><h2 id="briefHeading" tabindex="-1">Brief</h2>

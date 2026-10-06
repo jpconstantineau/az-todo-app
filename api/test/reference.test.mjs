@@ -40,7 +40,7 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await page.locator('#statusFilter').selectOption('reference');
   assert.deepEqual(await rows(), ['printer']);
   assert.match(await page.locator('#items').innerText(), /pending/);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.navigation?.work.status === 'reference');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.navigation?.work.status === 'reference');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.deepEqual(await rows(), ['printer']);
   assert.equal(await page.getByRole('button', { name: 'Clarify Printer paper specification', exact: true, includeHidden: true }).count(), 1);

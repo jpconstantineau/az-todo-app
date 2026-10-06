@@ -5,10 +5,10 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 
-const local = page => page.evaluate(async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).sharedLists);
+const local = page => page.evaluate(async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).sharedLists);
 const settled = page => waitForBrowser(page, async () => {
-  const session = await (await import('/inbox-store.js?v=2')).transact(null);
-  const data = await (await import('/inbox-store.js?v=2')).transact(session.accountId);
+  const session = await (await import('/inbox-store.js?v=3')).transact(null);
+  const data = await (await import('/inbox-store.js?v=3')).transact(session.accountId);
   return !data.sharedLists?.pending && !document.querySelector('#sharedContent').hidden && document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false';
 });
 const openDetails = async locator => locator.evaluate(element => { element.open = true; });
@@ -48,13 +48,13 @@ test('shared lists browser: delayed reads cannot replace a newer snapshot or und
   await first.locator('#addShared button').click(); await settled(first);
   await second.goto(server.url + '/shared.html'); await settled(second);
   await first.locator('#addShared input').fill('Keep this draft');
-  await waitForBrowser(first, async id => (await (await import('/inbox-store.js?v=2')).transact('alice')).sharedLists.drafts[id]?.add === 'Keep this draft', id);
+  await waitForBrowser(first, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).sharedLists.drafts[id]?.add === 'Keep this draft', id);
 
   const older = await holdRead(first);
   await selectAgain(first, id); await older.requested;
   const previous = (await local(second)).lists[id].revision;
   await second.getByRole('button', { name: 'Complete Milk', exact: true }).click(); await settled(second);
-  await waitForBrowser(second, async ({ id, revision }) => (await (await import('/inbox-store.js?v=2')).transact('alice')).sharedLists.lists[id]?.revision === revision,
+  await waitForBrowser(second, async ({ id, revision }) => (await (await import('/inbox-store.js?v=3')).transact('alice')).sharedLists.lists[id]?.revision === revision,
     { id, revision: previous + 1 });
   older.release();
   await first.waitForFunction(() => document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false');
@@ -68,7 +68,7 @@ test('shared lists browser: delayed reads cannot replace a newer snapshot or und
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', error: 'shared_access_denied', message: 'Permission removed.' }) }), { times: 1 });
   await selectAgain(second, id);
   await waitForBrowser(second, async id => {
-    const data = (await (await import('/inbox-store.js?v=2')).transact('alice')).sharedLists;
+    const data = (await (await import('/inbox-store.js?v=3')).transact('alice')).sharedLists;
     return !data.lists[id] && !data.directory.some(list => list.id === id);
   }, id);
   obsolete.release();
@@ -136,11 +136,11 @@ test('shared lists browser: create, invite, constrained member, offline conflict
   assert.match(await second.locator('#pendingText').textContent(), /Do not lose revoked work/);
   assert.equal(documents.find(d => d.kind === 'shared-list').items.length, 3);
   await page.locator('#addShared input').fill('Alice private draft');
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=2')).transact('alice')).sharedLists.drafts[id]?.add === 'Alice private draft', id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=3')).transact('alice')).sharedLists.drafts[id]?.add === 'Alice private draft', id);
   alice = 'eve'; await page.locator('#sharedRefresh').click(); await page.locator('#sharedSignIn').waitFor();
   assert.equal(await page.locator('#sharedMain').isVisible(), false);
   assert.equal(await page.locator('#addShared input').inputValue(), '');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).paused === true);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).paused === true);
   await owner.setOffline(true); await page.reload(); await page.locator('#sharedSignIn').waitFor();
   assert.equal(await page.locator('#sharedMain').isVisible(), false, 'known account mismatch also pauses offline reopening');
   alice = 'alice'; await owner.setOffline(false); await page.reload(); await page.locator('#sharedMain').waitFor();

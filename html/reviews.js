@@ -1,5 +1,5 @@
 import { belongsTo, memberships, refKey } from './collection-model.js?v=2';
-import { key, projected } from './inbox-store.js?v=2';
+import { key, projected } from './inbox-store.js?v=3';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=2';
 
 const $ = id => document.getElementById(id);
@@ -24,7 +24,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const tomorrow = new Date(year, month - 1, date + 1).getTime();
     return Object.values(records).filter(record => {
       if (record.deleted || seen.has(key(record))) return false;
-      if (record.type === 'project') return reviewKind === 'weekly' && record.status === 'active' || reviewKind === 'someday' && record.status === 'someday';
+      if (record.type === 'project') return reviewKind === 'weekly' && ['active', 'draft'].includes(record.status) || reviewKind === 'someday' && record.status === 'someday';
       if (reviewKind === 'someday' || record.type !== 'item' || ['completed', 'dropped', 'reference'].includes(record.status)) return false;
       return reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) ||
         record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow;
@@ -60,7 +60,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
     $('reviewDetails').textContent = !ref ? 'This review is empty. Start another review after capturing work or changing your focus.' : !target || target.deleted
       ? 'This record was deleted or is unavailable. Acknowledge it to continue; it will not be recreated.'
-      : [target.type === 'project' ? `Project status: ${target.status} · Project outcome: ${target.outcome}` : `Status: ${target.status}`, target.description,
+      : [target.type === 'project' ? `Project status: ${target.status === 'draft' ? 'Needs outcome' : target.status} · Project outcome: ${target.outcome || 'Not supplied yet'}` : `Status: ${target.status}`, target.description,
         memberships(target).map(ref => `Membership: ${records[refKey(ref)]?.title || 'Unavailable collection'}`).join(' · '),
         ...['waitingOn', 'plannedDay', 'dueDate', 'dueDateUtc', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'].filter(name => target[name]).map(name => `${name}: ${target[name]}`),
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');

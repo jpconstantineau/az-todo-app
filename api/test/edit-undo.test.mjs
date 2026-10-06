@@ -97,9 +97,9 @@ test('device export preserves exact undo fields and explains them in readable ou
   assert.match(readableExport(exported), /Keep notes/);
 });
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=2')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=3')).transact('alice'));
 async function confirmed(page) {
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.length === 0 &&
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue.length === 0 &&
     document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 }
 async function setup(t) {
@@ -133,13 +133,13 @@ test('browser undo survives offline edit/reload, preserves drafts, and syncs onc
   const { page, context } = await setup(t);
   await context.setOffline(true); await edit(page);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).draft.capture.text === 'Keep this draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).draft.capture.text === 'Keep this draft');
   const before = await local(page);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#undoEdit').isDisabled(), false);
   assert.deepEqual((await local(page)).undoEdit, before.undoEdit);
   await clickUndo(page);
-  await waitForBrowser(page, async () => !(await (await import('/inbox-store.js?v=2')).transact('alice')).undoEdit);
+  await waitForBrowser(page, async () => !(await (await import('/inbox-store.js?v=3')).transact('alice')).undoEdit);
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep this draft');
   assert.equal((await local(page)).queue.length, 2);
   await showView(page, 'work'); await page.getByRole('button', { name: 'Edit Original', exact: true }).waitFor();
@@ -157,7 +157,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
   assert.ok(recovery);
   const bobPull = page.waitForResponse(response => response.url().includes('/api/v1/changes?') && new URL(response.url()).searchParams.get('accountId') === 'bob');
   setUser('bob'); await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact(null)).accountId === 'bob');
   // Session metadata commits before Bob's pull; switching the fixture user early
   // can reject that still-running request and hide the controls for Alice's sync.
   await (await bobPull).finished();
@@ -181,7 +181,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
     }
   }
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=2');
+    const { transact } = await import('/inbox-store.js?v=3');
     await transact('alice');
     // Expire at the real click: this transaction precedes the undo handler's read.
     // Earlier expiry lets an unrelated refresh correctly disable the control.
@@ -204,7 +204,7 @@ test('undo rejected after a remote edit or deletion keeps the server record inta
       mutations: [{ type: 'item', id: record.id, action: 'delete', expectedVersion: record.version }] }) });
   assert.equal(response.status, 200);
   await clickUndo(page);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=2')).transact('alice')).queue.length === 1);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=3')).transact('alice')).queue.length === 1);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await page.locator('#failure').waitFor();
   assert.equal(documents.find(doc => doc.id.startsWith('record:item:')).record.deleted, true);
   assert.equal((await local(page)).queue[0].receipt.status, 'conflict');

@@ -2,7 +2,7 @@ import { collectionKinds, collectionKind, isCollection, refKey, memberships, anc
 
 export const viewKey = record => record.type === 'project' ? refKey(record) : record.id;
 export const parseRef = value => { const [type, id] = value.split(':'); return { type, id }; };
-export const collectionLabel = record => collectionKind(record) === 'list' ? record.title : `${collectionKinds[collectionKind(record)]}: ${record.title}${record.type === 'project' ? ` (${record.status === 'someday' ? 'Someday / on hold' : record.status === 'completed' ? 'Completed' : 'Active'})` : ''}`;
+export const collectionLabel = record => collectionKind(record) === 'list' ? record.title : `${collectionKinds[collectionKind(record)]}: ${record.title}${record.type === 'project' ? ` (${record.status === 'draft' ? 'Needs outcome' : record.status === 'someday' ? 'Someday / on hold' : record.status === 'completed' ? 'Completed' : 'Active'})` : ''}`;
 export function pickerOptions(control, records, refs = []) {
   const selected = refs.map(refKey), available = Object.values(records).filter(record => isCollection(record) && !record.deleted);
   control.replaceChildren(...available.map(record => new Option(ancestry(record, records).reverse().map(ref => records[refKey(ref)]?.title || 'Unavailable').join(' / ') + ` · ${collectionKinds[collectionKind(record)]}`, refKey(record))));
