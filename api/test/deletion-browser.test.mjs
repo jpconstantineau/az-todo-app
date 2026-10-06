@@ -9,7 +9,7 @@ import { projected } from '../../html/inbox-store.js';
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const sync = async page => { await clickControl(page.locator('#sync')); await confirmed(page); };
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=4')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'));
 const trash = page => clickControl(page.locator('#openDeleted'));
 
 test('deletion: offline reload, parent recovery, another device conflict and account isolation', { timeout: 90000 }, async t => {
@@ -41,7 +41,7 @@ test('deletion: offline reload, parent recovery, another device conflict and acc
       ] }) }); return response.status;
   });
   assert.equal(seeded, 200); await sync(page);
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=4')).transact('alice')).records['item:milk']);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=5')).transact('alice')).records['item:milk']);
   await second.goto(server.url); await second.locator('#workspace').waitFor(); await confirmed(second);
   await showView(second, 'work'); await other.setOffline(true);
   await second.getByRole('button', { name: 'Edit Milk', exact: true }).click();
@@ -146,7 +146,7 @@ test('deletion: lists delete completed and active linked items, including offlin
   });
   assert.deepEqual(statuses, [200, 200, 200]);
   await sync(page);
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=4')).transact('alice')).records['item:task-20']);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=5')).transact('alice')).records['item:task-20']);
   await showView(page, 'lists'); await page.locator('#view').selectOption('done');
   await page.getByRole('button', { name: 'Delete list: Done', exact: true }).click();
   await page.getByRole('button', { name: 'Delete list: Done', exact: true }).waitFor({ state: 'hidden' });

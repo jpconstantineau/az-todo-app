@@ -103,7 +103,7 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   await page.getByRole('button', { name: 'Parent', exact: true }).click();
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
   await page.getByRole('button', { name: 'Make role under Family' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=4')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
   assert.equal(await page.locator('#clarifyProgress').textContent(), '2 of 2');
   await page.locator('[data-proposal="title"]').fill('Call licensed electrician');
   assert.ok(await page.getByRole('button', { name: 'Undo previous decision' }).isVisible());
