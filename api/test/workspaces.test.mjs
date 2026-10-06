@@ -159,6 +159,39 @@ test('workspaces: large collection moves detach, move and reattach in repeat-saf
   assert.equal(records['list:other'].workspaceId, 'work');
 });
 
+test('workspaces: 20 is an operation boundary, not a logical collection-move limit', () => {
+  let records = {
+    'workspace:work': { type: 'workspace', id: 'work', title: 'Work', version: 1 },
+    'workspace:family': { type: 'workspace', id: 'family', title: 'Family', version: 1 },
+    'list:root': { type: 'list', id: 'root', title: 'Root', workspaceId: 'work', version: 1 }
+  };
+  for (let index = 0; index < 1000; index++) records[`item:task-${index}`] = {
+    type: 'item', id: `task-${index}`, title: `Task ${index}`, workspaceId: 'work', version: 1,
+    listId: 'root', projectId: null, collectionRefs: [{ type: 'list', id: 'root' }]
+  };
+  const plan = collectionMovePlan(records['list:root'], 'family', records,
+    { title: 'Root', workspaceId: 'family', parentRef: null }, 'thousand-item-move');
+  assert.equal(plan.entries.length, 1001, '1,000 linked items plus their root are one logical move');
+
+  const phases = [];
+  while (true) {
+    const next = nextCollectionMoveOperation(plan, records, 'alice');
+    if (!next) break;
+    assert.ok(next.operation.mutations.length >= 1 && next.operation.mutations.length <= 20);
+    assert.ok(new TextEncoder().encode(JSON.stringify(next.operation)).length <= 64 * 1024);
+    phases.push(next.phase);
+    records = structuredClone(records);
+    for (const mutation of next.operation.mutations) Object.assign(records[`${mutation.type}:${mutation.id}`], mutation.fields, {
+      version: mutation.expectedVersion + 1
+    });
+  }
+  assert.deepEqual([...new Set(phases)], ['detach', 'move', 'attach']);
+  assert.ok(phases.length > 3, 'the logical move spans many bounded operations');
+  assert.equal(records['list:root'].workspaceId, 'family');
+  assert.equal(records['item:task-999'].workspaceId, 'family');
+  assert.deepEqual(records['item:task-999'].collectionRefs, [{ type: 'list', id: 'root' }]);
+});
+
 test('workspaces: concurrent archive and capture serialize; frozen workspace rejects derived history changes', async t => {
   const { post } = await setup(t);
   await post([create('workspace', 'work', { title: 'Work' }), create('item', 'task', { title: 'Report', workspaceId: 'work' })]);

@@ -49,14 +49,14 @@ ID and original text. Clarification and brief history follow that item (or their
 project source). An existing review retains its decision history, but a moved
 item is unavailable to further decisions in its former workspace.
 
-Lists and projects can also move. A tree of at most 20 affected records (the
-root plus up to 19 nested collections or linked items) moves in one atomic
-operation. A larger tree is saved as a resumable device plan: the app first
-detaches its internal relationships, moves the original records in batches of
-at most 20, and restores only relationships whose endpoints are both in the
-moved tree. Links to collections left in the source workspace are deliberately
-cleared. Record IDs, original captures and clarification/brief history are not
-copied or rewritten.
+Lists and projects can also move, with no 20-record user limit. A tree of at
+most 20 affected records uses one atomic cloud operation. A larger tree is one
+logical device move replayed through the API's existing operations of at most
+20 records and 64 KiB each: the app first detaches internal relationships,
+moves the original records in bounded batches, and restores only relationships
+whose endpoints are both in the moved tree. Links to collections left in the
+source workspace are deliberately cleared. Record IDs, original captures and
+clarification/brief history are not copied or rewritten.
 
 The initiating device projects the final tree immediately, including offline.
 During server replay another device can temporarily see detached records, but

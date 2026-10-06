@@ -6,11 +6,12 @@ import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { showView, clickControl } from './navigation-helper.mjs';
 import { currentCreate } from './current-record.mjs';
+import { defaultSettings } from '../api/shared/defaults.mjs';
 
 const create = currentCreate;
 const ref = (type, id) => ({ type, id });
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=5')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=6')).transact('alice'));
 async function setup(t, items = []) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -41,7 +42,7 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
   await page.getByRole('button', { name: 'Edit Measure cabinets', exact: true }).click();
   await context.setOffline(true);
   await page.locator('#edit [name=collectionRefs]').selectOption(['project:kitchen', 'list:home', 'list:role']);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.edit?.fields.collectionRefs?.length === 3);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.edit?.fields.collectionRefs?.length === 3);
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=collectionRefs] option:checked').count(), 3);
   await saveEdit(page);
@@ -62,6 +63,36 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
     }
   }
 });
+test('collections browser: changing collection type preserves the collection and its items', async t => {
+  const defaults = { ...structuredClone(defaultSettings), contexts: ['@Store'] };
+  const { page } = await setup(t, [
+    create('list', 'groceries', { title: 'Groceries', parentRef: ref('list', 'home'), defaults }),
+    create('item', 'buy-milk', { title: 'Buy milk', status: 'next', listId: 'groceries', collectionRefs: [ref('list', 'groceries')] })
+  ]);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('groceries');
+  await page.getByRole('button', { name: 'Edit list: Groceries', exact: true }).click();
+  const type = page.getByRole('combobox', { name: 'Collection type', exact: true });
+  assert.equal(await type.inputValue(), 'list');
+  assert.equal(await type.locator('option[value="project"]').evaluate(option => option.disabled), true);
+  await type.selectOption('checklist'); await saveEdit(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).records['list:groceries']?.kind === 'checklist');
+  const localRecords = (await local(page)).records;
+  assert.deepEqual(localRecords['list:groceries'].parentRef, ref('list', 'home'));
+  assert.deepEqual(localRecords['list:groceries'].defaults, defaults);
+  assert.equal(localRecords['item:buy-milk'].listId, 'groceries');
+  assert.deepEqual(localRecords['item:buy-milk'].collectionRefs, [ref('list', 'groceries')]);
+  await synced(page);
+  const savedLists = documents.filter(doc => doc.id === 'record:list:groceries');
+  assert.equal(savedLists.length, 1); assert.equal(savedLists[0].record.kind, 'checklist');
+  assert.deepEqual(savedLists[0].record.parentRef, ref('list', 'home'));
+  assert.equal(documents.filter(doc => doc.id === 'record:item:buy-milk').length, 1);
+  await showView(page, 'execute');
+  assert.equal(await page.locator('#executeList option[value="groceries"]').count(), 0);
+  await page.locator('[data-execute-kind="checklist"]').click();
+  await page.locator('#executeList').selectOption('groceries');
+  await page.getByRole('button', { name: 'Edit Buy milk', exact: true }).waitFor();
+});
+
 test('collections browser: reusable reference checklist and resumable area mapping preserve source and tags', async t => {
   const entries = Array.from({ length: 21 }, (_, i) => create('item', `tag-${i}`, { title: `Tagged ${i}`, areas: ['Household'], status: 'inbox' }));
   const { page, context } = await setup(t, [create('item', 'passport', { title: 'Passport', description: 'Check expiry', status: 'reference', listId: 'packing', referenceLinks: ['https://example.com/passport'] }), ...entries]);
@@ -71,7 +102,7 @@ test('collections browser: reusable reference checklist and resumable area mappi
   await page.locator('#collectionUtilityForm [name=entries]').selectOption('passport');
   await page.locator('#collectionUtilityForm [name=title]').fill('November trip');
   await context.setOffline(true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.collectionUtility?.title === 'November trip');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.collectionUtility?.title === 'November trip');
   await page.evaluate(() => {
     window.collectionPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (value, ...args) {
@@ -120,11 +151,11 @@ test('collections browser: clarification uses the organizer and account changes 
   const selection = page.locator('#edit [name=collectionRefs]');
   await selection.focus(); await page.keyboard.press('Home'); await page.keyboard.press('Shift+ArrowDown');
   assert.equal(await selection.evaluate(el => el === document.activeElement), true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact('alice')).draft.edit?.fields.collectionRefs?.length > 0);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.edit?.fields.collectionRefs?.length > 0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Edit Private travel note', exact: true }).waitFor();
   setUser('bob'); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=5')).transact(null)).accountId === 'bob'); await synced(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact(null)).accountId === 'bob'); await synced(page);
   assert.equal(await page.locator('#edit [name=collectionRefs] option').count(), 0);
   assert.doesNotMatch(await page.locator('#collectionOutline').textContent(), /Home|Packing|Parent/);
   assert.equal(await page.locator('#collectionUtilityForm [name=title]').inputValue(), '');

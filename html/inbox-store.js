@@ -6,6 +6,8 @@ import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
 const size = value => new TextEncoder().encode(JSON.stringify(value)).length;
+const MAX_OPERATION_MUTATIONS = 20, MAX_OPERATION_BYTES = 65536;
+const MAX_QUEUE_OPERATIONS = 1024, MAX_QUEUE_BYTES = 64 * 1024 * 1024;
 let connection, resetting = false;
 const resetChannel = new BroadcastChannel('todo-inbox-device-reset');
 resetChannel.unref?.(); // Node's channel must not keep storage unit tests running.
@@ -106,9 +108,8 @@ export function projected(state) {
   return projectCollectionMove(records, state.workspaceMove);
 }
 
-export function enqueue(state, accountId, mutations) {
-  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before saving more changes.');
-  if (!mutations.length || mutations.length > 20) throw new Error('Save 1–20 items at a time (19 with a new list).');
+function operationFor(state, accountId, mutations, operationId = crypto.randomUUID()) {
+  if (!mutations.length || mutations.length > MAX_OPERATION_MUTATIONS) throw new Error('Save 1–20 records at a time.');
   const records = projected(state);
   const proposed = { ...records };
   for (const mutation of mutations) {
@@ -140,13 +141,34 @@ export function enqueue(state, accountId, mutations) {
       validateWorkflow({ ...old, ...mutation.fields }, old, mutation.fields);
     }
   }
-  const operation = { apiVersion: 1, accountId, operationId: crypto.randomUUID(), mutations };
-  if (size(operation) > 65536) throw new Error('This capture is too large. Save fewer items at a time. Your text is still here.');
-  // ponytail: one account document; split stores if measured cache size makes transactions slow.
-  if (state.queue.length >= 100 || size(state.queue) + size(operation) > 5 * 1024 * 1024) {
-    throw new Error('The device queue is full (100 saves or 5 MiB). Sync or export pending work before adding more.');
+  const operation = { apiVersion: 1, accountId, operationId, mutations };
+  if (size(operation) > MAX_OPERATION_BYTES) throw new Error('This capture is too large. Save fewer items at a time. Your text is still here.');
+  return operation;
+}
+
+function queueRoom(state, entries) {
+  let bytes = size(state.queue), count = state.queue.length;
+  for (const entry of entries) {
+    const nextBytes = bytes + size(entry) + (count ? 1 : 0);
+    if (count >= MAX_QUEUE_OPERATIONS || nextBytes > MAX_QUEUE_BYTES) break;
+    bytes = nextBytes; count++;
   }
-  state.queue.push({ operation });
+  return count - state.queue.length;
+}
+
+function addEntries(state, entries, capture = false) {
+  const available = queueRoom(state, entries);
+  if (available !== entries.length) {
+    if (capture) throw new Error(`This capture needs ${entries.length} pending saves, but this device has room for ${available}. Sync pending work, then try again. Your text is still here.`);
+    throw new Error('The device queue is full (1,024 saves or 64 MiB). Sync or export pending work before adding more.');
+  }
+  state.queue.push(...entries);
+}
+
+export function enqueue(state, accountId, mutations) {
+  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before saving more changes.');
+  const operation = operationFor(state, accountId, mutations);
+  addEntries(state, [{ operation }]);
   if (state.undoEdit && mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
 }
 
@@ -154,10 +176,10 @@ function advanceCollectionMove(state, accountId) {
   const plan = state.workspaceMove;
   if (!plan || plan.failure || state.queue.length) return;
   try {
-    const next = nextCollectionMoveOperation(plan, state.records, accountId);
+    const next = nextCollectionMoveOperation(plan, state.records, accountId, MAX_OPERATION_BYTES);
     if (!next) { delete state.workspaceMove; return; }
-    if (size(next.operation) > 65536) throw new Error('A collection-move batch exceeds the save limit.');
-    state.queue.push({ operation: next.operation, workspaceMoveId: plan.id, workspaceMovePhase: next.phase });
+    const operation = operationFor({ ...state, workspaceMove: undefined }, accountId, next.operation.mutations, next.operation.operationId);
+    addEntries(state, [{ operation, workspaceMoveId: plan.id, workspaceMovePhase: next.phase }]);
   } catch (failure) {
     plan.failure = failure.message;
   }
@@ -181,6 +203,29 @@ export function resumeCollectionMove(state, accountId) {
   delete plan.failure;
   advanceCollectionMove(state, accountId);
   if (plan.failure) throw new Error(plan.failure);
+}
+
+export function enqueueCapture(state, accountId, mutations) {
+  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before saving more changes.');
+  const batches = [];
+  for (const mutation of mutations) {
+    const current = batches.at(-1);
+    if (!current || current.mutations.length >= MAX_OPERATION_MUTATIONS ||
+        size({ apiVersion: 1, accountId, operationId: current.operationId, mutations: [...current.mutations, mutation] }) > MAX_OPERATION_BYTES) {
+      const next = { operationId: crypto.randomUUID(), mutations: [mutation] };
+      if (size({ apiVersion: 1, accountId, ...next }) > MAX_OPERATION_BYTES) throw new Error('This capture is too large. Save fewer items at a time. Your text is still here.');
+      batches.push(next);
+    } else current.mutations.push(mutation);
+  }
+  const shadow = { ...state, queue: [...state.queue] };
+  const entries = batches.map(batch => {
+    const entry = { operation: operationFor(shadow, accountId, batch.mutations, batch.operationId) };
+    shadow.queue.push(entry);
+    return entry;
+  });
+  addEntries(state, entries, true);
+  if (state.undoEdit && mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
+  return entries.length;
 }
 
 // One editor save per account on this device; the outbox and inverse commit together.
@@ -238,6 +283,7 @@ export function captureMutations(draft, workspaceId = 'personal') {
   const source = draft.original ?? draft.text ?? '';
   const titles = (draft.text ?? '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   if (!titles.length || titles.some(title => title.length > 200)) throw new Error('Enter a title of 1–200 characters on each non-empty line.');
+  if (titles.length > 1000) throw new Error('Capture supports up to 1,000 non-empty lines at a time. Your text is still here; save the remainder as another capture.');
   if (source.length > 16000 || (draft.body ?? '').length > 4000) throw new Error('Capture text is limited to 16,000 characters and notes to 4,000.');
   const mutations = [];
   const projectId = draft.listId?.startsWith('project:') ? draft.listId.slice(8) : null;

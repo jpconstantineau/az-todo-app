@@ -98,7 +98,7 @@ function phaseComplete(plan) {
   plan.phase = plan.phase === 'detach' ? 'move' : plan.phase === 'move' ? 'attach' : 'complete';
 }
 
-export function nextCollectionMoveOperation(plan, records, accountId) {
+export function nextCollectionMoveOperation(plan, records, accountId, maxBytes = Infinity) {
   while (plan.phase !== 'complete') {
     const active = activeEntries(plan, records), pending = [];
     for (const entry of active) {
@@ -113,7 +113,16 @@ export function nextCollectionMoveOperation(plan, records, accountId) {
       pending.push({ type: entry.type, id: entry.id, action: 'update', expectedVersion: record.version, fields });
     }
     if (!pending.length) { phaseComplete(plan); continue; }
-    const chunk = pending.slice(0, 20), operationId = `${plan.id}-${String(++plan.step).padStart(4, '0')}`;
+    const operationId = `${plan.id}-${String(plan.step + 1).padStart(4, '0')}`, chunk = [];
+    for (const mutation of pending.slice(0, 20)) {
+      const candidate = { apiVersion: 1, accountId, operationId, mutations: [...chunk, mutation] };
+      if (new TextEncoder().encode(JSON.stringify(candidate)).length > maxBytes) {
+        if (!chunk.length) throw new Error('Move paused because one record change exceeds the cloud operation size limit.');
+        break;
+      }
+      chunk.push(mutation);
+    }
+    plan.step++;
     return { operation: { apiVersion: 1, accountId, operationId, mutations: chunk }, phase: plan.phase };
   }
   return null;
