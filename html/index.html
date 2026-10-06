@@ -8,7 +8,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=10" defer></script>
+  <script src="/pwa.js?v=11" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
   <script type="module" src="/inbox.js?v=10"></script>
@@ -87,10 +87,10 @@
     <div class="inbox-grid">
     <section class="card capture-panel" aria-labelledby="captureHeading">
       <form id="capture"><fieldset id="captureWorkspaceFields" class="workspace-fields">
-        <div class="capture-header"><h2 id="captureHeading">Capture</h2><button type="submit" class="icon-button" aria-label="Save on device" title="Save on device"><svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3 M7 21v-8h10v8"/></svg></button></div>
+        <div class="capture-header"><h2 id="captureHeading">Capture</h2><div class="capture-actions"><button id="previewSplit" type="button" class="icon-button" aria-label="Preview comma / semicolon split" title="Preview comma / semicolon split"><svg class="split-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="m8.7 8.5 11.6 6M8.7 15.5l11.6-6"/></svg></button><button type="submit" class="icon-button" aria-label="Save on device" title="Save on device"><svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3 M7 21v-8h10v8"/></svg></button></div></div>
         <label for="captureText" class="sr-only">Capture items</label>
         <div id="captureTextWrap" class="capture-text">
-          <textarea id="captureText" name="text" rows="4" maxlength="16000" required aria-describedby="captureHelp captureCompletionHint" placeholder="Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves."></textarea>
+          <textarea id="captureText" name="text" rows="4" maxlength="16000" required aria-describedby="captureHelp captureCompletionHint previewHelp" placeholder="Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves."></textarea>
           <div id="captureMirror" aria-hidden="true" hidden><span id="captureBefore"></span><span id="captureGhost"></span><span id="captureAfter"></span></div>
         </div>
         <div id="captureCompletionControls" hidden><p id="captureCompletionHint" class="muted" role="status"></p><button id="captureCompletionUse" type="button">Use suggested text</button><button id="captureCompletionDismiss" type="button">Dismiss suggestion</button></div>
@@ -98,13 +98,12 @@
         <div id="captureTaskPreview" hidden><p id="capturePreviewHeading" class="muted">Suggested tasks — review before saving:</p><ol id="captureSuggestedTasks"></ol><button id="extractReview" type="button" hidden>Review saved suggestions</button></div>
         <p id="draftStatus" role="status"></p>
         <p id="captureHelp" class="sr-only">One item per line. Ctrl/⌘ + Enter saves.</p>
+        <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
         <details id="captureOptions"><summary>Notes, list, or context</summary>
           <label>Notes <textarea name="body" rows="2" maxlength="4000"></textarea></label>
           <label>List <select name="listId"><option value="">No list</option></select></label>
           <label>Or create a list <input name="newList" maxlength="200" placeholder="e.g. Groceries"></label>
           <label>Contexts <select name="contexts" multiple size="3"></select></label>
-          <button id="previewSplit" type="button">Preview comma / semicolon split</button>
-          <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
         </details>
       </fieldset></form>
       <details id="captureAI" data-unavailable><summary>Local AI suggestions</summary>

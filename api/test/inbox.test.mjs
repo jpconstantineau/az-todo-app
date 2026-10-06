@@ -200,15 +200,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=6')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v11')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v12')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
     '/inbox.js?v=10', '/inbox-store.js?v=6', '/inbox-fields.js?v=2', '/inbox-export.js?v=7',
     '/collection-model.js?v=2', '/collections.js?v=3', '/workspace-move.js?v=3', '/workspaces.js?v=2',
     '/clarification.js?v=4', '/clarification-flow.js?v=3', '/reviews.js?v=7', '/briefs.js?v=3',
-    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=10',
-    '/pwa.js?v=10', '/manifest.json',
+    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=11',
+    '/pwa.js?v=11', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -336,10 +336,12 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await showView(page, 'capture'); await page.locator('#captureText').fill('milk, bread; eggs');
-  await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
-  await page.locator('#previewSplit').click();
+  assert.equal(await page.locator('#captureOptions').evaluate(details => details.open), false);
+  await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
+  assert.equal(await page.locator('#previewHelp').isVisible(), true);
+  assert.equal(await page.locator('#captureText').evaluate(element => element === document.activeElement), true);
   await showView(page, 'capture'); await page.locator('#captureText').fill('oat milk\nbread\neggs');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=6')).transact('alice')).draft.capture.text === 'oat milk\nbread\neggs');
   await page.reload();

@@ -218,9 +218,9 @@ test('header follows workspace selection and save state, then clears identity on
   assert.equal(await page.locator('#captureHeading').innerText(), 'Capture');
   assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureHelp').getAttribute('class'), 'sr-only');
-  assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint');
-  assert.equal(await page.locator('.capture-header button').innerText(), '');
-  assert.ok((await page.locator('.capture-header button').boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
+  assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint previewHelp');
+  assert.deepEqual(await page.locator('.capture-header button').evaluateAll(buttons => buttons.map(button => button.innerText)), ['', '']);
+  assert.ok((await page.getByRole('button', { name: 'Save on device', exact: true }).boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
   await clickControl(page.locator('#manageWorkspaces'));
   await page.locator('#createWorkspace input').fill('Family');
   await page.locator('#createWorkspace button').click();
@@ -234,7 +234,7 @@ test('header follows workspace selection and save state, then clears identity on
     await page.setViewportSize({ width, height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     const heading = await page.locator('#captureHeading').boundingBox();
-    const save = await page.locator('.capture-header button').boundingBox();
+    const save = await page.getByRole('button', { name: 'Save on device', exact: true }).boundingBox();
     const text = await page.locator('#captureText').boundingBox();
     assert.ok(heading.width > 1 && heading.height > 1, 'Capture heading must be visually rendered');
     assert.equal(heading.x, text.x, 'Capture heading aligns with the textarea');

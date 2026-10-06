@@ -65,6 +65,8 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await page.keyboard.press('Shift+Tab');
   assert.ok(await page.getByRole('button', { name: 'Save on device', exact: true }).evaluate(el => el.matches(':focus-visible')));
   assert.equal(await page.getByRole('button', { name: 'Save on device', exact: true }).evaluate(el => getComputedStyle(el).outlineWidth), '3px');
+  await page.keyboard.press('Shift+Tab');
+  assert.ok(await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).evaluate(el => el.matches(':focus-visible')));
   await shot('inbox-keyboard-focus-390');
   await showView(page, 'capture'); await page.locator('#captureText').fill('A'.repeat(200));
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
