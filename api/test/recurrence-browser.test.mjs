@@ -72,6 +72,11 @@ test('recurring template UI creates one offline-safe occurrence, exposes history
   await dialog.getByRole('button', { name: 'Delete template' }).click();
   await waitForBrowser(page, async () => { const store = await import('/inbox-store.js?v=11'); return Object.values(store.projected(await store.transact('alice'))).some(record => record.type === 'recurrenceTemplate' && record.tombstoned); });
   assert.match(await page.locator('#recurringTemplates').textContent(), /Stopped/);
+  await page.locator('#recurringTemplates').getByRole('button', { name: 'Open template and history' }).click();
+  assert.equal(await dialog.getByRole('button', { name: 'Resume template' }).count(), 0);
+  assert.equal(await dialog.getByRole('button', { name: 'Template stopped' }).isDisabled(), true);
+  assert.equal(await dialog.getByRole('button', { name: 'Save template on device' }).isDisabled(), true);
+  await dialog.getByRole('button', { name: 'Close' }).click();
   await page.reload(); await page.locator('#workspace').waitFor();
   const stopped = await local(page); assert.equal(Object.values(stopped.records).filter(record => record.recurrenceTemplateId).length, 1);
 });

@@ -45,10 +45,11 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     for (const [name, value] of Object.entries(defaults)) { const control = form.elements.namedItem(name); if (control) control.value = value ?? ''; }
     if (defaults.mode) form.elements.mode.value = defaults.mode;
     $('recurringEditorHeading').textContent = template ? `Recurring template: ${template.title}` : 'New recurring template';
-    $('pauseRecurring').hidden = $('deleteRecurring').hidden = !template;
+    $('pauseRecurring').hidden = !template || !!template.tombstoned; $('deleteRecurring').hidden = !template;
     $('pauseRecurring').textContent = template?.paused ? 'Resume template' : 'Pause template';
     $('deleteRecurring').disabled = !!template?.tombstoned;
     $('deleteRecurring').textContent = template?.tombstoned ? 'Template stopped' : 'Delete template';
+    form.querySelector('[type=submit]').disabled = !!template?.tombstoned;
     $('recurringError').textContent = ''; $('recurringSaveStatus').textContent = '';
     showHistory(template || { id: '' }); showDialog(dialog); $('recurringEditorHeading').focus(); void journal();
   }
