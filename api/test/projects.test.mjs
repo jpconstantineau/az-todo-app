@@ -10,7 +10,7 @@ import { documents, startServer } from './harness.mjs';
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
 
 test('projects: offline relationships, inbox/project/day edits and export keep one action across time zones', { timeout: 90000 }, async t => {
   documents.length = 0;
@@ -31,7 +31,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.getByRole('button', { name: 'New project', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Family breakfast');
   await page.locator('#edit [name=outcome]').fill('Everyone has breakfast ready for Monday.');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.edit?.fields.outcome === 'Everyone has breakfast ready for Monday.');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit?.fields.outcome === 'Everyone has breakfast ready for Monday.');
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=outcome]').inputValue(), 'Everyone has breakfast ready for Monday.');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
@@ -64,7 +64,7 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
   await page.locator('#view').selectOption('day'); await page.locator('#day').fill('2026-10-05');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.navigation?.work.view === 'day');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation?.work.view === 'day');
   const queued = (await local(page)).queue;
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#view').inputValue(), 'day');

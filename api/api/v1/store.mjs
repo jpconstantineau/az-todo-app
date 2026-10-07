@@ -3,7 +3,7 @@ import { bytes, digest, document, partition, recordId, MAX_RECORD_BYTES } from "
 import { ValidationError } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { applyWorkflow } from "./workflow.mjs";
-import { validateReview, validateReviewDecision } from "./reviews.mjs";
+import { validateReview, validateReviewDecision, validateReviewReflection } from "./reviews.mjs";
 import { validateBrief } from "./briefs.mjs";
 import { validateDailyPlan, validateDailyPlanRevision } from './daily-plans.mjs';
 
@@ -125,6 +125,9 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       await validateWorkspace(record, current[i]?.record, lookup);
       await validateCollections(record, lookup);
       if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
+      if (record.type === 'reviewReflection') await validateReviewReflection(record, current[i]?.record, records,
+        async ref => records.find(candidate => candidate.type === ref.type && candidate.id === ref.id) ?? (await read(accountId, recordId(ref.type, ref.id)))?.record,
+        candidate => workspaceOf(candidate, lookup));
       if (record.type === 'dailyPlan') await validateDailyPlan(record, current[i]?.record, records, lookup, input.mutations);
       if (record.type === 'dailyPlanRevision') validateDailyPlanRevision(record, current[i]?.record, records);
       if (record.type === 'brief') await validateBrief(record, current[i]?.record,

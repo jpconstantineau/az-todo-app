@@ -1,19 +1,62 @@
 import { belongsTo, memberships, refKey } from './collection-model.js?v=2';
-import { key, projected } from './inbox-store.js?v=8';
+import { key, projected } from './inbox-store.js?v=9';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=2';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : null)]));
 const latest = (session, index) => [...session.history].reverse().find(entry => entry.index === index);
 const done = (session, index) => { const decision = latest(session, index); return decision && decision.choice !== 'undo'; };
+const promptNames = ['mentalSweep', 'calendarCheck', 'roleBalance', 'planReality'];
+const blankPrompts = () => Object.fromEntries(promptNames.map(name => [name, { state: 'unanswered', notes: '' }]));
+const cloneReflection = reflection => ({ rootReviewId: reflection.reviewId, baseReflectionId: reflection.id,
+  prompts: structuredClone(reflection.prompts), conclusion: reflection.conclusion, followUp: null });
+const digestId = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), byte => byte.toString(16).padStart(2, '0')).join('');
+export const reviewReflectionId = (reviewId, previousReflectionId) => digestId(`review-reflection:${previousReflectionId || reviewId}`);
+const rootReview = (session, records) => {
+  const seen = new Set();
+  while (session?.previousReviewId && !seen.has(session.id)) { seen.add(session.id); session = records[`review:${session.previousReviewId}`]; }
+  return session;
+};
+export function reviewReflections(reviewId, records) {
+  const remaining = Object.values(records).filter(record => record.type === 'reviewReflection' && record.reviewId === reviewId);
+  const ordered = [], seen = new Set();
+  let next = remaining.find(record => !record.previousReflectionId);
+  while (next && !seen.has(next.id)) {
+    ordered.push(next); seen.add(next.id);
+    next = remaining.find(record => record.previousReflectionId === next.id);
+  }
+  return ordered;
+}
+
+export async function mergeReflectionConflict(entry, records) {
+  const pending = entry?.operation?.mutations.find(mutation => mutation.type === 'reviewReflection');
+  const server = pending && records[key(pending)];
+  if (!pending || !server || server.deleted) return null;
+  const proposal = pending.fields;
+  const prompts = Object.fromEntries(promptNames.map(name => {
+    const mine = proposal.prompts[name], accepted = server.prompts[name];
+    return [name, mine.state !== 'unanswered' || mine.notes ? mine : accepted];
+  }));
+  const conclusion = !server.conclusion || server.conclusion === proposal.conclusion ? proposal.conclusion : !proposal.conclusion ? server.conclusion : `${server.conclusion}\n\n${proposal.conclusion}`;
+  if (conclusion.length > 4000) throw new Error('The combined accepted and pending conclusions exceed 4,000 characters. Export the recovery copy, use the server version, then shorten and save again.');
+  const followUpIds = [...new Set([...server.followUpIds, ...proposal.followUpIds])];
+  if (followUpIds.length > 50) throw new Error('The combined reflection has more than 50 follow-ups. Use the server version and start another review for additional actions.');
+  const id = await reviewReflectionId(server.reviewId, server.id);
+  const reflection = { type: 'reviewReflection', id, action: 'create', expectedVersion: 0, fields: {
+    reviewId: server.reviewId, previousReflectionId: server.id, promptVersion: 1, prompts, conclusion, followUpIds
+  } };
+  const related = entry.operation.mutations.filter(mutation => mutation.type === 'item').filter(mutation => !records[key(mutation)]);
+  return [reflection, ...related];
+}
 export function reviewHistory(session, records) {
   return Object.values(records).filter(record => record.type === 'reviewDecision' && record.reviewId === session.id)
     .sort((a, b) => a.sequence - b.sequence).map(record => ({ ...record, after: { ...record.before, ...record.changes } }));
 }
 
-export function setupReviews({ current, save, journal, edit, clarify, addAction, workspaceId, records: scopedRecords }) {
+export function setupReviews({ current, save, journal, edit, clarify, addAction, openPlan, workspaceId, records: scopedRecords }) {
   let active = null, selected = null, displayed, busy = false;
-  const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value });
+  let reflectionDraft = null;
+  const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value, reflection: reflectionDraft ? structuredClone(reflectionDraft) : null });
   const message = value => { $('reviewError').textContent = value; };
   function candidates(records, reviewKind, day, previous) {
     const seen = new Set(), visited = new Set();
@@ -41,6 +84,10 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const session = sessions.find(session => session.id === active);
     $('reviewBody').hidden = !session;
     if (!session) { displayed = null; return; }
+    const root = rootReview(session, records), reflections = reviewReflections(root.id, records), accepted = reflections.at(-1);
+    if (reflectionDraft?.rootReviewId !== root.id) reflectionDraft = accepted ? cloneReflection(accepted) : {
+      rootReviewId: root.id, baseReflectionId: null, prompts: blankPrompts(), conclusion: '', followUp: null
+    };
     const remaining = session.included.findIndex((_, i) => !done(session, i));
     const nextBatch = sessions.find(next => next.previousReviewId === session.id);
     const available = candidates(records, session.reviewKind, session.reviewDay, session).length;
@@ -66,6 +113,41 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');
     $('reviewOriginal').textContent = target?.originalText || '';
     const failed = state.queue.some(entry => entry.failure);
+    for (const section of document.querySelectorAll('[data-reflection-prompt]')) {
+      const value = reflectionDraft.prompts[section.dataset.reflectionPrompt];
+      section.querySelector('select').value = value.state;
+      section.querySelector('textarea').value = value.notes;
+    }
+    $('reviewConclusion').value = reflectionDraft.conclusion;
+    const followUp = reflectionDraft.followUp || { title: '', description: '' };
+    $('reviewFollowUp').elements.title.value = followUp.title || '';
+    $('reviewFollowUp').elements.description.value = followUp.description || '';
+    const areas = Object.values(records).filter(record => record.type === 'list' && record.kind === 'area' && !record.deleted).length;
+    const projects = Object.values(records).filter(record => record.type === 'project' && !record.deleted && ['active', 'draft'].includes(record.status));
+    $('reviewRoleSummary').textContent = `${areas} role/area collection${areas === 1 ? '' : 's'} · ${projects.length} active or unfinished project${projects.length === 1 ? '' : 's'} (${projects.filter(record => record.status === 'draft').length} need an outcome).`;
+    const dayPlan = records[`dailyPlan:${workspaceId()}_${session.reviewDay}`];
+    const planned = dayPlan ? dayPlan.actionIds.map(id => records[`item:${id}`]).filter(Boolean) : Object.values(records).filter(record => record.type === 'item' && record.plannedDay === session.reviewDay);
+    const completed = planned.filter(record => record.status === 'completed').length;
+    $('reviewPlanSummary').textContent = dayPlan ? `${planned.length} ordered action${planned.length === 1 ? '' : 's'} in the saved plan for ${session.reviewDay}: ${completed} completed, ${planned.length - completed} unfinished.`
+      : `${planned.length} action${planned.length === 1 ? '' : 's'} planned for ${session.reviewDay}; no saved daily plan order exists.`;
+    $('reviewSaveReflection').disabled = $('reviewSaveFollowUp').disabled = busy || failed;
+    $('reviewReflectionStatus').textContent = accepted ? `${reflections.length} accepted snapshot${reflections.length === 1 ? '' : 's'}. Latest: ${accepted.localState || 'Server-confirmed'}.` : 'No accepted reflection yet. Your draft is saved on this device.';
+    $('reviewReflectionHistory').replaceChildren(...reflections.map((reflection, index) => {
+      const row = document.createElement('li');
+      row.textContent = `Snapshot ${index + 1}: ${promptNames.map(name => `${name} ${reflection.prompts[name].state}`).join(' · ')}${reflection.conclusion ? ` · Conclusion: ${reflection.conclusion}` : ''}`;
+      return row;
+    }));
+    $('reviewFollowUps').replaceChildren(...(accepted?.followUpIds || []).map(id => {
+      const item = records[`item:${id}`], row = document.createElement('li'), text = document.createElement('span'), actions = document.createElement('div');
+      actions.className = 'actions'; text.textContent = item && !item.deleted ? `${item.title} · ${item.status}` : `Unavailable follow-up · ${id}`; row.append(text);
+      if (item && !item.deleted) {
+        for (const [label, action] of [['Edit', () => inspect(edit, item)], ['Clarify', () => inspect(clarify, item)], ['Open in Plan', () => openPlan(item.plannedDay || session.reviewDay)]]) {
+          const control = document.createElement('button'); control.type = 'button'; control.textContent = label; control.onclick = () => void perform(action); actions.append(control);
+        }
+        row.append(actions);
+      }
+      return row;
+    }));
     const unavailable = busy || failed || !target || target.deleted;
     $('reviewEdit').disabled = unavailable;
     $('reviewClarify').hidden = target?.type !== 'item';
@@ -174,6 +256,31 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     if (!current()) return;
     selected = choice === 'undo' ? index : null; $('reviewDefer').value = ''; render(); await journal();
   }
+  async function saveReflection(withFollowUp = false) {
+    if (!displayed || !reflectionDraft) return;
+    const records = scopedRecords ? scopedRecords() : projected(current()), root = rootReview(displayed.session, records);
+    const base = reflectionDraft.baseReflectionId ? records[`reviewReflection:${reflectionDraft.baseReflectionId}`] : null;
+    if (reflectionDraft.baseReflectionId && !base) throw new Error('The accepted reflection changed. Sync and review the latest history before saving.');
+    const followUp = withFollowUp ? reflectionDraft.followUp : null;
+    if (withFollowUp && (!followUp?.title?.trim() || followUp.title.length > 200)) throw new Error('Enter a follow-up title of 1–200 characters.');
+    if (withFollowUp && (followUp.description || '').length > 4000) throw new Error('Follow-up notes must be at most 4,000 characters.');
+    const followUpId = withFollowUp ? (followUp.id ||= crypto.randomUUID()) : null;
+    const followUpIds = [...(base?.followUpIds || [])];
+    if (followUpId && !followUpIds.includes(followUpId)) followUpIds.push(followUpId);
+    if (followUpIds.length > 50) throw new Error('A reflection supports up to 50 linked follow-ups. Start another review for additional actions.');
+    const id = await reviewReflectionId(root.id, reflectionDraft.baseReflectionId);
+    const fields = { reviewId: root.id, ...(reflectionDraft.baseReflectionId ? { previousReflectionId: reflectionDraft.baseReflectionId } : {}),
+      promptVersion: 1, prompts: structuredClone(reflectionDraft.prompts), conclusion: reflectionDraft.conclusion, followUpIds };
+    const mutations = [{ type: 'reviewReflection', id, action: 'create', expectedVersion: 0, fields }];
+    if (followUpId) mutations.push({ type: 'item', id: followUpId, action: 'create', expectedVersion: 0, fields: {
+      title: followUp.title.trim(), description: followUp.description || '', originalText: followUp.title, workspaceId: workspaceId(), collectionRefs: [], status: 'inbox'
+    } });
+    const nextReflectionDraft = { ...reflectionDraft, baseReflectionId: id, followUp: withFollowUp ? null : reflectionDraft.followUp };
+    const nextDraft = { ...draft(), reflection: structuredClone(nextReflectionDraft) };
+    await save(mutations, nextDraft);
+    reflectionDraft = nextReflectionDraft;
+    render(); await journal();
+  }
   $('startDaily').onclick = () => void perform(() => start('daily'));
   $('startWeekly').onclick = () => void perform(() => start('weekly'));
   $('startSomeday').onclick = () => void perform(() => start('someday'));
@@ -181,12 +288,26 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
   $('reviewSessions').onchange = () => { active = $('reviewSessions').value; selected = null; message(''); render(); void journal(); };
   $('reviewRecord').onchange = () => { selected = Number($('reviewRecord').value); message(''); render(); void journal(); };
   $('reviewDefer').oninput = () => void journal();
+  for (const section of document.querySelectorAll('[data-reflection-prompt]')) {
+    const name = section.dataset.reflectionPrompt, select = section.querySelector('select'), notes = section.querySelector('textarea');
+    select.onchange = () => { reflectionDraft.prompts[name].state = select.value; void journal(); };
+    notes.oninput = () => { reflectionDraft.prompts[name].notes = notes.value; void journal(); };
+  }
+  $('reviewConclusion').oninput = () => { reflectionDraft.conclusion = $('reviewConclusion').value; void journal(); };
+  for (const name of ['title', 'description']) $('reviewFollowUp').elements[name].oninput = () => {
+    reflectionDraft.followUp ||= { id: crypto.randomUUID(), title: '', description: '' };
+    reflectionDraft.followUp[name] = $('reviewFollowUp').elements[name].value; void journal();
+  };
+  $('reviewSaveReflection').onclick = () => void perform(() => saveReflection());
+  $('reviewFollowUp').onsubmit = event => { event.preventDefault(); void perform(() => saveReflection(true)); };
+  $('reviewOpenPlan').onclick = () => openPlan();
+  $('reviewOpenDayPlan').onclick = () => openPlan(displayed?.session.reviewDay);
   $('reviewEdit').onclick = () => void perform(() => inspect(edit));
   $('reviewClarify').onclick = () => void perform(() => inspect(clarify));
   $('reviewAddAction').onclick = () => void perform(() => inspect(addAction));
   for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewComplete', 'complete'], ['reviewNext', 'next'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
   return { render, draft, get busy() { return busy; },
-    restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
-    reset() { active = selected = displayed = null; $('reviews').hidden = true; $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
+    restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; reflectionDraft = saved.reflection || null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
+    reset() { active = selected = displayed = reflectionDraft = null; $('reviews').hidden = true; $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions', 'reviewReflectionStatus', 'reviewRoleSummary', 'reviewPlanSummary', 'reviewReflectionHistory', 'reviewFollowUps']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
   };
 }

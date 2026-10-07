@@ -81,7 +81,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'Unsaved after settings');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Unsaved after settings');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsaved after settings');
   await showView(page, 'work');
@@ -95,17 +95,17 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   // Restore an actual current draft, including its original comparison baseline.
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
   await page.locator('#edit [name=description]').fill('Unfinished current edit');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.edit?.fields.description === 'Unfinished current edit');
-  const savedEdit = await page.evaluate(async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.edit);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit?.fields.description === 'Unfinished current edit');
+  const savedEdit = await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit);
   assert.equal(savedEdit.initialFields.description, 'Two cartons');
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.editOpen === false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.editOpen === false);
   await page.reload(); await page.locator('#workspace').waitFor();
   await page.locator('#resumeEdit').click(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Unfinished current edit');
   assert.equal(await page.locator('#edit [name=energy]').inputValue(), 'Low');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.editOpen === true);
-  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.edit), savedEdit);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.editOpen === true);
+  assert.deepEqual(await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit), savedEdit);
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
   assert.equal(records().find(r => r.type === 'item').description, 'Unfinished current edit');
   assert.deepEqual(records().find(r => r.type === 'item').contexts, ['@Kitchen', '@Shop']);

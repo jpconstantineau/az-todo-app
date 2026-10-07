@@ -86,7 +86,7 @@ test('task rows keep actions visible at every width and retain keyboard focus, r
   await page.getByRole('button', { name: 'Reopen Bread', exact: true }).click();
   await page.getByRole('button', { name: 'Complete Bread', exact: true }).waitFor();
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=8');
+    const { transact } = await import('/inbox-store.js?v=9');
     await transact('alice', local => {
       const entry = local.queue[0], mutation = entry.operation.mutations[0];
       entry.failure = 'Conflict — inspect the server version';

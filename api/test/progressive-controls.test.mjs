@@ -50,11 +50,11 @@ test('progressive controls keep capture and editor actions reachable without exp
   for (const name of ['dueLocal', 'dueDate', 'waitingOn', 'energy', 'timeRequired']) assert.equal(await page.locator(`#capture [name=${name}]`).count(), 0);
   await page.locator('#capture [name=newList]').fill('Home');
   assert.equal(await page.locator('#capture [name=status]').count(), 0);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.newList === 'Home');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.newList === 'Home');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Prepare the room');
   assert.equal(await page.locator('#capture [name=newList]').inputValue(), 'Home');
-  const savedCapture = await page.evaluate(async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture);
+  const savedCapture = await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture);
   assert.deepEqual(Object.keys(savedCapture).sort(), ['body', 'contexts', 'listId', 'newList', 'text']);
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
@@ -89,7 +89,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   await page.locator('#edit [type=submit]').click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   // Projected state includes the offline edit and retains the collapsed deadline.
   const item = await page.evaluate(async () => {
-    const { transact, projected } = await import('/inbox-store.js?v=8');
+    const { transact, projected } = await import('/inbox-store.js?v=9');
     return Object.values(projected(await transact('alice'))).find(record => record.type === 'item');
   });
   assert.equal(item.status, 'waiting'); assert.equal(item.waitingOn, 'Alex'); assert.equal(item.dueDate, '2026-12-01');

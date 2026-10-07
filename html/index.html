@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=15" defer></script>
+  <script src="/pwa.js?v=16" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=15"></script>
+  <script type="module" src="/inbox.js?v=16"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -263,6 +263,45 @@
       <section id="reviewBody" hidden>
         <p id="reviewProgress" role="status"></p>
         <p id="reviewCapacity"></p><button id="reviewNextBatch" type="button" hidden>Review next batch</button>
+        <details id="reviewReflection" class="review-reflection">
+          <summary>Session reflection</summary>
+          <p class="muted">Optional and independent of record decisions. Save an accepted snapshot whenever useful; stopping or continuing another batch keeps this draft.</p>
+          <div class="review-prompt-grid">
+            <section class="review-prompt" data-reflection-prompt="mentalSweep">
+              <h4>Mental sweep</h4><p>What still has your attention that is not captured here?</p>
+              <label>Prompt state<select><option value="unanswered">Unanswered</option><option value="answered">Answered</option><option value="skipped">Skip for this review</option></select></label>
+              <label>Optional notes<textarea rows="3" maxlength="4000"></textarea></label>
+            </section>
+            <section class="review-prompt" data-reflection-prompt="calendarCheck">
+              <h4>Calendar check</h4><p>Looking back and ahead on your calendar, what needs an action, preparation, or follow-up?</p>
+              <label>Prompt state<select><option value="unanswered">Unanswered</option><option value="answered">Answered</option><option value="skipped">Skip for this review</option></select></label>
+              <label>Optional notes<textarea rows="3" maxlength="4000"></textarea></label>
+            </section>
+            <section class="review-prompt" data-reflection-prompt="roleBalance">
+              <h4>Roles and outcomes</h4><p>Where is your current mix of responsibilities and outcomes out of balance?</p>
+              <p id="reviewRoleSummary" class="muted"></p><button id="reviewOpenPlan" type="button">Open Plan</button>
+              <label>Prompt state<select><option value="unanswered">Unanswered</option><option value="answered">Answered</option><option value="skipped">Skip for this review</option></select></label>
+              <label>Optional notes<textarea rows="3" maxlength="4000"></textarea></label>
+            </section>
+            <section class="review-prompt" data-reflection-prompt="planReality">
+              <h4>Plan and reality</h4><p>What did you expect to do, what actually happened, and what should change next?</p>
+              <p id="reviewPlanSummary" class="muted"></p><button id="reviewOpenDayPlan" type="button">Open this day in Plan</button>
+              <label>Prompt state<select><option value="unanswered">Unanswered</option><option value="answered">Answered</option><option value="skipped">Skip for this review</option></select></label>
+              <label>Optional notes<textarea rows="3" maxlength="4000"></textarea></label>
+            </section>
+          </div>
+          <label>Optional conclusion<textarea id="reviewConclusion" rows="4" maxlength="4000"></textarea></label>
+          <div class="actions"><button id="reviewSaveReflection" type="button">Save reflection</button></div>
+          <form id="reviewFollowUp">
+            <h4>Add a linked follow-up</h4>
+            <label>Action title<input name="title" maxlength="200" required></label>
+            <label>Optional notes<textarea name="description" rows="3" maxlength="4000"></textarea></label>
+            <button id="reviewSaveFollowUp" type="submit">Save reflection and add follow-up</button>
+          </form>
+          <p id="reviewReflectionStatus" class="muted" role="status" aria-live="polite"></p>
+          <h4>Linked follow-ups</h4><ul id="reviewFollowUps" class="review-followups"></ul>
+          <details><summary>Accepted reflection history</summary><ol id="reviewReflectionHistory"></ol></details>
+        </details>
         <label>Review record<select id="reviewRecord"></select></label>
         <h3 id="reviewTitle" tabindex="-1" aria-describedby="reviewProgress"></h3><pre id="reviewDetails"></pre>
         <details><summary>Original capture</summary><pre id="reviewOriginal"></pre></details>

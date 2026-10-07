@@ -1,6 +1,7 @@
 import { ValidationError } from '../shared/validate.mjs';
 import { object, identifier, canonical } from './contract.mjs';
 import { calendarDate, workflowFields } from './workflow.mjs';
+import { createHash } from 'node:crypto';
 
 const fail = message => { throw new ValidationError(message); };
 export function reviewFields(action, input) {
@@ -39,6 +40,34 @@ export function reviewDecisionFields(action, input) {
   for (const name of ['before', 'changes']) object(input[name], workflowFields, name);
   return structuredClone(input);
 }
+
+const promptNames = ['mentalSweep', 'calendarCheck', 'roleBalance', 'planReality'];
+export const reflectionId = (reviewId, previousReflectionId) => createHash('sha256')
+  .update(`review-reflection:${previousReflectionId || reviewId}`).digest('hex');
+
+export function reviewReflectionFields(action, input) {
+  if (action !== 'create') fail('Review reflections are immutable.');
+  object(input, ['reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds'], 'review reflection');
+  identifier(input.reviewId, 'reviewId');
+  if (input.previousReflectionId !== undefined) identifier(input.previousReflectionId, 'previousReflectionId');
+  if (input.promptVersion !== 1) fail('Unsupported review reflection prompt version.');
+  object(input.prompts, promptNames, 'prompts');
+  if (Object.keys(input.prompts).length !== promptNames.length) fail('Every review reflection prompt is required.');
+  const prompts = {};
+  for (const name of promptNames) {
+    const prompt = input.prompts[name];
+    object(prompt, ['state', 'notes'], `prompts.${name}`);
+    if (!['unanswered', 'answered', 'skipped'].includes(prompt.state)) fail(`prompts.${name}.state is invalid.`);
+    if (typeof prompt.notes !== 'string' || prompt.notes.length > 4000) fail(`prompts.${name}.notes must be at most 4,000 characters.`);
+    prompts[name] = { state: prompt.state, notes: prompt.notes };
+  }
+  if (typeof input.conclusion !== 'string' || input.conclusion.length > 4000) fail('conclusion must be at most 4,000 characters.');
+  if (!Array.isArray(input.followUpIds) || input.followUpIds.length > 50) fail('followUpIds must contain at most 50 actions.');
+  const followUpIds = input.followUpIds.map(id => identifier(id, 'follow-up ID'));
+  if (new Set(followUpIds).size !== followUpIds.length) fail('followUpIds must be unique.');
+  return { reviewId: input.reviewId, ...(input.previousReflectionId ? { previousReflectionId: input.previousReflectionId } : {}),
+    promptVersion: 1, prompts, conclusion: input.conclusion, followUpIds };
+}
 export const workflowSnapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : null)]));
 
 // The decision and its canonical action edit must share one version-checked batch.
@@ -69,6 +98,23 @@ export function validateReviewDecision(record, old, records) {
   if (old || record.deleted || record.id.length > 36) fail('Review decisions are immutable and require an ID of at most 36 characters.');
   const review = records.find(r => r.type === 'review' && r.id === record.reviewId);
   if (!review || review.decisionHeads[record.index] !== record.id || review.decisionCount !== record.sequence) fail('Save the decision and review progress together.');
+}
+
+export async function validateReviewReflection(record, old, records, readRecord, workspaceOf) {
+  if (old || record.deleted) fail('Review reflections are immutable.');
+  const root = await readRecord({ type: 'review', id: record.reviewId });
+  if (!root || root.deleted || root.previousReviewId) fail('A review reflection must belong to the first saved review in its batch chain.');
+  const previous = record.previousReflectionId && await readRecord({ type: 'reviewReflection', id: record.previousReflectionId });
+  if (record.previousReflectionId && (!previous || previous.deleted || previous.reviewId !== record.reviewId)) fail('Continue the same review reflection history.');
+  if (record.id !== reflectionId(record.reviewId, record.previousReflectionId)) fail('Review reflection identity must follow its immutable history.');
+  if (previous && (previous.followUpIds.length > record.followUpIds.length ||
+      previous.followUpIds.some((id, index) => record.followUpIds[index] !== id))) fail('Review follow-up links are append-only.');
+  const prior = new Set(previous?.followUpIds || []);
+  for (const id of record.followUpIds) {
+    if (prior.has(id)) continue;
+    const item = records.find(candidate => candidate.type === 'item' && candidate.id === id) ?? await readRecord({ type: 'item', id });
+    if (!item || item.deleted || await workspaceOf(item) !== root.workspaceId) fail('New review follow-ups must be live actions in the review workspace.');
+  }
 }
 
 async function validateDecision(record, decision, prior, mutations, records, readRecord) {

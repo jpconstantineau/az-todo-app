@@ -7,7 +7,7 @@ import { waitForBrowser } from './browser-wait.mjs';
 import { showView, clickControl } from './navigation-helper.mjs';
 import { currentCreate } from './current-record.mjs';
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 async function setup(t, ai = false, seeds = []) {
   documents.length = 0; let user = 'alice';
@@ -42,7 +42,7 @@ async function createSpace(page, title) {
 }
 async function switchTo(page, id) {
   await page.locator('#workspaceSelect').selectOption(id);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=8')).transact('alice')).selectedWorkspace === id, id);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === id, id);
 }
 async function capture(page, text) {
   await showView(page, 'capture'); await page.locator('#captureText').fill(text);
@@ -147,7 +147,7 @@ test('workspaces: large list move survives offline reload and a lost acknowledge
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sync paused'));
   await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => {
-    const state = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const state = await (await import('/inbox-store.js?v=9')).transact('alice');
     return !state.workspaceMove && state.queue.length === 0 && state.records['item:task-20']?.workspaceId === 'family';
   });
   await synced(page);
@@ -183,7 +183,7 @@ test('workspaces: large move pauses on a concurrent edit and resumes without ove
   assert.equal((await local(page)).workspaceMove.phase, 'detach');
   await page.locator('#resumeMove').click();
   await waitForBrowser(page, async () => {
-    const state = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const state = await (await import('/inbox-store.js?v=9')).transact('alice');
     return !state.workspaceMove && state.queue.length === 0;
   });
   await synced(page);
@@ -316,7 +316,7 @@ test('workspaces: another device deletes a workspace while offline capture keeps
   assert.equal(deleted.status, 200);
   await context.setOffline(false);
   await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=8')).transact('alice')).queue[0]?.failure);
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=9')).transact('alice')).queue[0]?.failure);
   await page.locator('#failure').waitFor();
   const retained = await local(page);
   assert.deepEqual(retained.queue[0].operation, intent);
@@ -327,7 +327,7 @@ test('workspaces: another device deletes a workspace while offline capture keeps
   assert.equal((await local(page)).queue.length, 2, 'blocked queue preserves later work without assigning it to the deleted space');
   const copy = await page.evaluate(async () => {
     const { deviceExport, readableExport } = await import('/inbox-export.js?v=5');
-    const state = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const state = await (await import('/inbox-store.js?v=9')).transact('alice');
     return readableExport(deviceExport('alice', state, {}));
   });
   assert.match(copy, /Recover this offline report/);

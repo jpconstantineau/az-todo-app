@@ -146,6 +146,13 @@
 .execute-check input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; }
 .execute-item .editable-title { flex: 1; min-width: 0; justify-content: flex-start; }
 .plan-panel { display: grid; gap: var(--space-4); }
+.review-reflection { border-block: var(--border-width) solid var(--border); padding-block: var(--space-2) var(--space-4); margin-block: var(--space-4); }
+.review-prompt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.review-prompt { min-width: 0; padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface-raised); }
+.review-prompt > h4, .review-prompt > p { margin-block: 0 var(--space-2); }
+.review-followups { display: grid; gap: var(--space-2); padding-left: var(--space-6); }
+.review-followups li { padding: var(--space-2); border-bottom: var(--border-width) solid var(--border); }
+.review-followups .actions { margin-top: var(--space-2); }
 .plan-panel > p, .plan-panel > h2 { margin-block: 0; }
 .plan-section { border-top: var(--border-width) solid var(--border); padding-top: var(--space-4); min-width: 0; }
 .plan-section > h3 { font-size: var(--text-heading); margin-bottom: var(--space-3); }
@@ -191,6 +198,7 @@
 .day-carryover article { display: grid; gap: var(--space-2); }
 #planHistoryEntries { overflow-wrap: anywhere; }
 @media (max-width: 767px) {
+  .review-prompt-grid { grid-template-columns: minmax(0, 1fr); }
   #captureText { min-height: 50dvh; }
   #editor { height: 92dvh; }
   .menu-content .device-tools { align-items: stretch; }

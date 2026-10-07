@@ -1,5 +1,5 @@
 import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=2';
-import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=3';
+import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=4';
 import { workflowFields, validateWorkflow } from './inbox-fields.js?v=2';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=3';
 
