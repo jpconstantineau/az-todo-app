@@ -650,7 +650,7 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   await showView(page, 'lists');
   assert.match(await page.locator('#items').innerText(), /Choose a list/);
   assert.equal(await page.locator('#view option[value="all"]').count(), 0);
-  assert.equal(await page.locator('#newProject').isVisible(), false);
+  assert.equal(await page.locator('#newProject').count(), 0);
   await page.locator('#view').selectOption(listId);
   await page.locator('#statusFilter').selectOption('inbox');
   assert.equal(await page.locator('#items article').count(), 2);

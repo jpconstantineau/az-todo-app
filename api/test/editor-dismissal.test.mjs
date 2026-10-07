@@ -120,7 +120,7 @@ test('dismissed unsaved text can be resumed or discarded offline and stays in it
   assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Private unfinished text');
   assert.equal(await page.locator('#edit [name=title]').evaluate(el => el === document.activeElement), true);
   await page.keyboard.press('Escape'); await closedAndJournaled(page);
-  await page.locator('#newProject').click();
+  await showView(page, 'lists'); await page.locator('#newList').click();
   assert.equal(await page.locator('#edit [name=description]').inputValue(), 'Private unfinished text', 'opening another record cannot overwrite the draft');
   assert.match(await page.locator('#editError').innerText(), /Save or discard/);
   await page.locator('#cancelEdit').click(); await closedAndJournaled(page);
