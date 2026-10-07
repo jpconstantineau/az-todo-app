@@ -4,12 +4,20 @@ import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { showView, clickControl } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
+import { currentCreate } from './current-record.mjs';
 
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
-async function setup(t) {
+async function setup(t, mutations = []) {
   documents.length = 0;
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  if (mutations.length) {
+    const response = await fetch(server.url + '/api/v1/operations', {
+      method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+      body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations })
+    });
+    assert.equal(response.status, 200, await response.text());
+  }
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage(), errors = [];
@@ -22,22 +30,30 @@ async function saveEdit(page) {
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
 }
-async function createDestination(page, type, title) {
-  await showView(page, type === 'list' ? 'lists' : 'work');
-  await page.locator(type === 'list' ? '#newList' : '#newProject').click();
+async function createList(page, title) {
+  await showView(page, 'lists');
+  await page.locator('#newList').click();
   await page.locator('#edit [name=title]').fill(title);
-  if (type === 'project') await page.locator('#edit [name=outcome]').fill('A usable garage');
   await saveEdit(page);
   await page.locator('#createdDestination button').waitFor();
 }
 
-test('context add: offline list/project creation keeps Capture and editor drafts and one task identity', { timeout: 90000 }, async t => {
-  const { page, context } = await setup(t);
+test('context add: offline list/project additions keep Capture and editor drafts and one task identity', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t, [currentCreate('project', 'garage', { title: 'Garage', outcome: 'A usable garage' })]);
+  await showView(page, 'work');
+  assert.equal(await page.locator('#newProject').count(), 0);
+  assert.equal(await page.locator('#clarifyInbox').isVisible(), true);
+  assert.equal(await page.locator('#addContextItem').isVisible(), false);
+  await showView(page, 'capture');
   await page.locator('#captureText').fill('Unfinished global capture');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Unfinished global capture');
   await context.setOffline(true);
-  await createDestination(page, 'list', 'Groceries');
-  await page.getByRole('button', { name: 'Add item to Groceries', exact: true }).click();
+  await createList(page, 'Groceries');
+  assert.equal(await page.locator('#newProject').count(), 0);
+  assert.equal(await page.locator('#clarifyInbox').isVisible(), false);
+  await page.locator('#view').selectOption({ label: 'Groceries' });
+  assert.equal(await page.locator('#addContextItem').isVisible(), true);
+  await page.locator('#addContextItem').click();
   const listId = await page.locator('#view').inputValue();
   assert.equal(await page.locator('#edit [name=listId]').inputValue(), listId);
   assert.equal(await page.locator('#edit [name=projectId]').inputValue(), '');
@@ -63,8 +79,11 @@ test('context add: offline list/project creation keeps Capture and editor drafts
   await saveEdit(page);
   assert.equal(await page.locator('#items article').count(), 1);
   assert.equal(await page.locator('#items article').getAttribute('data-id'), itemId);
-  await createDestination(page, 'project', 'Garage');
-  await page.getByRole('button', { name: 'Add next action to Garage', exact: true }).click();
+  await showView(page, 'work');
+  await page.locator('#view').selectOption('project:garage');
+  assert.deepEqual(await page.locator('#itemsHeading + .actions').evaluate(group => [...group.children].map(control => control.id)), ['clarifyInbox', 'addContextItem']);
+  assert.equal(await page.locator('#addContextItem').textContent(), 'Add next action');
+  await page.locator('#addContextItem').click();
   const projectId = (await page.locator('#view').inputValue()).slice(8);
   assert.equal(await page.locator('#edit [name=projectId]').inputValue(), projectId);
   assert.equal(await page.locator('#edit [name=listId]').inputValue(), '');
@@ -80,7 +99,7 @@ test('context add: offline list/project creation keeps Capture and editor drafts
   assert.equal(await page.locator('#capture [name=listId]').inputValue(), '');
   assert.equal(await page.locator('#capture [name=projectId]').count(), 0);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
-  const items = records().filter(record => record.type === 'item');
+  const items = records().filter(record => record.type === 'item' && !record.deleted);
   assert.equal(items.length, 2);
   assert.equal(items.find(item => item.id === itemId).listId, listId);
   assert.equal(items.find(item => item.title === 'Sort shelf').projectId, projectId);
@@ -90,34 +109,39 @@ test('context add: offline list/project creation keeps Capture and editor drafts
   assert.equal(await page.locator('#addContextItem').isVisible(), false);
   await page.locator('#view').selectOption(listId);
   assert.equal(await page.locator('#addContextItem').isVisible(), true);
-  await page.locator('#addContextItem').click();
-  assert.equal(await page.locator('#edit [name=listId]').inputValue(), listId);
-  for (const width of [320, 390, 1440]) {
+  assert.deepEqual(await page.locator('#itemsHeading + .actions').evaluate(group => [...group.children].map(control => control.id)), ['clarifyInbox', 'addContextItem']);
+  assert.equal(await page.locator('#addContextItem').textContent(), 'Add item');
+  for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    assert.ok(await page.locator('#editor').evaluate(el => el.scrollWidth <= el.clientWidth));
-    if (process.env.CONTEXT_ADD_SCREENSHOT) await page.screenshot({ path: `${process.env.CONTEXT_ADD_SCREENSHOT}-${width}.png` });
+    assert.ok(await page.locator('#itemsHeading + .actions').evaluate(group => group.scrollWidth <= group.clientWidth));
+    assert.ok(await page.locator('#itemsHeading + .actions button:visible').evaluateAll(buttons => buttons.every(button => {
+      const box = button.getBoundingClientRect(); return box.width >= 44 && box.height >= 44;
+    })));
   }
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.locator('#addContextItem').click();
+  assert.equal(await page.locator('#edit [name=listId]').inputValue(), listId);
+  assert.ok(await page.locator('#editor').evaluate(el => el.scrollWidth <= el.clientWidth));
 });
 
 test('context add: workspace changes keep pending additions isolated and archived workspaces stay read-only', { timeout: 60000 }, async t => {
-  const { page, context } = await setup(t);
-  await createDestination(page, 'list', 'Personal list');
+  const { page, context } = await setup(t, [
+    { type: 'workspace', id: 'work', action: 'create', expectedVersion: 0, fields: { title: 'Work' } },
+    currentCreate('project', 'work-project', { title: 'Work project', outcome: 'Finished work', workspaceId: 'work' })
+  ]);
+  await createList(page, 'Personal list');
   await page.getByRole('button', { name: 'Add item to Personal list', exact: true }).click();
   await page.locator('#edit [name=title]').fill('Personal draft');
   await page.locator('#cancelEdit').click();
-  await clickControl(page.locator('#manageWorkspaces'));
-  await page.locator('#createWorkspace input').fill('Work');
-  await page.locator('#createWorkspace button').click();
-  await page.getByRole('heading', { name: 'Work', exact: true }).waitFor();
-  await page.locator('#closeWorkspaces').click();
   const work = await page.locator('#workspaceSelect option').evaluateAll(options => options.find(option => option.textContent === 'Work').value);
   await page.locator('#workspaceSelect').selectOption(work);
   await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === id, work);
   assert.equal(await page.locator('#createdDestination').textContent(), '');
   assert.equal(await page.locator('#addContextItem').isVisible(), false);
-  await createDestination(page, 'project', 'Work project');
-  await page.getByRole('button', { name: 'Add next action to Work project', exact: true }).click();
+  await showView(page, 'work');
+  await page.locator('#view').selectOption('project:work-project');
+  await page.locator('#addContextItem').click();
   const projectId = await page.locator('#edit [name=projectId]').inputValue();
   await page.locator('#edit [name=title]').fill('Work action');
   await saveEdit(page); await synced(page);
@@ -136,5 +160,5 @@ test('context add: workspace changes keep pending additions isolated and archive
   await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
   const personal = records().find(record => record.title === 'Personal draft');
   assert.equal(personal.workspaceId, 'personal'); assert.equal(personal.projectId, null);
-  assert.equal(records().filter(record => record.type === 'item').length, 2);
+  assert.equal(records().filter(record => record.type === 'item' && !record.deleted).length, 2);
 });

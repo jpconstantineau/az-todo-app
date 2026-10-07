@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
+import { currentCreate } from './current-record.mjs';
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
@@ -16,6 +17,13 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   documents.length = 0;
   let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const projectId = 'family-breakfast';
+  const seed = await fetch(server.url + '/api/v1/operations', {
+    method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(),
+      mutations: [currentCreate('project', projectId, { title: 'Family breakfast', outcome: 'Breakfast plan' })] })
+  });
+  assert.equal(seed.status, 200, await seed.text());
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const context = await browser.newContext({ timezoneId: 'Pacific/Honolulu', viewport: { width: 390, height: 844 } });
   const page = await context.newPage(), errors = [];
@@ -28,15 +36,15 @@ test('projects: offline relationships, inbox/project/day edits and export keep o
   await showView(page, 'work');
   const itemId = records().find(r => r.type === 'item').id;
   await context.setOffline(true);
-  await page.getByRole('button', { name: 'New project', exact: true }).click();
-  await page.locator('#edit [name=title]').fill('Family breakfast');
+  await page.locator('#view').selectOption('project:' + projectId);
+  await page.getByRole('button', { name: 'Edit project: Family breakfast', exact: true }).click();
   await page.locator('#edit [name=outcome]').fill('Everyone has breakfast ready for Monday.');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit?.fields.outcome === 'Everyone has breakfast ready for Monday.');
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=outcome]').inputValue(), 'Everyone has breakfast ready for Monday.');
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
-  const projectId = (await local(page)).queue[0].operation.mutations[0].id;
+  await page.locator('#view').selectOption('inbox');
   await page.getByRole('button', { name: 'Edit Milk', exact: true }).click();
   await page.locator('#edit .task-dates > summary').click();
   await page.locator('#edit .task-metadata > summary').click();

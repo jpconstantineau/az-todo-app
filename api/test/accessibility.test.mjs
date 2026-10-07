@@ -244,7 +244,7 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
   assert.ok((await page.evaluate(() => window.announcements)).includes('syncStatus'));
 });
 
-test('accessibility: list, project, defaults and clarification dialogs return to their original controls', { timeout: 60000 }, async t => {
+test('accessibility: contextual add, list, project, defaults and clarification dialogs return to their original controls', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Insurance');
   await showView(page, 'work');
@@ -252,19 +252,21 @@ test('accessibility: list, project, defaults and clarification dialogs return to
   await expectFocus(page, '#clarifyQuestion');
   await page.keyboard.press('Tab');
   await expectFocus(page, '[data-proposal=title]');
-  await page.keyboard.press('Tab'); await expectFocus(page, '#clarifyFlow .clarify-grid > button:first-child');
+  await page.keyboard.press('Tab'); await expectFocus(page, '#clarifyFlow > .clarify-grid > button:first-child');
   await page.keyboard.press('Escape');
   await expectFocus(page, '[aria-label="Clarify Insurance"]');
-  await page.locator('#newProject').focus(); await page.keyboard.press('Enter');
-  await page.locator('#edit [name=title]').fill('Coverage');
-  await page.locator('#edit [name=outcome]').fill('An insured home');
-  await page.locator('#edit [type=submit]').focus(); await page.keyboard.press('Enter');
-  await expectFocus(page, '#newProject');
-  const projectValue = await page.locator('#view option').filter({ hasText: 'Project: Coverage' }).getAttribute('value');
+  await keyboardActivate(page, '#clarifyInbox'); await page.locator('#clarifier').waitFor();
+  await keyboardActivate(page, '#clarifyFlow > .clarify-grid > button:first-child');
+  await keyboardActivate(page, '#clarifyStop');
+  const projectValue = await page.locator('#view option').filter({ hasText: 'Project: Insurance' }).getAttribute('value');
   await page.locator('#view').selectOption(projectValue);
-  await page.getByRole('button', { name: 'Edit project: Coverage', exact: true }).focus(); await page.keyboard.press('Enter');
+  await page.locator('#addContextItem').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#edit [name=title]');
+  await page.keyboard.press('Escape');
+  await expectFocus(page, '#addContextItem');
+  await page.getByRole('button', { name: 'Edit project: Insurance', exact: true }).focus(); await page.keyboard.press('Enter');
   await refresh(page); await page.keyboard.press('Escape');
-  await expectFocus(page, '[aria-label="Edit project: Coverage"]');
+  await expectFocus(page, '[aria-label="Edit project: Insurance"]');
 
   await showView(page, 'lists');
   await page.locator('#newList').focus(); await page.keyboard.press('Enter');

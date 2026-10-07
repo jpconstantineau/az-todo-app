@@ -712,7 +712,7 @@ function render() {
   if (readOnly) { extraction.suspend(); $('editor').close(); $('defaultsEditor').close(); clarification.close(); briefs.close(); }
   $('captureWorkspaceFields').disabled = readOnly;
   $('reviewWorkspaceFields').disabled = readOnly;
-  for (const id of ['newList', 'newProject']) $(id).disabled = readOnly;
+  $('newList').disabled = readOnly;
   if (readOnly) document.querySelectorAll('#items button, #lists button, #projectActions button, #deletedItems button').forEach(control => { control.disabled = true; });
   if (!focused.isConnected || (focused !== document.body && !focused.getClientRects().length)) restoreFocus(focused);
 }
@@ -1072,7 +1072,6 @@ function workspace(focus = true) {
   $('reviews').hidden = destination !== 'reviews';
   $('execute').hidden = destination !== 'execute';
   $('listTools').hidden = !listMode;
-  $('newProject').hidden = listMode;
   document.querySelector('.work-panel').classList.toggle('process-mode', !listMode);
   $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process';
   $('workEyebrow').hidden = !listMode;
@@ -1149,7 +1148,6 @@ $('resetExecutionFilters').onclick = () => {
 };
 $('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
   ? editing : { type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '', workspaceId: selectedWorkspace });
-$('newProject').onclick = () => openEditor({ type: 'project', id: crypto.randomUUID(), version: 0, title: '', description: '', outcome: '', workspaceId: selectedWorkspace, status: 'active' });
 $('clarifyInbox').onclick = guard(() => clarification.openInbox());
 function openDefaults(record, focus = true, show = true) {
   if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
