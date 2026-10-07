@@ -1,17 +1,17 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=2';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=3';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=4';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
-import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=9';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=11';
-import { clarificationUI } from './clarification.js?v=6';
-import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=8';
-import { setupBriefs } from './briefs.js?v=3';
+import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=4';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=10';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=3';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=12';
+import { clarificationUI } from './clarification.js?v=7';
+import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=9';
+import { setupBriefs } from './briefs.js?v=4';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
-import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=3';
+import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=4';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -44,7 +44,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -318,62 +318,67 @@ function refreshOptions() {
   refreshTaskOptions(capture, effectiveDefaults(capture.elements.listId.value));
   refreshTaskOptions(edit, effectiveDefaults(edit.elements.listId.value));
 }
-const utilityForm = $('collectionUtilityForm');
-function utilityDraft() {
-  return { ...formValues(utilityForm), entries: [...utilityForm.elements.entries.selectedOptions].map(option => option.value), next: utilityForm.elements.next.checked, source: utilityForm.dataset.source || '' };
+const collectionSettingsForm = $('collectionSettingsForm');
+collectionSettingsForm.elements.kind.replaceChildren(...Object.entries(collectionKinds).map(([kind, label]) => new Option(label, kind)));
+function localDay(now = new Date()) {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
-function restoreUtility(saved = {}) {
-  utilityForm.reset(); utilityForm.dataset.source = saved.source || '';
-  for (const name of ['title', 'mode', 'tag', 'target']) if (saved[name] !== undefined) {
-    const input = utilityForm.elements[name];
-    if (input.tagName === 'SELECT' && ![...input.options].some(option => option.value === saved[name])) input.add(new Option(saved[name], saved[name]));
-    input.value = saved[name];
+function renderCollectionSettings(context, records, listMode) {
+  const due = records.filter(record => isCollection(record) && record.revisitDate && record.revisitDate <= localDay())
+    .sort((a, b) => a.revisitDate.localeCompare(b.revisitDate) || a.title.localeCompare(b.title));
+  $('readyToRevisit').hidden = !listMode || !due.length;
+  $('readyToRevisitCollections').replaceChildren(...due.map(record => button(
+    `${record.title} · ${record.revisitDate}`,
+    () => { navigation.lists.view = viewKey(record); render(); void journal(); },
+    `Open ${record.title}, ready to revisit since ${record.revisitDate}`,
+    `revisit:${key(record)}`
+  )));
+  $('collectionSettings').hidden = !listMode || !context;
+  if (!listMode || !context) {
+    collectionSettingsForm.dataset.key = '';
+    statusText('collectionSettingsStatus', '');
+    return;
   }
-  utilityForm.elements.next.checked = !!saved.next;
-  utilityForm.elements.entries.replaceChildren(...(saved.entries || []).map(id => new Option(id, id, true, true)));
-  statusText('collectionUtilityStatus', '');
+  if (collectionSettingsForm.dataset.key !== key(context)) statusText('collectionSettingsStatus', '');
+  collectionSettingsForm.dataset.key = key(context);
+  collectionSettingsForm.elements.kind.value = collectionKind(context);
+  for (const option of collectionSettingsForm.elements.kind.options) {
+    option.disabled = context.type === 'project' ? option.value !== 'project' : option.value === 'project';
+  }
+  collectionSettingsForm.elements.kind.disabled = context.type === 'project' || workspaceReadOnly();
+  const parents = records.filter(candidate => isCollection(candidate) && key(candidate) !== key(context) &&
+    !ancestry(candidate, scopedRecords()).some(ref => refKey(ref) === key(context)));
+  options(collectionSettingsForm.elements.parentRef,
+    parents.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']]);
+  collectionSettingsForm.elements.parentRef.value = context.parentRef ? refKey(context.parentRef) : '';
+  collectionSettingsForm.elements.revisitDate.value = context.revisitDate || '';
+  $('collectionSettingsHelp').textContent = context.type === 'project'
+    ? 'Projects stay projects. Parent and revisit changes keep the project outcome, actions and history.'
+    : `${collectionKind(context) === 'reference' ? 'Reusable reference is for non-actionable source material. A revisit date only resurfaces the collection; it does not turn entries into actions. ' : ''}Changing type, parent or revisit date keeps contents and history.`;
+  for (const control of collectionSettingsForm.elements) control.disabled = workspaceReadOnly() || control.name === 'kind' && context.type === 'project';
 }
-function renderCollectionUtilities(context) {
-  const all = scopedRecords(), form = utilityForm, selected = utilityDraft();
-  $('checklistFields').hidden = form.elements.mode.value !== 'checklist'; $('areaMappingFields').hidden = form.elements.mode.value !== 'area';
-  const source = context && collectionKind(context) === 'reference' ? key(context) : '';
-  const entries = Object.values(all).filter(item => source && item.type === 'item' && !item.deleted && belongsTo(item, context));
-  form.elements.entries.replaceChildren(...entries.map(item => new Option(item.title, item.id, false, source === selected.source && selected.entries.includes(item.id))));
-  form.dataset.source = source;
-  const tags = [...new Set(Object.values(all).filter(item => item.type === 'item' && !item.deleted).flatMap(item => item.areas || []))];
-  options(form.elements.tag, tags.map(tag => ({ id: tag, title: tag })), [['', 'Choose an area tag']]);
-  options(form.elements.target, Object.values(all).filter(record => isCollection(record) && !record.deleted && collectionKind(record) === 'area').map(record => ({ id: key(record), title: record.title })), [['', 'Create a new Area']]);
-  form.querySelector('button').disabled = saving || workspaceReadOnly();
-}
-utilityForm.addEventListener('input', () => { void journal(); });
-utilityForm.elements.mode.onchange = () => { render(); void journal(); };
-utilityForm.onsubmit = event => {
+collectionSettingsForm.onsubmit = event => {
   event.preventDefault();
   if (saving || !accountId || workspaceReadOnly()) return;
-  const owner = accountId, generation = accountGeneration, submitted = utilityDraft(), workspaceId = selectedWorkspace;
-  saving = true; const controls = [...utilityForm.elements]; controls.forEach(control => { control.disabled = true; });
-  void (async () => {
-    try {
-      let result;
-      const saved = await transact(owner, local => {
-        if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before organizing more items.');
-        const records = workspaceRecords(projected(local), workspaceId);
-        if (submitted.mode === 'checklist') {
-          const source = records[submitted.source];
-          if (!source) throw new Error('Choose a reference list first.');
-          const items = submitted.entries.map(id => records['item:' + id]);
-          if (items.some(item => !item)) throw new Error('An entry is unavailable. Select entries again.');
-          result = { mutations: checklistMutations(source, items, submitted.title, submitted.next), remaining: 0 };
-        } else result = areaMappingMutations(records, submitted.tag, submitted.target ? parseRef(submitted.target) : null, submitted.title, workspaceId);
-        enqueue(local, owner, result.mutations);
-        currentDraft(local).collectionUtility = result.ref ? { ...submitted, target: refKey(result.ref), title: '' } : { mode: 'checklist' };
-      });
-      if (owner !== accountId || generation !== accountGeneration) return;
-      state = saved; restoreUtility(currentDraft(state).collectionUtility); render(); broadcast(); void sync();
-      statusText('collectionUtilityStatus', submitted.mode === 'area' ? `Batch saved on device. ${result.remaining} item(s) remain; save again to continue.` : 'New checklist saved on device. The reference list is unchanged.');
-    } catch (failure) { if (owner === accountId) { statusText('collectionUtilityStatus', failure.message); void journal(); } }
-    finally { saving = false; controls.forEach(control => { control.disabled = false; }); if (owner === accountId) utilityForm.querySelector('button').disabled = workspaceReadOnly(); }
-  })();
+  const record = scopedRecords()[collectionSettingsForm.dataset.key];
+  if (!record) { statusText('collectionSettingsStatus', 'This collection is no longer available. Choose it again.'); return; }
+  const submitted = {
+    ...(record.type === 'list' ? { kind: collectionSettingsForm.elements.kind.value } : {}),
+    parentRef: collectionSettingsForm.elements.parentRef.value ? parseRef(collectionSettingsForm.elements.parentRef.value) : null,
+    revisitDate: collectionSettingsForm.elements.revisitDate.value || null
+  };
+  const fields = Object.fromEntries(Object.entries(submitted).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(record[name] ?? null)));
+  if (!Object.keys(fields).length) { statusText('collectionSettingsStatus', 'No collection setting changes to save.'); return; }
+  saving = true;
+  const controls = [...collectionSettingsForm.elements]; controls.forEach(control => { control.disabled = true; });
+  void updateRecord(record, fields).then(saved => {
+    if (!saved || accountId === null) return;
+    statusText('collectionSettingsStatus', 'Collection settings saved on device.');
+    collectionSettingsForm.querySelector('[type=submit]')?.focus();
+  }).finally(() => {
+    saving = false;
+    if (accountId) render();
+  });
 };
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
@@ -411,7 +416,7 @@ function draft() {
   return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: hasEditDraft() ? { ...editing, fields: formValues(edit) } : null, editOpen: $('editor').open,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
-    collectionUtility: utilityDraft(), day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
+    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -448,7 +453,7 @@ function restoreDraft() {
   const savedCapture = normalizeCaptureDraft(saved.capture);
   fillValues(capture, savedCapture);
   originalInput = savedCapture.original;
-  extraction.restore(normalizeExtractionDraft(saved.extraction)); restoreUtility(saved.collectionUtility);
+  extraction.restore(normalizeExtractionDraft(saved.extraction));
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
   Object.assign(navigation.work, saved.navigation?.work);
@@ -522,10 +527,10 @@ function render() {
   const listMode = destination === 'lists';
   const filters = navigation[listMode ? 'lists' : 'work'];
   options($('view'), [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(project => ({ id: `project:${project.id}`, title: collectionLabel(project) }))],
-    listMode ? [['', 'Choose a list']] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
+    listMode ? [['', 'Choose collection']] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'inbox';
   filters.view = $('view').value;
-  $('collectionBrowser').hidden = $('collectionUtilities').hidden = !listMode;
+  $('collectionBrowser').hidden = !listMode;
   $('clarifyInbox').hidden = listMode;
   $('includeNested').checked = !!filters.nested;
   if (listMode) drawOutline($('collectionOutline'), scopedRecords(), record => { navigation.lists.view = viewKey(record); render(); void journal(); });
@@ -566,9 +571,9 @@ function render() {
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
   const context = project || lists.find(list => list.id === view);
-  $('collectionBreadcrumbs').textContent = context ? ancestry(context, scopedRecords()).reverse().map(ref => scopedRecords()[refKey(ref)]?.title || 'Unavailable parent').join(' / ') : 'Choose a list, project, area or role.';
+  $('collectionBreadcrumbs').textContent = context ? ancestry(context, scopedRecords()).reverse().map(ref => scopedRecords()[refKey(ref)]?.title || 'Unavailable parent').join(' / ') : 'Choose a collection.';
   $('collectionChildren').replaceChildren(...(listMode && context ? records.filter(record => isCollection(record) && record.parentRef && refKey(record.parentRef) === key(context)).map(child => button(collectionLabel(child), () => { navigation.lists.view = viewKey(child); render(); void journal(); }, `Open ${collectionLabel(child)}`, `child:${key(child)}`)) : []));
-  renderCollectionUtilities(context);
+  renderCollectionSettings(context, records, listMode);
   $('addContextItem').hidden = !context;
   $('addContextItem').disabled = workspaceReadOnly();
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
@@ -616,7 +621,7 @@ function render() {
     article.append(content, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
-    ? (lists.length ? 'Choose a list to see its items and manage its details.' : 'No lists yet. Create a list, or use Capture without one.')
+    ? (lists.length ? 'Choose a collection to see its items and manage its details.' : 'No collections yet. Create one with New list, or use Capture without one.')
     : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
     : view === 'inbox' ? 'No unprocessed captures match this view. Check Status for additional filters, or use Capture to add work.'
     : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
@@ -628,7 +633,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
@@ -705,8 +710,8 @@ function render() {
     checkLabel.append(checkbox); article.append(checkLabel, title); return article;
   }));
   if (!$('executeItems').childElementCount) $('executeItems').textContent = execute.view
-    ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Inspect saved work in List Workspace, or choose another ${execute.kind}.`
-    : executeCollections.length ? `Choose a ${execute.kind} to start working through its items.` : `No ${execute.kind}s yet. Create one in List Workspace.`;
+    ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Inspect saved work in Organize, or choose another ${execute.kind}.`
+    : executeCollections.length ? `Choose a ${execute.kind} to start working through its items.` : `No ${execute.kind}s yet. Create one in Organize.`;
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
   $('captureAI').hidden = readOnly;
   if (readOnly) { extraction.suspend(); $('editor').close(); $('defaultsEditor').close(); clarification.close(); briefs.close(); }
@@ -824,7 +829,7 @@ function openEditor(record, focus = true, show = true) {
   edit.elements.listId.value = fields.listId || '';
   pickerOptions(editOrganizer, scopedRecords(), memberships(fields));
   $('editOrganizer').hidden = record.type !== 'item';
-  $('editCollectionFields').hidden = !isCollection(record);
+  $('editCollectionFields').hidden = !isCollection(record) || record.version > 0;
   edit.elements.kind.value = collectionKind(record);
   for (const option of edit.elements.kind.options) option.disabled = !!record.version && (record.type === 'project' ? option.value !== 'project' : option.value === 'project');
   const parentOptions = Object.values(scopedRecords()).filter(candidate => isCollection(candidate) && !candidate.deleted && !ancestry(candidate, scopedRecords()).some(ref => refKey(ref) === key(record)));
@@ -1073,10 +1078,8 @@ function workspace(focus = true) {
   $('execute').hidden = destination !== 'execute';
   $('listTools').hidden = !listMode;
   document.querySelector('.work-panel').classList.toggle('process-mode', !listMode);
-  $('itemsHeading').textContent = listMode ? 'List Workspace' : 'Process';
-  $('workEyebrow').hidden = !listMode;
-  $('viewLabel').textContent = listMode ? 'List' : 'View';
-  $('viewLabel').classList.toggle('sr-only', !listMode);
+  $('itemsHeading').textContent = listMode ? 'Organize' : 'Process';
+  $('viewLabel').textContent = listMode ? 'Choose collection' : 'View';
   $('executionFilters').hidden = !listMode;
   for (const link of document.querySelectorAll('.workspace-nav a')) {
     if (link.hash === '#' + destination) link.setAttribute('aria-current', 'page');
@@ -1297,7 +1300,7 @@ async function showAccountName(owner, generation, verified) {
 function hideAccount() {
   $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
   $('appMenu').open = false; $('preferences').close();
-  restoreUtility(); utilityForm.elements.entries.replaceChildren(); utilityForm.elements.tag.replaceChildren(); utilityForm.elements.target.replaceChildren(); $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
+  $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); $('readyToRevisitCollections').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
   extraction.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();

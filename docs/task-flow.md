@@ -1,7 +1,7 @@
 # Native task flow and parity verification
 
 Implementation for issue #25. `/` serves `html/index.html` and is the canonical
-workspace URL. Capture is the default. [Capture, Your Work and List Workspace](navigation.md)
+workspace URL. Capture is the default. [Capture, Process and Organize](navigation.md)
 are separate addressable views that keep drafts intact.
 
 ## User flow
@@ -9,7 +9,7 @@ are separate addressable views that keep drafts intact.
 | Action | Native implementation / contract |
 | --- | --- |
 | Sign in/out | SWA auth; return to `/`; verify `/api/v1/session` before displaying account data |
-| New empty list | List Workspace → New list editor; versioned `list` create with title, notes and a snapshot of user defaults |
+| New empty list | Organize → New list editor; versioned `list` create with title, notes and a snapshot of user defaults |
 | Capture | One item per non-empty line; optional original-preserving split preview, notes and new/existing list |
 | Advanced task fields | Status, local due date/time, contexts, areas, energy, time and priority; native controls |
 | Review/filter | Your Work: all items, inbox, list, project or planned day, combined with status filter; local view over every fetched change page |

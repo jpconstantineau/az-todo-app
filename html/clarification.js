@@ -1,6 +1,6 @@
-import { collectionKinds, collectionKind, isCollection, memberships, ancestry, refKey } from './collection-model.js?v=2';
+import { collectionKinds, collectionKind, isCollection, memberships, ancestry, refKey } from './collection-model.js?v=3';
 import { localGuidance } from './local-guidance.js?v=1';
-import { newFlow, flowProposal, requireTitle, membershipChange, itemFields, beforeFields } from './clarification-flow.js?v=3';
+import { newFlow, flowProposal, requireTitle, membershipChange, itemFields, beforeFields } from './clarification-flow.js?v=4';
 
 export function clarificationUI({ records, save, journal, showDialog, actions }) {
   const $ = id => document.getElementById(id);

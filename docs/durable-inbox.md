@@ -7,7 +7,7 @@ successful first sign-in while online. See [PWA installation and updates](pwa-in
 for installation help and safe shell updates. Physical-device certification remains
 #14/#17 work.
 
-Capture, Your Work and List Workspace use [native destination links](navigation.md).
+Capture, Process and Organize use [native destination links](navigation.md).
 They share the account journal and outbox; changing views never submits a save.
 
 ## Using the same account on phone and laptop
@@ -222,7 +222,7 @@ when changing cached modules. See [PWA verification](pwa-installation.md).
 ## Defaults and compatibility
 
 An unfinished **New list** draft stays on device without opening the editor on
-page load, including offline reloads. Choose **New list** in List Workspace to
+page load, including offline reloads. Choose **New list** in Organize to
 resume its title and notes. Saving it creates that list once; the next **New list**
 starts a blank draft. Existing item and project editor drafts still reopen on reload.
 

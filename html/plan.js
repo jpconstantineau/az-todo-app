@@ -1,4 +1,4 @@
-import { ancestry, collectionKind, collectionKinds, isCollection, memberships, refKey } from './collection-model.js?v=2';
+import { ancestry, collectionKind, collectionKinds, isCollection, memberships, refKey } from './collection-model.js?v=3';
 
 const $ = id => document.getElementById(id);
 const dateText = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -260,10 +260,10 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     $('planFocusCounts').textContent = `${directChildren.length} direct ${directChildren.length === 1 ? 'child' : 'children'} · ${activeProjects.length} active ${activeProjects.length === 1 ? 'project' : 'projects'} · ${coverage}`;
     const summaryActions = [];
     if (focusRecord) {
-      summaryActions.push(control('Open in List Workspace', () => openCollection(focusRecord), `Open ${focusRecord.title} in List Workspace`, `plan:collection:${plan.focus}:open`));
+      summaryActions.push(control('Open in Organize', () => openCollection(focusRecord), `Open ${focusRecord.title} in Organize`, `plan:collection:${plan.focus}:open`));
       const editButton = control('Edit', () => edit(focusRecord), `Edit ${focusRecord.title}`, `plan:collection:${plan.focus}:edit`); editButton.disabled = readOnly(); summaryActions.push(editButton);
     } else {
-      summaryActions.push(control('Open List Workspace', () => openCollection(null), 'Open List Workspace', 'plan:workspace:open'),
+      summaryActions.push(control('Open Organize', () => openCollection(null), 'Open Organize', 'plan:workspace:open'),
         control('Process inbox', () => openProcess('inbox'), 'Process inbox', 'plan:workspace:process'));
     }
     $('planFocusActions').replaceChildren(...summaryActions);

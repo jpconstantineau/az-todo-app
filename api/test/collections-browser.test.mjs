@@ -11,7 +11,7 @@ import { defaultSettings } from '../api/shared/defaults.mjs';
 const create = currentCreate;
 const ref = (type, id) => ({ type, id });
 const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=10')).transact('alice'));
 async function setup(t, items = []) {
   documents.length = 0; let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -25,14 +25,14 @@ async function setup(t, items = []) {
   const errors = []; page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await synced(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  return { page, context, setUser: value => { user = value; } };
+  return { page, context, errors, setUser: value => { user = value; } };
 }
 async function saveEdit(page) {
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
 }
 test('collections browser: one editor creates kinds and parents; offline multi-membership and rollups keep one item', async t => {
-  const { page, context } = await setup(t, [create('item', 'task', { title: 'Measure cabinets', status: 'next' })]);
+  const { page, context, errors } = await setup(t, [create('item', 'task', { title: 'Measure cabinets', status: 'next' })]);
   await showView(page, 'lists'); await page.locator('#newList').click();
   await page.locator('#edit [name=kind]').selectOption('program'); await page.locator('#edit [name=title]').fill('Family plans');
   await page.locator('#edit [name=parentRef]').selectOption('list:home'); await saveEdit(page); await synced(page);
@@ -41,9 +41,13 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
   await showView(page, 'work'); await page.locator('#view').selectOption('all');
   await page.getByRole('button', { name: 'Edit Measure cabinets', exact: true }).click();
   await context.setOffline(true);
+  await page.waitForFunction(() => navigator.onLine === false);
   await page.locator('#edit [name=collectionRefs]').selectOption(['project:kitchen', 'list:home', 'list:role']);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit?.fields.collectionRefs?.length === 3);
-  await page.reload(); await page.locator('#editor').waitFor();
+  await waitForBrowser(page, async () => {
+    const draft = (await (await import('/inbox-store.js?v=10')).transact('alice')).draft;
+    return draft.editOpen === true && draft.edit?.fields.collectionRefs?.length === 3;
+  });
+  await page.reload(); await page.locator('#workspace').waitFor(); assert.deepEqual(errors, []); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=collectionRefs] option:checked').count(), 3);
   await saveEdit(page);
   await showView(page, 'lists'); await page.locator('#view').selectOption('home'); await page.locator('#includeNested').check();
@@ -63,25 +67,50 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
     }
   }
 });
-test('collections browser: changing collection type preserves the collection and its items', async t => {
+test('collections browser: direct settings preserve contents and surface due collections', async t => {
   const defaults = { ...structuredClone(defaultSettings), contexts: ['@Store'] };
-  const { page } = await setup(t, [
-    create('list', 'groceries', { title: 'Groceries', parentRef: ref('list', 'home'), defaults }),
-    create('item', 'buy-milk', { title: 'Buy milk', status: 'next', listId: 'groceries', collectionRefs: [ref('list', 'groceries')] })
+  const { page, context } = await setup(t, [
+    create('list', 'groceries', { title: 'Groceries', parentRef: ref('list', 'home'), revisitDate: '2000-01-01', defaults }),
+    create('item', 'buy-milk', { title: 'Buy milk', status: 'next', listId: 'groceries', collectionRefs: [ref('list', 'groceries')], areas: ['Household'] })
   ]);
-  await showView(page, 'lists'); await page.locator('#view').selectOption('groceries');
-  await page.getByRole('button', { name: 'Edit list: Groceries', exact: true }).click();
-  const type = page.getByRole('combobox', { name: 'Collection type', exact: true });
+  await showView(page, 'lists');
+  assert.equal(await page.locator('#itemsHeading').textContent(), 'Organize');
+  assert.equal(await page.title(), 'Organize · Personal');
+  assert.equal(await page.locator('#viewLabel').textContent(), 'Choose collection');
+  assert.equal(await page.locator('#viewLabel').getAttribute('class'), 'sr-only');
+  assert.equal(await page.locator('#view').evaluate(el => getComputedStyle(el).fontSize), await page.locator('#itemsHeading').evaluate(el => getComputedStyle(el).fontSize));
+  await page.getByRole('button', { name: /Open Groceries, ready to revisit since 2000-01-01/ }).click();
+  const settings = page.locator('#collectionSettingsForm');
+  const type = settings.getByRole('combobox', { name: 'Collection type', exact: true });
   assert.equal(await type.inputValue(), 'list');
   assert.equal(await type.locator('option[value="project"]').evaluate(option => option.disabled), true);
-  await type.selectOption('checklist'); await saveEdit(page);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).records['list:groceries']?.kind === 'checklist');
-  const localRecords = (await local(page)).records;
-  assert.deepEqual(localRecords['list:groceries'].parentRef, ref('list', 'home'));
-  assert.deepEqual(localRecords['list:groceries'].defaults, defaults);
-  assert.equal(localRecords['item:buy-milk'].listId, 'groceries');
-  assert.deepEqual(localRecords['item:buy-milk'].collectionRefs, [ref('list', 'groceries')]);
-  await synced(page);
+  await context.setOffline(true); await page.waitForFunction(() => navigator.onLine === false);
+  await type.selectOption('checklist');
+  await settings.getByLabel('Revisit on (optional)').fill('2027-01-02');
+  await settings.getByRole('button', { name: 'Save collection settings on device' }).click();
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=10')).transact('alice');
+    return (await import('/inbox-store.js?v=10')).projected(local)['list:groceries']?.kind === 'checklist' &&
+      local.queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === 'groceries' && mutation.fields?.revisitDate === '2027-01-02'));
+  });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await settings.getByLabel('Revisit on (optional)').inputValue(), '2027-01-02');
+  const projectedRecords = await page.evaluate(async () => { const store = await import('/inbox-store.js?v=10'); return store.projected(await store.transact('alice')); });
+  assert.deepEqual(projectedRecords['list:groceries'].parentRef, ref('list', 'home'));
+  assert.equal(projectedRecords['list:groceries'].revisitDate, '2027-01-02');
+  assert.deepEqual(projectedRecords['list:groceries'].defaults, defaults);
+  assert.equal(projectedRecords['item:buy-milk'].listId, 'groceries');
+  assert.deepEqual(projectedRecords['item:buy-milk'].collectionRefs, [ref('list', 'groceries')]);
+  assert.deepEqual(projectedRecords['item:buy-milk'].areas, ['Household']);
+  assert.equal(await page.locator('#readyToRevisit').isVisible(), false);
+  assert.equal(await page.locator('#collectionUtilities').count(), 0);
+  await page.locator('#view').selectOption('home');
+  assert.equal(await settings.locator('[name=parentRef] option[value="list:groceries"]').count(), 0, 'a descendant cannot become its ancestor\'s parent');
+  await page.locator('#view').selectOption('groceries');
+  await page.getByRole('button', { name: 'Edit list: Groceries', exact: true }).click();
+  assert.equal(await page.locator('#editCollectionFields').isVisible(), false);
+  await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); await synced(page);
   const savedLists = documents.filter(doc => doc.id === 'record:list:groceries');
   assert.equal(savedLists.length, 1); assert.equal(savedLists[0].record.kind, 'checklist');
   assert.deepEqual(savedLists[0].record.parentRef, ref('list', 'home'));
@@ -93,46 +122,20 @@ test('collections browser: changing collection type preserves the collection and
   await page.getByRole('button', { name: 'Edit Buy milk', exact: true }).waitFor();
 });
 
-test('collections browser: reusable reference checklist and resumable area mapping preserve source and tags', async t => {
-  const entries = Array.from({ length: 21 }, (_, i) => create('item', `tag-${i}`, { title: `Tagged ${i}`, areas: ['Household'], status: 'inbox' }));
-  const { page, context } = await setup(t, [create('item', 'passport', { title: 'Passport', description: 'Check expiry', status: 'reference', listId: 'packing', referenceLinks: ['https://example.com/passport'] }), ...entries]);
-  await showView(page, 'lists'); await page.locator('#view').selectOption('packing');
-  await page.getByRole('button', { name: 'Edit Passport', exact: true }).waitFor();
-  await page.locator('#collectionUtilities > summary').click();
-  await page.locator('#collectionUtilityForm [name=entries]').selectOption('passport');
-  await page.locator('#collectionUtilityForm [name=title]').fill('November trip');
-  await context.setOffline(true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.collectionUtility?.title === 'November trip');
-  await page.evaluate(() => {
-    window.collectionPut = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function (value, ...args) {
-      if (value?.queue?.some(entry => entry.operation.mutations.some(m => m.type === 'list' && m.fields?.title === 'November trip'))) throw new DOMException('Checklist quota failure', 'QuotaExceededError');
-      return window.collectionPut.call(this, value, ...args);
-    };
-  });
-  await page.getByRole('button', { name: 'Save collection action on device' }).click();
-  await page.waitForFunction(() => document.querySelector('#collectionUtilityStatus').textContent.includes('Checklist quota failure'));
-  assert.equal((await local(page)).queue.length, 0);
-  assert.equal(await page.locator('#collectionUtilityForm [name=title]').inputValue(), 'November trip');
-  assert.equal(await page.locator('#collectionUtilityForm [name=entries]').inputValue(), 'passport');
-  await page.evaluate(() => { IDBObjectStore.prototype.put = window.collectionPut; });
-  await page.getByRole('button', { name: 'Save collection action on device' }).click();
-  await page.waitForFunction(() => document.querySelector('#collectionUtilityStatus').textContent.includes('New checklist saved'));
-  const state = await local(page), copies = state.queue.flatMap(entry => entry.operation.mutations).filter(m => m.type === 'item');
-  assert.equal(copies.length, 1); assert.notEqual(copies[0].id, 'passport'); assert.equal(copies[0].fields.status, 'inbox'); assert.equal(copies[0].fields.description, 'Check expiry');
-  assert.equal(state.records['item:passport'].status, 'reference');
-  await page.locator('#collectionUtilityForm [name=mode]').selectOption('area');
-  await page.locator('#collectionUtilityForm [name=tag]').selectOption('Household');
-  await page.locator('#collectionUtilityForm [name=target]').selectOption('list:home');
-  await page.getByRole('button', { name: 'Save collection action on device' }).click();
-  await page.waitForFunction(() => document.querySelector('#collectionUtilityStatus').textContent.includes('1 item(s) remain'));
-  await page.reload(); await page.locator('#workspace').waitFor(); await page.locator('#collectionUtilities > summary').click();
-  assert.equal(await page.locator('#collectionUtilityForm [name=target]').inputValue(), 'list:home');
-  await page.getByRole('button', { name: 'Save collection action on device' }).click();
-  await page.waitForFunction(() => document.querySelector('#collectionUtilityStatus').textContent.includes('0 item(s) remain'));
-  await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); await synced(page);
-  const tagged = documents.filter(doc => doc.record?.id.startsWith('tag-')).map(doc => doc.record);
-  assert.equal(tagged.length, 21); assert.ok(tagged.every(item => item.areas[0] === 'Household' && item.collectionRefs.some(ref => ref.id === 'home')));
+test('collections browser: project settings keep project identity and reusable-reference guidance is explicit', async t => {
+  const { page } = await setup(t);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('project:kitchen');
+  const settings = page.locator('#collectionSettingsForm');
+  const type = settings.getByRole('combobox', { name: 'Collection type', exact: true });
+  assert.equal(await type.inputValue(), 'project'); assert.equal(await type.isDisabled(), true);
+  await settings.getByLabel('Revisit on (optional)').fill('2000-01-01');
+  await settings.getByRole('button', { name: 'Save collection settings on device' }).click();
+  await page.getByRole('button', { name: /Open Kitchen, ready to revisit since 2000-01-01/ }).waitFor();
+  assert.equal((await local(page)).records['project:kitchen'].type, 'project');
+  await page.locator('#view').selectOption('packing');
+  assert.match(await page.locator('#collectionSettingsHelp').textContent(), /non-actionable source material.*only resurfaces/);
+  assert.equal(await type.inputValue(), 'reference');
+  assert.equal(await type.locator('option:checked').textContent(), 'Reusable reference');
 });
 test('collections browser: clarification uses the organizer and account changes clear private selections', async t => {
   const { page, setUser } = await setup(t, [create('item', 'note', { title: 'Private travel note' })]);
@@ -153,12 +156,12 @@ test('collections browser: clarification uses the organizer and account changes 
   const selection = page.locator('#edit [name=collectionRefs]');
   await selection.focus(); await page.keyboard.press('Home'); await page.keyboard.press('Shift+ArrowDown');
   assert.equal(await selection.evaluate(el => el === document.activeElement), true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit?.fields.collectionRefs?.length > 0);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=10')).transact('alice')).draft.edit?.fields.collectionRefs?.length > 0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Edit Private travel note', exact: true }).waitFor();
   setUser('bob'); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).accountId === 'bob'); await synced(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=10')).transact(null)).accountId === 'bob'); await synced(page);
   assert.equal(await page.locator('#edit [name=collectionRefs] option').count(), 0);
   assert.doesNotMatch(await page.locator('#collectionOutline').textContent(), /Home|Packing|Parent/);
-  assert.equal(await page.locator('#collectionUtilityForm [name=title]').inputValue(), '');
+  assert.equal(await page.locator('#collectionSettings').isVisible(), false);
 });

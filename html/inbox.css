@@ -89,8 +89,12 @@
 #accountName { overflow-wrap: anywhere; margin-bottom: var(--space-1); text-transform: none; }
 #workspaceSelect { font: inherit; font-weight: inherit; width: 100%; min-width: 0; text-overflow: ellipsis; background-color: transparent; border-color: transparent; padding-left: 0; }
 #workspaceSelect:hover { border-color: var(--control-border); }
-.work-panel.process-mode #view { font-size: var(--text-heading); font-weight: var(--weight-emphasis); background-color: transparent; border-color: transparent; padding-left: 0; cursor: pointer; }
-.work-panel.process-mode #view:hover { border-color: var(--control-border); }
+.work-panel #view { font-size: var(--text-heading); font-weight: var(--weight-emphasis); background-color: transparent; border-color: transparent; padding-left: 0; cursor: pointer; }
+.work-panel #view:hover { border-color: var(--control-border); }
+.collection-revisit, .collection-settings { margin-block: var(--space-4); padding: var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface-raised); }
+.collection-revisit h3, .collection-settings h3 { margin-top: 0; }
+.collection-settings .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); align-items: end; }
+.collection-settings .form-grid p { grid-column: 1 / -1; margin-block: 0; }
 .save-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 .save-status { display: flex; align-items: center; justify-content: center; width: 32px; min-height: 44px; }
 .save-status[data-state="confirmed"] { color: var(--success); }

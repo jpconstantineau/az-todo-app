@@ -13,7 +13,7 @@ export const clarificationBehaviors = {
   'make-role': 'Make role',
   'make-initiative': 'Make initiative',
   'make-program': 'Make program',
-  'make-reference': 'Make reference list',
+  'make-reference': 'Make reusable reference',
   trash: 'Move to Deleted'
 };
 
@@ -28,7 +28,7 @@ const defaults = [
   ['role', 'Make role', 'make-role', 'more'],
   ['initiative', 'Make initiative', 'make-initiative', 'more'],
   ['program', 'Make program', 'make-program', 'more'],
-  ['reference-list', 'Make reference list', 'make-reference', 'more'],
+  ['reference-list', 'Make reusable reference', 'make-reference', 'more'],
   ['trash', 'Move to Deleted', 'trash', 'more']
 ].map(([id, label, behavior, placement]) => ({ id, label, behavior, placement }));
 

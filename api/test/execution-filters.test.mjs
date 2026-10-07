@@ -30,7 +30,7 @@ test('execution filters compare limits and retain unspecified or custom estimate
   assert.equal(matchesExecutionFilters(item, {}), true);
 });
 
-test('List Workspace filters combine, reset, stay offline and isolate accounts/workspaces while Process stays unfiltered', { timeout: 90000 }, async t => {
+test('Organize filters combine, reset, stay offline and isolate accounts/workspaces while Process stays unfiltered', { timeout: 90000 }, async t => {
   documents.length = 0;
   let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);

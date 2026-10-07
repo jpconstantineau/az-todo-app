@@ -13,7 +13,7 @@ test('clarification action preferences use the balanced requested defaults', () 
   assert.deepEqual(actions.filter(entry => entry.placement === 'primary').map(entry => entry.label),
     ['Make project', 'Make list', 'Make checklist', 'Action', 'Reference', 'Someday']);
   assert.deepEqual(actions.filter(entry => entry.placement === 'more').map(entry => entry.label),
-    ['Make area', 'Make role', 'Make initiative', 'Make program', 'Make reference list', 'Move to Deleted']);
+    ['Make area', 'Make role', 'Make initiative', 'Make program', 'Make reusable reference', 'Move to Deleted']);
 });
 
 test('clarification action preferences round-trip custom aliases and reject the whole malformed value', () => {

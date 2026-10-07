@@ -1,12 +1,12 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=3';
+import { readableBrief } from './briefs.js?v=4';
 import { purgeWorkspaceState } from './workspaces.js?v=4';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
-  'collectionRefs', 'parentRef', 'kind', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
+  'collectionRefs', 'parentRef', 'kind', 'revisitDate', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
   'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',

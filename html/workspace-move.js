@@ -1,4 +1,4 @@
-import { isCollection, memberships, refKey } from './collection-model.js?v=2';
+import { isCollection, memberships, refKey } from './collection-model.js?v=3';
 
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const relationshipFields = record => record.type === 'item'

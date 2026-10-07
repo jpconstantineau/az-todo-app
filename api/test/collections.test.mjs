@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 import { documents, startServer } from './harness.mjs';
 import { memberships, normalizeMembership, inCollection } from '../../html/collection-model.js';
 import { projected, enqueue, rememberEdit, undoEdit } from '../../html/inbox-store.js';
-import { checklistMutations, areaMappingMutations } from '../../html/collections.js';
 import { deviceExport, validateDeviceExport } from '../../html/inbox-export.js';
 import { currentCreate } from './current-record.mjs';
 
@@ -32,7 +31,7 @@ test('collections: server and offline membership normalization share the same co
 });
 test('collections: multi-membership, primary edits, workspace boundaries, cycles and atomic unlink/delete', async t => {
   const post = await setup(t);
-  assert.equal((await post([create('list', 'home', { kind: 'area' }), create('list', 'role', { kind: 'role' }), create('project', 'kitchen', { parentRef: ref('list', 'home') })])).status, 200);
+  assert.equal((await post([create('list', 'home', { kind: 'area', revisitDate: '2026-10-07' }), create('list', 'role', { kind: 'role' }), create('project', 'kitchen', { parentRef: ref('list', 'home') })])).status, 200);
   let result = await post([create('item', 'task', { listId: 'home', projectId: 'kitchen', collectionRefs: [ref('list', 'home'), ref('list', 'role'), ref('project', 'kitchen')] })]);
   assert.equal(result.status, 200);
   result = await post([change('item', 'task', 1, { listId: null, title: 'Primary edit' })]);
@@ -45,6 +44,7 @@ test('collections: multi-membership, primary edits, workspace boundaries, cycles
   assert.equal((await post([change('item', 'task', 2, { workspaceId: 'work' })])).status, 400);
   assert.equal((await post([change('item', 'task', 2, { collectionRefs: [], listId: null, projectId: null, workspaceId: 'work' }), change('list', 'role', 1, null, 'delete')])).status, 200);
   assert.equal((await post([change('project', 'kitchen', 1, { parentRef: null }), change('list', 'home', 1, null, 'delete')])).status, 200);
+  assert.equal((await post([create('list', 'bad-date', { revisitDate: '2026-02-30' })])).status, 400);
 });
 test('collections: concurrent moves cannot create a cycle; link/delete cannot orphan a task', async t => {
   const post = await setup(t);
@@ -55,28 +55,15 @@ test('collections: concurrent moves cannot create a cycle; link/delete cannot or
   const race = await Promise.all([post([create('item', 'task', { collectionRefs: [ref('list', 'c')] })]), post([change('list', 'c', 1, null, 'delete')])]);
   assert.equal(race.filter(result => result.status === 200).length, 1);
 });
-test('collections: bounded checklist copies, area batches, exports and undo preserve original memberships', () => {
+test('collections: exports and undo preserve memberships and revisit dates', () => {
   const source = { type: 'list', id: 'packing', title: 'Packing', kind: 'reference', workspaceId: 'personal' };
   const item = { type: 'item', id: 'passport', version: 1, accountId: 'alice', deleted: false, workspaceId: 'personal', collectionRefs: [ref('list', 'packing')], title: 'Passport', description: 'Expiry', status: 'reference', listId: 'packing', areas: ['Travel'], referenceLinks: ['https://example.com/renew'] };
-  const before = structuredClone(item);
-  const copies = checklistMutations(source, [item], 'Trip');
-  assert.equal(copies[0].fields.kind, 'checklist');
-  assert.equal(copies.length, 2); assert.equal(copies[1].fields.status, 'inbox'); assert.notEqual(copies[1].id, item.id);
-  assert.deepEqual(copies[1].fields.referenceLinks, item.referenceLinks); assert.deepEqual(item, before);
-  assert.equal(checklistMutations(source, [item], 'Trip', true)[1].fields.status, 'next');
-  assert.throws(() => checklistMutations(source, Array.from({ length: 20 }, (_, i) => ({ ...item, id: String(i) })), 'Too large'), /1–19/);
-  const records = Object.fromEntries(Array.from({ length: 21 }, (_, i) => ['item:' + i, { ...item, id: String(i) }]));
-  const batch = areaMappingMutations(records, 'Travel', null, 'Travel area', 'personal');
-  assert.equal(batch.mutations.length, 20); assert.equal(batch.remaining, 2);
-  const state = { records: { 'list:packing': source, ...records }, queue: [], draft: {}, after: 0 };
-  enqueue(state, 'alice', batch.mutations);
-  const next = areaMappingMutations(projected(state), 'Travel', batch.ref, '', 'personal');
-  assert.equal(next.mutations.length, 2); assert.equal(next.remaining, 0);
-  const editState = { records: { 'item:passport': item, 'list:packing': { ...source, version: 1, accountId: 'alice', deleted: false } }, queue: [], draft: {}, after: 0 };
+  const editState = { records: { 'item:passport': item, 'list:packing': { ...source, revisitDate: '2026-10-07', version: 1, accountId: 'alice', deleted: false } }, queue: [], draft: {}, after: 0 };
   const fields = { collectionRefs: [], listId: null, projectId: null };
   enqueue(editState, 'alice', [change('item', 'passport', 1, fields)]); rememberEdit(editState, item, fields);
   undoEdit(editState, 'alice', editState.undoEdit.operationId);
   assert.deepEqual(projected(editState)['item:passport'].collectionRefs, [ref('list', 'packing')]);
   const exported = deviceExport('alice', editState, {});
   assert.deepEqual(validateDeviceExport(exported).warnings, []);
+  assert.equal(exported.state.records['list:packing'].revisitDate, '2026-10-07');
 });

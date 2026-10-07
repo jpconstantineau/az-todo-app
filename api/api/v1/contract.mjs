@@ -85,7 +85,7 @@ export function fieldsFor(type, action, input) {
   const shared = ["title", "description", "workspaceId"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks"];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status"] : ["defaults", "kind", "parentRef"])];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate"] : ["defaults", "kind", "parentRef", "revisitDate"])];
   object(input, allowed, "fields");
   if (action === 'create') {
     if (!('workspaceId' in input)) throw new ValidationError('workspaceId is required.');
@@ -130,7 +130,7 @@ export function fieldsFor(type, action, input) {
       if (type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(value)) throw new ValidationError('Choose a draft, active, someday or completed project status.');
       result[key] = cleanTag(exactText(value, 64, key), key);
       if (!result[key]) throw new ValidationError("status is required.");
-    } else if (["dueDate", "startDate", "reviewDate"].includes(key)) result[key] = calendarDate(value, key);
+    } else if (["dueDate", "startDate", "reviewDate", "revisitDate"].includes(key)) result[key] = calendarDate(value, key);
     else if (key.endsWith("DateUtc")) {
       if (value !== null && (typeof value !== "string" || !value)) throw new ValidationError(`${key} must be a UTC date or null.`);
       result[key] = value === null ? null : utcDate(value);

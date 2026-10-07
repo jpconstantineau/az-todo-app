@@ -2,7 +2,7 @@
 
 ## Top-down planning — issue #139
 
-The **Plan** destination (`/#plan`) sits between List Workspace and Do. It uses
+The **Plan** destination (`/#plan`) sits between Organize and Do. It uses
 the existing Role, Area, Initiative, Program, Project and List hierarchy rather
 than introducing a goal schema or methodology setting. Choose a planning focus
 to see its path, outcome or notes, direct children, active projects and exact
@@ -50,8 +50,8 @@ Archived workspaces remain read-only. `context-add.test.mjs` covers these flows.
 ## Mobile workflow update — issue 45
 
 Below 768 CSS pixels, **Menu** (☰) expands account/preferences, Help, sync,
-reviews, export and defaults. The three destinations stay directly reachable;
-the visible **Lists** label retains the accessible name **List Workspace**.
+reviews, export and defaults. The destinations stay directly reachable; the
+stacked-layers link is named **Organize** at every width.
 The compact status disclosure uses text, a symbol and color for confirmed,
 pending, offline or failed saves. Expand it for account and offline-readiness
 details. Update instructions, errors, failed-save comparisons and storage
@@ -86,7 +86,7 @@ claim that those checks passed.
 
 Use three native links, /#capture, /#work and /#lists. Links provide ordinary keyboard navigation, opening in another tab and browser history without a router or extra server routes. The current link has aria-current=page, an underline and a border. The existing HashiCorp-derived tokens, native forms and responsive panels remain the design reference.
 
-Capture is the fresh-entry default and shows only the capture form. Your Work reviews all canonical actions with list/status filters. List Workspace requires a selected list and exposes its items, title/notes and defaults, plus New list. A missing/deleted list returns to Choose a list, never silently shows all work. Review and list selections/status filters are independent, account-bound draft metadata. URLs contain only the destination, never IDs or task text.
+Capture is the fresh-entry default and shows only the capture form. Process reviews all canonical actions with collection/status filters. Organize uses an accessible heading-like native collection selector and exposes the selected collection's items, title/notes, defaults and direct settings, plus New list. A missing/deleted collection returns to Choose collection, never silently shows all work. Review and collection selections/status filters are independent, account-bound draft metadata. URLs contain only the destination, never IDs or task text.
 
 **Inbox (unprocessed)** shows items whose status is `inbox` across all lists in
 the selected workspace. Choosing a processed status through editing or
@@ -109,9 +109,9 @@ On link activation and back/forward, focus moves to the destination heading (Cap
 
 ### Context, available time and energy (issue #75)
 
-List Workspace and Execute offer an optional **Context, time & energy**
+Organize and Execute offer an optional **Context, time & energy**
 disclosure. Its summary shows the number of active limits even when collapsed.
-In List Workspace, limits combine with status and list selection; in Execute,
+In Organize, limits combine with status and collection selection; in Execute,
 they narrow the selected collection. Process has no execution limits.
 **Reset context, time & energy** clears only those limits.
 
@@ -123,7 +123,7 @@ unrecognized time/energy values stay visible, as explained beside the controls.
 No metadata is required for capture or task actions.
 
 Choices use the existing account/workspace draft and remain independent between
-List Workspace and Execute. They survive offline reload without editing or queuing tasks.
+Organize and Execute. They survive offline reload without editing or queuing tasks.
 The complete module graph advances together for installed clients. Regression
 coverage lives in `api/test/execution-filters.test.mjs`, including custom values,
 combined scopes, reset, keyboard focus, offline reload and account/workspace isolation.
@@ -135,7 +135,7 @@ verification remain release gates.
 
 ### Include and exclude status filters (issue #49)
 
-In either Your Work or List Workspace, choose **Include statuses…** to show items
+In either Process or Organize, choose **Include statuses…** to show items
 matching any checked status, or **Exclude statuses…** to hide those statuses.
 Built-in and custom statuses are available. No checkboxes selected means no items
 for Include, and all statuses for Exclude. For example, exclude Completed and
@@ -155,7 +155,7 @@ remain unverified.
 
 ### Completed task visibility (issue #43)
 
-Your Work and List Workspace default to **Incomplete items**, hiding completed
+Process and Organize default to **Incomplete items**, hiding completed
 tasks across account, inbox, list, project and planned-day views. Waiting and
 deferred tasks remain visible. Choose **Completed** to review finished work or
 reopen an accidentally completed task; choose **All statuses** to see both.
@@ -173,7 +173,7 @@ work can be inspected with the project view and Completed filter.
 Automated navigation checks cover scoped filters, independent destinations,
 offline completion/reopening, saved choices, keyboard focus and account switching.
 Projects, outcomes and planned-day filters remain available in Your Work; list
-management stays in List Workspace. The planned day and review filters survive
+management stays in Organize. The planned day and review filters survive
 switching away and returning. Tests use production handlers with the existing
 in-memory Cosmos substitute; navigation scenarios are in
 `api/test/navigation.test.mjs`.
@@ -185,11 +185,11 @@ in-memory Cosmos substitute; navigation scenarios are in
 | Modal open during history navigation | Focus remains inside the editor, then returns to the visible destination on close |
 | Rejected saves and quota failures | Comparison, export and recovery text remain reachable from all destinations |
 | Account switch and expiry | Private content, selected list, filters and failure details disappear; changing the hash cannot bypass verification |
-| Deleted selected list | Choose a list / no-list state, without silently showing unrelated work |
+| Deleted selected collection | Choose collection / no-collection state, without silently showing unrelated work |
 | Keyboard and appearance | Native links, one aria-current marker, visible focus/underline, skip link and 44px targets |
 | Layout | No horizontal overflow at 320/390/768/1440/2560 CSS pixels in dark and light themes; 200% text enlargement at 720px also passes |
 
-Final screenshots: [Capture phone](design/navigation/navigation-capture-dark-390.png), [Your Work phone](design/navigation/navigation-work-dark-390.png), [List Workspace phone](design/navigation/navigation-lists-dark-390.png), [Capture desktop](design/navigation/navigation-capture-dark-1440.png), [Your Work desktop](design/navigation/navigation-work-dark-1440.png), [List Workspace desktop](design/navigation/navigation-lists-dark-1440.png), [light phone](design/navigation/navigation-work-light-390.png), [light desktop](design/navigation/navigation-work-light-1440.png). They include keyboard focus on the current destination.
+Final screenshots: [Capture phone](design/navigation/navigation-capture-dark-390.png), [Process phone](design/navigation/navigation-work-dark-390.png), [Organize phone](design/navigation/navigation-lists-dark-390.png), [Capture desktop](design/navigation/navigation-capture-dark-1440.png), [Process desktop](design/navigation/navigation-work-dark-1440.png), [Organize desktop](design/navigation/navigation-lists-dark-1440.png), [light phone](design/navigation/navigation-work-light-390.png), [light desktop](design/navigation/navigation-work-light-1440.png). They include keyboard focus on the current destination.
 
 From the repository root, reproduce screenshots with
 `NAVIGATION_SCREENSHOTS=docs/design/navigation` and run

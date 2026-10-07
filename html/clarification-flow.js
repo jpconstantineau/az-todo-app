@@ -1,4 +1,4 @@
-import { memberships, normalizeMembership } from './collection-model.js?v=2';
+import { memberships, normalizeMembership } from './collection-model.js?v=3';
 
 export const flowProposal = (item = {}) => ({
   view: 'classify', mode: 'file', title: item.title || '', parentRef: null, search: '', status: 'next',
