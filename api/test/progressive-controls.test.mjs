@@ -42,10 +42,12 @@ test('progressive controls keep capture and editor actions reachable without exp
   await context.setOffline(true);
   await page.locator('#captureText').fill('Prepare the room');
   await page.locator('#captureOptions > summary').click();
-  assert.equal(await page.locator('#capture button[type=submit]').count(), 1, 'capture has one Save button even with Notes open');
+  assert.equal(await page.locator('#capture button[type=submit]').count(), 1, 'capture has one Save button with options open');
   assert.equal(await page.locator('#capture [name=listId]').isVisible(), true);
   assert.equal(await page.locator('#capture [name=projectId], #capture [name=areas]').count(), 0);
-  assert.equal(await page.locator('#captureOptions > summary').innerText(), 'Notes, list, or context');
+  assert.equal(await page.locator('#captureOptions > summary').innerText(), 'Context or list');
+  assert.deepEqual(await page.locator('#captureOptions > label').evaluateAll(labels => labels.map(label => label.firstChild.textContent.trim())), ['Contexts', 'List', 'Or create a list']);
+  assert.equal(await page.locator('#capture [name=body]').count(), 0);
   assert.equal(await page.locator('#capture [name=contexts]').isVisible(), true);
   for (const name of ['dueLocal', 'dueDate', 'waitingOn', 'energy', 'timeRequired']) assert.equal(await page.locator(`#capture [name=${name}]`).count(), 0);
   await page.locator('#capture [name=newList]').fill('Home');
@@ -55,7 +57,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   assert.equal(await page.locator('#captureText').inputValue(), 'Prepare the room');
   assert.equal(await page.locator('#capture [name=newList]').inputValue(), 'Home');
   const savedCapture = await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture);
-  assert.deepEqual(Object.keys(savedCapture).sort(), ['body', 'contexts', 'listId', 'newList', 'text']);
+  assert.deepEqual(Object.keys(savedCapture).sort(), ['contexts', 'listId', 'newList', 'text']);
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await showView(page, 'work'); await page.locator('#view').selectOption('all');

@@ -228,20 +228,39 @@ test('invalid output and no-action notes stay recoverable; add/remove edits are 
   await clickControl(page.locator('#extractReview')); assert.equal(await page.locator('#extractionItems [name=title]').inputValue(), 'My manual task');
 });
 
-test('model download requires interaction; explicit notes survive suggestions and later edits block acceptance', { timeout: 60000 }, async t => {
+test('model download requires interaction and later capture edits block acceptance', { timeout: 60000 }, async t => {
   const { page } = await setup(t, { state: 'downloadable' });
   await page.locator('#captureText').fill(source);
-  await page.locator('#captureOptions > summary').click();
-  await page.locator('#capture [name=body]').fill('Keep this exact note.');
   await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
   assert.equal(await page.evaluate(() => aiCalls.active), true);
-  assert.match(await page.locator('#extractionItems [name=description]').first().inputValue(), /Keep this exact note\./);
+  assert.equal(await page.locator('#extractionItems [name=description]').first().inputValue(), 'About the quote');
   await page.locator('#extractClose').click();
-  await page.locator('#capture [name=body]').fill('A newer note');
+  await page.locator('#captureText').fill(source + '\nA newer capture line');
   await clickControl(page.locator('#extractReview')); await page.locator('#extractAccept').click();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Capture changed'));
   assert.equal(records().length, 0);
-  assert.equal((await local(page)).draft.capture.body, 'A newer note');
+  assert.equal((await local(page)).draft.capture.text, source + '\nA newer capture line');
+});
+
+test('a saved review accepts after legacy Capture Notes migrate into its comparison snapshot', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await page.locator('#captureText').fill(source);
+  await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
+  await page.locator('#extractClose').click();
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=9');
+    await transact('alice', local => {
+      local.draft.capture.body = 'Legacy supporting note.';
+      local.draft.extraction.draft.inputCapture.body = 'Legacy supporting note.';
+    });
+  });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), source + '\nLegacy supporting note.');
+  await clickControl(page.locator('#extractReview')); await page.locator('#extractAccept').click();
+  await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  const saved = await local(page);
+  assert.equal(saved.queue.length, 1);
+  assert.deepEqual(saved.draft.capture, {});
 });
 
 test('failed persistence never passes capture to inference or loses its recovery text', { timeout: 60000 }, async t => {
@@ -301,16 +320,14 @@ test('explicit AI success and failure retain the initiating keyboard control', {
 test('suggested batch review retains offline corrections and accepts once', { timeout: 60000 }, async t => {
   const { page, context } = await setup(t);
   const paragraph = 'One long thought '.repeat(30);
-  await page.evaluate(raw => { aiMode.raw = raw; }, output([suggestion({ title: 'My first task', description: '', evidence: paragraph, dueDate: '', dueTime: '' })]));
+  await page.evaluate(raw => { aiMode.raw = raw; }, output([suggestion({ title: 'My first task', description: 'Keep these review notes.', evidence: paragraph, dueDate: '', dueTime: '' })]));
   await page.locator('#captureText').fill(paragraph);
-  await page.locator('#captureOptions > summary').click();
-  await page.locator('#capture [name=body]').fill('Keep these original notes.');
   await context.setOffline(true);
   await page.locator('#extractStart').click();
   await page.locator('#extractionReview').waitFor();
   assert.match(await page.locator('#extractionHelp').textContent(), /unaccepted AI suggestions/);
   await page.locator('#extractionItems [name=title]').fill('My first task');
-  assert.equal(await page.locator('#extractionItems [name=description]').inputValue(), 'Keep these original notes.');
+  assert.equal(await page.locator('#extractionItems [name=description]').inputValue(), 'Keep these review notes.');
   await page.locator('#extractAdd').click();
   await page.locator('#extractionItems [name=title]').last().fill('My second task');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.extraction.draft.items[1].title === 'My second task');

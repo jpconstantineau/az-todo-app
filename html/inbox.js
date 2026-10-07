@@ -9,7 +9,7 @@ import { clarificationUI } from './clarification.js?v=5';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=8';
 import { setupBriefs } from './briefs.js?v=3';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=3';
 
@@ -21,9 +21,21 @@ let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null, recentTaskChange = null;
 let exportController;
+let splitFeedbackTimer;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
 const scopedRecords = () => workspaceRecords(projected(state), selectedWorkspace);
 const currentDraft = local => workspaceDraft(local, selectedWorkspace);
+function normalizeCaptureDraft(value = {}) {
+  const { body, ...captureDraft } = value || {};
+  if (typeof body === 'string' && body.trim()) captureDraft.text = captureDraft.text ? `${captureDraft.text}\n${body}` : body;
+  return Object.fromEntries(['text', 'contexts', 'listId', 'newList', 'original']
+    .filter(name => Object.hasOwn(captureDraft, name)).map(name => [name, captureDraft[name]]));
+}
+function normalizeExtractionDraft(value) {
+  const extractionDraft = value ? structuredClone(value) : value;
+  if (extractionDraft?.draft?.inputCapture) extractionDraft.draft.inputCapture = normalizeCaptureDraft(extractionDraft.draft.inputCapture);
+  return extractionDraft;
+}
 function availableWorkspaces() {
   return [{ id: PERSONAL, type: 'workspace', title: 'Personal', version: 0 }, ...Object.values(projected(state)).filter(record => record.type === 'workspace' && !record.deleted)];
 }
@@ -146,7 +158,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
     if (!owner || workspaceReadOnly()) throw new Error('Choose an active workspace to accept these suggestions.');
     if (JSON.stringify(captureDraft()) !== JSON.stringify(submitted.inputCapture)) throw new Error('Capture changed. Your reviewed suggestions are kept; return to capture before starting a new review.');
     const saved = await transact(owner, local => {
-      if (JSON.stringify(currentDraft(local).extraction?.draft) !== JSON.stringify(submitted) || JSON.stringify(currentDraft(local).capture) !== JSON.stringify(submitted.inputCapture)) throw new Error('This capture changed in another tab. Reload to inspect the saved draft.');
+      if (JSON.stringify(normalizeExtractionDraft(currentDraft(local).extraction)?.draft) !== JSON.stringify(submitted) || JSON.stringify(normalizeCaptureDraft(currentDraft(local).capture)) !== JSON.stringify(submitted.inputCapture)) throw new Error('This capture changed in another tab. Reload to inspect the saved draft.');
       const records = projected(local);
       // Stable task IDs survive reviewed edits. A stale tab cannot accept twice,
       // even after the operation is acknowledged or an accepted task is deleted.
@@ -433,9 +445,10 @@ function options(select, lists, first, keepMissing = false) {
 function restoreDraft() {
   capture.reset(); edit.reset(); editing = null; originalInput = undefined;
   const saved = projected(state)['workspace:' + selectedWorkspace]?.deleted ? {} : currentDraft(state);
-  fillValues(capture, saved.capture || {});
-  originalInput = saved.capture?.original;
-  extraction.restore(saved.extraction); restoreUtility(saved.collectionUtility);
+  const savedCapture = normalizeCaptureDraft(saved.capture);
+  fillValues(capture, savedCapture);
+  originalInput = savedCapture.original;
+  extraction.restore(normalizeExtractionDraft(saved.extraction)); restoreUtility(saved.collectionUtility);
   $('previewHelp').hidden = originalInput === undefined;
   navigation = emptyNavigation();
   Object.assign(navigation.work, saved.navigation?.work);
@@ -922,7 +935,11 @@ async function updateRecord(record, fields, close = false) {
   broadcast(); void sync(); return true;
 }
 
-capture.addEventListener('input', () => { extraction.changed(); void journal(); });
+function clearSplitFeedback() {
+  clearTimeout(splitFeedbackTimer); splitFeedbackTimer = undefined;
+  statusText('splitStatus', ''); $('splitStatus').hidden = true;
+}
+capture.addEventListener('input', () => { clearSplitFeedback(); extraction.changed(); void journal(); });
 edit.addEventListener('input', () => { void journal(); });
 capture.elements.listId.addEventListener('change', refreshOptions);
 edit.elements.listId.addEventListener('change', refreshOptions);
@@ -985,6 +1002,13 @@ edit.addEventListener('submit', event => {
   });
 });
 $('previewSplit').onclick = () => {
+  if (!/[,;]/.test(capture.elements.text.value)) {
+    clearSplitFeedback();
+    statusText('splitStatus', 'No commas or semicolons found in the capture box.'); $('splitStatus').hidden = false;
+    splitFeedbackTimer = setTimeout(clearSplitFeedback, 5000);
+    capture.elements.text.focus(); return;
+  }
+  clearSplitFeedback();
   originalInput ??= capture.elements.text.value;
   capture.elements.text.value = capture.elements.text.value.split(/[,;\n]+/).map(line => line.trim()).filter(Boolean).join('\n');
   $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
