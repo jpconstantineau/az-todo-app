@@ -2,8 +2,8 @@
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 import { readableBrief } from './briefs.js?v=3';
-import { purgeWorkspaceState } from './workspaces.js?v=3';
-const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision'];
+import { purgeWorkspaceState } from './workspaces.js?v=4';
+const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
   'collectionRefs', 'parentRef', 'kind', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
@@ -11,7 +11,7 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
   'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
-  'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
+  'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
   'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates'];
 
 export const validateDeviceExport = value => validateExport(value);
@@ -56,6 +56,18 @@ function validateExport(value, server = false) {
       Number.isSafeInteger(entry.index) && entry.index >= 0 && Number.isSafeInteger(entry.recordVersion) && entry.recordVersion >= 0 &&
       ['retain', 'drop', 'defer', 'complete', 'next', 'unavailable', 'undo'].includes(entry.choice) && object(entry.before) && object(entry.changes),
     `${path}: invalid review decision shape.`);
+  };
+  const reviewReflection = (entry, path, stored = false) => {
+    const promptNames = ['mentalSweep', 'calendarCheck', 'roleBalance', 'planReality'];
+    require(!stored || entry.deleted !== true, `${path}: review reflections are immutable.`);
+    require(typeof entry.reviewId === 'string' && entry.reviewId.length > 0 &&
+      (entry.previousReflectionId === undefined || typeof entry.previousReflectionId === 'string' && entry.previousReflectionId.length > 0) &&
+      entry.promptVersion === 1 && object(entry.prompts) && Object.keys(entry.prompts).length === promptNames.length &&
+      promptNames.every(name => object(entry.prompts[name]) && ['unanswered', 'answered', 'skipped'].includes(entry.prompts[name].state) &&
+        typeof entry.prompts[name].notes === 'string' && entry.prompts[name].notes.length <= 4000) &&
+      typeof entry.conclusion === 'string' && entry.conclusion.length <= 4000 && Array.isArray(entry.followUpIds) && entry.followUpIds.length <= 50 &&
+      entry.followUpIds.every(id => typeof id === 'string' && id.length > 0) && new Set(entry.followUpIds).size === entry.followUpIds.length,
+    `${path}: invalid review reflection shape.`);
   };
   const unknown = (entry, allowed, path) => {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
@@ -116,6 +128,7 @@ function validateExport(value, server = false) {
     if (entry.type === 'clarification') clarification(entry, path);
     if (entry.type === 'review') review(entry, path, true);
     if (entry.type === 'reviewDecision') reviewDecision(entry, path, true);
+    if (entry.type === 'reviewReflection') reviewReflection(entry, path, true);
     if (!knownTypes.includes(entry.type)) warnings.push(`${path}: record type ${entry.type} preserved, interpretation unsupported`);
     unknown(entry, recordFields, path);
   }
@@ -148,6 +161,10 @@ function validateExport(value, server = false) {
       if (mutation.type === 'reviewDecision') {
         require(mutation.action === 'create' && object(mutation.fields), `${path}: review decision mutation must create immutable history.`);
         reviewDecision(mutation.fields, `${path}.fields`);
+      }
+      if (mutation.type === 'reviewReflection') {
+        require(mutation.action === 'create' && object(mutation.fields), `${path}: review reflection mutation must create immutable history.`);
+        reviewReflection(mutation.fields, `${path}.fields`);
       }
       if (mutation.action === 'create') currentShape({ type: mutation.type, ...mutation.fields }, `${path}.fields`);
       if (mutation.fields) unknown(mutation.fields, recordFields, `${path}.fields`);
@@ -225,6 +242,14 @@ const label = key => key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, lette
 function fields(value) {
   return Object.entries(value).map(([key, entry]) => `${label(key)}: ${typeof entry === 'string' ? entry : JSON.stringify(entry, null, 2)}`).join('\n');
 }
+function readableReflection(record, records) {
+  const review = records[`review:${record.reviewId}`];
+  const labels = { mentalSweep: 'Mental sweep', calendarCheck: 'Calendar check', roleBalance: 'Roles and outcomes', planReality: 'Plan and reality' };
+  return [`Review: ${record.reviewId}`, `Review date: ${review?.reviewDay || 'Unavailable'}`,
+    `Previous reflection: ${record.previousReflectionId || '(first snapshot)'}`,
+    ...Object.entries(labels).map(([name, title]) => `${title}: ${record.prompts[name].state}\n${record.prompts[name].notes || '(no notes)'}`),
+    `Conclusion: ${record.conclusion || '(none)'}`, `Follow-up action IDs: ${record.followUpIds.join(', ') || '(none)'}`].join('\n');
+}
 
 export function readableExport(value) {
   const server = value?.format === 'az-todo-account-export';
@@ -240,7 +265,8 @@ export function readableExport(value) {
     lines.push('', heading);
     const records = Object.values(value.state.records).filter(record => record.deleted === deleted);
     if (!records.length) lines.push('(none)');
-    for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`, record.type === 'brief' && record.content ? readableBrief(record) : fields(record));
+    for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`,
+      record.type === 'brief' && record.content ? readableBrief(record) : record.type === 'reviewReflection' ? readableReflection(record, value.state.records) : fields(record));
   }
   if (server) return lines.join('\n') + '\n';
   lines.push('', 'PENDING SAVES (not server-confirmed)');

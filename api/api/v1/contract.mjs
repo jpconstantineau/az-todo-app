@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ValidationError, text, cleanTag, utcDate } from "../shared/validate.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
 import { calendarDate } from "./workflow.mjs";
-import { reviewFields, reviewDecisionFields } from "./reviews.mjs";
+import { reviewFields, reviewDecisionFields, reviewReflectionFields } from "./reviews.mjs";
 import { clarificationFields } from "./clarification.mjs";
 import { briefFields } from "./briefs.mjs";
 import { dailyPlanFields, effortEstimate } from './daily-plans.mjs';
@@ -35,7 +35,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "brief", "planPreference", "dailyPlan", "dailyPlanRevision"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
+  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
   return value;
 }
 function exactText(value, max, field) {
@@ -55,6 +55,7 @@ function link(value, field) {
 export function fieldsFor(type, action, input) {
   if (['planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(type)) return dailyPlanFields(type, action, input);
   if (type === 'reviewDecision') return reviewDecisionFields(action, input);
+  if (type === 'reviewReflection') return reviewReflectionFields(action, input);
   if (type === 'workspace') {
     object(input, ['title', 'archived'], 'fields');
     const result = {};

@@ -1,6 +1,7 @@
 export const PERSONAL = 'personal';
 export function workspaceOf(record, records) {
   if (record?.type === 'reviewDecision') return records[`review:${record.reviewId}`]?.workspaceId;
+  if (record?.type === 'reviewReflection') return records[`review:${record.reviewId}`]?.workspaceId;
   if (record?.type === 'clarification') return records[`item:${record.id}`]?.workspaceId;
   if (record?.type === 'brief') return records[`${record.subjectType}:${record.subjectId}`]?.workspaceId;
   return record?.workspaceId;

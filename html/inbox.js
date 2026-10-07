@@ -1,13 +1,13 @@
 import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=2';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=3';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=8';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=9';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=10';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=11';
 import { clarificationUI } from './clarification.js?v=5';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
-import { setupReviews } from './reviews.js?v=7';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=8';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
@@ -208,6 +208,10 @@ let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'inbox', status: '' }, lists: { view: '', status: '' }, plan: { focus: '', week: localMonday() }, execute: { kind: 'list', view: '' } });
 let navigation = emptyNavigation();
 const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, workspaceId: () => selectedWorkspace, journal,
+  openPlan: day => {
+    if (day) { $('day').value = day; $('planDay').value = day; }
+    location.hash = 'plan';
+  },
   edit: record => {
     if (editing && (key(editing) !== key(record) || editing.version !== record.version) && JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields)) {
       showDialog($('editor')); error('Finish saving this edit before editing another record. Your draft is still here.');
@@ -215,7 +219,7 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
     }
     openEditor(record);
   },
-  clarify: record => clarification.open(record), addAction: addContextItem, save: async mutations => {
+  clarify: record => clarification.open(record), addAction: addContextItem, save: async (mutations, nextDraft) => {
   const owner = accountId, generation = accountGeneration;
   if (!owner) throw new Error('Sign in to resume this review.');
   const saved = await transact(owner, local => {
@@ -226,6 +230,7 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
       if ((current?.version || 0) !== mutation.expectedVersion || current?.deleted) throw new Error('This review or record changed. Reopen the review and inspect the latest state before deciding.');
     }
     enqueue(local, owner, mutations);
+    if (nextDraft) currentDraft(local).review = nextDraft.review;
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save remains with its original account.');
   state = saved; clearError(); render(); broadcast(); void sync();
@@ -610,9 +615,10 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
+    const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
     if (planConflict) {
       const projectedRecords = projected(state);
       const describePlan = (record, revision, pending) => {
@@ -631,8 +637,8 @@ function render() {
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n')
       : 'The move plan and its acknowledged progress remain saved on this device.';
     const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
-    $('resolve').hidden = move || !failed?.receipt || !planConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
-    $('resolve').textContent = planConflict ? 'Apply my pending plan to latest version' : 'Apply pending edit to latest version';
+    $('resolve').hidden = move || !failed?.receipt || !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').textContent = planConflict ? 'Apply my pending plan to latest version' : reflectionConflict ? 'Merge pending reflection after accepted snapshot' : 'Apply pending edit to latest version';
     $('discard').hidden = move;
     $('discard').textContent = failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
@@ -1440,12 +1446,14 @@ $('resumeMove').onclick = guard(async () => {
 $('resolve').onclick = guard(async () => {
   const owner = accountId, id = state.queue[0].operation.operationId;
   const reviewed = structuredClone(state.records);
+  const reflectionMutations = await mergeReflectionConflict(state.queue[0], state.records);
   if (!confirm('Apply this pending edit to the latest server version shown?')) return;
   const saved = await transact(owner, local => {
     const entry = local.queue[0];
     if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');
     const planConflict = entry.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
-    const mutations = planConflict ? [] : entry.operation.mutations.map(mutation => {
+    const reflectionConflict = !!reflectionMutations;
+    const mutations = planConflict || reflectionConflict ? [] : entry.operation.mutations.map(mutation => {
       const record = local.records[key(mutation)];
       if (mutation.action !== 'update' || !record || record.deleted) throw new Error('Deleted or missing records cannot be overwritten. Export your pending text to recover it separately.');
       if (record.version !== reviewed[key(mutation)]?.version) throw new Error('Server version changed again. Review the comparison before applying your edit.');
@@ -1476,12 +1484,29 @@ $('resolve').onclick = guard(async () => {
         } });
       }
     }
+    if (reflectionConflict) {
+      const pending = entry.operation.mutations.find(mutation => mutation.type === 'reviewReflection');
+      const server = local.records[key(pending)];
+      if (!server || server.deleted || server.version !== reviewed[key(pending)]?.version) throw new Error('The accepted reflection changed again. Review the comparison before merging.');
+      for (const mutation of reflectionMutations) {
+        if (local.records[key(mutation)]) throw new Error('The merged reflection or follow-up now exists. Sync and review the latest history before trying again.');
+      }
+      mutations.push(...reflectionMutations);
+    }
     local.queue.shift();
     const later = local.queue; local.queue = [];
     enqueue(local, owner, mutations); local.queue.push(...later);
+    if (reflectionConflict) {
+      const reflection = reflectionMutations.find(mutation => mutation.type === 'reviewReflection');
+      const savedDraft = currentDraft(local).review?.reflection;
+      if (savedDraft?.rootReviewId === reflection.fields.reviewId) Object.assign(savedDraft, {
+        baseReflectionId: reflection.id, prompts: structuredClone(reflection.fields.prompts), conclusion: reflection.fields.conclusion, followUp: null
+      });
+    }
   });
   if (owner !== accountId) return;
   state = saved;
+  if (reflectionMutations) reviews.restore(currentDraft(state).review);
   render(); broadcast(); void sync();
 });
 $('discard').onclick = guard(async () => {
