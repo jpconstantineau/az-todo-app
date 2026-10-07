@@ -4,6 +4,7 @@ import { documents, startServer } from './harness.mjs';
 import { currentCreate } from './current-record.mjs';
 import { reflectionId } from '../api/v1/reviews.mjs';
 import { deviceExport, readableExport, validateDeviceExport } from '../../html/inbox-export.js';
+import { mergeReflectionConflict, reviewReflectionId } from '../../html/reviews.js';
 
 const create = currentCreate;
 const prompts = (notes = '') => ({
@@ -43,10 +44,15 @@ test('immutable review reflections preserve the frozen review and canonical foll
   assert.deepEqual(state[`reviewReflection:${firstId}`].followUpIds, [followUpId]);
   assert.equal(state[`item:${followUpId}`].status, 'inbox');
 
-  const collision = await post({ ...first, operationId: crypto.randomUUID() });
+  const collisionOperation = { ...first, operationId: crypto.randomUUID() };
+  const collision = await post(collisionOperation);
   assert.equal(collision.status, 409);
   assert.equal(collision.body.status, 'conflict');
   assert.equal(collision.body.conflicts[0].current.id, firstId);
+  const recovery = deviceExport('alice', { records: state, queue: [{ operation: collisionOperation, failure: 'Another edit conflicts', receipt: collision.body }],
+    draft: { review: { reflection: { rootReviewId: 'root', baseReflectionId: null, prompts: prompts('Pending draft'), conclusion: 'Pending draft', followUp: null } } }, after: 0 }, {});
+  assert.deepEqual(validateDeviceExport(recovery).warnings, []);
+  assert.match(readableExport(recovery), /Conflict\/receipt[\s\S]*Call the venue/);
 
   await commit(op([{ type: 'item', id: followUpId, action: 'delete', expectedVersion: 1 }]));
   const secondId = reflectionId('root', firstId);
@@ -60,6 +66,23 @@ test('immutable review reflections preserve the frozen review and canonical foll
   assert.deepEqual(validateDeviceExport(exported).warnings, []);
   const readable = readableExport(exported);
   for (const expected of ['Review date: 2026-10-07', 'Mental sweep: answered', 'Accepted conclusion survives', followUpId, 'Previous reflection']) assert.match(readable, new RegExp(expected));
+});
+
+test('same-predecessor reflection conflicts merge accepted conclusions and stable follow-ups into the next deterministic revision', async () => {
+  const acceptedId = await reviewReflectionId('root');
+  const accepted = { type: 'reviewReflection', id: acceptedId, reviewId: 'root', promptVersion: 1, prompts: prompts('Accepted note'),
+    conclusion: 'Accepted conclusion', followUpIds: ['accepted-action'], version: 1, deleted: false };
+  const pending = { type: 'reviewReflection', id: acceptedId, action: 'create', expectedVersion: 0,
+    fields: { ...fields('root', null, ['pending-action'], 'Pending note'), prompts: { ...prompts(), planReality: { state: 'answered', notes: 'Pending note' } }, conclusion: 'Pending conclusion' } };
+  const item = create('item', 'pending-action', { title: 'Pending action' });
+  const merged = await mergeReflectionConflict({ operation: { mutations: [pending, item] } }, { [`reviewReflection:${acceptedId}`]: accepted });
+  assert.equal(merged[0].id, await reviewReflectionId('root', acceptedId));
+  assert.equal(merged[0].fields.previousReflectionId, acceptedId);
+  assert.deepEqual(merged[0].fields.followUpIds, ['accepted-action', 'pending-action']);
+  assert.equal(merged[0].fields.conclusion, 'Accepted conclusion\n\nPending conclusion');
+  assert.equal(merged[0].fields.prompts.mentalSweep.notes, 'Accepted note');
+  assert.equal(merged[0].fields.prompts.planReality.notes, 'Pending note');
+  assert.equal(merged[1].id, 'pending-action');
 });
 
 test('reflection trust boundaries reject updates, forged lineage, foreign roots and new cross-workspace links', async t => {
