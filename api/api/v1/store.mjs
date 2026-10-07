@@ -5,6 +5,7 @@ import { defaultSettings } from "../shared/defaults.mjs";
 import { applyWorkflow } from "./workflow.mjs";
 import { validateReview, validateReviewDecision } from "./reviews.mjs";
 import { validateBrief } from "./briefs.mjs";
+import { validateDailyPlan, validateDailyPlanRevision } from './daily-plans.mjs';
 
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
 import { erasedWorkspaceIds } from './workspace-erasure.mjs';
@@ -59,7 +60,7 @@ async function validateCollections(record, lookup) {
   }
 }
 function validateCurrentShape(record) {
-  if (['item', 'list', 'project', 'review'].includes(record.type) && typeof record.workspaceId !== 'string') {
+  if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(record.type) && typeof record.workspaceId !== 'string') {
     throw new ValidationError('workspaceId is required.');
   }
   if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
@@ -118,9 +119,14 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const lookup = async (type, id) => records.find(r => r.type === type && r.id === id) ?? (await read(accountId, recordId(type, id)))?.record;
     for (const [i, record] of records.entries()) {
       validateCurrentShape(record);
+      if (record.type === 'planPreference' && (record.id !== record.workspaceId || current[i]?.record && record.workspaceId !== current[i].record.workspaceId)) {
+        throw new ValidationError('Plan preference identity must match its workspace.');
+      }
       await validateWorkspace(record, current[i]?.record, lookup);
       await validateCollections(record, lookup);
       if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
+      if (record.type === 'dailyPlan') await validateDailyPlan(record, current[i]?.record, records, lookup, input.mutations);
+      if (record.type === 'dailyPlanRevision') validateDailyPlanRevision(record, current[i]?.record, records);
       if (record.type === 'brief') await validateBrief(record, current[i]?.record,
         async (type, id) => (type === 'brief' ? undefined : records.find(r => r.type === type && r.id === id)) ?? (await read(accountId, recordId(type, id)))?.record);
       if (record.type === 'review') await validateReview(record, current[i]?.record, input.mutations, records,

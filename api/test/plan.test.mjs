@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { inPlanningFocus, localMonday, membershipPaths, resolvePlanningFocus } from '../../html/plan.js';
+import { estimateSummary, inPlanningFocus, localMonday, membershipPaths, orderedDayItems, resolvePlanningFocus } from '../../html/plan.js';
 import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { currentCreate } from './current-record.mjs';
@@ -21,6 +21,17 @@ test('plan helpers use local Mondays, every membership path and a live-parent fa
   assert.deepEqual(membershipPaths(item, records), ['Role / Initiative / Project', 'Role / Initiative']);
   assert.equal(inPlanningFocus(item, 'list:role', records), true);
   assert.equal(resolvePlanningFocus('project:project', records), 'list:initiative');
+  const dayRecords = {
+    'dailyPlan:personal_2026-10-07': { actionIds: ['two'] },
+    'item:one': { type: 'item', id: 'one', workspaceId: 'personal', plannedDay: '2026-10-07', createdUtc: '2026-01-01', effortEstimate: { scale: 'tshirt', value: 'M' } },
+    'item:two': { type: 'item', id: 'two', workspaceId: 'personal', plannedDay: '2026-10-07', createdUtc: '2026-01-02', effortEstimate: { scale: 'fibonacci', value: 8 } },
+    'item:three': { type: 'item', id: 'three', workspaceId: 'personal', plannedDay: '2026-10-07', createdUtc: '2026-01-03' }
+  };
+  const ordered = orderedDayItems(dayRecords, 'personal', '2026-10-07');
+  assert.deepEqual(ordered.map(entry => entry.id), ['two', 'one', 'three'], 'legacy members follow saved IDs in stable order');
+  assert.equal(estimateSummary(ordered, 'tshirt'), '1 M · 1 unestimated · 1 previous-scale');
+  assert.equal(estimateSummary(ordered, 'fibonacci'), '8 points · 1 unestimated · 1 previous-scale');
+  assert.equal(estimateSummary(ordered, 'none'), '');
 });
 
 test('Plan routes through hierarchy, weekly offline intent and the existing day view without cloning actions', { timeout: 90000 }, async t => {
@@ -105,7 +116,7 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
   assert.equal(await page.getByRole('checkbox', { name: 'Plan Unfiled next for this week', exact: true }).count(), 1);
 
   await page.locator('#planDay').fill('2030-05-06');
-  assert.deepEqual(await page.locator('#planDayActions article').evaluateAll(rows => rows.map(row => row.dataset.id)), ['day']);
+  assert.deepEqual(await page.locator('#planDayActions > li[data-id]').evaluateAll(rows => rows.map(row => row.dataset.id)), ['day']);
   assert.doesNotMatch(await page.locator('#planDayActions').innerText(), /Nested next/);
   await page.locator('#planOpenDay').click();
   await page.waitForFunction(() => document.querySelector('#yourWork').getAttribute('aria-current') === 'page');
@@ -173,4 +184,127 @@ test('Plan preferences stay isolated by workspace and account while archived wor
   assert.equal(await page.locator('#planFocus').inputValue(), '');
   assert.equal(await page.locator('#planFocus option').count(), 1);
   assert.doesNotMatch(await page.locator('#plan').innerText(), /Personal role|Work role|Work next/);
+});
+
+test('Day builds an ordered offline plan with relative estimates, assessment history and title-only add', { timeout: 90000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 320, height: 900 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
+  await page.goto(server.url + '/#plan'); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.locator('#planDay').fill('2030-05-06');
+  assert.equal(await page.locator('#planEstimationMethod').inputValue(), 'none');
+  await page.locator('#planQuickAdd input[name="title"]').fill('First day action');
+  await page.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=7')).transact('alice');
+    return Object.values(local.records).some(record => record.type === 'dailyPlan' && record.planDay === '2030-05-06') ||
+      local.queue.some(entry => entry.operation.mutations.some(mutation => mutation.type === 'dailyPlan' && mutation.fields.planDay === '2030-05-06'));
+  });
+  await page.locator('#planQuickAdd input[name="title"]').waitFor();
+  await page.waitForFunction(() => document.querySelector('#planQuickAdd input[name="title"]').value === '' && document.querySelectorAll('#planDayActions > li[data-id]').length === 1);
+  await page.locator('#planQuickAdd input[name="title"]').fill('Second day action');
+  await page.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=7')).transact('alice');
+    return Object.values((await import('/inbox-store.js?v=7')).projected(local)).some(record => record.title === 'Second day action');
+  });
+  await confirmed(page);
+  assert.deepEqual(await page.locator('#planDayActions > li[data-id] .day-plan-content > button').allTextContents(), ['First day action', 'Second day action']);
+  assert.match(await page.locator('#planDayActions').innerText(), /No permanent priority/);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+
+  await page.locator('#planEstimationMethod').selectOption('tshirt'); await confirmed(page);
+  await page.getByLabel('Estimate First day action using T-shirt').selectOption('L'); await confirmed(page);
+  assert.match(await page.locator('#planLoadSummary').textContent(), /1 L · 1 unestimated · 0 previous-scale/);
+  await page.locator('#planLoadAssessment').selectOption('full'); await confirmed(page);
+  await page.getByLabel('Estimate Second day action using T-shirt').selectOption('M'); await confirmed(page);
+  assert.equal(await page.locator('#planLoadAssessment').inputValue(), 'needs_reassessment');
+  await page.locator('#planHistory').getByText('Plan history').click();
+  assert.match(await page.locator('#planHistoryEntries').innerText(), /Full → Needs reassessment/);
+  await page.locator('#planEstimationMethod').selectOption('fibonacci'); await confirmed(page);
+  assert.match(await page.locator('#planLoadSummary').textContent(), /0 points · 0 unestimated · 2 previous-scale/);
+
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Move Second day action up from position 2' }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).queue.length > 0);
+  assert.deepEqual(await page.locator('#planDayActions > li[data-id] .day-plan-content > button').allTextContents(), ['Second day action', 'First day action']);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#planDay').inputValue(), '2030-05-06');
+  assert.deepEqual(await page.locator('#planDayActions > li[data-id] .day-plan-content > button').allTextContents(), ['Second day action', 'First day action']);
+  assert.match(await page.locator('#planStatus').textContent(), /Working offline/);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
+
+  const items = documents.filter(document => document.record?.type === 'item').map(document => document.record);
+  assert.equal(items.length, 2);
+  assert.ok(items.every(item => item.plannedDay === '2030-05-06' && item.priority === null && item.timeRequired === null));
+  const plan = documents.find(document => document.record?.type === 'dailyPlan')?.record;
+  assert.deepEqual(plan.actionIds, items.sort((a, b) => a.title.localeCompare(b.title)).reverse().map(item => item.id));
+  assert.ok(documents.filter(document => document.record?.type === 'dailyPlanRevision').length >= 5);
+
+  const carryover = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
+    body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'carryover-fixture', mutations: [currentCreate('item', 'carryover', {
+      title: 'Keep identity', status: 'waiting', waitingOn: 'Alex', plannedDay: '2030-05-05', dueDate: '2030-05-20', priority: 'high', timeRequired: '45m'
+    })] }) });
+  assert.equal(carryover.status, 200, await carryover.text());
+  await clickControl(page.locator('#sync'));
+  await page.getByRole('button', { name: 'Move to selected date: Keep identity' }).waitFor();
+  await page.getByRole('button', { name: 'Move to selected date: Keep identity' }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).projected(await (await import('/inbox-store.js?v=7')).transact('alice')))['item:carryover']?.plannedDay === '2030-05-06');
+  await confirmed(page);
+  const moved = documents.find(document => document.record?.id === 'carryover').record;
+  assert.deepEqual({ status: moved.status, waitingOn: moved.waitingOn, dueDate: moved.dueDate, priority: moved.priority, timeRequired: moved.timeRequired, plannedDay: moved.plannedDay },
+    { status: 'waiting', waitingOn: 'Alex', dueDate: '2030-05-20', priority: 'high', timeRequired: '45m', plannedDay: '2030-05-06' });
+  assert.ok(documents.some(document => document.record?.type === 'dailyPlan' && document.record.planDay === '2030-05-05'));
+  assert.ok(documents.find(document => document.record?.type === 'dailyPlan' && document.record.planDay === '2030-05-06').record.carryoverDecisions.some(decision => decision.actionId === 'carryover' && decision.choice === 'move'));
+});
+
+test('Day exposes whole-plan stale conflicts and preserves unrelated queued work through both choices', { timeout: 90000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const day = '2031-02-03', planId = `personal_${day}`, before = { actionIds: [], loadAssessment: 'needs_assessment' }, initial = { actionIds: ['one', 'two'], loadAssessment: 'needs_assessment' };
+  const seed = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({
+    apiVersion: 1, accountId: 'alice', operationId: 'seed-conflict-plan', mutations: [
+      currentCreate('item', 'one', { title: 'One', status: 'next', plannedDay: day }), currentCreate('item', 'two', { title: 'Two', status: 'next', plannedDay: day }),
+      { type: 'dailyPlan', id: planId, action: 'create', expectedVersion: 0, fields: { workspaceId: 'personal', planDay: day, ...initial, carryoverDecisions: [], revisionHead: 'seed-plan-revision', revisionCount: 1 } },
+      { type: 'dailyPlanRevision', id: 'seed-plan-revision', action: 'create', expectedVersion: 0, fields: { workspaceId: 'personal', planId, planDay: day, sequence: 1, operationKind: 'add', before, after: initial, carryoverDecision: null,
+        estimates: initial.actionIds.map(actionId => ({ actionId, estimate: null })) } }
+    ]
+  }) });
+  assert.equal(seed.status, 200, await seed.text());
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const contextA = await browser.newContext(), contextB = await browser.newContext();
+  const pageA = await contextA.newPage(), pageB = await contextB.newPage();
+  for (const page of [pageA, pageB]) {
+    await page.goto(server.url + '/#plan'); await page.locator('#workspace').waitFor(); await confirmed(page); await page.locator('#planDay').fill(day);
+    assert.deepEqual(await page.locator('#planDayActions > li[data-id]').evaluateAll(rows => rows.map(row => row.dataset.id)), ['one', 'two']);
+  }
+
+  await pageA.getByRole('button', { name: 'Move Two up from position 2' }).click();
+  await waitForBrowser(pageA, async id => (await (await import('/inbox-store.js?v=7')).transact('alice')).records[`dailyPlan:${id}`]?.version === 2, planId); await confirmed(pageA);
+  await pageB.locator('#planLoadAssessment').selectOption('full');
+  await pageB.locator('#failure').waitFor();
+  assert.match(await pageB.locator('#comparison').textContent(), /My pending plan[\s\S]*Load assessment: full[\s\S]*Server plan[\s\S]*1\. Two/);
+  pageB.once('dialog', dialog => dialog.accept()); await pageB.locator('#discard').click(); await pageB.locator('#failure').waitFor({ state: 'hidden' });
+  assert.deepEqual(await pageB.locator('#planDayActions > li[data-id]').evaluateAll(rows => rows.map(row => row.dataset.id)), ['two', 'one']);
+
+  await pageA.locator('#planLoadAssessment').selectOption('full');
+  await waitForBrowser(pageA, async id => (await (await import('/inbox-store.js?v=7')).transact('alice')).records[`dailyPlan:${id}`]?.version === 3, planId); await confirmed(pageA);
+  await pageB.getByRole('button', { name: 'Move Two down from position 1' }).click();
+  await pageB.locator('#failure').waitFor();
+  await pageB.locator('#planDay').fill('2031-02-04');
+  await pageB.locator('#planQuickAdd input[name="title"]').fill('Unrelated next day');
+  await pageB.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
+  await waitForBrowser(pageB, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).queue.length === 2);
+  pageB.once('dialog', dialog => dialog.accept()); await pageB.locator('#resolve').click();
+  await waitForBrowser(pageB, async id => {
+    const local = await (await import('/inbox-store.js?v=7')).transact('alice');
+    return local.records[`dailyPlan:${id}`]?.version === 4 && Object.values(local.records).some(record => record.title === 'Unrelated next day') && local.queue.length === 0;
+  }, planId); await confirmed(pageB);
+  const serverPlan = documents.find(document => document.record?.type === 'dailyPlan' && document.record.id === planId).record;
+  assert.deepEqual(serverPlan.actionIds, ['one', 'two']);
+  assert.equal(serverPlan.loadAssessment, 'needs_reassessment', 'rebasing changed membership resets the latest accepted assessment');
+  assert.ok(documents.some(document => document.record?.type === 'item' && document.record.title === 'Unrelated next day'));
 });

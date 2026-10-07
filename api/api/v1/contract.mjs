@@ -5,6 +5,7 @@ import { calendarDate } from "./workflow.mjs";
 import { reviewFields, reviewDecisionFields } from "./reviews.mjs";
 import { clarificationFields } from "./clarification.mjs";
 import { briefFields } from "./briefs.mjs";
+import { dailyPlanFields, effortEstimate } from './daily-plans.mjs';
 
 import { collectionKinds, validateRef, validateRefs } from './collection-model.mjs';
 
@@ -34,7 +35,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "brief"].includes(value)) throw new ValidationError("type must be workspace, list, item, project, settings, clarification, review, reviewDecision or brief.");
+  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "brief", "planPreference", "dailyPlan", "dailyPlanRevision"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
   return value;
 }
 function exactText(value, max, field) {
@@ -52,6 +53,7 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (['planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(type)) return dailyPlanFields(type, action, input);
   if (type === 'reviewDecision') return reviewDecisionFields(action, input);
   if (type === 'workspace') {
     object(input, ['title', 'archived'], 'fields');
@@ -81,7 +83,7 @@ export function fieldsFor(type, action, input) {
   }
   const shared = ["title", "description", "workspaceId"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
-  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
+  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status"] : ["defaults", "kind", "parentRef"])];
   object(input, allowed, "fields");
   if (action === 'create') {
@@ -122,6 +124,7 @@ export function fieldsFor(type, action, input) {
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
     else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
     else if (["plannedDay", "plannedWeek"].includes(key)) result[key] = calendarDate(value, key);
+    else if (key === 'effortEstimate') result[key] = effortEstimate(value);
     else if (key === "status") {
       if (type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(value)) throw new ValidationError('Choose a draft, active, someday or completed project status.');
       result[key] = cleanTag(exactText(value, 64, key), key);
@@ -144,7 +147,7 @@ export function fieldsFor(type, action, input) {
       ...(type === 'project' ? { outcome: '' } : {}),
       ...(type === "item" ? { collectionRefs: [], listId: null, projectId: null, plannedDay: null, plannedWeek: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,
-        priority: null, referenceLinks: [] } : {}), ...result
+        priority: null, effortEstimate: null, referenceLinks: [] } : {}), ...result
     };
   }
   if (!Object.keys(result).length) throw new ValidationError("fields must contain an edit.");
