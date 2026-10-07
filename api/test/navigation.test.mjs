@@ -525,7 +525,7 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   await clickControl(page.getByRole('button', { name: 'Clarify filed', exact: true, includeHidden: true }));
   await page.getByRole('button', { name: 'Action', exact: true }).click();
   await page.locator('[data-proposal=title]').fill('filed');
-  await page.getByRole('button', { name: 'Save without a new destination', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Session summary');
   await page.locator('#clarifyStop').click();
   assert.deepEqual(await rows(), []);

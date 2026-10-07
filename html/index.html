@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=18" defer></script>
+  <script src="/pwa.js?v=19" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=18"></script>
+  <script type="module" src="/inbox.js?v=19"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -360,15 +360,14 @@
       </form>
     </dialog>
     <dialog class="side-panel clarify-sheet" id="clarifier" aria-labelledby="clarifyHeading">
-      <div class="clarify-header"><div><p class="eyebrow">One item at a time</p><h2 id="clarifyHeading">Clarify</h2></div><p id="clarifyProgress"></p></div>
-      <h3 id="clarifyTask"></h3>
-      <details><summary>Original</summary><pre id="clarifyOriginal"></pre></details>
-      <h3 id="clarifyQuestion" tabindex="-1">What is this?</h3><p id="clarifyHelp"></p>
-      <p id="clarifyError" role="alert" hidden></p><p id="clarifyDraftStatus" role="status" aria-live="polite"></p>
-      <div id="clarifyResult" class="clarify-result" role="status" hidden></div>
       <form id="clarifyForm">
+        <div class="clarify-header"><h2 id="clarifyHeading" tabindex="-1">Clarifying</h2><p id="clarifyProgress"></p></div>
+        <label id="clarifyTitleLabel" class="clarify-title-label"><span class="sr-only">Item title</span><input id="clarifyTitle" class="clarify-title" data-proposal="title" required maxlength="200"></label>
+        <p id="clarifyError" role="alert" hidden></p><p id="clarifyDraftStatus" role="status" aria-live="polite"></p>
+        <div id="clarifyResult" class="clarify-result" role="status" hidden></div>
         <div id="clarifyFlow"></div>
-        <div class="actions clarify-footer"><button id="clarifySkip" type="button">Skip</button><button id="clarifyStop" type="button">Stop</button></div>
+        <details id="clarifyOriginalDetails"><summary>Original</summary><pre id="clarifyOriginal"></pre></details>
+        <div class="actions clarify-footer"><button id="clarifySave" type="button">Save</button><button id="clarifySkip" type="button">Skip</button><button id="clarifyStop" type="button">Stop</button></div>
       </form>
       <p><a href="/help.html#clarification" target="_blank" rel="noopener">Clarification help (new tab)</a></p>
       <details id="localGuidance" hidden>

@@ -48,7 +48,7 @@ for (const mode of [{ absent: true }, { state: 'unavailable' }, { checkFail: tru
   const { page } = await setup(t, mode);
   assert.equal(await page.locator('#guidanceStart').isDisabled(), true);
   await page.locator('[data-proposal=title]').fill('My own next action');
-  await page.getByRole('button', { name: 'Save without a new destination', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Session summary');
   assert.equal(await page.evaluate(() => aiCalls.create.length), 0);
 });

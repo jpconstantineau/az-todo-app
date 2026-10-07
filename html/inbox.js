@@ -5,7 +5,7 @@ import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js
 import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=9';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=11';
-import { clarificationUI } from './clarification.js?v=5';
+import { clarificationUI } from './clarification.js?v=6';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=8';
 import { setupBriefs } from './briefs.js?v=3';

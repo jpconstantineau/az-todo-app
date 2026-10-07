@@ -138,10 +138,12 @@ test('collections browser: clarification uses the organizer and account changes 
   const { page, setUser } = await setup(t, [create('item', 'note', { title: 'Private travel note' })]);
   await showView(page, 'work');
   await clickControl(page.getByRole('button', { name: 'Clarify Private travel note', exact: true, includeHidden: true }));
-  await page.getByRole('button', { name: /File Private travel note in .*Packing/ }).click();
-  await page.getByRole('button', { name: /File Private travel note in .*Parent/ }).click();
+  await page.getByRole('button', { name: /Use .*Packing as parent/ }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: /Use Parent as parent/ }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('button', { name: 'Reference', exact: true }).click();
-  await page.getByRole('button', { name: 'Save without a new destination', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Session summary');
   await page.locator('#clarifyStop').click(); await synced(page);
   const item = (await local(page)).records['item:note'];

@@ -47,6 +47,11 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     else input.maxLength = name === 'title' ? 200 : 4000;
     wrapper.append(input); return wrapper;
   }
+  function question(text) {
+    const heading = element('h3', { id: 'clarifyQuestion', tabIndex: -1, textContent: text });
+    heading.dataset.focusKey = 'question';
+    return heading;
+  }
   function collectionPath(record) {
     const parents = ancestry(record, records()).slice(1).reverse().map(ref => records()[refKey(ref)]?.title).filter(Boolean);
     return [...parents, record.title].join(' / ');
@@ -59,30 +64,24 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
         Number(recent.has(refKey(b))) - Number(recent.has(refKey(a))) || a.title.localeCompare(b.title));
   }
   function destinationSurface(container) {
-    const mode = element('fieldset', { className: 'clarify-mode' }), legend = element('legend', { textContent: 'Destination mode' });
-    const file = control('File item', () => setMode('file')), parent = control('Parent', () => setMode('parent'));
-    file.setAttribute('aria-pressed', String(active.proposal.mode === 'file'));
-    parent.setAttribute('aria-pressed', String(active.proposal.mode === 'parent'));
-    mode.append(legend, file, parent, element('span', { className: 'muted', textContent: active.proposal.mode === 'parent' && active.proposal.parentRef ? collectionPath(records()[refKey(active.proposal.parentRef)]) : 'Root — no parent' }));
     const search = labeledInput('search', 'Search lists and projects');
+    search.querySelector('input').dataset.focusKey = 'search';
     const list = element('div', { className: 'clarify-destinations' });
+    const none = control('No parent', clearDestination, 'clarify-destination');
+    none.dataset.focusKey = 'destination:none';
+    none.setAttribute('aria-pressed', String(!active.proposal.parentRef));
+    list.append(none);
     for (const destination of availableCollections()) {
-      const selected = memberships(active.item).some(ref => refKey(ref) === refKey(destination));
       const row = control(`${destination.title} · ${collectionKinds[collectionKind(destination)]}${collectionPath(destination) === destination.title ? '' : ` · ${collectionPath(destination)}`}`, () => chooseDestination(destination), 'clarify-destination');
-      if (active.proposal.mode === 'file') {
-        row.setAttribute('aria-label', `File ${active.item.title} in ${collectionPath(destination)}`);
-        if (selected) { row.textContent = `✓ ${row.textContent}`; row.disabled = true; }
-      } else {
-        row.setAttribute('aria-label', `Use ${collectionPath(destination)} as parent`);
-        row.setAttribute('aria-pressed', String(refKey(active.proposal.parentRef || {}) === refKey(destination)));
-      }
+      row.dataset.focusKey = `destination:${refKey(destination)}`;
+      row.setAttribute('aria-label', `Use ${collectionPath(destination)} as parent`);
+      row.setAttribute('aria-pressed', String(refKey(active.proposal.parentRef || {}) === refKey(destination)));
       list.append(row);
     }
-    if (!list.childElementCount) list.textContent = 'No matching destinations.';
-    container.append(mode, search, list);
+    if (list.childElementCount === 1 && active.proposal.search) list.append(element('p', { className: 'muted', textContent: 'No matching destinations.' }));
+    container.append(search, list);
   }
   function drawClassify(container) {
-    container.append(labeledInput('title', 'Title', 'text', true));
     const grid = element('div', { className: 'clarify-grid' });
     const configured = actions();
     for (const entry of configured.filter(entry => entry.placement === 'primary')) grid.append(actionControl(entry));
@@ -92,21 +91,23 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
       const more = element('details'), summary = element('summary', { textContent: 'More' });
       more.append(summary, extras); grid.append(more);
     }
-    container.append(grid); destinationSurface(container);
+    container.append(question('What is this?'), grid); destinationSurface(container);
   }
   function actionControl(entry) {
     const behavior = entry.behavior;
     if (behavior.startsWith('make-')) return control(makeLabel(entry.label), () => convert(behavior.slice(5)));
-    if (['action', 'reference', 'someday'].includes(behavior)) return control(entry.label, () => setView(behavior));
+    if (['action', 'reference', 'someday'].includes(behavior)) {
+      const button = control(entry.label, () => setView(behavior)); button.dataset.focusKey = `view:${behavior}`; return button;
+    }
     return control(entry.label, trash, 'danger-button');
   }
   function drawItemDecision(container) {
-    const back = control('Back to choices', () => setView('classify'));
-    container.append(back, labeledInput('title', active.proposal.view === 'action' ? 'Action wording' : 'Title', 'text', true));
+    const view = active.proposal.view, back = control('Back to choices', () => setView('classify', `view:${view}`));
+    container.append(back, question(view === 'action' ? 'Action' : view === 'reference' ? 'Reference' : 'Someday'));
     if (active.proposal.view === 'action') {
       const choices = element('fieldset', { className: 'clarify-dispositions' }), legend = element('legend', { textContent: 'Disposition' }); choices.append(legend);
       for (const [status, label] of [['next', 'Next'], ['waiting', 'Waiting'], ['planned', 'Plan'], ['deferred', 'Defer'], ['completed', 'Done']]) {
-        const button = control(label, () => setStatus(status)); button.setAttribute('aria-pressed', String(active.proposal.status === status)); choices.append(button);
+        const button = control(label, () => setStatus(status)); button.dataset.focusKey = `status:${status}`; button.setAttribute('aria-pressed', String(active.proposal.status === status)); choices.append(button);
       }
       container.append(choices);
       if (active.proposal.status === 'waiting') container.append(labeledInput('waitingOn', 'Waiting for', 'text', true), labeledInput('reviewDate', 'Follow up on (optional)', 'date'));
@@ -115,48 +116,58 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
       const reminder = element('p', { className: 'muted', textContent: 'If it takes less than two minutes, do it now and choose Done only after it is finished.' }); container.append(reminder);
     } else if (active.proposal.view === 'someday') container.append(labeledInput('reviewDate', 'Reconsider on (optional)', 'date'));
     destinationSurface(container);
-    const parent = active.proposal.mode === 'parent' && active.proposal.parentRef ? records()[refKey(active.proposal.parentRef)] : null;
-    container.append(control(parent ? `Save linked to ${collectionPath(parent)}` : 'Save without a new destination', () => saveItem(parent), 'clarify-save-without'));
   }
   function drawResult() {
     const strip = $('clarifyResult'); strip.replaceChildren(); strip.hidden = !active?.previous;
     if (!active?.previous) return;
     strip.append(element('span', { textContent: active.previous.message }), control('Undo previous decision', undo));
   }
-  function draw() {
+  function draw({ preserve = false, focusKey = 'heading' } = {}) {
+    const panelScroll = preserve ? dialog.scrollTop : 0;
+    const destinationsScroll = preserve ? form.querySelector('.clarify-destinations')?.scrollTop || 0 : 0;
     const container = $('clarifyFlow'); container.replaceChildren();
     $('clarifyError').hidden = true; $('clarifyDraftStatus').textContent = '';
     drawResult();
     if (active.finished) {
       const remaining = inboxItems();
-      $('clarifyHeading').textContent = remaining.length ? 'All inbox items viewed' : 'Clarify inbox complete'; $('clarifyQuestion').textContent = 'Session summary';
+      $('clarifyHeading').textContent = remaining.length ? 'All inbox items viewed' : 'Clarify inbox complete';
       $('clarifyProgress').textContent = `${active.processed} processed · ${active.skipped} skipped · ${Object.values(records()).filter(record => record.type === 'project' && !record.deleted && record.status === 'draft').length} project(s) need outcomes`;
-      $('clarifyHelp').textContent = remaining.length ? `${remaining.length} unprocessed item(s) remain in Inbox. Return to start another pass when you are ready.` : 'Every inbox item in this pass has been processed. Draft projects are listed as Needs outcome and included in weekly review.';
-      $('clarifyTask').textContent = ''; $('clarifyOriginal').textContent = '';
+      $('clarifyTitleLabel').hidden = true; $('clarifyOriginalDetails').hidden = true; $('clarifyOriginal').textContent = '';
+      container.append(question('Session summary'), element('p', { id: 'clarifyHelp', textContent: remaining.length ? `${remaining.length} unprocessed item(s) remain in Inbox. Return to start another pass when you are ready.` : 'Every inbox item in this pass has been processed. Draft projects are listed as Needs outcome and included in weekly review.' }));
       if (remaining.length) container.append(control('Return to first unprocessed item', restartUnprocessed));
-      $('clarifySkip').hidden = true; $('clarifyStop').textContent = 'Done'; $('clarifyStop').focus(); return;
+      $('clarifySave').hidden = true; $('clarifySkip').hidden = true; $('clarifyStop').textContent = 'Done'; $('clarifyStop').focus(); return;
     }
     const total = active.ids.length;
-    $('clarifyHeading').textContent = 'Clarify'; $('clarifyProgress').textContent = active.sessionMode ? `${active.index + 1} of ${total}` : 'One item';
-    $('clarifyQuestion').textContent = active.proposal.view === 'classify' ? 'What is this?' : active.proposal.view === 'action' ? 'Action' : active.proposal.view === 'reference' ? 'Reference' : 'Someday';
-    $('clarifyHelp').textContent = active.proposal.mode === 'parent' ? 'Choose a collection. Item decisions link to it when saved; newly made collections are nested under it.' : 'Choose a meaning or file this item directly. Filing keeps the item here for classification.';
-    $('clarifyTask').textContent = active.item.title; $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
-    $('clarifySkip').hidden = false; $('clarifyStop').textContent = 'Stop';
+    $('clarifyHeading').textContent = 'Clarifying'; $('clarifyProgress').textContent = active.sessionMode ? `${active.index + 1} of ${total}` : 'One item';
+    $('clarifyTitleLabel').hidden = false; $('clarifyTitle').value = active.proposal.title; $('clarifyOriginalDetails').hidden = false; $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
+    $('clarifySave').hidden = false; $('clarifySkip').hidden = false; $('clarifyStop').textContent = 'Stop';
     if (active.proposal.view === 'classify') drawClassify(container); else drawItemDecision(container);
-    $('clarifyQuestion').focus();
+    const destination = selectedDestination();
+    $('clarifySave').disabled = active.proposal.view === 'classify' && (!destination || !membershipChange(active.item, active.proposal.parentRef));
+    if (preserve) {
+      dialog.scrollTop = panelScroll;
+      const list = form.querySelector('.clarify-destinations'); if (list) list.scrollTop = destinationsScroll;
+    }
+    const target = focusKey === 'heading' ? $('clarifyHeading') : [...form.querySelectorAll('[data-focus-key]')].find(control => control.dataset.focusKey === focusKey);
+    target?.focus({ preventScroll: preserve });
   }
   function makeLabel(label) {
     const parent = active.proposal.parentRef && records()[refKey(active.proposal.parentRef)];
     return parent ? `${label} under ${parent.title}` : label;
   }
-  function setMode(mode) { active.proposal = { ...values(), mode, ...(mode === 'file' ? { parentRef: null } : {}) }; draw(); void journal(); }
-  function setView(view) { active.proposal = { ...values(), view, status: view === 'action' ? 'next' : active.proposal.status }; draw(); void journal(); }
-  function setStatus(status) { active.proposal = { ...values(), status }; draw(); void journal(); }
+  function setView(view, focusKey = 'question') { active.proposal = { ...values(), view, status: view === 'action' ? 'next' : active.proposal.status }; draw({ preserve: view === 'classify', focusKey }); void journal(); }
+  function setStatus(status) { active.proposal = { ...values(), status }; draw({ preserve: true, focusKey: `status:${status}` }); void journal(); }
+  function clearDestination() { active.proposal = { ...values(), mode: 'parent', parentRef: null }; draw({ preserve: true, focusKey: 'destination:none' }); void journal(); }
   function chooseDestination(destination) {
-    if (active.proposal.mode === 'parent') { active.proposal = { ...values(), parentRef: { type: destination.type, id: destination.id } }; draw(); void journal(); return;
-    }
-    if (active.proposal.view === 'classify') return file(destination);
-    return saveItem(destination);
+    const destinationRef = { type: destination.type, id: destination.id };
+    active.proposal = { ...values(), mode: 'parent', parentRef: destinationRef };
+    draw({ preserve: true, focusKey: `destination:${refKey(destinationRef)}` }); void journal();
+  }
+  function selectedDestination() { return active.proposal.parentRef ? records()[refKey(active.proposal.parentRef)] : null; }
+  async function saveChoice() {
+    const destination = selectedDestination();
+    if (active.proposal.view === 'classify') { if (destination) await file(destination); return; }
+    await saveItem(destination);
   }
   function clarificationMutation(item, fields) {
     const saved = records()[`clarification:${item.id}`];
@@ -197,11 +208,12 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     if (!await save(mutations, next)) return; active = next; draw(); announce(next.previous.message);
   }
   async function file(destination) {
-    const item = active.item, destinationRef = { type: destination.type, id: destination.id }, after = membershipChange(item, destinationRef);
+    const item = active.item, proposal = values(), destinationRef = { type: destination.type, id: destination.id }, after = membershipChange(item, destinationRef);
     if (!after) { announce(`Already filed in ${destination.title}.`); return; }
     const decision = { type: 'file', destinationRef, before: beforeFields(item, after), after };
     const session = { flowVersion: 3, step: 'classify', decision, proposal: flowProposal(item) };
     const updated = { ...item, ...after, version: item.version + 1 }, next = nextActive(decision, `Filed in ${destination.title}`, false, updated);
+    next.proposal = proposal;
     next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
     if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next)) return;
     active = next; draw(); announce(next.previous.message);
@@ -263,10 +275,11 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     if (!active) return;
     active.proposal = values(); guidance.invalidate();
     if (event.target.dataset.proposal === 'search') {
-      draw(); const search = form.querySelector('[data-proposal=search]'); search?.focus(); search?.setSelectionRange(search.value.length, search.value.length);
+      draw({ preserve: true, focusKey: 'search' }); const search = form.querySelector('[data-proposal=search]'); search?.setSelectionRange(search.value.length, search.value.length);
     } else drawResult();
     void journal();
   });
+  $('clarifySave').onclick = () => void perform(saveChoice);
   $('clarifySkip').onclick = () => void perform(skip);
   $('clarifyStop').onclick = () => { guidance.hide(); dialog.close(); };
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); else guidance.hide(); });
@@ -281,7 +294,9 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
   }
   function begin(items, sessionMode) {
     if (!items.length) throw new Error('No unprocessed captures are available to clarify.');
-    active = initial(items, sessionMode);
+    const resuming = active?.item && !active.finished && active.sessionMode === sessionMode &&
+      (sessionMode ? items.some(item => item.id === active.item.id) : active.item.id === items[0].id);
+    active = resuming ? { ...active, item: records()[`item:${active.item.id}`], open: true } : initial(items, sessionMode);
     showDialog(dialog); draw(); void journal(); void guidance.check();
   }
   return {
