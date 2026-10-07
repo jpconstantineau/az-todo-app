@@ -116,6 +116,13 @@ test('mobile clarification uses the staged parent picker, resumes its draft, con
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
   assert.equal(await page.locator('#clarifySave').isDisabled(), false);
+  await page.locator('#clarifySave').click();
+  await waitForBrowser(page, async () => {
+    const { projected, transact } = await import('/inbox-store.js?v=9'), state = await transact('disposable-test-user');
+    return projected(state)['item:capture']?.collectionRefs?.some(ref => ref.type === 'list' && ref.id === 'family');
+  });
+  await page.evaluate(() => new Promise(requestAnimationFrame));
+  assert.equal(await page.locator('#clarifySave').isDisabled(), true);
   await page.locator('#clarifyFlow details > summary').click();
   await page.getByRole('button', { name: 'Make role under Family' }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
@@ -129,6 +136,7 @@ test('mobile clarification uses the staged parent picker, resumes its draft, con
   assert.equal(await page.getByRole('button', { name: 'Use Family as parent' }).getAttribute('aria-pressed'), 'true');
   await page.getByRole('button', { name: 'No parent', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'No parent', exact: true }).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#clarifySave').isDisabled(), true);
   await page.locator('#clarifyFlow details > summary').click();
   await page.getByRole('button', { name: 'Make role', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Session summary'); await confirmed(page);

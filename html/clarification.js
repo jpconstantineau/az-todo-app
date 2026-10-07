@@ -142,14 +142,18 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     $('clarifyTitleLabel').hidden = false; $('clarifyTitle').value = active.proposal.title; $('clarifyOriginalDetails').hidden = false; $('clarifyOriginal').textContent = active.item.originalText || active.item.title;
     $('clarifySave').hidden = false; $('clarifySkip').hidden = false; $('clarifyStop').textContent = 'Stop';
     if (active.proposal.view === 'classify') drawClassify(container); else drawItemDecision(container);
-    const destination = selectedDestination();
-    $('clarifySave').disabled = active.proposal.view === 'classify' && (!destination || !membershipChange(active.item, active.proposal.parentRef));
+    updateSaveState();
     if (preserve) {
       dialog.scrollTop = panelScroll;
       const list = form.querySelector('.clarify-destinations'); if (list) list.scrollTop = destinationsScroll;
     }
     const target = focusKey === 'heading' ? $('clarifyHeading') : [...form.querySelectorAll('[data-focus-key]')].find(control => control.dataset.focusKey === focusKey);
     target?.focus({ preventScroll: preserve });
+  }
+  function updateSaveState() {
+    if (active.finished) return;
+    const destination = selectedDestination();
+    $('clarifySave').disabled = active.proposal.view === 'classify' && (!destination || !membershipChange(active.item, active.proposal.parentRef));
   }
   function makeLabel(label) {
     const parent = active.proposal.parentRef && records()[refKey(active.proposal.parentRef)];
@@ -268,7 +272,11 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     for (const input of form.elements) input.disabled = true;
     try { await action(); }
     catch (error) { $('clarifyError').textContent = error.message; $('clarifyError').hidden = false; }
-    finally { busy = false; for (const input of form.elements) input.disabled = false; if (dialog.open) void guidance.check(); }
+    finally {
+      busy = false;
+      for (const input of form.elements) input.disabled = false;
+      if (dialog.open) { updateSaveState(); void guidance.check(); }
+    }
   }
   form.addEventListener('submit', event => event.preventDefault());
   form.addEventListener('input', event => {
