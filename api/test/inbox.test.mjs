@@ -383,8 +383,8 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   assert.equal(documents.filter(doc => doc.kind === 'receipt').length, 3);
 });
 
-test('capture: legacy Notes restore into capture without truncation and leave the next draft snapshot', async t => {
-  const { page } = await setup(t);
+test('capture: legacy Notes restore without truncation, leave the next draft snapshot and clear after save', async t => {
+  const { page, context } = await setup(t);
   const legacyText = 'x'.repeat(16000), legacyNotes = 'Legacy supporting note';
   await page.evaluate(async ({ legacyText, legacyNotes }) => {
     const { transact } = await import('/inbox-store.js?v=9');
@@ -398,6 +398,20 @@ test('capture: legacy Notes restore into capture without truncation and leave th
     const saved = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture;
     return saved.text === 'Edited legacy capture' && !Object.hasOwn(saved, 'body');
   });
+  await context.setOffline(true);
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=9');
+    await transact('alice', local => { local.draft.capture = { text: 'Legacy task', body: 'Legacy supporting note', contexts: [], listId: '', newList: '' }; });
+  });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Legacy task\nLegacy supporting note');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === '');
+  const saved = await local(page);
+  assert.deepEqual(saved.draft.capture, {});
+  assert.deepEqual(saved.queue[0].operation.mutations.map(mutation => [mutation.fields.title, mutation.fields.description]), [
+    ['Legacy task', ''], ['Legacy supporting note', '']
+  ]);
 });
 
 test('inbox: editor storage failure closes the sheet and exposes a recovery copy', { timeout: 90000 }, async t => {

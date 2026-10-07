@@ -961,7 +961,7 @@ capture.addEventListener('submit', event => {
       let pendingSaves;
       const saved = await transact(owner, local => {
         pendingSaves = enqueueCapture(local, owner, mutations);
-        if (JSON.stringify(currentDraft(local).capture) === JSON.stringify(submitted)) { currentDraft(local).capture = {}; currentDraft(local).extraction = { enabled: currentDraft(local).extraction?.enabled === true, includeLists: currentDraft(local).extraction?.includeLists === true }; }
+        if (JSON.stringify(normalizeCaptureDraft(currentDraft(local).capture)) === JSON.stringify(submitted)) { currentDraft(local).capture = {}; currentDraft(local).extraction = { enabled: currentDraft(local).extraction?.enabled === true, includeLists: currentDraft(local).extraction?.includeLists === true }; }
       });
       if (owner !== accountId) return;
       state = saved;
