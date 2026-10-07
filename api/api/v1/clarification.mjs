@@ -59,47 +59,67 @@ export function clarificationFields(input) {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const exactMutation = (mutation, action, expectedVersion, fields) => mutation && mutation.action === action && mutation.expectedVersion === expectedVersion && (fields === undefined ? mutation.fields === undefined : same(mutation.fields, fields));
+function clarificationMutations(mutations, item) {
+  const planning = mutations.filter(mutation => ['dailyPlan', 'dailyPlanRevision'].includes(mutation.type));
+  const core = mutations.filter(mutation => !['dailyPlan', 'dailyPlanRevision'].includes(mutation.type));
+  if (!planning.length) return core;
+  const source = core.find(mutation => mutation.type === 'item' && mutation.id === item?.id);
+  if (!item || source?.action !== 'update' || !Object.hasOwn(source.fields || {}, 'plannedDay') || source.fields.plannedDay === item.plannedDay) {
+    fail('Planning history may accompany only a clarification that changes Planned day.');
+  }
+  const expected = new Set([item.plannedDay, source.fields.plannedDay].filter(Boolean).map(day => `${item.workspaceId}_${day}`));
+  const plans = planning.filter(mutation => mutation.type === 'dailyPlan');
+  const revisions = planning.filter(mutation => mutation.type === 'dailyPlanRevision');
+  if (plans.length !== expected.size || revisions.length !== expected.size ||
+      plans.some(mutation => !expected.has(mutation.id)) ||
+      revisions.some(mutation => !expected.has(mutation.fields?.planId) ||
+        !plans.some(plan => plan.id === mutation.fields.planId && plan.fields?.revisionHead === mutation.id))) {
+    fail('Clarification planning history must cover each affected date exactly once.');
+  }
+  return core;
+}
 
 export function validateClarification(record, old, mutations, item) {
   if (old && old.flowVersion !== 3) fail('Replace the obsolete clarification before saving a v3 decision.');
   if (record.deleted) fail('Clarification history cannot be deleted.');
+  const coreMutations = clarificationMutations(mutations, item);
   const d = record.decision;
   if (record.step === 'classify' && !d) {
-    if (mutations.length !== 1) fail('A blank clarification cannot change another record.');
+    if (coreMutations.length !== 1) fail('A blank clarification cannot change another record.');
     return;
   }
   if (record.step === 'reversed') {
     if (!old?.decision || !same(d, old.decision)) fail('Undo the latest clarification decision exactly.');
     if (d.type === 'convert') {
-      const source = mutations.find(m => m.type === 'item' && m.id === record.id);
-      const target = mutations.find(m => m.type === d.containerRef.type && m.id === d.containerRef.id);
-      if (!item?.deleted || !exactMutation(source, 'restore', item.version) || !exactMutation(target, 'delete', 1) || mutations.length !== 3) fail('Undo conversion by restoring its source and deleting its unchanged empty container together.');
+      const source = coreMutations.find(m => m.type === 'item' && m.id === record.id);
+      const target = coreMutations.find(m => m.type === d.containerRef.type && m.id === d.containerRef.id);
+      if (!item?.deleted || !exactMutation(source, 'restore', item.version) || !exactMutation(target, 'delete', 1) || coreMutations.length !== 3) fail('Undo conversion by restoring its source and deleting its unchanged empty container together.');
     } else if (d.type === 'trash') {
-      const source = mutations.find(m => m.type === 'item' && m.id === record.id);
-      if (!item?.deleted || !exactMutation(source, 'restore', item.version) || mutations.length !== 2) fail('Undo Trash by restoring its current tombstone.');
+      const source = coreMutations.find(m => m.type === 'item' && m.id === record.id);
+      if (!item?.deleted || !exactMutation(source, 'restore', item.version) || coreMutations.length !== 2) fail('Undo Trash by restoring its current tombstone.');
     } else {
-      const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+      const source = coreMutations.find(m => m.type === 'item' && m.id === record.id);
       if (!item || item.deleted || Object.entries(d.after).some(([name, value]) => !same(item[name] ?? null, value)) ||
-          !exactMutation(source, 'update', item.version, d.before) || mutations.length !== 2) fail('Undo only the unchanged fields from the latest clarification decision.');
+          !exactMutation(source, 'update', item.version, d.before) || coreMutations.length !== 2) fail('Undo only the unchanged fields from the latest clarification decision.');
     }
     return;
   }
   if (!item || item.deleted) fail('Clarification requires the current live source item.');
   if (d.type === 'convert') {
-    const source = mutations.find(m => m.type === 'item' && m.id === record.id);
-    const target = mutations.find(m => m.type === d.containerRef.type && m.id === d.containerRef.id);
+    const source = coreMutations.find(m => m.type === 'item' && m.id === record.id);
+    const target = coreMutations.find(m => m.type === d.containerRef.type && m.id === d.containerRef.id);
     const type = d.containerKind === 'project' ? 'project' : 'list';
-    if (d.containerRef.type !== type || !exactMutation(source, 'delete', item.version) || !target || target.action !== 'create' || target.expectedVersion !== 0 || mutations.length !== 3 ||
+    if (d.containerRef.type !== type || !exactMutation(source, 'delete', item.version) || !target || target.action !== 'create' || target.expectedVersion !== 0 || coreMutations.length !== 3 ||
         target.fields.title !== d.title || !same(target.fields.parentRef ?? null, d.parentRef) || target.fields.workspaceId !== item.workspaceId ||
         (type === 'project' ? target.fields.status !== 'draft' || target.fields.outcome !== '' : target.fields.kind !== d.containerKind)) fail('Convert the source and create the selected container together.');
     return;
   }
-  const source = mutations.find(m => m.type === 'item' && m.id === record.id);
+  const source = coreMutations.find(m => m.type === 'item' && m.id === record.id);
   if (d.type === 'trash') {
-    if (!exactMutation(source, 'delete', item.version) || mutations.length !== 2) fail('Save Trash and the source tombstone together.');
+    if (!exactMutation(source, 'delete', item.version) || coreMutations.length !== 2) fail('Save Trash and the source tombstone together.');
     return;
   }
-  if (Object.entries(d.before).some(([name, value]) => !same(item[name] ?? null, value)) || !exactMutation(source, 'update', item.version, d.after) || mutations.length !== 2) fail('Item changes must match the accepted clarification exactly.');
+  if (Object.entries(d.before).some(([name, value]) => !same(item[name] ?? null, value)) || !exactMutation(source, 'update', item.version, d.after) || coreMutations.length !== 2) fail('Item changes must match the accepted clarification exactly.');
   if (d.type === 'file') {
     if (record.step !== 'classify' || !d.after.collectionRefs?.some(candidate => same(candidate, d.destinationRef))) fail('Filing must add the selected destination without completing clarification.');
   } else if (record.step !== 'complete') fail('An item decision must complete clarification.');

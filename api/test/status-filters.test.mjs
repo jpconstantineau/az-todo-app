@@ -62,7 +62,7 @@ test('status filters: inclusion, exclusion, scopes, offline persistence and acco
   assert.equal(await page.locator('#statusFilter').inputValue(), '@exclude');
   assert.deepEqual(await rows(), ['inbox', 'item-0', 'item-3']);
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=7')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
     return local.draft.navigation?.work.statuses.includes('dropped') && local.draft.navigation?.lists.statuses.includes('completed');
   });
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
@@ -83,7 +83,7 @@ test('status filters: inclusion, exclusion, scopes, offline persistence and acco
       await page.screenshot({ path: `${process.env.STATUS_FILTER_SCREENSHOTS}/statuses-${width}.png`, fullPage: true });
     }
   }
-  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=7')).transact('alice'));
+  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
   assert.deepEqual(local.queue, []); assert.deepEqual(documents, before, 'filtering never mutates tasks');
   user = 'bob'; await context.setOffline(false); await page.reload(); await page.locator('#workspace').waitFor();
   await showView(page, 'work');

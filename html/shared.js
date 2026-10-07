@@ -1,4 +1,4 @@
-import { transact } from './inbox-store.js?v=7';
+import { transact } from './inbox-store.js?v=8';
 
 const $ = id => document.getElementById(id);
 const rights = ['view', 'add', 'edit', 'complete', 'delete'];

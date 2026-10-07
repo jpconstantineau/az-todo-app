@@ -2,7 +2,7 @@ import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, 
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=3';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=7';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=8';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=10';
 import { clarificationUI } from './clarification.js?v=5';
@@ -128,6 +128,12 @@ edit.elements.workspaceId.onchange = () => {
 function enqueue(local, owner, mutations) {
   queueMutations(local, owner, mutations);
 }
+function ensurePlanMutationsAvailable(local, mutations) {
+  const touched = new Set(mutations.map(key));
+  if (local.queue.some(entry => entry.failure && entry.operation.mutations.some(mutation => touched.has(key(mutation))))) {
+    throw new Error('Resolve this plan conflict before changing the same day. Other dates remain available.');
+  }
+}
 function workspaceReadOnly() {
   const space = projected(state)['workspace:' + selectedWorkspace];
   return selectedWorkspace !== PERSONAL && (!space || space.deleted || space.archived);
@@ -180,12 +186,19 @@ async function saveClarification(mutations, next) {
   if (!owner) return false;
   const saved = await transact(owner, local => {
     const records = projected(local);
-    for (const mutation of mutations) {
+    const planning = mutations.flatMap(mutation => {
+      const current = records[key(mutation)];
+      return mutation.type === 'item' && mutation.action === 'update' && current && Object.hasOwn(mutation.fields || {}, 'plannedDay')
+        ? membershipPlanMutations(records, current.workspaceId, current, mutation.fields.plannedDay) : [];
+    });
+    const complete = [...mutations, ...planning];
+    ensurePlanMutationsAvailable(local, complete);
+    for (const mutation of complete) {
       const current = records[key(mutation)];
       const expectedDeleted = mutation.action === 'restore';
       if (!!current?.deleted !== expectedDeleted && mutation.action !== 'create' || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This item or clarification changed. Your draft is kept. Stop, export a copy, and reopen the latest clarification to compare.');
     }
-    enqueue(local, owner, mutations);
+    enqueue(local, owner, complete);
     currentDraft(local).clarification = next;
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
   if (owner !== accountId) return false;
@@ -223,8 +236,8 @@ async function saveDailyPlan(mutations) {
   if (workspaceReadOnly()) throw new Error('Unarchive this workspace before editing its plan.');
   try {
     const saved = await transact(owner, local => {
-      const current = projected(local), touched = new Set(mutations.map(key));
-      if (local.queue.some(entry => entry.failure && entry.operation.mutations.some(mutation => touched.has(key(mutation))))) throw new Error('Resolve this plan conflict before changing the same day. Other dates remain available.');
+      const current = projected(local);
+      ensurePlanMutationsAvailable(local, mutations);
       for (const mutation of mutations) {
         const record = current[key(mutation)], version = record?.version || 0;
         if (version !== mutation.expectedVersion || record?.deleted) throw new Error('This plan changed. Review the latest day and try again.');
@@ -873,7 +886,9 @@ async function updateRecord(record, fields, close = false) {
         const mutation = { type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields };
         const planning = current?.type === 'item' && Object.hasOwn(fields, 'plannedDay')
           ? membershipPlanMutations(projected(local), current.workspaceId, current, fields.plannedDay) : [];
-        enqueue(local, owner, [mutation, ...planning]);
+        const complete = [mutation, ...planning];
+        ensurePlanMutationsAvailable(local, complete);
+        enqueue(local, owner, complete);
       }
       if (close && current && record.version > 0 && !movingCollection) rememberEdit(local, current, fields);
       if (close) currentDraft(local).edit = null;
@@ -977,7 +992,13 @@ $('discardEdit').onclick = guard(async () => {
 $('undoEdit').onclick = guard(async () => {
   const owner = accountId, generation = accountGeneration, operationId = state?.undoEdit?.operationId;
   if (!owner || !operationId) return;
-  const saved = await transact(owner, local => undoEdit(local, owner, operationId));
+  const saved = await transact(owner, local => {
+    const undo = local.undoEdit, current = undo && projected(local)[key(undo)];
+    const planning = current?.type === 'item' && Object.hasOwn(undo.fields || {}, 'plannedDay')
+      ? membershipPlanMutations(projected(local), current.workspaceId, current, undo.fields.plannedDay) : [];
+    ensurePlanMutationsAvailable(local, planning);
+    undoEdit(local, owner, operationId, Date.now(), planning);
+  });
   if (owner !== accountId || generation !== accountGeneration) return;
   state = saved; clearError(); render(); broadcast(); void sync();
   statusText('undoEditStatus', 'Undo saved on device. Sync to confirm it on the server.');
@@ -1436,6 +1457,7 @@ $('resolve').onclick = guard(async () => {
         if (mutation.type === 'dailyPlanRevision') continue;
         if (mutation.type !== 'dailyPlan') {
           const server = local.records[key(mutation)];
+          if ((server?.version ?? 0) !== (reviewed[key(mutation)]?.version ?? 0)) throw new Error('A related action changed again. Review the comparison before applying your plan.');
           if (mutation.action === 'create' && !server) mutations.push(mutation);
           else if (server && !server.deleted) mutations.push({ ...mutation, action: 'update', expectedVersion: server.version });
           else throw new Error('A related action was deleted or changed incompatibly. Use the server plan for this save and reapply the membership deliberately.');

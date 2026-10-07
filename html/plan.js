@@ -311,7 +311,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
       const title = control(item.title, () => edit(item), `Edit ${item.title}`, `plan:day:${item.id}:edit`); title.disabled = readOnly();
       const meta = document.createElement('span'); meta.className = 'day-plan-meta';
       const estimate = item.effortEstimate ? item.effortEstimate.scale === method ? `${item.effortEstimate.value} ${method === 'fibonacci' ? 'points' : ''}`.trim() : `${item.effortEstimate.value} (${item.effortEstimate.scale}, previous scale)` : 'Unestimated';
-      meta.textContent = `${dayDetails(item)}${method === 'none' ? '' : ` · ${estimate}`}`;
+      meta.textContent = `${dayDetails(item)} · ${estimate}`;
       content.append(title, meta);
       const controls = document.createElement('div'); controls.className = 'day-plan-controls'; controls.setAttribute('role', 'group'); controls.setAttribute('aria-label', `Order and plan controls for ${item.title}, position ${index + 1}`);
       const up = control('Move up', () => reorder(item, index - 1), `Move ${item.title} up from position ${index + 1}`, `plan:day:${item.id}:up`);
@@ -352,7 +352,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
 
     const excluded = new Set(['completed', 'dropped', 'reference']);
     const dayEligible = all.filter(item => item.type === 'item' && !item.deleted && item.workspaceId === owner && item.plannedDay !== day && !excluded.has(item.status));
-    $('planEligibleActions').replaceChildren(...dayEligible.map(item => {
+    $('planEligibleActions').replaceChildren(...dayEligible.map((item, index) => {
       const add = control(`Add ${item.title}`, async () => {
         const ids = [...dayItems.map(entry => entry.id), item.id], mutations = [{ type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: { plannedDay: day } }];
         if (item.plannedDay) {
@@ -363,6 +363,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
         mutations.push(...planMutations(recordMap, owner, day, { actionIds: ids, loadAssessment: resetAssessment(assessment) }, 'add'));
         await savePlan(mutations);
       }, `Add ${item.title} to ${day}`, `plan:add:${item.id}`);
+      add.dataset.focusFallback = dayEligible[index + 1] ? `plan:add:${dayEligible[index + 1].id}` : 'plan:add:heading';
       add.disabled = readOnly(); return add;
     }));
     if (!dayEligible.length) $('planEligibleActions').textContent = 'No eligible actions. Completed, dropped and Reference items are excluded.';

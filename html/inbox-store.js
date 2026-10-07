@@ -246,12 +246,12 @@ export function canUndoEdit(state, now = Date.now()) {
     (state.records[key(undo)]?.version ?? 0) <= undo.expectedVersion;
 }
 
-export function undoEdit(state, accountId, operationId, now = Date.now()) {
+export function undoEdit(state, accountId, operationId, now = Date.now(), relatedMutations = []) {
   if (state.undoEdit?.operationId !== operationId || !canUndoEdit(state, now)) {
     throw new Error('This edit can no longer be undone. It expired, the record changed, or a save needs attention.');
   }
   const { type, id, expectedVersion, fields } = state.undoEdit;
-  enqueue(state, accountId, [{ type, id, action: 'update', expectedVersion, fields: structuredClone(fields) }]);
+  enqueue(state, accountId, [{ type, id, action: 'update', expectedVersion, fields: structuredClone(fields) }, ...relatedMutations]);
   delete state.undoEdit;
 }
 

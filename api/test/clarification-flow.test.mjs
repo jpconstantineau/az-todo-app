@@ -104,7 +104,7 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
   await page.locator('#clarifyFlow details > summary').click();
   await page.getByRole('button', { name: 'Make role under Family' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('disposable-test-user')).draft.clarification?.item?.id === 'second');
   assert.equal(await page.locator('#clarifyProgress').textContent(), '2 of 2');
   await page.locator('[data-proposal="title"]').fill('Call licensed electrician');
   assert.ok(await page.getByRole('button', { name: 'Undo previous decision' }).isVisible());
@@ -128,6 +128,40 @@ test('mobile v3 clarification exposes destinations, converts in one tap, advance
   }
 });
 
+test('clarifying and undoing a planned day update the canonical item and plan history atomically', { timeout: 60000 }, async t => {
+  documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
+  await post(server.url, [createItem('capture')], undefined, 'disposable-test-user');
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
+  await page.getByRole('button', { name: 'Action', exact: true }).click();
+  await page.getByRole('button', { name: 'Plan', exact: true }).click();
+  await page.locator('[data-proposal="plannedDay"]').fill('2030-05-06');
+  await page.getByRole('button', { name: 'Save without a new destination', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=8');
+    return projected(await transact('disposable-test-user'))['item:capture']?.plannedDay === '2030-05-06';
+  });
+  await confirmed(page);
+  const saved = (type, id = 'capture') => documents.find(document => document.UserID === 'disposable-test-user' && document.id === `record:${type}:${id}`)?.record;
+  assert.equal(saved('item').plannedDay, '2030-05-06');
+  let plan = saved('dailyPlan', 'personal_2030-05-06');
+  assert.deepEqual(plan.actionIds, ['capture']); assert.equal(plan.revisionCount, 1);
+  assert.equal(saved('dailyPlanRevision', plan.revisionHead).after.actionIds[0], 'capture');
+
+  await page.getByRole('button', { name: 'Undo previous decision', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=8');
+    return projected(await transact('disposable-test-user'))['item:capture']?.plannedDay === null;
+  });
+  await confirmed(page);
+  assert.equal(saved('item').plannedDay, null);
+  plan = saved('dailyPlan', 'personal_2030-05-06');
+  assert.deepEqual(plan.actionIds, []); assert.equal(plan.revisionCount, 2);
+  assert.deepEqual(saved('dailyPlanRevision', plan.revisionHead).before.actionIds, ['capture']);
+});
+
 test('clarification preferences persist order and a custom alias dispatches its supported behavior', { timeout: 60000 }, async t => {
   documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
   await post(server.url, [createItem('capture', { title: 'Groceries', description: '', originalText: 'Groceries', sourceUrl: null })], undefined, 'disposable-test-user');
@@ -148,7 +182,7 @@ test('clarification preferences persist order and a custom alias dispatches its 
   await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
   await page.getByRole('button', { name: 'Make shopping list', exact: true }).click();
   await waitForBrowser(page, async () => {
-    const { transact, projected } = await import('/inbox-store.js?v=7');
+    const { transact, projected } = await import('/inbox-store.js?v=8');
     return Object.values(projected(await transact('disposable-test-user'))).some(record => record.type === 'list' && record.kind === 'checklist');
   });
   await confirmed(page);
