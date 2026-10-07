@@ -216,7 +216,16 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   assert.match(await page.locator('#planDayActions').innerText(), /No permanent priority/);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 
-  await page.locator('#planEstimationMethod').selectOption('tshirt'); await confirmed(page);
+  const selectEstimationMethod = async (method, summary) => {
+    await page.locator('#planEstimationMethod').selectOption(method);
+    await waitForBrowser(page, async expected => {
+      const { projected, transact } = await import('/inbox-store.js?v=9');
+      return projected(await transact('alice'))['planPreference:personal']?.estimationMethod === expected;
+    }, method);
+    await page.waitForFunction(expected => document.querySelector('#planLoadSummary').textContent.endsWith(expected), summary);
+    await confirmed(page);
+  };
+  await selectEstimationMethod('tshirt', 'No current-scale estimates · 2 unestimated · 0 previous-scale');
   await page.getByLabel('Estimate First day action using T-shirt').selectOption('L'); await confirmed(page);
   assert.match(await page.locator('#planLoadSummary').textContent(), /1 L · 1 unestimated · 0 previous-scale/);
   await page.locator('#planLoadAssessment').selectOption('full'); await confirmed(page);
@@ -224,9 +233,9 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   assert.equal(await page.locator('#planLoadAssessment').inputValue(), 'needs_reassessment');
   await page.locator('#planHistory').getByText('Plan history').click();
   assert.match(await page.locator('#planHistoryEntries').innerText(), /Full → Needs reassessment/);
-  await page.locator('#planEstimationMethod').selectOption('fibonacci'); await confirmed(page);
+  await selectEstimationMethod('fibonacci', '0 points · 0 unestimated · 2 previous-scale');
   assert.match(await page.locator('#planLoadSummary').textContent(), /0 points · 0 unestimated · 2 previous-scale/);
-  await page.locator('#planEstimationMethod').selectOption('none'); await confirmed(page);
+  await selectEstimationMethod('none', 'Needs reassessment');
   assert.equal(await page.locator('#planLoadSummary').textContent(), 'Needs reassessment');
   assert.match(await page.locator('#planDayActions').innerText(), /L \(tshirt, previous scale\)/);
   assert.match(await page.locator('#planDayActions').innerText(), /M \(tshirt, previous scale\)/);

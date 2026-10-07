@@ -129,9 +129,12 @@ test('mobile clarification uses the staged parent picker, resumes its draft, con
   assert.equal(await page.locator('#clarifyProgress').textContent(), '2 of 2');
   await page.getByRole('textbox', { name: 'Item title' }).fill('Call licensed electrician');
   await page.getByRole('button', { name: 'Use Family as parent' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('disposable-test-user')).draft.clarification?.proposal.title === 'Call licensed electrician');
-  await page.locator('#clarifyStop').click(); await page.locator('#clarifier').waitFor({ state: 'hidden' });
-  await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#clarifyInbox'));
+  await waitForBrowser(page, async () => {
+    const draft = (await (await import('/inbox-store.js?v=9')).transact('disposable-test-user')).draft.clarification;
+    return draft?.open === true && draft.proposal.title === 'Call licensed electrician' && draft.proposal.parentRef?.id === 'family';
+  });
+  await page.reload(); await page.locator('#workspace').waitFor(); await page.locator('#clarifier').waitFor();
+  await page.waitForFunction(() => document.querySelector('#clarifyTitle').value === 'Call licensed electrician');
   assert.equal(await page.getByRole('textbox', { name: 'Item title' }).inputValue(), 'Call licensed electrician');
   assert.equal(await page.getByRole('button', { name: 'Use Family as parent' }).getAttribute('aria-pressed'), 'true');
   await page.getByRole('button', { name: 'No parent', exact: true }).click();
