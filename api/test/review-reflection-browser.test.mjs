@@ -49,10 +49,10 @@ test('session reflection drafts span review batches, save canonical follow-ups o
   await page.locator('#reviewFollowUp input[name="title"]').fill('Book follow-up room');
   await page.locator('#reviewFollowUp textarea[name="description"]').fill('Ask facilities about access.');
   await waitForBrowser(page, async () => {
-    const draft = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.review?.reflection;
+    const draft = (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.review?.reflection;
     return draft?.rootReviewId === 'root-review' && draft.prompts.mentalSweep.notes === 'Book the follow-up room.' && draft.followUp?.id;
   });
-  const before = await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.review.reflection);
+  const before = await page.evaluate(async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.review.reflection);
   await page.locator('#closeReviews').click(); await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   await clickControl(page.locator('#openReviews'));
   assert.equal(await page.locator('#reviewSessions').inputValue(), 'next-review');
@@ -62,10 +62,10 @@ test('session reflection drafts span review batches, save canonical follow-ups o
   await page.locator('#reviewReflection').evaluate(element => { element.open = true; });
   await page.locator('#reviewSaveFollowUp').click();
   await waitForBrowser(page, async id => {
-    const { transact, projected } = await import('/inbox-store.js?v=9'), local = await transact('alice'), records = projected(local);
+    const { transact, projected } = await import('/inbox-store.js?v=8'), local = await transact('alice'), records = projected(local);
     return records[`item:${id}`]?.title === 'Book follow-up room' && Object.values(records).some(record => record.type === 'reviewReflection' && record.reviewId === 'root-review' && record.followUpIds.includes(id));
   }, before.followUp.id);
-  assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.review.reflection.followUp)), null);
+  assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.review.reflection.followUp)), null);
   await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#openReviews'));
   assert.match(await page.locator('#reviewFollowUps').textContent(), /Book follow-up room · inbox/);
   assert.equal(await page.locator('#reviewSessions').inputValue(), 'next-review');
