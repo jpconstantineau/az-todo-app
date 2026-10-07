@@ -1,4 +1,4 @@
-import { ancestry, collectionKind, collectionKinds, isCollection, memberships, refKey } from './collection-model.js?v=3';
+import { ancestry, collectionKind, collectionKinds, isCollection, memberships, refKey } from './collection-model.js?v=4';
 
 const $ = id => document.getElementById(id);
 const dateText = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;

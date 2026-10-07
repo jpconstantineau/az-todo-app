@@ -8,6 +8,7 @@ import { briefFields } from "./briefs.mjs";
 import { dailyPlanFields, effortEstimate } from './daily-plans.mjs';
 
 import { collectionKinds, validateRef, validateRefs } from './collection-model.mjs';
+import { occurrenceId, recurrenceDate, recurrenceRule } from './recurrence-model.mjs';
 
 export const MAX_BODY_BYTES = 65536;
 export const MAX_RECORD_BYTES = 32768;
@@ -35,7 +36,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
+  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
   return value;
 }
 function exactText(value, max, field) {
@@ -82,9 +83,41 @@ export function fieldsFor(type, action, input) {
     object(input, ["defaults"], "fields");
     return { defaults: validateDefaults(input.defaults) };
   }
+  if (type === 'recurrenceTemplate') {
+    const managed = ['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
+    const recurrence = ['rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc'];
+    object(input, [...managed, ...recurrence], 'fields');
+    const result = {};
+    const itemInput = Object.fromEntries(Object.entries(input).filter(([name]) => managed.includes(name)));
+    if (Object.keys(itemInput).length) Object.assign(result, fieldsFor('item', 'update', itemInput));
+    if ('rule' in input) result.rule = recurrenceRule(input.rule);
+    for (const name of ['paused', 'tombstoned']) if (name in input) {
+      if (typeof input[name] !== 'boolean') throw new ValidationError(`${name} must be true or false.`);
+      result[name] = input[name];
+    }
+    if ('nextOccurrenceNumber' in input) {
+      if (!Number.isSafeInteger(input.nextOccurrenceNumber) || input.nextOccurrenceNumber < 1) throw new ValidationError('nextOccurrenceNumber must be positive.');
+      result.nextOccurrenceNumber = input.nextOccurrenceNumber;
+    }
+    if ('nextIntendedDate' in input) result.nextIntendedDate = recurrenceDate(input.nextIntendedDate, 'nextIntendedDate');
+    if ('openOccurrenceId' in input) result.openOccurrenceId = input.openOccurrenceId === null ? null : identifier(input.openOccurrenceId, 'openOccurrenceId');
+    if ('lastResolvedUtc' in input) result.lastResolvedUtc = input.lastResolvedUtc === null ? null : utcDate(input.lastResolvedUtc);
+    if (action === 'create') {
+      for (const name of ['title', 'workspaceId', 'collectionRefs', 'status', 'rule', 'nextOccurrenceNumber', 'nextIntendedDate']) {
+        if (!(name in result)) throw new ValidationError(`${name} is required.`);
+      }
+      if (!['inbox', 'next'].includes(result.status)) throw new ValidationError('Generated state must be Inbox or Next.');
+      if (result.nextOccurrenceNumber !== 1 || result.nextIntendedDate !== result.rule.anchorDate || result.openOccurrenceId) throw new ValidationError('A new recurrence template must begin at occurrence 1 with no open occurrence.');
+      return { description: '', listId: null, projectId: null, contexts: [], areas: [], energy: null, timeRequired: null, priority: null, referenceLinks: [], paused: false, tombstoned: false, openOccurrenceId: null, lastResolvedUtc: null, ...result };
+    }
+    if (!Object.keys(result).length) throw new ValidationError('fields must contain an edit.');
+    if ('status' in result && !['inbox', 'next'].includes(result.status)) throw new ValidationError('Generated state must be Inbox or Next.');
+    return result;
+  }
   const shared = ["title", "description", "workspaceId"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
-  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks"];
+  const recurrenceOccurrenceFields = ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'];
+  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks", ...recurrenceOccurrenceFields];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate"] : ["defaults", "kind", "parentRef", "revisitDate"])];
   object(input, allowed, "fields");
   if (action === 'create') {
@@ -114,6 +147,17 @@ export function fieldsFor(type, action, input) {
       catch { throw new ValidationError('captureTimeZone must be a supported timezone.'); }
       result[key] = value;
     }
+    else if (key === 'recurrenceTemplateId') result[key] = identifier(value, key);
+    else if (key === 'recurrenceNumber' || key === 'sourceTemplateVersion') {
+      if (!Number.isSafeInteger(value) || value < 1) throw new ValidationError(`${key} must be positive.`);
+      result[key] = value;
+    }
+    else if (key === 'intendedDate') result[key] = recurrenceDate(value, key);
+    else if (key === 'occurrenceState') {
+      if (!['open', 'completed', 'skipped'].includes(value)) throw new ValidationError('occurrenceState must be open, completed or skipped.');
+      result[key] = value;
+    }
+    else if (key === 'occurrenceResolvedUtc') result[key] = value === null ? null : utcDate(value);
     else if (key === "defaults") result[key] = validateDefaults(value);
     else if (key === "title") {
       result[key] = exactText(value, 200, key);
@@ -142,6 +186,9 @@ export function fieldsFor(type, action, input) {
   if (action === "create") {
     if (!result.title) throw new ValidationError("title is required.");
     if (type === "project" && result.status !== 'draft' && !result.outcome?.trim()) throw new ValidationError("outcome is required for an active, someday or completed project.");
+    if (type === 'item' && result.recurrenceTemplateId) {
+      for (const name of recurrenceOccurrenceFields) if (!(name in result)) throw new ValidationError(`${name} is required for a recurring occurrence.`);
+    }
     return {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
@@ -181,8 +228,13 @@ export function validateOperation(input) {
       throw new ValidationError("expectedVersion must be 0 for create, or the last observed positive version for update/delete/restore.");
     }
     const fieldless = ["delete", "restore"].includes(action);
+    if (type === 'recurrenceTemplate' && fieldless) throw new ValidationError('Recurring templates are paused or stopped, not deleted or restored.');
     if (fieldless && mutation.fields !== undefined) throw new ValidationError(`${action} cannot include fields.`);
-    return { type, id, action, expectedVersion, ...(!fieldless ? { fields: fieldsFor(type, action, mutation.fields) } : {}) };
+    const fields = fieldless ? undefined : fieldsFor(type, action, mutation.fields);
+    if (type === 'item' && action === 'create' && fields.recurrenceTemplateId && id !== occurrenceId(fields.recurrenceTemplateId, fields.recurrenceNumber)) {
+      throw new ValidationError('Recurring occurrence identity is invalid.');
+    }
+    return { type, id, action, expectedVersion, ...(!fieldless ? { fields } : {}) };
   });
   return { ...input, mutations };
 }

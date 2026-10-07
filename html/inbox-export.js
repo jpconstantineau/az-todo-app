@@ -3,7 +3,8 @@ const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 import { readableBrief } from './briefs.js?v=4';
 import { purgeWorkspaceState } from './workspaces.js?v=4';
-const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision'];
+import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=1';
+const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
   'collectionRefs', 'parentRef', 'kind', 'revisitDate', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
@@ -12,7 +13,8 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
-  'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates'];
+  'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates',
+  'rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc', 'recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'];
 
 export const validateDeviceExport = value => validateExport(value);
 export const validateAccountExport = value => validateExport(value, true);
@@ -73,7 +75,7 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   const currentShape = (entry, path) => {
-    if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(entry.type)) {
+    if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(entry.type)) {
       require(typeof entry.workspaceId === 'string' && entry.workspaceId.length > 0, `${path}: workspaceId is required.`);
     }
     if (entry.type === 'item') {
@@ -82,6 +84,12 @@ function validateExport(value, server = false) {
       require(entry.status !== 'waiting' || typeof entry.waitingOn === 'string' && entry.waitingOn.trim(), `${path}: waiting needs a subject.`);
       require(entry.status !== 'deferred' || entry.startDate || entry.startDateUtc, `${path}: deferred needs a start date.`);
       for (const name of ['due', 'start', 'review']) require(!(entry[`${name}Date`] && entry[`${name}DateUtc`]), `${path}: ${name} date is ambiguous.`);
+      if (entry.recurrenceTemplateId) require(entry.id === occurrenceId(entry.recurrenceTemplateId, entry.recurrenceNumber) && /^\d{4}-\d{2}-\d{2}$/.test(entry.intendedDate) && Number.isSafeInteger(entry.sourceTemplateVersion) && entry.sourceTemplateVersion > 0 && ['open', 'completed', 'skipped'].includes(entry.occurrenceState) &&
+        (entry.occurrenceState === 'open' ? entry.occurrenceResolvedUtc === null && !['completed', 'dropped'].includes(entry.status) : Number.isFinite(Date.parse(entry.occurrenceResolvedUtc)) && entry.status === (entry.occurrenceState === 'completed' ? 'completed' : 'dropped')), `${path}: invalid recurring occurrence.`);
+    }
+    if (entry.type === 'recurrenceTemplate') {
+      try { recurrenceRule(entry.rule); } catch { require(false, `${path}: invalid recurrence rule.`); }
+      require(Array.isArray(entry.collectionRefs) && ['inbox', 'next'].includes(entry.status) && typeof entry.paused === 'boolean' && typeof entry.tombstoned === 'boolean' && Number.isSafeInteger(entry.nextOccurrenceNumber) && entry.nextOccurrenceNumber > 0 && /^\d{4}-\d{2}-\d{2}$/.test(entry.nextIntendedDate) && (entry.openOccurrenceId === null || typeof entry.openOccurrenceId === 'string') && (entry.lastResolvedUtc === null || Number.isFinite(Date.parse(entry.lastResolvedUtc))), `${path}: invalid recurring template.`);
     }
     if (entry.type === 'project') require(['draft', 'active', 'someday', 'completed'].includes(entry.status) &&
       (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
@@ -97,7 +105,7 @@ function validateExport(value, server = false) {
   unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');
   const draft = (entry, path) => {
     require(object(entry), `${path}: draft must be an object.`);
-    unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'collectionUtility', 'day', 'navigation', 'review', 'extraction'], path);
+    unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'collectionUtility', 'day', 'navigation', 'review', 'extraction', 'recurrence'], path);
     if (entry.capture) unknown(entry.capture, ['text', 'body', 'listId', 'newList', 'contexts', 'original'], `${path}.capture`);
     if (entry.edit && !object(entry.edit.initialFields)) warnings.push(`${path}.edit: missing saved baseline; preserved for recovery, editor restore unsupported`);
   };
@@ -114,7 +122,7 @@ function validateExport(value, server = false) {
       object(move.root) && ['list', 'project'].includes(move.root.type) && typeof move.root.id === 'string' &&
       typeof move.sourceWorkspaceId === 'string' && typeof move.destinationWorkspaceId === 'string' &&
       Array.isArray(move.entries) && move.entries.length > 20 && Array.isArray(move.skipped), 'workspaceMove has an invalid resumable move shape.');
-    for (const entry of move.entries) require(object(entry) && ['list', 'project', 'item'].includes(entry.type) &&
+    for (const entry of move.entries) require(object(entry) && ['list', 'project', 'item', 'recurrenceTemplate'].includes(entry.type) &&
       typeof entry.id === 'string' && object(entry.final), 'workspaceMove contains a malformed record.');
   }
   if (state.workspaceErasureNotice !== undefined) require(object(state.workspaceErasureNotice) &&
@@ -135,6 +143,16 @@ function validateExport(value, server = false) {
   for (const [key, entry] of Object.entries(state.records)) {
     record(entry, `records.${key}`);
     require(key === `${entry.type}:${entry.id}`, `records.${key}: identity does not match its key.`);
+  }
+  for (const entry of Object.values(state.records)) {
+    if (entry.type === 'recurrenceTemplate' && entry.openOccurrenceId) {
+      const occurrence = state.records[`item:${entry.openOccurrenceId}`];
+      require(occurrence?.recurrenceTemplateId === entry.id && occurrence.occurrenceState === 'open' && occurrence.recurrenceNumber === entry.nextOccurrenceNumber - 1, `records.recurrenceTemplate:${entry.id}: open occurrence cursor is invalid.`);
+    }
+    if (entry.type === 'item' && entry.recurrenceTemplateId) {
+      const template = state.records[`recurrenceTemplate:${entry.recurrenceTemplateId}`];
+      require(template && template.workspaceId === entry.workspaceId, `records.item:${entry.id}: recurrence template is missing or in another workspace.`);
+    }
   }
   const operations = new Set();
   for (const [index, entry] of state.queue.entries()) {
@@ -268,6 +286,10 @@ export function readableExport(value) {
     for (const record of records) lines.push('', `${record.type}: ${record.title ?? record.id}`,
       record.type === 'brief' && record.content ? readableBrief(record) : record.type === 'reviewReflection' ? readableReflection(record, value.state.records) : fields(record));
   }
+  const recurring = Object.values(value.state.records).filter(record => record.type === 'recurrenceTemplate');
+  lines.push('', 'RECURRING TEMPLATES', ...(recurring.length ? recurring.flatMap(record => ['', `${record.title} (${record.tombstoned ? 'stopped' : record.paused ? 'paused' : 'active'})`, fields(record)]) : ['(none)']));
+  const occurrences = Object.values(value.state.records).filter(record => record.type === 'item' && record.recurrenceTemplateId).sort((a, b) => a.recurrenceTemplateId.localeCompare(b.recurrenceTemplateId) || b.recurrenceNumber - a.recurrenceNumber);
+  lines.push('', 'OCCURRENCE HISTORY', ...(occurrences.length ? occurrences.flatMap(record => ['', `${record.title} · intended ${record.intendedDate} · ${record.occurrenceState}`, fields(record)]) : ['(none)']));
   if (server) return lines.join('\n') + '\n';
   lines.push('', 'PENDING SAVES (not server-confirmed)');
   if (!value.state.queue.length) lines.push('(none)');

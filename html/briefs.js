@@ -1,4 +1,4 @@
-import { belongsTo } from './collection-model.js?v=3';
+import { belongsTo } from './collection-model.js?v=4';
 export const briefSections = [
   ['outcome', 'Desired outcome'], ['context', 'Context and supplied sources'], ['scope', 'Scope'],
   ['exclusions', 'Exclusions'], ['nextAction', 'Proposed next action'],

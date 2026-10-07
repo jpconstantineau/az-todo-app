@@ -1,10 +1,11 @@
-import { isCollection, memberships, refKey } from './collection-model.js?v=3';
+import { isCollection, memberships, refKey } from './collection-model.js?v=4';
 
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-const relationshipFields = record => record.type === 'item'
+const linkedRecord = record => ['item', 'recurrenceTemplate'].includes(record.type);
+const relationshipFields = record => linkedRecord(record)
   ? { collectionRefs: memberships(record), listId: record.listId || null, projectId: record.projectId || null }
   : { parentRef: record.parentRef || null };
-const detachedFields = record => record.type === 'item'
+const detachedFields = record => linkedRecord(record)
   ? { collectionRefs: [], listId: null, projectId: null }
   : { parentRef: null };
 
@@ -17,14 +18,16 @@ function movingRecords(record, records) {
       if (isCollection(candidate) && !candidate.deleted && candidate.parentRef && moving.has(refKey(candidate.parentRef))) moving.add(refKey(candidate));
     }
   } while (moving.size !== previousSize);
-  return Object.values(records).filter(candidate => !candidate.deleted &&
-    (moving.has(refKey(candidate)) || candidate.type === 'item' && memberships(candidate).some(ref => moving.has(refKey(ref)))))
-    .sort((left, right) => refKey(left).localeCompare(refKey(right)));
+  const selected = Object.values(records).filter(candidate => !candidate.deleted &&
+    (moving.has(refKey(candidate)) || linkedRecord(candidate) && memberships(candidate).some(ref => moving.has(refKey(ref)))));
+  const recurrenceIds = new Set(selected.flatMap(candidate => candidate.type === 'recurrenceTemplate' ? [candidate.id] : candidate.recurrenceTemplateId ? [candidate.recurrenceTemplateId] : []));
+  return Object.values(records).filter(candidate => !candidate.deleted && (selected.includes(candidate) || candidate.type === 'recurrenceTemplate' && recurrenceIds.has(candidate.id) || candidate.type === 'item' && recurrenceIds.has(candidate.recurrenceTemplateId)))
+    .sort((left, right) => (left.type === 'recurrenceTemplate' ? -1 : right.type === 'recurrenceTemplate' ? 1 : refKey(left).localeCompare(refKey(right))));
 }
 
 function finalFields(candidate, root, workspaceId, moving, fields) {
   let relationships;
-  if (candidate.type === 'item') {
+  if (linkedRecord(candidate)) {
     const collectionRefs = memberships(candidate).filter(ref => moving.has(refKey(ref)));
     relationships = { collectionRefs,
       listId: collectionRefs.some(ref => ref.type === 'list' && ref.id === candidate.listId) ? candidate.listId : collectionRefs.find(ref => ref.type === 'list')?.id || null,
@@ -67,7 +70,7 @@ function activeEntries(plan, records) {
 
 function targetFields(entry, active) {
   const keys = new Set(active.map(refKey));
-  if (entry.type !== 'item') {
+  if (!['item', 'recurrenceTemplate'].includes(entry.type)) {
     const parentRef = entry.final.parentRef && keys.has(refKey(entry.final.parentRef)) ? entry.final.parentRef : null;
     return { ...entry.final, parentRef };
   }

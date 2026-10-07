@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=20" defer></script>
+  <script src="/pwa.js?v=21" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=20"></script>
+  <script type="module" src="/inbox.js?v=21"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -141,6 +141,11 @@
           <label>Revisit on (optional)<input name="revisitDate" type="date" min="0001-01-01" max="9999-12-31"></label>
           <p id="collectionSettingsHelp" class="muted"></p><button type="submit">Save collection settings on device</button><p id="collectionSettingsStatus" role="status"></p>
         </form>
+      </section>
+      <section id="recurringSection" class="collection-settings" aria-labelledby="recurringHeading" hidden>
+        <p class="eyebrow">Scheduled work</p><h3 id="recurringHeading" tabindex="-1">Recurring templates</h3>
+        <p class="muted">Only one open occurrence is created. Missed calendar slots are not backfilled.</p>
+        <button id="newRecurring" type="button">New recurring template</button><p id="recurringStatus" role="status" aria-live="polite"></p><div id="recurringTemplates"></div>
       </section>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
@@ -358,9 +363,36 @@
         <label id="editWorkspaceLabel">Workspace<select name="workspaceId"></select><span id="editWorkspaceHelp" class="muted"></span></label>
         <div id="editCollectionFields" hidden><label>Collection type<select name="kind" aria-describedby="collectionTypeHelp"></select></label><p id="collectionTypeHelp" class="muted">Changing a collection’s type keeps its items, defaults, parent and history. Projects retain their own type.</p><label>Parent (optional)<select name="parentRef"></select></label></div><div id="editOrganizer"></div><label id="editListLabel">Primary list (defaults) <select name="listId"></select></label>
         <div id="editAdvanced"><div id="editFields"></div></div>
+        <fieldset id="recurrenceEditScope" hidden><legend>Apply recurring changes</legend>
+          <label><input type="radio" name="recurrenceScope" value="one" checked> This occurrence only</label>
+          <label><input type="radio" name="recurrenceScope" value="this-future"> This and future occurrences</label>
+          <label><input type="radio" name="recurrenceScope" value="future"> Future occurrences only</label>
+        </fieldset>
         <details><summary>Original capture</summary><pre id="original"></pre></details>
         </div>
         <div class="editor-actions"><button type="submit">Save edit on device</button><button id="cancelEdit" type="button">Close editor</button></div>
+      </form>
+    </dialog>
+    <dialog class="side-panel" id="recurringEditor" aria-labelledby="recurringEditorHeading">
+      <p class="eyebrow">Schedule work</p><h2 id="recurringEditorHeading" tabindex="-1">Recurring template</h2>
+      <p id="recurringError" role="alert"></p><p id="recurringSaveStatus" role="status" aria-live="polite"></p>
+      <form id="recurringForm">
+        <div class="edit-scroll">
+          <label>Title <input name="title" maxlength="200" required></label>
+          <label>Notes <textarea name="description" rows="3" maxlength="4000"></textarea></label>
+          <fieldset><legend>Repeat from</legend><label><input type="radio" name="mode" value="fixed" checked> Fixed calendar</label><label><input type="radio" name="mode" value="after-resolution"> After completion/skip</label></fieldset>
+          <div class="form-grid recurrence-schedule"><label>Every <input name="interval" type="number" min="1" max="999" value="1" required></label><label>Unit <select name="unit"><option value="day">Days</option><option value="week">Weeks</option><option value="month">Months</option></select></label></div>
+          <label>First date <input name="anchorDate" type="date" min="0001-01-01" max="9999-12-31" required></label>
+          <label>Time zone <input name="timeZone" maxlength="100" required></label>
+          <label>Destination <select name="destination"><option value="">No collection</option></select></label>
+          <label>Generated state <select name="status"><option value="inbox" selected>Inbox</option><option value="next">Next</option></select></label>
+          <label>Contexts <input name="contexts" placeholder="Comma separated"></label><label>Areas <input name="areas" placeholder="Comma separated"></label>
+          <label>Energy <input name="energy" maxlength="64"></label><label>Time <input name="timeRequired" maxlength="64"></label><label>Priority <input name="priority" maxlength="64"></label>
+          <label>Reference links <textarea name="referenceLinks" rows="2" placeholder="One HTTP(S) link per line"></textarea></label>
+          <p class="muted">Schedule and time-zone changes affect only occurrences not yet created. Individual occurrence dates remain ordinary item fields.</p>
+          <details><summary>Occurrence history</summary><div id="recurrenceHistory"></div></details>
+        </div>
+        <div class="editor-actions"><button type="submit">Save template on device</button><button id="pauseRecurring" type="button" hidden>Pause template</button><button id="deleteRecurring" type="button" hidden>Delete template</button><button id="closeRecurring" type="button">Close</button></div>
       </form>
     </dialog>
     <dialog class="side-panel clarify-sheet" id="clarifier" aria-labelledby="clarifyHeading">

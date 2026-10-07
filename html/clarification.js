@@ -1,4 +1,4 @@
-import { collectionKinds, collectionKind, isCollection, memberships, ancestry, refKey } from './collection-model.js?v=3';
+import { collectionKinds, collectionKind, isCollection, memberships, ancestry, refKey } from './collection-model.js?v=4';
 import { localGuidance } from './local-guidance.js?v=1';
 import { newFlow, flowProposal, requireTitle, membershipChange, itemFields, beforeFields } from './clarification-flow.js?v=4';
 

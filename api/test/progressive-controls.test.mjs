@@ -80,7 +80,7 @@ test('progressive controls keep capture and editor actions reachable without exp
   for (const [width, height] of [[320, 600], [400, 900], [767, 900], [768, 900], [936, 900], [1440, 900]]) {
     await page.setViewportSize({ width, height });
     for (const bottom of [false, true]) {
-      await page.locator('.edit-scroll').evaluate((el, bottom) => { el.scrollTop = bottom ? el.scrollHeight : 0; }, bottom);
+      await page.locator('#editor .edit-scroll').evaluate((el, bottom) => { el.scrollTop = bottom ? el.scrollHeight : 0; }, bottom);
       for (const selector of ['#edit [type=submit]', '#cancelEdit']) {
         const rect = await page.locator(selector).boundingBox();
         assert.ok(rect.y >= 0 && rect.y + rect.height <= height && rect.height >= 44, `${selector} at ${width}x${height}: ${JSON.stringify(rect)}`);

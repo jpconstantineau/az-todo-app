@@ -46,5 +46,5 @@ export function inCollection(item, ref, records, nested = false) {
   return memberships(item).some(member => (nested ? ancestry(member, records) : [member]).some(candidate => refKey(candidate) === refKey(ref)));
 }
 export function collectionContents(record, target) {
-  return !record.deleted && (record.type === 'item' && belongsTo(record, target) || isCollection(record) && record.parentRef && refKey(record.parentRef) === refKey(target));
+  return !record.deleted && (['item', 'recurrenceTemplate'].includes(record.type) && !record.tombstoned && belongsTo(record, target) || isCollection(record) && record.parentRef && refKey(record.parentRef) === refKey(target));
 }
