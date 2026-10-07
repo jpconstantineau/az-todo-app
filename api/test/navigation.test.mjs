@@ -794,7 +794,10 @@ test('navigation: keyboard links, responsive layout and appearance across all si
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${theme} ${width} ${view}`);
         assert.equal(await page.locator('.workspace-nav [aria-current="page"]').count(), 1);
         assert.equal(await page.locator('.inbox-grid > section:visible:not(#failure)').count(), 1);
-        for (const link of await page.locator('.workspace-nav a').all()) assert.ok((await link.boundingBox()).height >= 44);
+        for (const link of await page.locator('.workspace-nav a').all()) {
+          const bounds = await link.boundingBox();
+          assert.ok(bounds.width >= 44 && bounds.height >= 44, `${theme} ${width} ${view} ${await link.getAttribute('aria-label')}`);
+        }
         if (shots && [390, 1440].includes(width) && (theme === 'dark' || ['work', 'execute'].includes(view))) {
           await page.locator('.workspace-nav [aria-current="page"]').focus();
           await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');

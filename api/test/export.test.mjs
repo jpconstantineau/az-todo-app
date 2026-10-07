@@ -11,7 +11,7 @@ function fixture() {
   const base = { accountId: 'alice', version: 2, deleted: false, createdUtc: '2026-10-02T12:00:00.000Z' };
   const item = { ...base, type: 'item', id: 'milk', workspaceId: 'personal', collectionRefs: [{ type: 'list', id: 'groceries' }, { type: 'project', id: 'dinner' }], title: 'Milk', originalText: '  milk\n', description: 'Two cartons',
     sourceUrl: 'https://example.com/milk', selectedText: 'original selection', referenceLinks: ['https://example.com'],
-    listId: 'groceries', projectId: 'dinner', plannedDay: '2026-10-03', dueDateUtc: '2026-10-04T03:00:00.000Z',
+    listId: 'groceries', projectId: 'dinner', plannedDay: '2026-10-03', plannedWeek: '2026-09-28', dueDateUtc: '2026-10-04T03:00:00.000Z',
     status: 'waiting', waitingOn: 'Sam', reviewDate: '2026-10-03', startDate: '2026-10-04', areas: ['Home'],
     workflowBeforeTransition: { status: 'next', waitingOn: '', startDate: null, startDateUtc: null, reviewDate: null, reviewDateUtc: null },
     completionBeforeTransition: 'next' };
@@ -69,7 +69,7 @@ test('portable export round-trips originals, relationships, tombstones, exact qu
   assert.equal(run().status, 1, 'existing output must not be overwritten');
   assert.deepEqual(value, before, 'validation and text rendering never mutate snapshots');
   const text = readableExport(value);
-  for (const expected of ['Milk', 'Two cartons', 'Everyone fed', '2026-10-03', 'https://example.com/milk',
+  for (const expected of ['Milk', 'Two cartons', 'Everyone fed', '2026-10-03', '2026-09-28', 'https://example.com/milk',
     'original selection', 'pending-id', 'Oat milk', 'Unsent edit', 'Saved unfinished draft', 'Unpersisted current draft']) assert.ok(text.includes(expected), expected);
   assert.match(text, /DELETED RECORD SNAPSHOTS \(not active tasks\)[\s\S]*Erased task/);
   assert.match(text, /PENDING SAVES \(not server-confirmed\)/);

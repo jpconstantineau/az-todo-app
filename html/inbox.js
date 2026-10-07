@@ -11,7 +11,7 @@ import { setupReviews } from './reviews.js?v=7';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
-import { localMonday, setupPlan } from './plan.js?v=1';
+import { localMonday, setupPlan } from './plan.js?v=2';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -220,7 +220,10 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
 const planner = setupPlan({ records: scopedRecords, navigation: () => navigation.plan, readOnly: workspaceReadOnly,
   save: async (record, fields) => { if (!await updateRecord(record, fields)) render(); },
   edit: record => openEditor(record),
-  inspectDeleted: () => { renderDeleted(); showDialog($('deletedRecords')); },
+  inspectDeleted: record => {
+    renderDeleted(); showDialog($('deletedRecords'));
+    $('deletedRecords').querySelector(`[data-focus-key="${CSS.escape(`${key(record)}:restore`)}"]`)?.focus();
+  },
   openCollection: record => {
     navigation.lists.view = record ? viewKey(record) : '';
     location.hash = 'lists';
@@ -667,6 +670,7 @@ function renderDeleted() {
       : button('Restore', () => changeDeletion(record, 'restore'), `Restore ${record.type}: ${record.title}`, `${key(record)}:restore`));
     return article;
   }));
+  if (workspaceReadOnly()) $('deletedItems').querySelectorAll('button').forEach(control => { control.disabled = true; });
   if (!deleted.length) $('deletedItems').textContent = 'No deleted items, lists or projects on this device. Sync to retrieve changes from other devices.';
 }
 async function changeDeletion(record, action, linkedSnapshot = []) {

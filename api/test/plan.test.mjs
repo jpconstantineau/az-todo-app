@@ -41,6 +41,7 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
     currentCreate('list', 'secondary', { title: 'Secondary', parentRef: { type: 'list', id: 'role' } }),
     currentCreate('item', 'nested', { title: 'Nested next', status: 'next', collectionRefs: [{ type: 'project', id: 'project' }] }),
     currentCreate('item', 'multiple', { title: 'Multiple paths', status: 'next', collectionRefs: [{ type: 'project', id: 'project' }, { type: 'list', id: 'secondary' }] }),
+    currentCreate('item', 'direct', { title: 'Direct role action', status: 'next', plannedWeek: week, collectionRefs: [{ type: 'list', id: 'role' }] }),
     currentCreate('item', 'unfiled', { title: 'Unfiled next', status: 'next' }),
     currentCreate('item', 'attention', { title: 'Waiting selected', status: 'waiting', waitingOn: 'Alex', plannedWeek: week, collectionRefs: [{ type: 'project', id: 'project' }] }),
     currentCreate('item', 'day', { title: 'Day only', status: 'next', plannedDay: '2030-05-06', collectionRefs: [{ type: 'list', id: 'secondary' }] }),
@@ -59,11 +60,18 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
   await page.goForward(); await page.waitForFunction(() => document.querySelector('#openPlan').getAttribute('aria-current') === 'page');
 
   await page.locator('#planFocusPicker > summary').click();
+  await page.locator('#planFocus').selectOption('list:role');
+  assert.match(await page.locator('#planFocusCounts').textContent(), /1 of 1 active project has a Next action/);
+  assert.match(await page.locator('#planBalance').textContent(), /Direct: 1/);
   await page.locator('#planFocus').selectOption('project:project');
   assert.deepEqual(await page.locator('#planBreadcrumbs button').allTextContents(), ['Workspace', 'Parent', 'Initiative', 'Project']);
   assert.equal(await page.locator('#planFocusKind').textContent(), 'Project');
   assert.equal(await page.locator('#planFocusDescription').textContent(), 'A finished result');
   assert.match(await page.locator('#planFocusCounts').textContent(), /2 Next actions/);
+  assert.equal(await page.locator('#planHierarchy button[aria-label="Plan Project"]').getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: 'Edit Project', exact: true }).click();
+  await page.getByRole('button', { name: 'Close editor', exact: true }).click();
+  assert.ok(await page.getByRole('button', { name: 'Edit Project', exact: true }).evaluate(element => element === document.activeElement));
   assert.deepEqual((await page.locator('#planWeekActions article').evaluateAll(rows => rows.map(row => row.dataset.id))).sort(), ['multiple', 'nested']);
   assert.match(await page.locator('#planWeekActions').innerText(), /Parent \/ Initiative \/ Project/);
   assert.match(await page.locator('#planWeekActions').innerText(), /Parent \/ Secondary/);
@@ -85,10 +93,11 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
   assert.deepEqual((await local(page)).queue, pending);
   await context.setOffline(false); await clickControl(page.locator('#sync')); await confirmed(page);
   const stored = documents.filter(document => document.record?.type === 'item').map(document => document.record);
-  assert.equal(stored.length, 5);
+  assert.equal(stored.length, 6);
   assert.equal(stored.find(record => record.id === 'nested').plannedWeek, week);
   assert.equal(stored.find(record => record.id === 'nested').status, 'next');
 
+  await page.locator('#planAttention > summary').click();
   await page.getByRole('checkbox', { name: 'Remove Waiting selected from this week', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).records['item:attention']?.plannedWeek === null); await confirmed(page);
   assert.equal(documents.find(document => document.record?.id === 'attention').record.plannedWeek, null);
