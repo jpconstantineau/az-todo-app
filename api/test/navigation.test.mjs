@@ -85,7 +85,7 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   assert.equal(await page.getByRole('combobox', { name: 'View', exact: true }).inputValue(), 'inbox');
   assert.equal(await page.locator('#view').evaluate(el => getComputedStyle(el).fontSize), await page.locator('#itemsHeading').evaluate(el => getComputedStyle(el).fontSize));
   assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
-  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process'], ['listWorkspace', 'List Workspace'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process'], ['listWorkspace', 'List Workspace'], ['openPlan', 'Plan'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
     const link = page.getByRole('link', { name, exact: true });
     assert.equal(await link.getAttribute('id'), id);
     assert.equal(await link.getAttribute('title'), name);
@@ -727,7 +727,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   await page.route('**/api/v1/operations', route => route.fulfill({ status: 400, json: { apiVersion: 1, error: 'invalid_request', message: 'Keep this rejected save.' } }));
   await capture(page, 'Rejected private task'); await page.locator('#failure').waitFor();
   await page.locator('#captureText').fill('Private unsaved draft');
-  for (const view of ['work', 'lists', 'execute', 'capture']) {
+  for (const view of ['work', 'lists', 'plan', 'execute', 'capture']) {
     await showView(page, view);
     assert.ok(await page.locator('#failure').isVisible());
     assert.ok(await page.locator('#discard').isVisible());
@@ -740,7 +740,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   await context.setOffline(true);
   await page.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('Full', 'QuotaExceededError'); }; });
   await page.locator('#captureText').fill('Recover this draft'); await page.locator('#recovery').waitFor();
-  for (const view of ['work', 'lists', 'execute', 'capture']) {
+  for (const view of ['work', 'lists', 'plan', 'execute', 'capture']) {
     await showView(page, view);
     assert.ok(await page.locator('#recovery').isVisible());
     assert.match(await page.locator('#recoveryText').inputValue(), /Recover this draft/);
@@ -768,7 +768,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   assert.equal(await page.locator('.work-panel').isVisible(), false);
 });
 
-test('navigation: keyboard links, responsive layout and appearance across all five destinations', { timeout: 90000 }, async t => {
+test('navigation: keyboard links, responsive layout and appearance across all six destinations', { timeout: 90000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Buy milk\nBook a bike tune-up', 'Weekend'); await confirmed(page);
   const list = documents.find(doc => doc.record?.type === 'list').record;
@@ -789,12 +789,15 @@ test('navigation: keyboard links, responsive layout and appearance across all fi
     if (await page.locator('#appMenu').evaluate(element => element.open)) await page.locator('#appMenu > summary').click();
     for (const width of [320, 390, 768, 1440, 2560]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const view of ['capture', 'work', 'lists', 'execute', 'reviews']) {
+      for (const view of ['capture', 'work', 'lists', 'plan', 'execute', 'reviews']) {
         await showView(page, view);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${theme} ${width} ${view}`);
         assert.equal(await page.locator('.workspace-nav [aria-current="page"]').count(), 1);
         assert.equal(await page.locator('.inbox-grid > section:visible:not(#failure)').count(), 1);
-        for (const link of await page.locator('.workspace-nav a').all()) assert.ok((await link.boundingBox()).height >= 44);
+        for (const link of await page.locator('.workspace-nav a').all()) {
+          const bounds = await link.boundingBox();
+          assert.ok(bounds.width >= 44 && bounds.height >= 44, `${theme} ${width} ${view} ${await link.getAttribute('aria-label')}`);
+        }
         if (shots && [390, 1440].includes(width) && (theme === 'dark' || ['work', 'execute'].includes(view))) {
           await page.locator('.workspace-nav [aria-current="page"]').focus();
           await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
@@ -807,7 +810,7 @@ test('navigation: keyboard links, responsive layout and appearance across all fi
   // Reflow and 200% text enlargement; physical browser zoom/phone keyboards remain manual checks.
   await page.setViewportSize({ width: 720, height: 450 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  for (const view of ['capture', 'work', 'lists', 'execute', 'reviews']) {
+  for (const view of ['capture', 'work', 'lists', 'plan', 'execute', 'reviews']) {
     await showView(page, view);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   }

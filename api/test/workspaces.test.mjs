@@ -85,7 +85,7 @@ test('workspaces: moving a collection carries its nested records and keeps histo
     create('list', 'root', { title: 'Root', workspaceId: 'work' }),
     create('project', 'child', { title: 'Project', outcome: 'Done', workspaceId: 'work', parentRef: { type: 'list', id: 'root' } }),
     create('list', 'other', { title: 'Other', workspaceId: 'work' }),
-    create('item', 'task', { title: 'Clarified task', workspaceId: 'work', collectionRefs: [{ type: 'project', id: 'child' }, { type: 'list', id: 'other' }], projectId: 'child', listId: 'other' })
+    create('item', 'task', { title: 'Clarified task', workspaceId: 'work', plannedWeek: '2026-10-05', collectionRefs: [{ type: 'project', id: 'child' }, { type: 'list', id: 'other' }], projectId: 'child', listId: 'other' })
   ])).status, 200);
   const records = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
   records['clarification:task'] = { type: 'clarification', id: 'task', ...clarification('complete') };
@@ -101,6 +101,7 @@ test('workspaces: moving a collection carries its nested records and keeps histo
   assert.deepEqual(moved['item:task'].collectionRefs, [{ type: 'project', id: 'child' }]);
   assert.equal(moved['item:task'].listId, null);
   assert.equal(moved['item:task'].projectId, 'child');
+  assert.equal(moved['item:task'].plannedWeek, '2026-10-05');
   assert.equal(moved['list:other'].workspaceId, 'work');
   moved['clarification:task'] = records['clarification:task']; moved['brief:brief'] = records['brief:brief'];
   assert.equal(workspaceOf(moved['clarification:task'], moved), 'family');
@@ -116,7 +117,7 @@ test('workspaces: large collection moves detach, move and reattach in repeat-saf
   for (let start = 0; start < 21; start += 20) {
     const batch = Array.from({ length: Math.min(20, 21 - start) }, (_, offset) => {
       const id = `task-${start + offset}`;
-      return create('item', id, { title: id, originalText: `Original ${id}`, workspaceId: 'work', listId: 'other',
+      return create('item', id, { title: id, originalText: `Original ${id}`, workspaceId: 'work', listId: 'other', ...(start + offset === 0 ? { plannedWeek: '2026-10-05' } : {}),
         collectionRefs: [{ type: 'list', id: 'root' }, { type: 'list', id: 'other' }] });
     });
     assert.equal((await post(batch)).status, 200);
@@ -153,6 +154,7 @@ test('workspaces: large collection moves detach, move and reattach in repeat-saf
     const item = records[`item:task-${index}`];
     assert.equal(item.workspaceId, 'family');
     assert.equal(item.originalText, `Original task-${index}`);
+    assert.equal(item.plannedWeek, index === 0 ? '2026-10-05' : null);
     assert.deepEqual(item.collectionRefs, [{ type: 'list', id: 'root' }]);
     assert.equal(item.listId, 'root');
   }

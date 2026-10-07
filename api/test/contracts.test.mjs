@@ -37,7 +37,7 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /type="module" src="\/inbox.js\?v=12"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=14"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {
@@ -59,4 +59,8 @@ test('current create contract requires canonical workspace, membership and proje
   assert.throws(() => fieldsFor('project', 'create', { title: 'Project', outcome: 'Done', workspaceId: 'personal' }), /status/);
   assert.throws(() => fieldsFor('review', 'create', { reviewKind: 'weekly', reviewDay: '2026-10-05', included: [], decisionHeads: [], decisionCount: 0 }), /workspaceId/);
   assert.deepEqual(fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal', collectionRefs: [] }).collectionRefs, []);
+  assert.equal(fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal', collectionRefs: [] }).plannedWeek, null);
+  assert.equal(fieldsFor('item', 'update', { plannedWeek: '2026-10-05' }).plannedWeek, '2026-10-05');
+  assert.equal(fieldsFor('item', 'update', { plannedWeek: null }).plannedWeek, null);
+  assert.throws(() => fieldsFor('item', 'update', { plannedWeek: '2026-10-5' }), /plannedWeek/);
 });

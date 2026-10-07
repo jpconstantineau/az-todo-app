@@ -4,13 +4,14 @@ import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './works
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
 import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=7';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=8';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=9';
 import { clarificationUI } from './clarification.js?v=5';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
 import { setupReviews } from './reviews.js?v=7';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
+import { localMonday, setupPlan } from './plan.js?v=2';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -31,7 +32,7 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'List Workspace' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
@@ -191,7 +192,7 @@ async function saveClarification(mutations, next) {
   state = saved; render(); broadcast(); void sync(); return true;
 }
 let destination = 'capture';
-const emptyNavigation = () => ({ work: { view: 'inbox', status: '' }, lists: { view: '', status: '' }, execute: { kind: 'list', view: '' } });
+const emptyNavigation = () => ({ work: { view: 'inbox', status: '' }, lists: { view: '', status: '' }, plan: { focus: '', week: localMonday() }, execute: { kind: 'list', view: '' } });
 let navigation = emptyNavigation();
 const reviews = setupReviews({ current: () => accountId ? state : null, records: scopedRecords, workspaceId: () => selectedWorkspace, journal,
   edit: record => {
@@ -216,6 +217,23 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save remains with its original account.');
   state = saved; clearError(); render(); broadcast(); void sync();
 } });
+const planner = setupPlan({ records: scopedRecords, navigation: () => navigation.plan, readOnly: workspaceReadOnly,
+  save: async (record, fields) => { if (!await updateRecord(record, fields)) render(); },
+  edit: record => openEditor(record),
+  inspectDeleted: record => {
+    renderDeleted(); showDialog($('deletedRecords'));
+    $('deletedRecords').querySelector(`[data-focus-key="${CSS.escape(`${key(record)}:restore`)}"]`)?.focus();
+  },
+  openCollection: record => {
+    navigation.lists.view = record ? viewKey(record) : '';
+    location.hash = 'lists';
+  },
+  openProcess: (action, day) => {
+    if (action === 'set-day' || action === 'open-day') $('day').value = day;
+    if (action === 'inbox') navigation.work.view = 'inbox';
+    if (action === 'open-day') navigation.work.view = 'day';
+    if (action !== 'set-day') location.hash = 'work';
+  }, journal });
 addTaskControls($('editFields'));
 const editOrganizer = organizer($('editOrganizer'), {}, []);
 const primaryMemberships = document.createElement('details'), primarySummary = document.createElement('summary');
@@ -385,8 +403,10 @@ function restoreDraft() {
   navigation = emptyNavigation();
   Object.assign(navigation.work, saved.navigation?.work);
   Object.assign(navigation.lists, saved.navigation?.lists || {});
+  Object.assign(navigation.plan, saved.navigation?.plan || {});
   Object.assign(navigation.execute, saved.navigation?.execute || {});
   $('day').value = saved.day ?? localDate(new Date().toISOString()).slice(0, 10);
+  $('planDay').value = $('day').value;
   workspace(false);
   // Keep unfinished list creation available through New list without opening it on arrival.
   if (saved.edit) openEditor(saved.edit, false, saved.editOpen === true && !(saved.edit.type === 'list' && saved.edit.version === 0));
@@ -558,7 +578,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     $('comparison').textContent = failed ? failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n')
@@ -572,6 +592,8 @@ function render() {
   briefs.render();
   renderDeleted();
   renderEditorDraft();
+  $('planDay').value = $('day').value;
+  planner.render();
   const readOnly = workspaceReadOnly();
   const execute = navigation.execute;
   const kinds = $('executeKinds');
@@ -648,6 +670,7 @@ function renderDeleted() {
       : button('Restore', () => changeDeletion(record, 'restore'), `Restore ${record.type}: ${record.title}`, `${key(record)}:restore`));
     return article;
   }));
+  if (workspaceReadOnly()) $('deletedItems').querySelectorAll('button').forEach(control => { control.disabled = true; });
   if (!deleted.length) $('deletedItems').textContent = 'No deleted items, lists or projects on this device. Sync to retrieve changes from other devices.';
 }
 async function changeDeletion(record, action, linkedSnapshot = []) {
@@ -793,7 +816,7 @@ async function discardEdit() {
 
 async function updateRecord(record, fields, close = false) {
   const owner = accountId;
-  if (!owner) return;
+  if (!owner) return false;
   if (workspaceReadOnly()) throw new Error('Unarchive this workspace before editing.');
   if (fields.title !== undefined && (!fields.title.trim() || fields.title.length > 200)) throw new Error('Title must be 1–200 characters.');
   if ((fields.description?.length ?? 0) > 4000) throw new Error('Notes must be at most 4,000 characters.');
@@ -816,8 +839,8 @@ async function updateRecord(record, fields, close = false) {
       if (close) currentDraft(local).edit = null;
     });
     if (owner === accountId) state = saved;
-  } catch (failure) { if (owner === accountId) storageFailure(failure); return; }
-  if (owner !== accountId) return;
+  } catch (failure) { if (owner === accountId) storageFailure(failure); return false; }
+  if (owner !== accountId) return false;
   if (!close && record.type === 'item') {
     const current = projected(state)[key(record)];
     recentTaskChange = fields === record.workflowBeforeTransition ? null
@@ -835,7 +858,7 @@ async function updateRecord(record, fields, close = false) {
         addContextItem(target);
       }, `Add ${target.type === 'project' ? 'next action to' : 'item to'} ${target.title}`));
   }
-  broadcast(); void sync();
+  broadcast(); void sync(); return true;
 }
 
 capture.addEventListener('input', () => { extraction.changed(); void journal(); });
@@ -932,7 +955,7 @@ function focusDestination() {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
+  (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'plan' ? $('planHeading') : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
 }
 function restoreFocus(control) {
   const modal = document.querySelector('dialog[open]'), scope = modal || document;
@@ -950,10 +973,11 @@ function showDialog(dialog) {
   dialog.showModal();
 }
 function workspace(focus = true) {
-  destination = ['work', 'lists', 'execute', 'reviews'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
+  destination = ['work', 'lists', 'plan', 'execute', 'reviews'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
   const listMode = destination === 'lists';
   document.querySelector('.capture-panel').hidden = destination !== 'capture';
   document.querySelector('.work-panel').hidden = !['work', 'lists'].includes(destination);
+  $('plan').hidden = destination !== 'plan';
   $('reviews').hidden = destination !== 'reviews';
   $('execute').hidden = destination !== 'execute';
   $('listTools').hidden = !listMode;
@@ -1224,7 +1248,7 @@ function hideAccount() {
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
-  $('projectOutcome').textContent = ''; $('projectActions').replaceChildren(); $('day').value = '';
+  $('projectOutcome').textContent = ''; $('projectActions').replaceChildren(); $('day').value = $('planDay').value = '';
   $('createdDestination').replaceChildren(); $('addContextItem').hidden = true;
   $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
 }

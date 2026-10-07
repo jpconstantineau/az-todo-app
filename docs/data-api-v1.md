@@ -254,7 +254,7 @@ Operations contain 1–20 distinct records and at most 64 KiB of UTF-8 JSON. Unk
 fields, unknown versions, malformed dates, invalid references and oversized text
 are rejected rather than clipped. Lists support title (200 characters), description
 (4,000) and creation-only capture fields. Items additionally support nullable
-`listId`, `projectId`, calendar-date `plannedDay`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
+`listId`, `projectId`, calendar-date `plannedDay` and `plannedWeek`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
 `waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority` and HTTP(S)
 `referenceLinks`. Tags are at most 64 characters, arrays at most 20 entries, URLs
 at most 2,048 characters. Statuses allow `inbox`, `next`, `waiting`, `deferred`,
@@ -282,10 +282,11 @@ existing milk action without changing its identity, original capture, source or 
 Project deletion requires an already empty membership, just like list deletion;
 otherwise it returns `409 project_not_empty`.
 
-`plannedDay` is `null` or a real `YYYY-MM-DD` calendar date (years 0001–9999),
-stored and displayed without time-zone conversion. It describes a day to work on
-the action, not a deadline, start date or review cue. Assigning it never changes
-`dueDateUtc`. Missing project/day fields on existing records mean unassigned;
+`plannedDay` and `plannedWeek` are `null` or real `YYYY-MM-DD` calendar dates (years 0001–9999),
+stored and displayed without time-zone conversion. `plannedDay` describes a day
+to work on the action; `plannedWeek` is the week selected in Plan. Neither is a deadline,
+start date or review cue, and assigning either never changes `dueDateUtc`, status
+or collection membership. Missing project/day/week fields on existing records mean unassigned;
 no backfill, partition change or data reset is required. Existing action `areas`
 remain optional tags and survive relationship changes. Older clients can still
 edit known fields without erasing these additions. Deploy the additive API before

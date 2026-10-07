@@ -1,5 +1,25 @@
 # Workspace navigation — issue 26
 
+## Top-down planning — issue #139
+
+The **Plan** destination (`/#plan`) sits between List Workspace and Do. It uses
+the existing Role, Area, Initiative, Program, Project and List hierarchy rather
+than introducing a goal schema or methodology setting. Choose a planning focus
+to see its path, outcome or notes, direct children, active projects and exact
+`Next` coverage. Items with multiple memberships show every path but remain one
+canonical action.
+
+**This week** stores an optional `plannedWeek` calendar date on the item. The
+display defaults to the device's local Monday. Selecting or removing an action
+changes only that field and uses the existing offline journal, conflict handling
+and account/workspace isolation. Selected non-Next work remains under Needs
+attention; the planner never promotes, duplicates or silently unplans it.
+
+**Day** reads the existing `plannedDay` field and hands that date to Process.
+Ordering, capacity and carryover remain outside this feature. Plan focus and week
+are device-draft navigation preferences. A deleted focus falls back to its live
+parent, then the whole workspace. Archived/deleted workspaces are read-only.
+
 ## Add work in context — issue 76
 
 Select a list in Lists or Your Work and choose **Add item**, or select a project

@@ -81,7 +81,7 @@ export function fieldsFor(type, action, input) {
   }
   const shared = ["title", "description", "workspaceId"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
-  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
+  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "referenceLinks"];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status"] : ["defaults", "kind", "parentRef"])];
   object(input, allowed, "fields");
   if (action === 'create') {
@@ -121,7 +121,7 @@ export function fieldsFor(type, action, input) {
       result[key] = exactText(value, ({ originalText: 16000, selectedText: 8000, sourceTitle: 2000 })[key] || 4000, key);
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
     else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
-    else if (key === "plannedDay") result[key] = calendarDate(value, key);
+    else if (["plannedDay", "plannedWeek"].includes(key)) result[key] = calendarDate(value, key);
     else if (key === "status") {
       if (type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(value)) throw new ValidationError('Choose a draft, active, someday or completed project status.');
       result[key] = cleanTag(exactText(value, 64, key), key);
@@ -142,7 +142,7 @@ export function fieldsFor(type, action, input) {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
       ...(type === 'project' ? { outcome: '' } : {}),
-      ...(type === "item" ? { collectionRefs: [], listId: null, projectId: null, plannedDay: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
+      ...(type === "item" ? { collectionRefs: [], listId: null, projectId: null, plannedDay: null, plannedWeek: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,
         priority: null, referenceLinks: [] } : {}), ...result
     };
