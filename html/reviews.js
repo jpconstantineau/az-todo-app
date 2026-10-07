@@ -1,5 +1,5 @@
 import { belongsTo, memberships, refKey } from './collection-model.js?v=2';
-import { key, projected } from './inbox-store.js?v=8';
+import { key, projected } from './inbox-store.js?v=9';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=2';
 
 const $ = id => document.getElementById(id);
@@ -275,7 +275,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     if (followUpId) mutations.push({ type: 'item', id: followUpId, action: 'create', expectedVersion: 0, fields: {
       title: followUp.title.trim(), description: followUp.description || '', originalText: followUp.title, workspaceId: workspaceId(), collectionRefs: [], status: 'inbox'
     } });
-    const nextReflectionDraft = { ...reflectionDraft, baseReflectionId: id, followUp: null };
+    const nextReflectionDraft = { ...reflectionDraft, baseReflectionId: id, followUp: withFollowUp ? null : reflectionDraft.followUp };
     const nextDraft = { ...draft(), reflection: structuredClone(nextReflectionDraft) };
     await save(mutations, nextDraft);
     reflectionDraft = nextReflectionDraft;

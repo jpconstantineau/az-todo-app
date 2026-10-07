@@ -2,7 +2,7 @@ import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, 
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=8';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=9';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=11';
 import { clarificationUI } from './clarification.js?v=5';
@@ -1500,7 +1500,8 @@ $('resolve').onclick = guard(async () => {
       const reflection = reflectionMutations.find(mutation => mutation.type === 'reviewReflection');
       const savedDraft = currentDraft(local).review?.reflection;
       if (savedDraft?.rootReviewId === reflection.fields.reviewId) Object.assign(savedDraft, {
-        baseReflectionId: reflection.id, prompts: structuredClone(reflection.fields.prompts), conclusion: reflection.fields.conclusion, followUp: null
+        baseReflectionId: reflection.id, prompts: structuredClone(reflection.fields.prompts), conclusion: reflection.fields.conclusion,
+        followUp: entry.operation.mutations.some(mutation => mutation.type === 'item' && mutation.id === savedDraft.followUp?.id) ? null : savedDraft.followUp
       });
     }
   });

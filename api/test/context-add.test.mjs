@@ -34,7 +34,7 @@ async function createDestination(page, type, title) {
 test('context add: offline list/project creation keeps Capture and editor drafts and one task identity', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t);
   await page.locator('#captureText').fill('Unfinished global capture');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'Unfinished global capture');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Unfinished global capture');
   await context.setOffline(true);
   await createDestination(page, 'list', 'Groceries');
   await page.getByRole('button', { name: 'Add item to Groceries', exact: true }).click();
@@ -45,7 +45,7 @@ test('context add: offline list/project creation keeps Capture and editor drafts
   assert.equal(await page.locator('#edit [name=title]').evaluate(el => el === document.activeElement), true);
   await page.locator('#edit [name=title]').fill('Milk');
   await page.locator('#edit [name=description]').fill('Two cartons');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.edit?.fields.description === 'Two cartons');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.edit?.fields.description === 'Two cartons');
   await page.reload(); await page.locator('#editor').waitFor();
   assert.equal(await page.locator('#edit [name=title]').inputValue(), 'Milk');
   assert.equal(await page.locator('#edit [name=listId]').inputValue(), listId);
@@ -113,7 +113,7 @@ test('context add: workspace changes keep pending additions isolated and archive
   await page.locator('#closeWorkspaces').click();
   const work = await page.locator('#workspaceSelect option').evaluateAll(options => options.find(option => option.textContent === 'Work').value);
   await page.locator('#workspaceSelect').selectOption(work);
-  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=8')).transact('alice')).selectedWorkspace === id, work);
+  await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === id, work);
   assert.equal(await page.locator('#createdDestination').textContent(), '');
   assert.equal(await page.locator('#addContextItem').isVisible(), false);
   await createDestination(page, 'project', 'Work project');

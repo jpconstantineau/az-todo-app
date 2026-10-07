@@ -9,7 +9,7 @@ import { documents, faults, startServer } from './harness.mjs';
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const label = (page, expected) => page.waitForFunction(value => document.querySelector('#sessionStatus').textContent === value, expected);
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
 async function setup(t) {
   documents.length = 0;
   Object.assign(faults, { nextWrite: false, batchIndex: -1, loseBatchResponse: false });
@@ -42,7 +42,7 @@ async function sync(page) {
   const changes = await (await response).json();
   // Headers and an unchanged confirmation label do not mean this pull was applied.
   await waitForBrowser(page, async ({ accountId, highWater }) => {
-    const state = await (await import('/inbox-store.js?v=8')).transact(accountId);
+    const state = await (await import('/inbox-store.js?v=9')).transact(accountId);
     if (state.after < highWater || state.queue.length) return false;
     const items = Object.values(state.records).filter(record => record.type === 'item' && !record.deleted);
     const rendered = [...document.querySelectorAll('#items article')];
@@ -136,7 +136,7 @@ test('account label: explicit sign-out clears the label and pauses the original 
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
   await clickControl(page.locator('#signOut'));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact(null)).paused);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).paused);
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /alice-handle/);
   assert.equal((await local(page)).draft.capture.text, 'Keep this draft');
 });
@@ -144,11 +144,11 @@ test('account label: explicit sign-out clears the label and pauses the original 
 test('same-profile tabs share their unsaved draft slot; independent profiles do not', async t => {
   const { page, context, browser, url } = await setup(t);
   await open(page, url); await showView(page, 'capture'); await page.locator('#captureText').fill('First tab draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'First tab draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'First tab draft');
   const second = await context.newPage(); await open(second, url);
   assert.equal(await second.locator('#captureText').inputValue(), 'First tab draft');
   await showView(second, 'capture'); await second.locator('#captureText').fill('Shared replacement');
-  await waitForBrowser(second, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'Shared replacement');
+  await waitForBrowser(second, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Shared replacement');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#captureText').inputValue(), 'Shared replacement');
   const independent = await browser.newContext(), third = await independent.newPage();

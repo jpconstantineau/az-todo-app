@@ -150,8 +150,8 @@ test('PWA: failed asset download retains the active shell; successful update wai
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   await page.locator('#captureText').fill('Draft across update');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'Draft across update');
-  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across update');
+  const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
   const before = await local();
   assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
@@ -234,21 +234,21 @@ test('PWA: device reset requires confirmation, closes other tabs, and restores t
   await page.locator('#captureText').fill('Cloud copy');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
     return Object.values(local.records).some(record => record.title === 'Cloud copy') && local.queue.length === 0;
   });
   await page.locator('#captureText').fill('Unfinished device draft');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.capture.text === 'Unfinished device draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Unfinished device draft');
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
   const reset = page.getByRole('button', { name: 'Clear device database' });
   page.once('dialog', dialog => { assert.match(dialog.message(), /Pending saves and unfinished drafts/); void dialog.dismiss(); });
   await reset.click();
-  assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=8')).transact('alice')))).draft.capture.text, 'Unfinished device draft');
+  assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')))).draft.capture.text, 'Unfinished device draft');
 
   const second = await context.newPage();
   await second.goto(server.url); await ready(second); await second.locator('#workspace').waitFor();
   await page.evaluate(async () => {
-    const { transact } = await import('/inbox-store.js?v=8');
+    const { transact } = await import('/inbox-store.js?v=9');
     await transact('alice', local => { local.records = {}; });
   });
   const firstReload = page.waitForEvent('framenavigated', frame => frame === page.mainFrame());
@@ -258,7 +258,7 @@ test('PWA: device reset requires confirmation, closes other tabs, and restores t
   await Promise.all([firstReload, secondReload]);
   await ready(page); await page.locator('#workspace').waitFor();
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
     return Object.values(local.records).some(record => record.title === 'Cloud copy') && local.queue.length === 0;
   });
   assert.equal(await page.locator('#captureText').inputValue(), '');

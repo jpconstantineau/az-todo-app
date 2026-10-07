@@ -7,7 +7,7 @@ import { waitForBrowser } from './browser-wait.mjs';
 import { currentCreate } from './current-record.mjs';
 import { documents, startServer } from './harness.mjs';
 
-const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice'));
+const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 
 test('plan helpers use local Mondays, every membership path and a live-parent fallback', () => {
@@ -91,7 +91,7 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
   await context.setOffline(true);
   await page.getByRole('checkbox', { name: 'Plan Nested next for this week', exact: true }).click();
   await waitForBrowser(page, async selectedWeek => {
-    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
     return local.queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === 'nested' && mutation.fields?.plannedWeek === selectedWeek));
   }, week);
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Remove Nested next from this week');
@@ -110,7 +110,7 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
 
   await page.locator('#planAttention > summary').click();
   await page.getByRole('checkbox', { name: 'Remove Waiting selected from this week', exact: true }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).records['item:attention']?.plannedWeek === null); await confirmed(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).records['item:attention']?.plannedWeek === null); await confirmed(page);
   assert.equal(documents.find(document => document.record?.id === 'attention').record.plannedWeek, null);
   await page.locator('#planBreadcrumbs').getByRole('button', { name: 'Plan the whole workspace', exact: true }).click();
   assert.equal(await page.getByRole('checkbox', { name: 'Plan Unfiled next for this week', exact: true }).count(), 1);
@@ -126,7 +126,7 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
 
   await showView(page, 'plan');
   await page.locator('#planFocusPicker > summary').click(); await page.locator('#planFocus').selectOption('project:project');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.navigation.plan.focus === 'project:project');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.plan.focus === 'project:project');
   await page.route('**/api/v1/operations', route => route.fulfill({ status: 400, json: { apiVersion: 1, error: 'invalid_request', message: 'Keep this planned week.' } }));
   await page.getByRole('checkbox', { name: 'Plan Multiple paths for this week', exact: true }).click();
   await page.locator('#failure').waitFor();
@@ -138,7 +138,7 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
   assert.match(await page.locator('#comparison').textContent(), /Planned week: /);
   page.once('dialog', dialog => dialog.accept()); await page.locator('#discard').click(); await page.locator('#failure').waitFor({ state: 'hidden' });
   await page.unroute('**/api/v1/operations');
-  await page.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice', local => { local.records['project:project'].deleted = true; }));
+  await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice', local => { local.records['project:project'].deleted = true; }));
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#planFocus').inputValue(), 'list:initiative');
   assert.equal(await page.locator('#planFocusTitle').textContent(), 'Initiative');
@@ -161,25 +161,25 @@ test('Plan preferences stay isolated by workspace and account while archived wor
     ]
   }) });
   assert.equal(response.status, 200, await response.text());
-  await clickControl(page.locator('#sync')); await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).records['list:work-role']?.version === 1); await confirmed(page);
+  await clickControl(page.locator('#sync')); await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).records['list:work-role']?.version === 1); await confirmed(page);
   await showView(page, 'plan'); await page.locator('#planFocusPicker > summary').click(); await page.locator('#planFocus').selectOption('list:personal-role');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.navigation.plan.focus === 'list:personal-role');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.plan.focus === 'list:personal-role');
   await page.locator('#workspaceSelect').selectOption('work');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).selectedWorkspace === 'work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === 'work');
   assert.equal(await page.locator('#planFocus').inputValue(), '');
   assert.equal(await page.locator('#planFocus option[value="list:personal-role"]').count(), 0);
   await page.locator('#planFocus').selectOption('list:work-role');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).workspaceDrafts.work.navigation.plan.focus === 'list:work-role');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).workspaceDrafts.work.navigation.plan.focus === 'list:work-role');
   await clickControl(page.locator('#manageWorkspaces')); await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor(); await page.locator('#closeWorkspaces').click();
   assert.match(await page.locator('#planStatus').textContent(), /read-only/);
   assert.equal(await page.getByRole('checkbox', { name: 'Plan Work next for this week', exact: true }).isDisabled(), true);
   await page.locator('#workspaceSelect').selectOption('personal');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).selectedWorkspace === 'personal');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === 'personal');
   assert.equal(await page.locator('#planFocus').inputValue(), 'list:personal-role');
 
   user = 'bob'; await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact(null)).accountId === 'bob'); await confirmed(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).accountId === 'bob'); await confirmed(page);
   await showView(page, 'plan');
   assert.equal(await page.locator('#planFocus').inputValue(), '');
   assert.equal(await page.locator('#planFocus option').count(), 1);
@@ -199,7 +199,7 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   await page.locator('#planQuickAdd input[name="title"]').fill('First day action');
   await page.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
     return Object.values(local.records).some(record => record.type === 'dailyPlan' && record.planDay === '2030-05-06') ||
       local.queue.some(entry => entry.operation.mutations.some(mutation => mutation.type === 'dailyPlan' && mutation.fields.planDay === '2030-05-06'));
   });
@@ -208,8 +208,8 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   await page.locator('#planQuickAdd input[name="title"]').fill('Second day action');
   await page.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
   await waitForBrowser(page, async () => {
-    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
-    return Object.values((await import('/inbox-store.js?v=8')).projected(local)).some(record => record.title === 'Second day action');
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
+    return Object.values((await import('/inbox-store.js?v=9')).projected(local)).some(record => record.title === 'Second day action');
   });
   await confirmed(page);
   assert.deepEqual(await page.locator('#planDayActions > li[data-id] .day-plan-content > button').allTextContents(), ['First day action', 'Second day action']);
@@ -233,7 +233,7 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
 
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Move Second day action up from position 2' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).queue.length > 0);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length > 0);
   assert.deepEqual(await page.locator('#planDayActions > li[data-id] .day-plan-content > button').allTextContents(), ['Second day action', 'First day action']);
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#planDay').inputValue(), '2030-05-06');
@@ -258,12 +258,12 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   await clickControl(page.locator('#sync'));
   await page.getByRole('button', { name: 'Keep on prior date: Keep on prior date' }).waitFor();
   await page.getByRole('button', { name: 'Keep on prior date: Keep on prior date' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).projected(await (await import('/inbox-store.js?v=8')).transact('alice')))[`dailyPlan:personal_2030-05-06`]?.carryoverDecisions.some(decision => decision.actionId === 'carryover-keep'));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).projected(await (await import('/inbox-store.js?v=9')).transact('alice')))[`dailyPlan:personal_2030-05-06`]?.carryoverDecisions.some(decision => decision.actionId === 'carryover-keep'));
   await page.getByRole('button', { name: 'Remove from daily plan: Remove only membership' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).projected(await (await import('/inbox-store.js?v=8')).transact('alice')))['item:carryover-remove']?.plannedDay === null);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).projected(await (await import('/inbox-store.js?v=9')).transact('alice')))['item:carryover-remove']?.plannedDay === null);
   await page.getByRole('button', { name: 'Move to selected date: Keep identity' }).waitFor();
   await page.getByRole('button', { name: 'Move to selected date: Keep identity' }).click();
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).projected(await (await import('/inbox-store.js?v=8')).transact('alice')))['item:carryover-move']?.plannedDay === '2030-05-06');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).projected(await (await import('/inbox-store.js?v=9')).transact('alice')))['item:carryover-move']?.plannedDay === '2030-05-06');
   await confirmed(page);
   const moved = documents.find(document => document.record?.id === 'carryover-move').record;
   assert.deepEqual({ status: moved.status, waitingOn: moved.waitingOn, dueDate: moved.dueDate, priority: moved.priority, timeRequired: moved.timeRequired, plannedDay: moved.plannedDay },
@@ -298,7 +298,7 @@ test('Day exposes whole-plan stale conflicts and preserves unrelated queued work
   }
 
   await pageA.getByRole('button', { name: 'Move Two up from position 2' }).click();
-  await waitForBrowser(pageA, async id => (await (await import('/inbox-store.js?v=8')).transact('alice')).records[`dailyPlan:${id}`]?.version === 2, planId); await confirmed(pageA);
+  await waitForBrowser(pageA, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).records[`dailyPlan:${id}`]?.version === 2, planId); await confirmed(pageA);
   await pageB.getByLabel('Estimate One using T-shirt').selectOption('L');
   await pageB.locator('#failure').waitFor();
   assert.match(await pageB.locator('#comparison').textContent(), /My pending plan[\s\S]*"value":"L"[\s\S]*Server plan[\s\S]*1\. Two/);
@@ -306,26 +306,26 @@ test('Day exposes whole-plan stale conflicts and preserves unrelated queued work
   assert.deepEqual(await pageB.locator('#planDayActions > li[data-id]').evaluateAll(rows => rows.map(row => row.dataset.id)), ['two', 'one']);
 
   await pageA.locator('#planLoadAssessment').selectOption('full');
-  await waitForBrowser(pageA, async id => (await (await import('/inbox-store.js?v=8')).transact('alice')).records[`dailyPlan:${id}`]?.version === 3, planId); await confirmed(pageA);
+  await waitForBrowser(pageA, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).records[`dailyPlan:${id}`]?.version === 3, planId); await confirmed(pageA);
   await pageB.getByLabel('Estimate One using T-shirt').selectOption('M');
   await pageB.locator('#failure').waitFor();
   await pageB.locator('#planDay').fill('2031-02-04');
   await pageB.locator('#planQuickAdd input[name="title"]').fill('Unrelated next day');
   await pageB.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
-  await waitForBrowser(pageB, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).queue.length === 2);
+  await waitForBrowser(pageB, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length === 2);
   const peer = await contextB.newPage(); await peer.goto(server.url + '/help.html');
   let race;
   pageB.once('dialog', dialog => { race = (async () => {
-    await peer.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice', local => { local.records['item:one'].version++; }));
+    await peer.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice', local => { local.records['item:one'].version++; }));
     await dialog.accept();
   })(); });
   await pageB.locator('#resolve').click(); await race;
   await pageB.waitForFunction(() => document.querySelector('#error').textContent.includes('related action changed again'));
   assert.equal((await local(pageB)).queue[0].failure.includes('conflicts with this save'), true, 'failed plan remains available for another reviewed attempt');
-  await peer.evaluate(async () => (await import('/inbox-store.js?v=8')).transact('alice', local => { local.records['item:one'].version--; }));
+  await peer.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice', local => { local.records['item:one'].version--; }));
   pageB.once('dialog', dialog => dialog.accept()); await pageB.locator('#resolve').click();
   await waitForBrowser(pageB, async id => {
-    const local = await (await import('/inbox-store.js?v=8')).transact('alice');
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
     return local.records[`dailyPlan:${id}`]?.version === 4 && Object.values(local.records).some(record => record.title === 'Unrelated next day') && local.queue.length === 0;
   }, planId); await confirmed(pageB);
   const serverPlan = documents.find(document => document.record?.type === 'dailyPlan' && document.record.id === planId).record;
