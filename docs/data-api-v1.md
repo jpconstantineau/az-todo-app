@@ -255,7 +255,9 @@ fields, unknown versions, malformed dates, invalid references and oversized text
 are rejected rather than clipped. Lists support title (200 characters), description
 (4,000) and creation-only capture fields. Items additionally support nullable
 `listId`, `projectId`, calendar-date `plannedDay` and `plannedWeek`, explicit `status`, nullable UTC `dueDateUtc`/`startDateUtc`/`reviewDateUtc`,
-`waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority` and HTTP(S)
+`waitingOn`, `contexts`, `areas`, `energy`, `timeRequired`, `priority`, nullable tagged
+`effortEstimate` (`{scale:"tshirt",value:"XS"|"S"|"M"|"L"|"XL"}` or
+`{scale:"fibonacci",value:1|2|3|5|8|13}`) and HTTP(S)
 `referenceLinks`. Tags are at most 64 characters, arrays at most 20 entries, URLs
 at most 2,048 characters. Statuses allow `inbox`, `next`, `waiting`, `deferred`,
 `someday`, `reference`, `completed`, `dropped`, and the destination list/account
@@ -292,6 +294,22 @@ remain optional tags and survive relationship changes. Older clients can still
 edit known fields without erasing these additions. Deploy the additive API before
 the new shell; do not roll back the API while project operations are pending.
 See [Projects and planned days](projects.md) for the manual flow and verification.
+
+Daily planning uses three additive workspace-scoped records. `planPreference`
+has the deterministic workspace ID and `estimationMethod` (`none`, `tshirt` or
+`fibonacci`). `dailyPlan` has deterministic `<workspaceId>_<YYYY-MM-DD>` identity,
+an ordered unique list of at most 200 action IDs, explicit `loadAssessment`,
+carryover decisions, and revision head/count. Its ordered actions must be live
+canonical items whose `plannedDay` and workspace match. `dailyPlanRevision` is an
+immutable UUID record containing the affected plan/date, sequence and operation
+kind, exact before/after order and assessment, optional carryover decision, and
+every action's tagged estimate at that revision. A plan update and its new
+revision must share one version-checked operation; membership operations also
+include the canonical item edit and every affected date's plan/revision. Accepted
+`fits`, `full` or `overcommitted` assessments reset to `needs_reassessment` when
+membership or an included estimate changes. Legacy `plannedDay` items absent from
+a plan are read after saved IDs and are adopted only by the first explicit plan
+change; there is no migration or clone.
 
 For an edit, send `action:"update"`, the observed positive `expectedVersion`, and
 only the fields to change. Completion is `{status:"completed"}` and records server-managed `statusBeforeCompletion`; reopening explicitly submits that previous status (`next` for historical records without it). Retrying cannot toggle twice. Even an edit that

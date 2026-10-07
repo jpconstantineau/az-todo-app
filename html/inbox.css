@@ -170,6 +170,26 @@
 .plan-action-check > span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .plan-day-action > button { flex: 1; min-width: 0; justify-content: flex-start; text-align: left; }
 .plan-day-action > span { text-align: right; overflow-wrap: anywhere; }
+.day-header { align-items: end; }
+.day-load { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-block: var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: 12px; background: var(--surface-raised); }
+.day-summary { grid-column: 1 / -1; margin: 0; font-weight: var(--weight-emphasis); }
+.day-summary[data-assessment="overcommitted"], .day-summary[data-assessment="needs_reassessment"] { color: var(--warning); }
+.day-workspace { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: var(--space-4); align-items: start; }
+.day-workspace > section { min-width: 0; }
+.day-add { padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: 12px; background: var(--surface-raised); }
+.day-add h4, .day-workspace h4 { margin-top: 0; }
+#planQuickAdd { display: grid; gap: var(--space-2); }
+.day-plan-list { padding-left: var(--space-6); }
+.inbox-page .day-plan-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; margin: 0 0 var(--space-2); padding: var(--space-3); border-radius: 12px; }
+.day-plan-content { min-width: 0; }
+.day-plan-content > button { min-height: 44px; padding-inline: 0; border-color: transparent; background: transparent; color: var(--ink); font-weight: var(--weight-title); text-align: left; }
+.day-plan-meta { display: block; color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.day-plan-controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); }
+.day-plan-controls label { display: flex; align-items: center; gap: var(--space-1); }
+.day-plan-controls input[type="number"] { width: 5rem; }
+.day-carryover { padding: var(--space-4); border: var(--border-width) solid var(--warning); border-radius: 12px; }
+.day-carryover article { display: grid; gap: var(--space-2); }
+#planHistoryEntries { overflow-wrap: anywhere; }
 @media (max-width: 767px) {
   #captureText { min-height: 50dvh; }
   #editor { height: 92dvh; }
@@ -181,6 +201,10 @@
   .inbox-page .plan-action, .inbox-page .plan-day-action { align-items: stretch; flex-direction: column; }
   .plan-action > button { align-self: flex-start; }
   .plan-day-action > span { text-align: left; }
+  .day-load, .day-workspace { grid-template-columns: minmax(0, 1fr); }
+  .day-add { width: 100%; }
+  .inbox-page .day-plan-row { grid-template-columns: minmax(0, 1fr); }
+  .day-plan-controls { justify-content: flex-start; }
 }
 
 .workspace-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

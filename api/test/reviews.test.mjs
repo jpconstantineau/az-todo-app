@@ -31,7 +31,7 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   await page.locator('#reviewRetain').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
   assert.match(await page.locator('#reviewProgress').textContent(), /pending/);
   await page.locator('#reviewDefer').fill('2026-10-08');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).draft.review?.deferUntil === '2026-10-08');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).draft.review?.deferUntil === '2026-10-08');
   await page.reload(); await page.locator('#workspace').waitFor(); await clickControl(page.locator('#openReviews'));
   assert.match(await page.locator('#reviewProgress').textContent(), /1 of 2/); assert.equal(await page.locator('#reviewDefer').inputValue(), '2026-10-08');
   await page.locator('#reviewDeferSave').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 2'));
@@ -107,7 +107,7 @@ test('review cues include projects and waiting work; competing devices and delet
   const doomed = records().find(r => r.id === 'inbox' && r.type === 'item');
   await post([{ type: 'item', id: doomed.id, action: 'delete', expectedVersion: doomed.version }]);
   await clickControl(other.locator('#sync'));
-  await waitForBrowser(other, async () => (await (await import('/inbox-store.js?v=7')).transact('alice')).records['item:inbox']?.deleted);
+  await waitForBrowser(other, async () => (await (await import('/inbox-store.js?v=8')).transact('alice')).records['item:inbox']?.deleted);
   await clickControl(other.locator('#openReviews')); await other.locator('#reviewRecord').selectOption(index('inbox'));
   assert.match(await other.locator('#reviewDetails').textContent(), /deleted or is unavailable/);
   await other.locator('#reviewUnavailable').click(); await other.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('2 of 5')); await confirmed(other);

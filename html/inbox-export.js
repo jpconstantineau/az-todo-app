@@ -3,15 +3,16 @@ const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 import { readableBrief } from './briefs.js?v=3';
 import { purgeWorkspaceState } from './workspaces.js?v=3';
-const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief'];
+const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
   'collectionRefs', 'parentRef', 'kind', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
+  'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
-  'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes'];
+  'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
+  'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates'];
 
 export const validateDeviceExport = value => validateExport(value);
 export const validateAccountExport = value => validateExport(value, true);
@@ -60,7 +61,7 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   const currentShape = (entry, path) => {
-    if (['item', 'list', 'project', 'review'].includes(entry.type)) {
+    if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(entry.type)) {
       require(typeof entry.workspaceId === 'string' && entry.workspaceId.length > 0, `${path}: workspaceId is required.`);
     }
     if (entry.type === 'item') {
@@ -72,6 +73,13 @@ function validateExport(value, server = false) {
     }
     if (entry.type === 'project') require(['draft', 'active', 'someday', 'completed'].includes(entry.status) &&
       (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
+    if (entry.type === 'planPreference') require(['none', 'tshirt', 'fibonacci'].includes(entry.estimationMethod), `${path}: invalid estimation method.`);
+    if (entry.type === 'dailyPlan') require(/^\d{4}-\d{2}-\d{2}$/.test(entry.planDay) && Array.isArray(entry.actionIds) &&
+      Array.isArray(entry.carryoverDecisions) && typeof entry.revisionHead === 'string' && Number.isSafeInteger(entry.revisionCount) && entry.revisionCount > 0,
+    `${path}: invalid daily plan.`);
+    if (entry.type === 'dailyPlanRevision') require(/^\d{4}-\d{2}-\d{2}$/.test(entry.planDay) && typeof entry.planId === 'string' &&
+      Number.isSafeInteger(entry.sequence) && entry.sequence > 0 && object(entry.before) && object(entry.after) && Array.isArray(entry.estimates),
+    `${path}: invalid daily plan revision.`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
   unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');

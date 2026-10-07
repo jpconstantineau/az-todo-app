@@ -32,6 +32,39 @@ const edit = (operationId, id, expectedVersion, fields, action = "update", type 
 };
 const records = () => documents.filter(d => d.kind === "record").map(d => d.record);
 
+test('daily plans keep order separate, append immutable revisions and conflict as whole records', async t => {
+  const f = await fixture(t), day = '2030-05-06', planId = `personal_${day}`;
+  const created = await f.post(edit('create-day-item', 'day-item', 0, { title: 'Day item', plannedDay: day, timeRequired: '30m', priority: 'high' }, 'create'));
+  assert.equal(created.status, 200);
+  const revision = (id, sequence, before, after, operationKind = 'add') => ({ type: 'dailyPlanRevision', id, action: 'create', expectedVersion: 0,
+    fields: { workspaceId: 'personal', planId, planDay: day, sequence, operationKind, before, after, carryoverDecision: null,
+      estimates: after.actionIds.map(actionId => ({ actionId, estimate: null })) } });
+  const empty = { actionIds: [], loadAssessment: 'needs_assessment' }, first = { actionIds: ['day-item'], loadAssessment: 'needs_assessment' };
+  const initial = await f.post({ apiVersion: 1, accountId: 'alice', operationId: 'create-day-plan', mutations: [
+    { type: 'dailyPlan', id: planId, action: 'create', expectedVersion: 0, fields: { workspaceId: 'personal', planDay: day, ...first, carryoverDecisions: [], revisionHead: 'day-revision-1', revisionCount: 1 } },
+    revision('day-revision-1', 1, empty, first)
+  ] });
+  assert.equal(initial.status, 200, JSON.stringify(initial.body));
+  assert.equal((await f.post(edit('rewrite-revision', 'day-revision-1', 1, { operationKind: 'reorder' }, 'update', 'dailyPlanRevision'))).status, 400);
+  assert.equal((await f.post({ apiVersion: 1, accountId: 'alice', operationId: 'plan-without-history', mutations: [
+    { type: 'dailyPlan', id: planId, action: 'update', expectedVersion: 1, fields: { actionIds: ['day-item'], loadAssessment: 'full', carryoverDecisions: [], revisionHead: 'missing', revisionCount: 2 } }
+  ] })).status, 400);
+  const after = { actionIds: ['day-item'], loadAssessment: 'full' };
+  const assessed = await f.post({ apiVersion: 1, accountId: 'alice', operationId: 'assess-day-plan', mutations: [
+    { type: 'dailyPlan', id: planId, action: 'update', expectedVersion: 1, fields: { ...after, carryoverDecisions: [], revisionHead: 'day-revision-2', revisionCount: 2 } },
+    revision('day-revision-2', 2, first, after, 'assessment')
+  ] });
+  assert.equal(assessed.status, 200, JSON.stringify(assessed.body));
+  const stale = await f.post({ apiVersion: 1, accountId: 'alice', operationId: 'stale-day-plan', mutations: [
+    { type: 'dailyPlan', id: planId, action: 'update', expectedVersion: 1, fields: { ...first, carryoverDecisions: [], revisionHead: 'day-revision-stale', revisionCount: 2 } },
+    revision('day-revision-stale', 2, first, first, 'reorder')
+  ] });
+  assert.equal(stale.status, 409); assert.equal(stale.body.status, 'conflict');
+  const item = (await f.get('item', 'day-item')).body.record;
+  assert.equal(item.priority, 'high'); assert.equal(item.timeRequired, '30m');
+  assert.deepEqual((await f.get('dailyPlan', planId)).body.record.actionIds, ['day-item']);
+});
+
 test('explicit restore retains identity/content, retries safely and rejects stale or foreign intent', async t => {
   const f = await fixture(t);
   await f.post(capture);

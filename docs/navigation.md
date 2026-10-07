@@ -15,10 +15,24 @@ changes only that field and uses the existing offline journal, conflict handling
 and account/workspace isolation. Selected non-Next work remains under Needs
 attention; the planner never promotes, duplicates or silently unplans it.
 
-**Day** reads the existing `plannedDay` field and hands that date to Process.
-Ordering, capacity and carryover remain outside this feature. Plan focus and week
-are device-draft navigation preferences. A deleted focus falls back to its live
-parent, then the whole workspace. Archived/deleted workspaces are read-only.
+**Day** keeps `item.plannedDay` as canonical membership and adds a separate,
+versioned order, explicit load assessment, carryover decisions and immutable
+history. None is the default estimation method; a workspace can instead use
+tagged T-shirt or Fibonacci values. Changing method never converts or removes an
+estimate: values from the other scale stay visible as previous-scale and out of
+the aggregate. Permanent `priority`, `timeRequired`, status and deadlines remain
+independent.
+
+The title-only path creates one canonical item without requiring a collection,
+goal, priority or estimate. Native Move up/down and direct-position controls work
+with keyboard and touch. Earlier unfinished plans require an explicit keep, move
+or remove-from-plan choice; no action is dropped or carried automatically. Day
+order and decisions save through the account outbox and resume offline. A stale
+plan is a whole-record conflict: compare numbered pending/server plans, then
+rebase the pending plan to the latest version or discard only that failed save.
+Plan focus, week, selected day and open Day disclosures are workspace device-draft
+preferences. A deleted focus falls back to its live parent, then the whole
+workspace. Archived/deleted workspaces are read-only.
 
 ## Add work in context — issue 76
 

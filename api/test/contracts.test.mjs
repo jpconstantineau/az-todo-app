@@ -37,7 +37,7 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /type="module" src="\/inbox.js\?v=14"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=15"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {
@@ -63,4 +63,13 @@ test('current create contract requires canonical workspace, membership and proje
   assert.equal(fieldsFor('item', 'update', { plannedWeek: '2026-10-05' }).plannedWeek, '2026-10-05');
   assert.equal(fieldsFor('item', 'update', { plannedWeek: null }).plannedWeek, null);
   assert.throws(() => fieldsFor('item', 'update', { plannedWeek: '2026-10-5' }), /plannedWeek/);
+  assert.deepEqual(fieldsFor('item', 'update', { effortEstimate: { scale: 'tshirt', value: 'L' } }).effortEstimate, { scale: 'tshirt', value: 'L' });
+  assert.deepEqual(fieldsFor('item', 'update', { effortEstimate: { scale: 'fibonacci', value: 13 } }).effortEstimate, { scale: 'fibonacci', value: 13 });
+  assert.throws(() => fieldsFor('item', 'update', { effortEstimate: { scale: 'minutes', value: 30 } }), /tagged T-shirt or Fibonacci/);
+  assert.deepEqual(fieldsFor('planPreference', 'create', { workspaceId: 'personal', estimationMethod: 'none' }), { workspaceId: 'personal', estimationMethod: 'none' });
+  assert.throws(() => fieldsFor('planPreference', 'create', { workspaceId: 'personal', estimationMethod: 'hours' }), /None, T-shirt or Fibonacci/);
+  const plan = fieldsFor('dailyPlan', 'create', { workspaceId: 'personal', planDay: '2026-10-07', actionIds: ['one'], loadAssessment: 'full', carryoverDecisions: [], revisionHead: 'revision', revisionCount: 1 });
+  assert.deepEqual(plan.actionIds, ['one']);
+  assert.throws(() => fieldsFor('dailyPlan', 'create', { ...plan, actionIds: ['one', 'one'] }), /unique/);
+  assert.throws(() => fieldsFor('dailyPlanRevision', 'update', {}), /immutable/);
 });

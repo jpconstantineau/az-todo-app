@@ -2,16 +2,16 @@ import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, 
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline, checklistMutations, areaMappingMutations } from './collections.js?v=3';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=3';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=3';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=7';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=8';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=2';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=9';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=10';
 import { clarificationUI } from './clarification.js?v=5';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=1';
 import { setupReviews } from './reviews.js?v=7';
 import { setupBriefs } from './briefs.js?v=3';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=1';
 import { setupAgentStatus } from './local-agent.js?v=1';
-import { localMonday, setupPlan } from './plan.js?v=2';
+import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=3';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -128,6 +128,12 @@ edit.elements.workspaceId.onchange = () => {
 function enqueue(local, owner, mutations) {
   queueMutations(local, owner, mutations);
 }
+function ensurePlanMutationsAvailable(local, mutations) {
+  const touched = new Set(mutations.map(key));
+  if (local.queue.some(entry => entry.failure && entry.operation.mutations.some(mutation => touched.has(key(mutation))))) {
+    throw new Error('Resolve this plan conflict before changing the same day. Other dates remain available.');
+  }
+}
 function workspaceReadOnly() {
   const space = projected(state)['workspace:' + selectedWorkspace];
   return selectedWorkspace !== PERSONAL && (!space || space.deleted || space.archived);
@@ -180,12 +186,19 @@ async function saveClarification(mutations, next) {
   if (!owner) return false;
   const saved = await transact(owner, local => {
     const records = projected(local);
-    for (const mutation of mutations) {
+    const planning = mutations.flatMap(mutation => {
+      const current = records[key(mutation)];
+      return mutation.type === 'item' && mutation.action === 'update' && current && Object.hasOwn(mutation.fields || {}, 'plannedDay')
+        ? membershipPlanMutations(records, current.workspaceId, current, mutation.fields.plannedDay) : [];
+    });
+    const complete = [...mutations, ...planning];
+    ensurePlanMutationsAvailable(local, complete);
+    for (const mutation of complete) {
       const current = records[key(mutation)];
       const expectedDeleted = mutation.action === 'restore';
       if (!!current?.deleted !== expectedDeleted && mutation.action !== 'create' || (current?.version || 0) !== mutation.expectedVersion) throw new Error('This item or clarification changed. Your draft is kept. Stop, export a copy, and reopen the latest clarification to compare.');
     }
-    enqueue(local, owner, mutations);
+    enqueue(local, owner, complete);
     currentDraft(local).clarification = next;
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
   if (owner !== accountId) return false;
@@ -217,8 +230,27 @@ const reviews = setupReviews({ current: () => accountId ? state : null, records:
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save remains with its original account.');
   state = saved; clearError(); render(); broadcast(); void sync();
 } });
-const planner = setupPlan({ records: scopedRecords, navigation: () => navigation.plan, readOnly: workspaceReadOnly,
+async function saveDailyPlan(mutations) {
+  const owner = accountId, generation = accountGeneration;
+  if (!owner) return false;
+  if (workspaceReadOnly()) throw new Error('Unarchive this workspace before editing its plan.');
+  try {
+    const saved = await transact(owner, local => {
+      const current = projected(local);
+      ensurePlanMutationsAvailable(local, mutations);
+      for (const mutation of mutations) {
+        const record = current[key(mutation)], version = record?.version || 0;
+        if (version !== mutation.expectedVersion || record?.deleted) throw new Error('This plan changed. Review the latest day and try again.');
+      }
+      enqueue(local, owner, mutations);
+    });
+    if (owner !== accountId || generation !== accountGeneration) return false;
+    state = saved; clearError(); render(); broadcast(); void sync(); return true;
+  } catch (failure) { if (owner === accountId) storageFailure(failure); return false; }
+}
+const planner = setupPlan({ records: scopedRecords, workspaceId: () => selectedWorkspace, navigation: () => navigation.plan, readOnly: workspaceReadOnly,
   save: async (record, fields) => { if (!await updateRecord(record, fields)) render(); },
+  savePlan: saveDailyPlan,
   edit: record => openEditor(record),
   inspectDeleted: record => {
     renderDeleted(); showDialog($('deletedRecords'));
@@ -578,13 +610,29 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow'], ['changes', 'Workflow changes'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
-    $('comparison').textContent = failed ? failed.operation.mutations.map(mutation =>
+    const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
+    if (planConflict) {
+      const projectedRecords = projected(state);
+      const describePlan = (record, revision, pending) => {
+        if (!record) return 'No plan';
+        const workspaceId = record.workspaceId || revision?.fields?.workspaceId;
+        const ids = record.actionIds || [], method = (pending ? projectedRecords : state.records)[`planPreference:${workspaceId}`]?.estimationMethod || 'none';
+        const estimates = pending ? revision?.fields?.estimates || [] : ids.map(actionId => ({ actionId, estimate: state.records[`item:${actionId}`]?.effortEstimate || null }));
+        const order = ids.map((id, index) => `${index + 1}. ${(pending ? projectedRecords : state.records)[`item:${id}`]?.title || id}`).join('\n') || '(empty)';
+        return `Estimation method: ${method}\nLoad assessment: ${record.loadAssessment}\nOrder:\n${order}\nTagged estimates: ${JSON.stringify(estimates)}\nCarryover decisions: ${JSON.stringify(record.carryoverDecisions || [])}`;
+      };
+      $('comparison').textContent = failed.operation.mutations.filter(mutation => mutation.type === 'dailyPlan').map(mutation => {
+        const revision = failed.operation.mutations.find(candidate => candidate.type === 'dailyPlanRevision' && candidate.fields.planId === mutation.id);
+        return `My pending plan\n${describePlan(mutation.fields, revision, true)}\n\nServer plan\n${describePlan(state.records[key(mutation)], null, false)}`;
+      }).join('\n\n——\n\n');
+    } else $('comparison').textContent = failed ? failed.operation.mutations.map(mutation =>
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n')
       : 'The move plan and its acknowledged progress remain saved on this device.';
     const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
-    $('resolve').hidden = move || !failed?.receipt || failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').hidden = move || !failed?.receipt || !planConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').textContent = planConflict ? 'Apply my pending plan to latest version' : 'Apply pending edit to latest version';
     $('discard').hidden = move;
     $('discard').textContent = failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
@@ -834,7 +882,14 @@ async function updateRecord(record, fields, close = false) {
         const records = projected(local), plan = collectionMovePlan(current, fields.workspaceId, records, fields);
         if (plan) beginCollectionMove(local, owner, plan);
         else enqueue(local, owner, collectionMoveMutations(current, fields.workspaceId, records, fields));
-      } else enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields }]);
+      } else {
+        const mutation = { type: record.type, id: record.id, action: record.version === 0 ? 'create' : 'update', expectedVersion: record.version, fields };
+        const planning = current?.type === 'item' && Object.hasOwn(fields, 'plannedDay')
+          ? membershipPlanMutations(projected(local), current.workspaceId, current, fields.plannedDay) : [];
+        const complete = [mutation, ...planning];
+        ensurePlanMutationsAvailable(local, complete);
+        enqueue(local, owner, complete);
+      }
       if (close && current && record.version > 0 && !movingCollection) rememberEdit(local, current, fields);
       if (close) currentDraft(local).edit = null;
     });
@@ -937,7 +992,13 @@ $('discardEdit').onclick = guard(async () => {
 $('undoEdit').onclick = guard(async () => {
   const owner = accountId, generation = accountGeneration, operationId = state?.undoEdit?.operationId;
   if (!owner || !operationId) return;
-  const saved = await transact(owner, local => undoEdit(local, owner, operationId));
+  const saved = await transact(owner, local => {
+    const undo = local.undoEdit, current = undo && projected(local)[key(undo)];
+    const planning = current?.type === 'item' && Object.hasOwn(undo.fields || {}, 'plannedDay')
+      ? membershipPlanMutations(projected(local), current.workspaceId, current, undo.fields.plannedDay) : [];
+    ensurePlanMutationsAvailable(local, planning);
+    undoEdit(local, owner, operationId, Date.now(), planning);
+  });
   if (owner !== accountId || generation !== accountGeneration) return;
   state = saved; clearError(); render(); broadcast(); void sync();
   statusText('undoEditStatus', 'Undo saved on device. Sync to confirm it on the server.');
@@ -962,8 +1023,8 @@ function restoreFocus(control) {
   if (modal?.contains(document.activeElement) && document.activeElement !== control) return;
   // Labels and DOM nodes can change; record ID plus action remains stable.
   const matching = value => value ? scope.querySelector(`[data-focus-key="${CSS.escape(value)}"]`) : null;
-  const target = control?.isConnected && scope.contains(control) ? control
-    : matching(control?.dataset.focusKey) || matching(control?.dataset.focusFallback);
+  const primary = control?.isConnected && scope.contains(control) ? control : matching(control?.dataset.focusKey);
+  const target = primary && !primary.disabled && primary.getClientRects().length ? primary : matching(control?.dataset.focusFallback);
   if (target && target !== document.body && !target.disabled && target.getClientRects().length) target.focus();
   else focusDestination();
 }
@@ -1383,12 +1444,38 @@ $('resolve').onclick = guard(async () => {
   const saved = await transact(owner, local => {
     const entry = local.queue[0];
     if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');
-    const mutations = entry.operation.mutations.map(mutation => {
+    const planConflict = entry.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
+    const mutations = planConflict ? [] : entry.operation.mutations.map(mutation => {
       const record = local.records[key(mutation)];
       if (mutation.action !== 'update' || !record || record.deleted) throw new Error('Deleted or missing records cannot be overwritten. Export your pending text to recover it separately.');
       if (record.version !== reviewed[key(mutation)]?.version) throw new Error('Server version changed again. Review the comparison before applying your edit.');
       return { ...mutation, expectedVersion: record.version };
     });
+    if (planConflict) {
+      const pendingRevisions = new Map(entry.operation.mutations.filter(mutation => mutation.type === 'dailyPlanRevision').map(mutation => [mutation.fields.planId, mutation]));
+      for (const mutation of entry.operation.mutations) {
+        if (mutation.type === 'dailyPlanRevision') continue;
+        if (mutation.type !== 'dailyPlan') {
+          const server = local.records[key(mutation)];
+          if ((server?.version ?? 0) !== (reviewed[key(mutation)]?.version ?? 0)) throw new Error('A related action changed again. Review the comparison before applying your plan.');
+          if (mutation.action === 'create' && !server) mutations.push(mutation);
+          else if (server && !server.deleted) mutations.push({ ...mutation, action: 'update', expectedVersion: server.version });
+          else throw new Error('A related action was deleted or changed incompatibly. Use the server plan for this save and reapply the membership deliberately.');
+          continue;
+        }
+        const server = local.records[key(mutation)], originalRevision = pendingRevisions.get(mutation.id), revisionId = crypto.randomUUID();
+        if (server && server.version !== reviewed[key(mutation)]?.version) throw new Error('Server plan changed again. Review the comparison before applying your plan.');
+        const resetsAssessment = server && ['fits', 'full', 'overcommitted'].includes(server.loadAssessment) &&
+          (JSON.stringify(server.actionIds) !== JSON.stringify(mutation.fields.actionIds) || entry.operation.mutations.some(candidate => candidate.type === 'item' && Object.hasOwn(candidate.fields || {}, 'effortEstimate') && (server.actionIds.includes(candidate.id) || mutation.fields.actionIds.includes(candidate.id))));
+        const after = { actionIds: mutation.fields.actionIds, loadAssessment: resetsAssessment ? 'needs_reassessment' : mutation.fields.loadAssessment };
+        const sequence = (server?.revisionCount || 0) + 1;
+        mutations.push({ ...mutation, action: server ? 'update' : 'create', expectedVersion: server?.version || 0,
+          fields: { ...mutation.fields, loadAssessment: after.loadAssessment, ...(server ? {} : { workspaceId: mutation.fields.workspaceId || originalRevision.fields.workspaceId, planDay: mutation.fields.planDay || originalRevision.fields.planDay }), revisionHead: revisionId, revisionCount: sequence } },
+        { type: 'dailyPlanRevision', id: revisionId, action: 'create', expectedVersion: 0, fields: {
+          ...originalRevision.fields, sequence, before: { actionIds: server?.actionIds || [], loadAssessment: server?.loadAssessment || 'needs_assessment' }, after
+        } });
+      }
+    }
     local.queue.shift();
     const later = local.queue; local.queue = [];
     enqueue(local, owner, mutations); local.queue.push(...later);
