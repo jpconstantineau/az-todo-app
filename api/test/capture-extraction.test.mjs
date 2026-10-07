@@ -258,8 +258,15 @@ test('a saved review accepts after legacy Capture Notes migrate into its compari
   assert.equal(await page.locator('#captureText').inputValue(), source + '\nLegacy supporting note.');
   await clickControl(page.locator('#extractReview')); await page.locator('#extractAccept').click();
   await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  await waitForBrowser(page, async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9');
+    return Object.values(projected(await transact('alice'))).some(record => record.type === 'item' && record.title === 'Call Sam');
+  });
   const saved = await local(page);
-  assert.equal(saved.queue.length, 1);
+  assert.equal(await page.evaluate(async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9');
+    return Object.values(projected(await transact('alice'))).filter(record => record.type === 'item').length;
+  }), 2);
   assert.deepEqual(saved.draft.capture, {});
 });
 

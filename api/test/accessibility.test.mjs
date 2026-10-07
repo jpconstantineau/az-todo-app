@@ -249,7 +249,7 @@ test('accessibility: contextual add, list, project, defaults and clarification d
   await capture(page, 'Insurance');
   await showView(page, 'work');
   await keyboardActivate(page, '[aria-label="Clarify Insurance"]');
-  await expectFocus(page, '#clarifyQuestion');
+  await expectFocus(page, '#clarifyHeading');
   await page.keyboard.press('Tab');
   await expectFocus(page, '[data-proposal=title]');
   await page.keyboard.press('Tab'); await expectFocus(page, '#clarifyFlow > .clarify-grid > button:first-child');
