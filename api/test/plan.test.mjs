@@ -222,10 +222,10 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
       const { projected, transact } = await import('/inbox-store.js?v=9');
       return projected(await transact('alice'))['planPreference:personal']?.estimationMethod === expected;
     }, method);
-    await page.waitForFunction(expected => document.querySelector('#planLoadSummary').textContent.endsWith(expected), summary);
+    await page.waitForFunction(expected => document.querySelector('#planLoadSummary').textContent === expected, summary);
     await confirmed(page);
   };
-  await selectEstimationMethod('tshirt', 'No current-scale estimates · 2 unestimated · 0 previous-scale');
+  await selectEstimationMethod('tshirt', 'Needs assessment · No current-scale estimates · 2 unestimated · 0 previous-scale');
   await page.getByLabel('Estimate First day action using T-shirt').selectOption('L'); await confirmed(page);
   assert.match(await page.locator('#planLoadSummary').textContent(), /1 L · 1 unestimated · 0 previous-scale/);
   await page.locator('#planLoadAssessment').selectOption('full'); await confirmed(page);
@@ -233,7 +233,7 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   assert.equal(await page.locator('#planLoadAssessment').inputValue(), 'needs_reassessment');
   await page.locator('#planHistory').getByText('Plan history').click();
   assert.match(await page.locator('#planHistoryEntries').innerText(), /Full → Needs reassessment/);
-  await selectEstimationMethod('fibonacci', '0 points · 0 unestimated · 2 previous-scale');
+  await selectEstimationMethod('fibonacci', 'Needs reassessment · 0 points · 0 unestimated · 2 previous-scale');
   assert.match(await page.locator('#planLoadSummary').textContent(), /0 points · 0 unestimated · 2 previous-scale/);
   await selectEstimationMethod('none', 'Needs reassessment');
   assert.equal(await page.locator('#planLoadSummary').textContent(), 'Needs reassessment');
