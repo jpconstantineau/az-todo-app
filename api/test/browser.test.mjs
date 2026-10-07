@@ -36,7 +36,6 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=listId]').selectOption(list.id);
   await showView(page, 'capture'); await page.locator('#captureText').fill('<img src=x onerror=alert(1)>');
-  await page.locator('#capture [name=body]').fill('Two cartons');
   assert.equal(await page.locator('#capture [name=status]').count(), 0);
   await page.locator('#capture [name=contexts]').selectOption(['@Kitchen', '@Shop']);
   assert.equal(await page.locator('#capture [name=areas]').count(), 0);
@@ -45,8 +44,10 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   let item = records().find(r => r.type === 'item');
   assert.equal(item.status, 'inbox', 'ordinary capture always needs clarification');
+  assert.equal(item.description, '');
   await showView(page, 'work');
   await page.getByRole('button', { name: 'Edit ' + item.title, exact: true }).click();
+  await page.locator('#edit [name=description]').fill('Two cartons');
   await page.locator('#edit [name=status]').selectOption('custom');
   await page.locator('#edit .task-metadata > summary').click();
   await page.locator('#edit .task-dates > summary').click();

@@ -64,12 +64,12 @@ test('accessibility: capture save preserves a later control choice and still sup
   await page.keyboard.press('Control+Enter');
   await page.waitForFunction(() => !!window.releaseCaptureSave);
   await keyboardActivate(page, '#captureOptions > summary');
-  await page.locator('#capture [name=body]').focus();
-  await page.keyboard.type('Notes for my next capture');
+  await page.locator('#capture [name=newList]').focus();
+  await page.keyboard.type('Next capture list');
   await page.evaluate(() => releaseCaptureSave());
   await page.waitForFunction(() => !document.querySelector('#capture [type=submit]').disabled);
-  await expectFocus(page, '#capture [name=body]');
-  assert.equal(await page.locator('#capture [name=body]').inputValue(), 'Notes for my next capture');
+  await expectFocus(page, '#capture [name=newList]');
+  assert.equal(await page.locator('#capture [name=newList]').inputValue(), 'Next capture list');
   await page.locator('#captureText').fill('Next task');
   await page.keyboard.press('Control+Enter');
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');

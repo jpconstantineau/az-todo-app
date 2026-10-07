@@ -216,9 +216,12 @@ test('header follows workspace selection and save state, then clears identity on
   for (const id of ['sessionStatus', 'offlineStatus', 'syncStatus']) assert.equal(await page.locator(`#${id}`).isVisible(), false);
   assert.equal(await page.locator('#capture > fieldset > label').innerText(), 'Capture items');
   assert.equal(await page.locator('#captureHeading').innerText(), 'Capture');
-  assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. Ctrl/⌘ + Enter saves.');
+  assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. For commas or semicolons, preview the split first. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureHelp').getAttribute('class'), 'sr-only');
+  assert.equal(await page.locator('#captureHelp').textContent(), 'One item per line. For comma- or semicolon-separated items, choose Preview comma / semicolon split before saving. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint previewHelp');
+  assert.equal(await page.locator('#previewSplit svg').getAttribute('aria-hidden'), 'true');
+  assert.deepEqual(await page.locator('#previewSplit path').evaluateAll(paths => paths.map(path => path.getAttribute('d'))), ['M8.7 8.7 21 21', 'm8.7 15.3 4.6-4.6', 'M12.3 12.3 21 3']);
   assert.deepEqual(await page.locator('.capture-header button').evaluateAll(buttons => buttons.map(button => button.innerText)), ['', '']);
   assert.ok((await page.getByRole('button', { name: 'Save on device', exact: true }).boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
   await clickControl(page.locator('#manageWorkspaces'));

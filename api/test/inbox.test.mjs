@@ -200,15 +200,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v18')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v19')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=16', '/plan.js?v=3', '/inbox-store.js?v=9', '/inbox-fields.js?v=2', '/inbox-export.js?v=11',
+    '/inbox.js?v=17', '/plan.js?v=3', '/inbox-store.js?v=9', '/inbox-fields.js?v=2', '/inbox-export.js?v=11',
     '/collection-model.js?v=2', '/collections.js?v=3', '/workspace-move.js?v=3', '/workspaces.js?v=4',
     '/clarification.js?v=5', '/clarification-preferences.js?v=1', '/clarification-flow.js?v=3', '/reviews.js?v=8', '/briefs.js?v=3',
-    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=16',
-    '/pwa.js?v=16', '/manifest.json',
+    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=17',
+    '/pwa.js?v=17', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -335,11 +335,33 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   const { page, context, url } = await setup(t);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
-  await showView(page, 'capture'); await page.locator('#captureText').fill('milk, bread; eggs');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('milk and bread');
   assert.equal(await page.locator('#captureOptions').evaluate(details => details.open), false);
   await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
   assert.equal((await local(page)).queue.length, 0);
+  assert.equal(await page.locator('#captureText').inputValue(), 'milk and bread');
+  assert.equal(await page.locator('#splitStatus').textContent(), 'No commas or semicolons found in the capture box.');
+  assert.equal(await page.locator('#splitStatus').isVisible(), true);
+  assert.equal(await page.locator('#previewHelp').isHidden(), true);
+  assert.equal(Object.hasOwn((await local(page)).draft.capture, 'original'), false);
+  assert.equal(await page.locator('#captureText').evaluate(element => element === document.activeElement), true);
+  await page.waitForTimeout(5100);
+  assert.equal(await page.locator('#splitStatus').isHidden(), true, 'no-separator feedback clears after five seconds');
+  await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
+  await page.locator('#captureText').fill('');
+  assert.equal(await page.locator('#splitStatus').isHidden(), true, 'the next edit clears no-separator feedback');
+  await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
+  assert.equal(await page.locator('#splitStatus').textContent(), 'No commas or semicolons found in the capture box.');
+  assert.equal(await page.locator('#captureText').inputValue(), '');
+  await page.locator('#captureText').fill('\n\n');
+  await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
+  assert.equal(await page.locator('#splitStatus').textContent(), 'No commas or semicolons found in the capture box.');
+  assert.equal(await page.locator('#captureText').inputValue(), '\n\n');
+  assert.equal(Object.hasOwn((await local(page)).draft.capture, 'original'), false);
+  await page.locator('#captureText').fill(' milk, bread\n eggs; ');
+  await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
   assert.equal(await page.locator('#captureText').inputValue(), 'milk\nbread\neggs');
+  assert.equal(await page.locator('#splitStatus').isHidden(), true);
   assert.equal(await page.locator('#previewHelp').isVisible(), true);
   assert.equal(await page.locator('#captureText').evaluate(element => element === document.activeElement), true);
   await showView(page, 'capture'); await page.locator('#captureText').fill('oat milk\nbread\neggs');
@@ -349,7 +371,7 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   assert.equal(await page.locator('#captureText').inputValue(), 'oat milk\nbread\neggs');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.getByRole('button', { name: 'Edit oat milk', includeHidden: true }).waitFor({ state: 'attached' });
-  assert.ok((await local(page)).queue[0].operation.mutations.every(mutation => mutation.fields.originalText === 'milk, bread; eggs'));
+  assert.ok((await local(page)).queue[0].operation.mutations.every(mutation => mutation.fields.originalText === ' milk, bread\n eggs; '));
   const second = await context.newPage(); await second.goto(url);
   await second.locator('#workspace').waitFor();
   await Promise.all([capture(page, 'Tab one'), capture(second, 'Tab two')]);
@@ -359,6 +381,37 @@ test('inbox: splitting requires preview confirmation, draft survives reload and 
   await confirmed(page); await confirmed(second);
   assert.equal(records().length, 5);
   assert.equal(documents.filter(doc => doc.kind === 'receipt').length, 3);
+});
+
+test('capture: legacy Notes restore without truncation, leave the next draft snapshot and clear after save', async t => {
+  const { page, context } = await setup(t);
+  const legacyText = 'x'.repeat(16000), legacyNotes = 'Legacy supporting note';
+  await page.evaluate(async ({ legacyText, legacyNotes }) => {
+    const { transact } = await import('/inbox-store.js?v=9');
+    await transact('alice', local => { local.draft.capture = { text: legacyText, body: legacyNotes, contexts: [], listId: '', newList: '' }; });
+  }, { legacyText, legacyNotes });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), `${legacyText}\n${legacyNotes}`);
+  assert.ok((await page.locator('#captureText').inputValue()).length > 16000, 'legacy content remains visible above the current limit');
+  await page.locator('#captureText').fill('Edited legacy capture');
+  await waitForBrowser(page, async () => {
+    const saved = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture;
+    return saved.text === 'Edited legacy capture' && !Object.hasOwn(saved, 'body');
+  });
+  await context.setOffline(true);
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=9');
+    await transact('alice', local => { local.draft.capture = { text: 'Legacy task', body: 'Legacy supporting note', contexts: [], listId: '', newList: '' }; });
+  });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Legacy task\nLegacy supporting note');
+  await page.getByRole('button', { name: 'Save on device', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#captureText').value === '');
+  const saved = await local(page);
+  assert.deepEqual(saved.draft.capture, {});
+  assert.deepEqual(saved.queue[0].operation.mutations.map(mutation => [mutation.fields.title, mutation.fields.description]), [
+    ['Legacy task', ''], ['Legacy supporting note', '']
+  ]);
 });
 
 test('inbox: editor storage failure closes the sheet and exposes a recovery copy', { timeout: 90000 }, async t => {
@@ -434,7 +487,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const root = new URL('../../html/', import.meta.url);
   const nextAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v18', 'shell-next'),
+    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v19', 'shell-next'),
   ])));
   nextAssets.set('/', nextAssets.get('/index.html'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
