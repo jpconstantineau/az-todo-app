@@ -1,4 +1,4 @@
-import { collectionKinds, collectionKind, isCollection, refKey, memberships, ancestry, normalizeMembership, belongsTo } from './collection-model.js?v=2';
+import { collectionKinds, collectionKind, isCollection, refKey, ancestry, normalizeMembership } from './collection-model.js?v=3';
 
 export const viewKey = record => record.type === 'project' ? refKey(record) : record.id;
 export const parseRef = value => { const [type, id] = value.split(':'); return { type, id }; };
@@ -38,27 +38,4 @@ export function drawOutline(container, records, open) {
   const list = document.createElement('ul');
   list.append(...available.filter(record => !record.parentRef || !records[refKey(record.parentRef)] || records[refKey(record.parentRef)].deleted).map(record => row(record)));
   container.replaceChildren(list);
-}
-export function checklistMutations(source, items, title, next = false) {
-  if (collectionKind(source) !== 'reference' || source.deleted) throw new Error('Choose a live reference list.');
-  if (!title.trim() || title.length > 200) throw new Error('Name the new checklist (1–200 characters).');
-  if (!items.length || items.length > 19 || new Set(items.map(item => item.id)).size !== items.length) throw new Error('Choose 1–19 entries for one checklist.');
-  const id = crypto.randomUUID(), workspaceId = source.workspaceId, destination = { type: 'list', id };
-  return [{ type: 'list', id, action: 'create', expectedVersion: 0, fields: { title, kind: 'checklist', workspaceId, parentRef: source.parentRef || null } }, ...items.map(item => {
-    if (item.deleted || !belongsTo(item, source)) throw new Error('A selected source entry changed. Choose the entries again.');
-    return { type: 'item', id: crypto.randomUUID(), action: 'create', expectedVersion: 0, fields: { title: item.title, description: item.description || '', referenceLinks: item.referenceLinks || [], sourceUrl: item.sourceUrl || null, sourceTitle: item.sourceTitle || '', originalText: item.title, workspaceId, status: next ? 'next' : 'inbox', ...membershipFields([destination]) } };
-  })];
-}
-export function areaMappingMutations(records, tag, target, title, workspaceId) {
-  const existing = target && records[refKey(target)];
-  if (target && (!existing || existing.deleted || collectionKind(existing) !== 'area')) throw new Error('Choose an available Area.');
-  if (!tag) throw new Error('Choose an existing area tag.');
-  if (!target && (!title.trim() || title.length > 200)) throw new Error('Name the new Area (1–200 characters).');
-  const ref = target || { type: 'list', id: crypto.randomUUID() };
-  const candidates = Object.values(records).filter(record => record.type === 'item' && !record.deleted && record.areas?.includes(tag) && !belongsTo(record, ref));
-  const batch = candidates.slice(0, target ? 20 : 19);
-  if (!batch.length && target) throw new Error('All items with this tag are already linked.');
-  const mutations = target ? [] : [{ type: 'list', id: ref.id, action: 'create', expectedVersion: 0, fields: { title, kind: 'area', workspaceId } }];
-  for (const item of batch) mutations.push({ type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: membershipFields([...memberships(item), ref], item) });
-  return { mutations, ref, remaining: candidates.length - batch.length };
 }

@@ -17,7 +17,7 @@ flowchart LR
   API --> DB[Azure Cosmos DB]
 ```
 
-- [Capture, Your Work and List Workspace navigation](docs/navigation.md)
+- [Capture, Process and Organize navigation](docs/navigation.md)
 - [Separate workspaces, offline drafts, archive and recovery](docs/workspaces.md)
 - [Operator-assisted permanent erasure for one non-Personal workspace](docs/workspace-erasure.md)
 - [Shared shopping/family lists, invitations and granular permissions](docs/shared-lists.md)

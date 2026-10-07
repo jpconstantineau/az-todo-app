@@ -30,9 +30,11 @@ state changes require an explicit schema/version decision, not fallback readers.
 ## Workspace drafts
 
 An unused workspace has `{}`. Journaling writes `workspaceId`, `capture`, `edit`,
-`editOpen`, `defaults`, `defaultsOpen`, `clarification`, `brief`, `collectionUtility`,
-`day`, `navigation`, `review`, and `extraction`. Empty/null workflow snapshots mean
+`editOpen`, `defaults`, `defaultsOpen`, `clarification`, `brief`, `day`,
+`navigation`, `review`, and `extraction`. Empty/null workflow snapshots mean
 that workflow has not been opened; these are normal current states, not migrations.
+Portable imports still accept the removed `collectionUtility` key so older
+recovery copies remain readable, but the client ignores it and does not save it again.
 
 - Capture contains only `text`, `body`, `listId`, `newList`, and `contexts`, plus
   `original` after explicit split preview. `listId` is empty, a list ID, or a
@@ -40,8 +42,10 @@ that workflow has not been opened; these are normal current states, not migratio
   attributes belong to the item editor or reviewed extraction suggestions.
 - A non-null editor draft contains `type`, `id`, `version`, complete form `fields`
   and complete `initialFields` from when editing began. Form values include
-  collection references, workspace, dates and metadata; `parentRef` is a form
-  string and project lifecycle is `projectStatus`. Restoration keeps both the
+  collection references, workspace, dates and metadata; new collection drafts
+  keep `parentRef` as a form string and project lifecycle is `projectStatus`.
+  Existing collection type, parent and `revisitDate` save directly from Organize
+  rather than entering the editor draft. Restoration keeps both the
   edits and their baseline, even if the cached record changed. Drafts without
   `initialFields` are unsupported and are never reconstructed from server data.
 - Defaults contain record identity/version and form `values`. `editOpen` and

@@ -79,13 +79,13 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
   const { page, context, setUser } = await setup(t, '#work');
   assert.equal(await page.locator('#itemsHeading').textContent(), 'Process');
   assert.equal(await page.title(), 'Process · Personal');
-  assert.equal(await page.locator('#workEyebrow').isVisible(), false);
+  assert.equal(await page.locator('#workEyebrow').count(), 0);
   assert.equal(await page.locator('#viewLabel').getAttribute('class'), 'sr-only');
   assert.equal(await page.locator('#executionFilters').isVisible(), false);
   assert.equal(await page.getByRole('combobox', { name: 'View', exact: true }).inputValue(), 'inbox');
   assert.equal(await page.locator('#view').evaluate(el => getComputedStyle(el).fontSize), await page.locator('#itemsHeading').evaluate(el => getComputedStyle(el).fontSize));
   assert.equal(await page.locator('#view option').first().getAttribute('value'), 'inbox');
-  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process'], ['listWorkspace', 'List Workspace'], ['openPlan', 'Plan'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
+  for (const [id, name] of [['quickFocus', 'Capture'], ['yourWork', 'Process'], ['listWorkspace', 'Organize'], ['openPlan', 'Plan'], ['doWork', 'Do'], ['openReviews', 'Review']]) {
     const link = page.getByRole('link', { name, exact: true });
     assert.equal(await link.getAttribute('id'), id);
     assert.equal(await link.getAttribute('title'), name);
@@ -229,7 +229,7 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
 
 test('navigation: Execute offers existing collection kinds, including an Area without a Project', { timeout: 90000 }, async t => {
   const { page, context, url } = await setup(t, '#execute');
-  const kinds = { area: 'Area', role: 'Role', initiative: 'Initiative', program: 'Program', reference: 'Reference list' };
+  const kinds = { area: 'Area', role: 'Role', initiative: 'Initiative', program: 'Program', reference: 'Reusable reference' };
   assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Project', 'Checklist']);
   const mutations = Object.entries(kinds).flatMap(([kind, title]) => [
     currentCreate('list', kind, { title, kind }),
@@ -648,7 +648,7 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
   await page.locator('#view').selectOption('inbox');
   await page.locator('#statusFilter').selectOption('next');
   await showView(page, 'lists');
-  assert.match(await page.locator('#items').innerText(), /Choose a list/);
+  assert.match(await page.locator('#items').innerText(), /Choose a collection/);
   assert.equal(await page.locator('#view option[value="all"]').count(), 0);
   assert.equal(await page.locator('#newProject').count(), 0);
   await page.locator('#view').selectOption(listId);
@@ -719,7 +719,7 @@ test('navigation: distinct views preserve offline capture, filters, editor draft
 
 test('navigation: failures stay reachable in every view, deleted selections clear, and accounts cannot inherit navigation state', { timeout: 90000 }, async t => {
   const { page, context, setUser } = await setup(t, '#lists');
-  assert.match(await page.locator('#items').innerText(), /No lists yet/);
+  assert.match(await page.locator('#items').innerText(), /No collections yet/);
   await capture(page, 'Private task', 'Private list'); await confirmed(page);
   const list = documents.find(doc => doc.record?.type === 'list').record;
   await showView(page, 'lists'); await page.locator('#view').selectOption(list.id);
@@ -754,7 +754,7 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   }, list.id);
   await page.reload(); await page.locator('#workspace').waitFor(); await showView(page, 'lists');
   assert.equal(await page.locator('#view').inputValue(), '');
-  assert.match(await page.locator('#items').innerText(), /No lists yet/);
+  assert.match(await page.locator('#items').innerText(), /No collections yet/);
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).accountId === 'bob');
   await confirmed(page);

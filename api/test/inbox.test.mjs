@@ -200,15 +200,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v21')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v22')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=19', '/plan.js?v=3', '/inbox-store.js?v=9', '/inbox-fields.js?v=2', '/inbox-export.js?v=11',
-    '/collection-model.js?v=2', '/collections.js?v=3', '/workspace-move.js?v=3', '/workspaces.js?v=4',
-    '/clarification.js?v=6', '/clarification-preferences.js?v=1', '/clarification-flow.js?v=3', '/reviews.js?v=8', '/briefs.js?v=3',
-    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=19',
-    '/pwa.js?v=19', '/manifest.json',
+    '/inbox.js?v=20', '/plan.js?v=4', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=12',
+    '/collection-model.js?v=3', '/collections.js?v=4', '/workspace-move.js?v=4', '/workspaces.js?v=4',
+    '/clarification.js?v=7', '/clarification-preferences.js?v=2', '/clarification-flow.js?v=4', '/reviews.js?v=9', '/briefs.js?v=4',
+    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=20',
+    '/pwa.js?v=20', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -482,13 +482,13 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v20 to v21 preserves a draft and exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v21 to v22 preserves a draft and exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v21', 'shell-v20')
-      .replace(/\/(inbox|shared|pwa)\.js\?v=19/g, '/$1.js?v=18'),
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v22', 'shell-v21')
+      .replace(/\/(inbox|shared|pwa)\.js\?v=20/g, '/$1.js?v=19'),
   ])));
   previousAssets.set('/', previousAssets.get('/index.html'));
   const currentWorker = await readFile(new URL('inbox-sw.js', root), 'utf8');
@@ -505,7 +505,7 @@ test('shell upgrade from v20 to v21 preserves a draft and exact queued operation
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v20')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v21')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
@@ -531,7 +531,7 @@ test('shell upgrade from v20 to v21 preserves a draft and exact queued operation
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v21')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v22')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.equal(await page.evaluate(async operation => (await fetch('/api/v1/operations', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation)

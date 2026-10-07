@@ -1,10 +1,11 @@
 # Lists and organization
 
-Lists is one browser for ordinary lists, projects, areas, roles, initiatives,
-programs and reusable reference lists. New list uses the existing editor with a
-kind and optional parent. Projects still require a desired outcome. Existing
-projects retain their IDs and history; changing between a list and a project is
-not a kind edit. The New project and Add next action shortcuts remain explicit.
+Organize is one browser for ordinary lists, projects, areas, roles, initiatives,
+programs and reusable references. New list uses the existing editor with a kind
+and optional parent. A selected collection exposes its type, cycle-safe parent
+and optional one-time revisit date directly. Projects still require a desired
+outcome and remain projects. Changing a non-project kind keeps its ID, contents,
+defaults and history. The New project and Add next action shortcuts remain explicit.
 
 Open a collection to see its direct items and children. Include nested items
 shows each item once, even when it has several matching memberships. Desktop has
@@ -20,21 +21,18 @@ primary. The editor's Primary memberships disclosure lets the user choose a
 different primary. Only the primary list supplies list defaults; parent defaults
 are not inherited. Context, time, energy and historical area tags remain editable.
 
-## Reference lists and area tags
+## Reusable references, tags and revisit dates
 
-A reference list shows reference entries with the default Incomplete filter.
-Use as checklist copies selected titles, notes and supplied links into a new
-ordinary list. Copies get new item IDs and enter Inbox unless Create copies as
-Next actions is explicitly checked. The source entries are unchanged. Each save
-is one atomic operation: a list plus 1–19 entries. Choose a subset for larger
-lists; there is no hidden truncation or automatic reset.
+A Reusable reference collection holds non-actionable source material. Its
+entries remain ordinary saved records and can still carry existing area tags;
+Organize no longer presents a separate copy-or-map action whose meaning depends
+on the selected collection. Removing that page flow does not delete reference
+entries, copied checklists, collection memberships or historical area tags.
 
-Create/link an area from a tag links the selected workspace's matching items to
-an explicitly selected or newly created Area. It does not delete tags, merge
-equal names, change defaults, or alter items in other workspaces. A batch links
-up to 20 items, or 19 with a new Area. The form retains its target and tag through
-reload; each later batch skips already linked items. Progress is reported after
-each save. Sync failures use the existing outbox and conflict recovery.
+`revisitDate` is one optional calendar date on a list or project. A collection
+due today or earlier is pinned under Ready to revisit until the date is cleared
+or rescheduled. This is a resurfacing cue only: it does not create recurrence,
+send a notification, change an item date or make reference material actionable.
 
 ## Additive storage contract
 
@@ -42,6 +40,7 @@ each save. Sync failures use the existing outbox and conflict recovery.
   `list`, `area`, `role`, `initiative`, `program`, `reference`.
 - Lists and projects have optional `parentRef: { type: "list" | "project", id }`.
   Each has one parent at most. Typed IDs keep equal list/project IDs distinct.
+- Lists and projects have optional `revisitDate: "YYYY-MM-DD" | null`.
 - `item.collectionRefs` is a required array of at most 20 unique typed refs.
   An empty array represents an unfiled item and is still authoritative.
 - `listId` and `projectId` remain primary links for the UI. A combined refs and
@@ -76,6 +75,6 @@ private nesting does not grant sharing access.
 
 Validation uses the existing API/browser suites, including concurrent cycles,
 link/delete races, compatibility projections, offline drafts and rollups,
-checklist source preservation and resumable tag mapping. Responsive screenshots
+type conversion, project constraints and revisit resurfacing. Responsive screenshots
 are in `docs/design/unified-lists/`. Physical-device and spoken screen-reader
 testing remain manual follow-ups.
