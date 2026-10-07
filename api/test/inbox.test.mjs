@@ -200,15 +200,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=7')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v14')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v15')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=12', '/inbox-store.js?v=7', '/inbox-fields.js?v=2', '/inbox-export.js?v=8',
+    '/inbox.js?v=13', '/plan.js?v=1', '/inbox-store.js?v=7', '/inbox-fields.js?v=2', '/inbox-export.js?v=9',
     '/collection-model.js?v=2', '/collections.js?v=3', '/workspace-move.js?v=3', '/workspaces.js?v=3',
     '/clarification.js?v=5', '/clarification-preferences.js?v=1', '/clarification-flow.js?v=3', '/reviews.js?v=7', '/briefs.js?v=3',
-    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=12',
-    '/pwa.js?v=12', '/manifest.json',
+    '/capture-extraction.js?v=1', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=13',
+    '/pwa.js?v=13', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -434,7 +434,7 @@ test('shell upgrade from the release baseline preserves a draft and exact queued
   const root = new URL('../../html/', import.meta.url);
   const nextAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v10', 'shell-next'),
+    (await readFile(new URL(name, root), 'utf8')).replace(/\?v=\d+/g, '?v=next').replaceAll('shell-v15', 'shell-next'),
   ])));
   nextAssets.set('/', nextAssets.get('/index.html'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;

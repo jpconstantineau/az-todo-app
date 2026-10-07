@@ -37,10 +37,10 @@
   .toolbar button { flex: 1 1 auto; }
 }
 
-.workspace-nav { align-items: stretch; }
+.workspace-nav { display: grid; grid-template-columns: repeat(6, minmax(44px, 1fr)); gap: var(--space-1); align-items: stretch; }
 .workspace-nav > a { display: flex; align-items: center; justify-content: center; }
 .nav-icon { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.workspace-nav > * { flex: 1 1 0; text-align: center; min-width: 0; }
+.workspace-nav > * { text-align: center; min-width: 0; padding-inline: var(--space-1); }
 #savedEdit { overflow-wrap: anywhere; }
 #listTools { margin-block: var(--space-4); }
 #statusSelection { min-width: 0; margin: var(--space-3) 0; padding: var(--space-3); border: var(--border-width) solid var(--border); border-radius: var(--radius-control); }
@@ -145,11 +145,41 @@
 .execute-check { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; min-height: 44px; margin: 0; cursor: pointer; }
 .execute-check input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; }
 .execute-item .editable-title { flex: 1; min-width: 0; justify-content: flex-start; }
+.plan-panel { display: grid; gap: var(--space-4); }
+.plan-panel > p, .plan-panel > h2 { margin-block: 0; }
+.plan-section { border-top: var(--border-width) solid var(--border); padding-top: var(--space-4); min-width: 0; }
+.plan-section > h3 { font-size: var(--text-heading); margin-bottom: var(--space-3); }
+.plan-browser { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.plan-hierarchy { border-right: var(--border-width) solid var(--border); padding-right: var(--space-4); }
+.plan-hierarchy ul { list-style: none; margin: 0; padding-inline-start: var(--space-4); }
+.plan-hierarchy > ul { padding-inline-start: 0; }
+.plan-hierarchy li { margin-block: var(--space-1); }
+.plan-hierarchy button { width: 100%; justify-content: flex-start; text-align: left; }
+.plan-focus-picker { display: none; }
+.plan-focus-summary { min-width: 0; }
+.plan-focus-summary > h3 { font-size: var(--text-heading); }
+.plan-breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); list-style: none; margin: 0 0 var(--space-3); padding: 0; }
+.plan-breadcrumbs li { display: flex; align-items: center; min-width: 0; }
+.plan-breadcrumbs li + li::before { content: '/'; color: var(--muted); margin-right: var(--space-1); }
+.plan-breadcrumbs button { min-height: 44px; padding: var(--space-1) var(--space-2); background: transparent; border-color: transparent; color: var(--link); text-align: left; }
+.plan-actions { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.inbox-page .plan-action, .inbox-page .plan-day-action { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0; padding: var(--space-3); }
+.plan-action-check { display: flex; align-items: center; gap: var(--space-3); flex: 1; min-width: 0; min-height: 44px; margin: 0; cursor: pointer; }
+.plan-action-check input { flex: 0 0 24px; width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; accent-color: var(--link); }
+.plan-action-check > span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.plan-day-action > button { flex: 1; min-width: 0; justify-content: flex-start; text-align: left; }
+.plan-day-action > span { text-align: right; overflow-wrap: anywhere; }
 @media (max-width: 767px) {
   #captureText { min-height: 50dvh; }
   #editor { height: 92dvh; }
   .menu-content .device-tools { align-items: stretch; }
   .workspace-nav > * { padding-inline: var(--space-1); }
+  .plan-browser { grid-template-columns: minmax(0, 1fr); }
+  .plan-hierarchy { display: none; }
+  .plan-focus-picker { display: block; }
+  .inbox-page .plan-action, .inbox-page .plan-day-action { align-items: stretch; flex-direction: column; }
+  .plan-action > button { align-self: flex-start; }
+  .plan-day-action > span { text-align: left; }
 }
 
 .workspace-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

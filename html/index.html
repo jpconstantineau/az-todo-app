@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=12" defer></script>
+  <script src="/pwa.js?v=13" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=12"></script>
+  <script type="module" src="/inbox.js?v=13"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -86,6 +86,7 @@
       <a class="button icon-button" id="quickFocus" href="#capture" aria-current="page" aria-label="Capture" title="Capture"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="8" rx="9" ry="5" transform="rotate(-15 12 8)"/><ellipse cx="7" cy="13" rx="2" ry="1.5"/><path d="M8 14.5c2 3 1 5-1 6"/></svg></a>
       <a class="button icon-button" id="yourWork" href="#work" aria-label="Process" title="Process"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="6" rx=".5"/><path d="M12 8v5M5 16v-3h14v3"/><rect x="2" y="16" width="6" height="6" rx=".5"/><rect x="16" y="16" width="6" height="6" rx=".5"/></svg></a>
       <a class="button icon-button" id="listWorkspace" href="#lists" aria-label="List Workspace" title="List Workspace"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4-9 4-9-4Zm0 6 9 4 9-4M3 19l9 4 9-4"/></svg></a>
+      <a class="button icon-button" id="openPlan" href="#plan" aria-label="Plan" title="Plan"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z"/></svg></a>
       <a class="button icon-button" id="doWork" href="#execute" aria-label="Do" title="Do"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="3" rx="1"/><path d="M8 3H6a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M7 9l1 1 2-2m3 1h4M7 14l1 1 2-2m3 1h4M7 19l1 1 2-2m3 1h4"/></svg></a>
       <a class="button icon-button" id="openReviews" href="#reviews" aria-label="Review" title="Review"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m15 15 7 7"/></svg></a>
     </nav>
@@ -159,6 +160,34 @@
         <div id="areaMappingFields" hidden><label>Existing area tag<select name="tag"></select></label><label>Link to Area<select name="target"></select></label><p>Tags are kept. Each save links up to 20 items (19 with a new Area). Save the next batch to resume; already linked items are skipped.</p></div>
         <label>New list / Area name<input name="title" maxlength="200"></label><button type="submit">Save collection action on device</button><p id="collectionUtilityStatus" role="status"></p>
       </form></details><div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
+    </section>
+    <section class="card plan-panel" id="plan" aria-labelledby="planHeading" hidden>
+      <p class="eyebrow">Align</p><h2 id="planHeading" tabindex="-1">Plan</h2>
+      <p>Start at the right level, choose the Next actions that matter this week, then inspect the day already planned.</p>
+      <p id="planStatus" class="muted" role="status" aria-live="polite">Loading plan…</p>
+      <section class="plan-section" aria-labelledby="planRolesHeading">
+        <h3 id="planRolesHeading">Roles &amp; goals</h3>
+        <div class="plan-browser">
+          <nav id="planHierarchy" class="plan-hierarchy" aria-label="Planning hierarchy"></nav>
+          <div class="plan-focus-summary">
+            <details id="planFocusPicker" class="plan-focus-picker"><summary>Choose planning focus</summary><label>Planning focus<select id="planFocus"><option value="">Whole workspace</option></select></label></details>
+            <nav id="planBreadcrumbs" class="plan-breadcrumbs" aria-label="Planning breadcrumbs"></nav>
+            <p class="eyebrow" id="planFocusKind">Workspace</p><h3 id="planFocusTitle">Whole workspace</h3>
+            <p id="planFocusDescription"></p><p id="planFocusCounts" class="muted"></p><div id="planFocusActions" class="actions"></div>
+          </div>
+        </div>
+      </section>
+      <section class="plan-section" aria-labelledby="planWeekHeading">
+        <h3 id="planWeekHeading">This week</h3>
+        <label>Week of <input id="planWeek" type="date" min="0001-01-01" max="9999-12-31"></label>
+        <p id="planBalance" class="muted"></p><div id="planWeekActions" class="plan-actions"></div>
+        <section id="planAttention" aria-labelledby="planAttentionHeading" hidden><h4 id="planAttentionHeading">Needs attention</h4><p class="muted">These selected actions are no longer Next or were deleted. Inspect them or remove live actions from this week; nothing is promoted or unplanned automatically.</p><div id="planAttentionActions" class="plan-actions"></div></section>
+      </section>
+      <section class="plan-section" aria-labelledby="planDayHeading">
+        <h3 id="planDayHeading">Day</h3><p class="muted">This read-only roll-up uses Planned day. Daily ordering, capacity and carryover are handled separately.</p>
+        <label>Planned day <input id="planDay" type="date" min="0001-01-01" max="9999-12-31"></label>
+        <button id="planOpenDay" type="button">Open day in Process</button><div id="planDayActions" class="plan-actions"></div>
+      </section>
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
       <h2 id="executeHeading" tabindex="-1">Execute</h2>

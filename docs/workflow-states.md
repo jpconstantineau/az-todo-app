@@ -60,6 +60,7 @@ waiting/deferred.
 | --- | --- | --- | --- |
 | Deadline | `dueDate` | `dueDateUtc` | When the work is due. |
 | Planned day | `plannedDay` | None | Which day view includes the action; not a deadline. |
+| Planned week | `plannedWeek` | None | Which weekly Plan selection includes the action; not a status or deadline. |
 | Deferred start | `startDate` | `startDateUtc` | When deferred work becomes ready for review. |
 | Review cue | `reviewDate` | `reviewDateUtc` | When to check a waiting dependency. |
 
