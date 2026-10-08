@@ -87,6 +87,8 @@ test('brief templates use only accepted clarification facts and keep linked proj
   const noProject = templateBrief({ ...item, projectId: null }, complete('none'));
   assert.doesNotMatch(noProject.context, /Linked project/);
   assert.doesNotMatch(noProject.missingInformation, /current project relationship/);
+  const linkedAfterClarification = templateBrief({ ...item, projectId: project.id }, complete('none'), { [`project:${project.id}`]: project });
+  assert.match(linkedAfterClarification.context, /Linked project: Repair roof/);
 
   for (const step of ['summary', 'project']) {
     const ignored = templateBrief({ ...item, projectId: project.id }, { ...complete('new'), step }, { [`project:${project.id}`]: project });
@@ -102,6 +104,9 @@ test('brief templates use only accepted clarification facts and keep linked proj
   assert.match(deleted.context, /current project unavailable \(project:roof at version 4 is deleted\)/); assert.doesNotMatch(deleted.context, /Roof no longer leaks/);
   const missingKeep = templateBrief({ ...item, projectId: null }, complete('keep'));
   assert.match(missingKeep.context, /current project unavailable/); assert.doesNotMatch(missingKeep.context, /Original roof outcome/);
+  const removedExisting = templateBrief({ ...item, projectId: null }, complete('existing'), { [`project:${project.id}`]: project });
+  assert.match(removedExisting.context, /Project relationship accepted during clarification: project:roof .*current task has no linked project/);
+  assert.doesNotMatch(removedExisting.context, /Linked project: Repair roof/);
 
   const changed = { ...project, id: 'replacement', version: 2, title: 'Replacement project', outcome: 'Replacement complete' };
   const refreshed = templateBrief({ ...item, projectId: changed.id, version: 4 }, complete('existing'), { [`project:${changed.id}`]: changed });
@@ -153,11 +158,29 @@ async function download(page) {
 test('brief browser: offline edit/resume, revision-specific decisions, export, project template and account clearing', { timeout: 90000 }, async t => {
   const { page, context, browser, url, setUser } = await setup(t);
   const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.locator('#closeBriefs').click();
   await context.setOffline(true);
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=9');
+    await transact('alice', local => {
+      Object.assign(local.records['item:insurance'], { projectId: 'roof', collectionRefs: [{ type: 'project', id: 'roof' }] });
+      local.records['project:roof'] = { type: 'project', id: 'roof', accountId: 'alice', workspaceId: 'personal', version: 3,
+        title: 'Repair roof', outcome: 'Roof no longer leaks', status: 'active', deleted: false };
+      local.records['clarification:insurance'] = { type: 'clarification', id: 'insurance', accountId: 'alice', version: 7, flowVersion: 2, step: 'complete',
+        answers: { project: { choice: 'existing', projectId: 'roof', projectTitle: '', outcome: '' }, organize: { notes: 'Unknown: warranty coverage' } }, proposal: {} };
+      local.draft.brief = null;
+    });
+  });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await clickControl(page.getByRole('button', { includeHidden: true, name: 'Brief Call the insurer', exact: true }));
+  assert.match(await page.locator('#briefForm [name=context]').inputValue(), /Linked project desired outcome: Roof no longer leaks/);
+  assert.match(await page.locator('#briefForm [name=missingInformation]').inputValue(), /Accepted clarification notes: Unknown: warranty coverage/);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.brief?.content.context.includes('Roof no longer leaks'));
   await page.locator('#briefForm [name=outcome]').fill('Coverage in place');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.brief?.content.outcome === 'Coverage in place');
   await page.reload(); await page.locator('#briefs').waitFor();
   assert.equal(await page.locator('#briefForm [name=outcome]').inputValue(), 'Coverage in place');
+  assert.match(await page.locator('#briefForm [name=context]').inputValue(), /Linked project desired outcome: Roof no longer leaks/);
   assert.equal(await page.locator('#briefAccept').isDisabled(), true);
   await page.getByRole('button', { name: 'Save new draft revision' }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length === 1);

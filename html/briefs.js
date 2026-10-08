@@ -14,9 +14,9 @@ function acceptedV2Context(subject, clarification, records) {
   if (clarification?.flowVersion !== 2 || clarification.step !== 'complete') return { context: [], missing: [] };
   const answer = clarification.answers?.project, notes = clarification.answers?.organize?.notes || '';
   const missing = notes ? [`Accepted clarification notes: ${notes}`] : [];
-  if (!answer || answer.choice === 'none') return { context: [], missing };
+  if ((!answer || answer.choice === 'none') && !subject.projectId) return { context: [], missing };
 
-  const projectId = subject.projectId || (answer.choice === 'existing' ? answer.projectId : '');
+  const projectId = subject.projectId || '';
   const project = projectId ? records[`project:${projectId}`] : null;
   if (project && !project.deleted) {
     const context = [`Linked project: ${project.title} (project:${project.id} at version ${project.version})`];
@@ -26,10 +26,12 @@ function acceptedV2Context(subject, clarification, records) {
   }
 
   const unavailable = project?.deleted ? `current project unavailable (project:${project.id} at version ${project.version} is deleted)` : projectId ? `current project unavailable (project:${projectId})` : 'current project unavailable';
-  const context = answer.choice === 'new' ? [
+  const context = answer?.choice === 'new' ? [
     `Linked project from accepted clarification: ${answer.projectTitle}`,
     `Linked project desired outcome from accepted clarification: ${answer.outcome}`,
     `Project context source: clarification:${clarification.id || subject.id} at version ${clarification.version ?? 'unknown'}; ${unavailable}.`
+  ] : !projectId && answer?.choice === 'existing' ? [
+    `Project relationship accepted during clarification: project:${answer.projectId} (clarification:${clarification.id || subject.id} at version ${clarification.version ?? 'unknown'}); current task has no linked project.`
   ] : [`Linked project context: ${unavailable}.`];
   missing.push('Confirm the current project relationship and outcome.');
   return { context, missing };
