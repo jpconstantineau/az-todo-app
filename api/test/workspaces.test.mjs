@@ -108,6 +108,21 @@ test('workspaces: moving a collection carries its nested records and keeps histo
   assert.equal(workspaceOf(moved['brief:brief'], moved), 'family');
 });
 
+test('collection moves carry a recurring template and all of its occurrence history together', () => {
+  const records = {
+    'list:root': { type: 'list', id: 'root', version: 1, workspaceId: 'work', title: 'Root', parentRef: null },
+    'recurrenceTemplate:series': { type: 'recurrenceTemplate', id: 'series', version: 3, workspaceId: 'work', collectionRefs: [{ type: 'list', id: 'root' }], listId: 'root', projectId: null },
+    'item:current': { type: 'item', id: 'current', version: 1, workspaceId: 'work', recurrenceTemplateId: 'series', occurrenceState: 'open', collectionRefs: [{ type: 'list', id: 'root' }], listId: 'root', projectId: null },
+    'item:history': { type: 'item', id: 'history', version: 2, workspaceId: 'work', recurrenceTemplateId: 'series', occurrenceState: 'completed', collectionRefs: [], listId: null, projectId: null },
+    'recurrenceTemplate:stopped': { type: 'recurrenceTemplate', id: 'stopped', version: 3, workspaceId: 'work', tombstoned: true, collectionRefs: [{ type: 'list', id: 'root' }], listId: 'root', projectId: null },
+    'item:stopped-history': { type: 'item', id: 'stopped-history', version: 2, workspaceId: 'work', recurrenceTemplateId: 'stopped', occurrenceState: 'completed', collectionRefs: [{ type: 'list', id: 'root' }], listId: 'root', projectId: null }
+  };
+  const mutations = collectionMoveMutations(records['list:root'], 'family', records, { title: 'Root', workspaceId: 'family', parentRef: null });
+  assert.deepEqual(mutations.map(mutation => `${mutation.type}:${mutation.id}`), ['recurrenceTemplate:series', 'item:current', 'item:history', 'list:root']);
+  assert.ok(mutations.every(mutation => mutation.fields.workspaceId === 'family'));
+  assert.equal(records['recurrenceTemplate:stopped'].workspaceId, 'work');
+});
+
 test('workspaces: large collection moves detach, move and reattach in repeat-safe bounded batches', async t => {
   const { post } = await setup(t);
   assert.equal((await post([

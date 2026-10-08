@@ -1,7 +1,8 @@
-import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=3';
+import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=4';
 import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=4';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=3';
-import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=4';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=4';
+import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=5';
+import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=1';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const key = record => `${record.type}:${record.id}`;
@@ -108,19 +109,69 @@ export function projected(state) {
   return projectCollectionMove(records, state.workspaceMove);
 }
 
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+function validateRecurrenceMutation(mutation, record, old, proposed, records) {
+  const fail = message => { throw new Error(message); };
+  if (record.type === 'recurrenceTemplate') {
+    if (record.deleted) fail('Recurring templates are stopped, not deleted.');
+    if (!old) return;
+    const opening = !old.openOccurrenceId && record.openOccurrenceId;
+    const resolving = old.openOccurrenceId && !record.openOccurrenceId;
+    const cursor = ['nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc'];
+    if (old.tombstoned && !(resolving && Object.keys(mutation.fields).every(name => cursor.includes(name)))) fail('A stopped recurring template is read-only history.');
+    if (!cursor.some(name => !same(record[name] ?? null, old[name] ?? null))) return;
+    if (!old.openOccurrenceId && !record.openOccurrenceId && !same(record.rule, old.rule) && record.nextOccurrenceNumber === old.nextOccurrenceNumber && record.lastResolvedUtc === old.lastResolvedUtc && record.nextIntendedDate === (record.lastResolvedUtc ? nextAfterResolution(record.rule, record.lastResolvedUtc) : record.rule.anchorDate)) return;
+    if (opening) {
+      const item = proposed[`item:${record.openOccurrenceId}`], intended = materializationDate(old);
+      if (!item || !intended || item.id !== occurrenceId(old.id, old.nextOccurrenceNumber) || item.recurrenceNumber !== old.nextOccurrenceNumber || record.nextOccurrenceNumber !== old.nextOccurrenceNumber + 1 || item.intendedDate !== intended || record.nextIntendedDate !== intended || item.recurrenceTemplateId !== old.id || item.sourceTemplateVersion !== old.version || item.occurrenceState !== 'open' || item.occurrenceResolvedUtc !== null || !same(recurrenceSnapshot(item), recurrenceSnapshot(old))) fail('Materialization must atomically create the exact next occurrence.');
+      return;
+    }
+    if (resolving) {
+      const item = proposed[`item:${old.openOccurrenceId}`];
+      if (!item || !['completed', 'skipped'].includes(item.occurrenceState) || item.occurrenceResolvedUtc !== record.lastResolvedUtc || record.nextOccurrenceNumber !== old.nextOccurrenceNumber || record.nextIntendedDate !== (old.tombstoned ? old.nextIntendedDate : nextAfterResolution(record.rule, item.occurrenceResolvedUtc))) fail('Resolution must atomically update the occurrence and template cursor.');
+      return;
+    }
+    fail('Recurrence cursors may change only with a linked occurrence transition.');
+  }
+  if (record.type !== 'item') return;
+  const linked = record.recurrenceTemplateId || old?.recurrenceTemplateId;
+  if (!linked) {
+    if (['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'].some(name => name in (mutation.fields || {}))) fail('Ordinary items cannot forge recurrence fields.');
+    return;
+  }
+  if (record.deleted) fail('A live recurring occurrence must be completed or skipped, not deleted.');
+  const template = proposed[`recurrenceTemplate:${linked}`];
+  if (!template) fail('Recurring occurrence requires its template.');
+  if (!old) {
+    if (template.openOccurrenceId !== record.id || record.id !== occurrenceId(linked, record.recurrenceNumber)) fail('Recurring occurrence creation requires the paired template cursor.');
+    return;
+  }
+  for (const name of ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion']) if (!same(record[name], old[name])) fail('Recurring occurrence identity and intended date are immutable.');
+  if (record.workspaceId !== old.workspaceId && template.workspaceId !== record.workspaceId) fail('Move the recurring template and its history together.');
+  if (old.occurrenceState !== 'open') {
+    if (Object.keys(mutation.fields).every(name => ['workspaceId', 'collectionRefs', 'listId', 'projectId'].includes(name)) && template.workspaceId === record.workspaceId) return;
+    fail('Completed and skipped occurrences are read-only history.');
+  }
+  if (record.occurrenceState === 'open') {
+    if (record.occurrenceResolvedUtc !== null || ['completed', 'dropped'].includes(record.status)) fail('Complete or skip recurring work through its terminal action.');
+    return;
+  }
+  if (!['completed', 'skipped'].includes(record.occurrenceState) || (record.occurrenceState === 'completed' ? record.status !== 'completed' : record.status !== 'dropped') || !record.occurrenceResolvedUtc || template.openOccurrenceId !== null) fail('Occurrence resolution requires the paired template cursor update.');
+}
+
 function operationFor(state, accountId, mutations, operationId = crypto.randomUUID()) {
   if (!mutations.length || mutations.length > MAX_OPERATION_MUTATIONS) throw new Error('Save 1–20 records at a time.');
   const records = projected(state);
   const proposed = { ...records };
   for (const mutation of mutations) {
     proposed[key(mutation)] = { ...records[key(mutation)], ...mutation.fields, ...mutation, deleted: mutation.action === 'delete' };
-    if (mutation.type === 'item') normalizeMembership(proposed[key(mutation)], records[key(mutation)], mutation.fields);
+    if (['item', 'recurrenceTemplate'].includes(mutation.type)) normalizeMembership(proposed[key(mutation)], records[key(mutation)], mutation.fields);
   }
   for (const mutation of mutations) {
     if (!['workspace', 'settings'].includes(mutation.type)) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
-      if (['item', 'list', 'project', 'review'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
-      if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
+      if (['item', 'list', 'project', 'review', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
+      if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
       if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose a draft, active, someday or completed project status.');
       if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new Error('Add a desired outcome before activating this project.');
       for (const member of [record, ...(old ? [old] : [])]) {
@@ -128,7 +179,7 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
         if (id !== 'personal' && (!workspace || workspace.deleted || workspace.archived)) throw new Error('This workspace is unavailable or archived. Restore or unarchive it before saving.');
       }
       if (!record.deleted) {
-        for (const ref of record.type === 'item' ? memberships(record) : record.parentRef ? [record.parentRef] : []) {
+        for (const ref of ['item', 'recurrenceTemplate'].includes(record.type) ? memberships(record) : record.parentRef ? [record.parentRef] : []) {
           const parent = proposed[refKey(ref)];
           if (!parent || parent.deleted) throw new Error('Destination collection is unavailable. Restore or remove its link.');
           if (workspaceOf(parent, proposed) !== workspaceOf(record, proposed)) throw new Error('Clear collection memberships before moving to another workspace.');
@@ -140,6 +191,7 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
       const old = records[key(mutation)];
       validateWorkflow({ ...old, ...mutation.fields }, old, mutation.fields);
     }
+    validateRecurrenceMutation(mutation, proposed[key(mutation)], records[key(mutation)], proposed, records);
   }
   const operation = { apiVersion: 1, accountId, operationId, mutations };
   if (size(operation) > MAX_OPERATION_BYTES) throw new Error('This capture is too large. Save fewer items at a time. Your text is still here.');
@@ -275,7 +327,9 @@ export function applyReceipt(state, receipt, accountId) {
   if (receipt.status === 'committed') state.queue.splice(index, 1);
   else {
     if (state.undoEdit && state.queue[index].operation.mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
-    state.queue[index].failure = 'Another edit or deletion conflicts with this save. Review both versions.';
+    state.queue[index].failure = state.queue[index].operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId)
+      ? 'This recurring series changed on another device. Keep the server outcome or export this pending intent before discarding it.'
+      : 'Another edit or deletion conflicts with this save. Review both versions.';
     state.queue[index].receipt = receipt;
     for (const conflict of receipt.conflicts) {
       const record = conflict.current;

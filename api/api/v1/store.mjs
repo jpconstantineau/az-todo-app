@@ -12,6 +12,7 @@ import { erasedWorkspaceIds } from './workspace-erasure.mjs';
 import { validateClarification } from './clarification.mjs';
 
 import { normalizeMembership, memberships, isCollection, collectionContents, refKey } from './collection-model.mjs';
+import { recurrenceAlreadySatisfied, validateRecurrence } from './recurrence.mjs';
 
 export class ApiError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -43,7 +44,7 @@ async function hasContents(accountId, target, pending, workspaceId = null) {
 }
 async function validateCollections(record, lookup) {
   if (record.deleted) return;
-  const refs = record.type === 'item' ? memberships(record) : isCollection(record) && record.parentRef ? [record.parentRef] : [];
+  const refs = ['item', 'recurrenceTemplate'].includes(record.type) ? memberships(record) : isCollection(record) && record.parentRef ? [record.parentRef] : [];
   for (const ref of refs) {
     const target = await lookup(ref.type, ref.id);
     if (!target || target.deleted) throw new ApiError(404, `${ref.type}_not_found`, 'Destination collection is unavailable. Restore or remove its link.');
@@ -60,10 +61,10 @@ async function validateCollections(record, lookup) {
   }
 }
 function validateCurrentShape(record) {
-  if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(record.type) && typeof record.workspaceId !== 'string') {
+  if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') {
     throw new ValidationError('workspaceId is required.');
   }
-  if (record.type === 'item' && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
+  if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
   if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) {
     throw new ValidationError('Choose a draft, active, someday or completed project status.');
   }
@@ -90,21 +91,39 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       if (previous.requestHash !== requestHash) throw new ApiError(409, "operation_reused", "Use a new operationId for different content.");
       return previous.response;
     }
+    const sequence = (state?.sequence ?? 0) + 1;
+    if (!Number.isSafeInteger(sequence)) throw new ApiError(503, "sequence_exhausted", "Account sequence requires maintenance.");
+    const satisfied = recurrenceAlreadySatisfied(input, current, sequence);
+    if (satisfied) {
+      // Persist the equivalent deterministic materialization as a receipt. A
+      // later completion must not make retrying this accepted operation fail.
+      const nextState = document(accountId, "state", { kind: "state", sequence });
+      const batch = [state ? replace(nextState, state._etag) : create(nextState),
+        create(document(accountId, receiptId, { kind: "receipt", requestHash, response: satisfied })),
+        create(document(accountId, `change:${sequence}`, { kind: "change", sequence, response: satisfied }))];
+      const result = await container.items.batch(batch, partition(accountId));
+      const codes = [result.code, ...(result.result ?? []).map(row => row.statusCode)];
+      if (codes.some(code => [409, 412].includes(code))) continue;
+      if (result.code < 200 || result.code >= 300 || result.result?.length !== batch.length || result.result.some(row => row.statusCode < 200 || row.statusCode >= 300)) {
+        throw new ApiError(503, "storage_unavailable", "Commit was not acknowledged. Retry the same operationId and content.");
+      }
+      return satisfied;
+    }
     const conflicts = input.mutations.flatMap((proposed, i) => {
       const record = current[i]?.record ?? null;
       return ((proposed.action === "restore" ? !record?.deleted : record?.deleted) || (record?.version ?? 0) !== proposed.expectedVersion)
         ? [{ proposed, current: record }] : [];
     });
-    const sequence = (state?.sequence ?? 0) + 1;
-    if (!Number.isSafeInteger(sequence)) throw new ApiError(503, "sequence_exhausted", "Account sequence requires maintenance.");
     const now = new Date().toISOString();
     const records = conflicts.length ? [] : input.mutations.map((m, i) => {
       const old = current[i]?.record;
       const record = { ...old, ...m.fields, id: m.id, type: m.type, accountId,
         version: m.expectedVersion + 1, createdUtc: old?.createdUtc ?? now, updatedUtc: now,
         deleted: m.action === "delete", deletedUtc: m.action === "delete" ? now : null };
-      if (m.type === "item") {
+      if (['item', 'recurrenceTemplate'].includes(m.type)) {
         try { normalizeMembership(record, old, m.fields); } catch (error) { throw new ValidationError(error.message); }
+      }
+      if (m.type === "item") {
         applyWorkflow(record, old, m.fields);
         record.completedUtc = record.status === "completed" ? (old?.completedUtc ?? now) : null;
       }
@@ -124,6 +143,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       }
       await validateWorkspace(record, current[i]?.record, lookup);
       await validateCollections(record, lookup);
+      await validateRecurrence(record, current[i]?.record, input.mutations[i], records, lookup, now);
       if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
       if (record.type === 'reviewReflection') await validateReviewReflection(record, current[i]?.record, records,
         async ref => records.find(candidate => candidate.type === ref.type && candidate.id === ref.id) ?? (await read(accountId, recordId(ref.type, ref.id)))?.record,

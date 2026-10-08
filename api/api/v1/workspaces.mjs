@@ -19,7 +19,7 @@ export async function validateWorkspace(record, old, lookup) {
   };
   await writable(workspaceId);
   if (old) await writable(await workspaceOf(old, lookup));
-  if (record.type === 'item' && !record.deleted) {
+  if (['item', 'recurrenceTemplate'].includes(record.type) && !record.deleted && !record.tombstoned) {
     for (const type of ['list', 'project']) {
       const parent = record[`${type}Id`] && await lookup(type, record[`${type}Id`]);
       if (parent && await workspaceOf(parent, lookup) !== workspaceId) fail('Items, lists and projects must belong to the same workspace. Clear those links before moving an item.');

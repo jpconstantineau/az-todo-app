@@ -1,17 +1,19 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=3';
+import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=4';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=4';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
-import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=4';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=10';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=3';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=12';
-import { clarificationUI } from './clarification.js?v=7';
+import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=12';
+import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=14';
+import { clarificationUI } from './clarification.js?v=9';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=9';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=10';
 import { setupBriefs } from './briefs.js?v=4';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=4';
+import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
+import { setupRecurrence } from './recurrence-ui.js?v=2';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -22,6 +24,7 @@ let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGenera
 let defaultsEditing = null, recentTaskChange = null;
 let exportController;
 let splitFeedbackTimer;
+let materializingRecurrence = false;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
 const scopedRecords = () => workspaceRecords(projected(state), selectedWorkspace);
 const currentDraft = local => workspaceDraft(local, selectedWorkspace);
@@ -146,11 +149,37 @@ function ensurePlanMutationsAvailable(local, mutations) {
     throw new Error('Resolve this plan conflict before changing the same day. Other dates remain available.');
   }
 }
-function workspaceReadOnly() {
-  const space = projected(state)['workspace:' + selectedWorkspace];
-  return selectedWorkspace !== PERSONAL && (!space || space.deleted || space.archived);
+function workspaceReadOnly(workspaceId = selectedWorkspace) {
+  const space = projected(state)['workspace:' + workspaceId];
+  return workspaceId !== PERSONAL && (!space || space.deleted || space.archived);
 }
 const dialogOpeners = new Map();
+const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
+  readOnly: workspaceReadOnly, showDialog, restoreFocus, journal, label: collectionLabel, save: saveRecurrence });
+async function saveRecurrence(mutations, message, clearRecurrenceDraft = false, targetWorkspaceId = selectedWorkspace) {
+  const owner = accountId, generation = accountGeneration;
+  if (!owner || workspaceReadOnly(targetWorkspaceId)) throw new Error('Choose an active workspace before changing recurring work.');
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before changing recurring work.');
+    const records = projected(local);
+    for (const mutation of mutations) {
+      const current = records[key(mutation)];
+      if (mutation.action === 'create' ? current : !current || current.deleted || current.version !== mutation.expectedVersion) throw new Error('This recurring series changed. Reopen it and compare the latest state.');
+    }
+    enqueue(local, owner, mutations);
+    if (clearRecurrenceDraft) currentDraft(local).recurrence = null;
+  });
+  if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the recurring save remains with its original account.');
+  state = saved; statusText('recurringStatus', message); clearError(); render(); broadcast(); void sync();
+  setTimeout(() => void materializeRecurrence(), 0);
+}
+async function materializeRecurrence() {
+  if (materializingRecurrence || !accountId || document.hidden) return;
+  materializingRecurrence = true;
+  try { while (await recurrence.materialize()) { /* One bounded operation at a time; each template creates at most one open item. */ } }
+  catch (failure) { if (accountId) error(`Recurring work was not created: ${failure.message}`); }
+  finally { materializingRecurrence = false; }
+}
 const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
   current: () => accountId && !workspaceReadOnly() ? { ...captureDraft(), accountId, lists: Object.values(scopedRecords()).filter(record => isCollection(record) && !record.deleted).map(record => ({ id: record.type === 'project' ? refKey(record) : record.id, title: collectionLabel(record) })) } : null,
   save: async submitted => {
@@ -416,7 +445,7 @@ function draft() {
   return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: hasEditDraft() ? { ...editing, fields: formValues(edit) } : null, editOpen: $('editor').open,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
-    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot() };
+    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot(), recurrence: recurrence.snapshot() };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -428,6 +457,7 @@ function storageFailure(failure) {
   clarification.close();
   briefs.close();
   extraction.close();
+  $('recurringEditor').close();
 }
 function guard(action) {
   return (...args) => Promise.resolve().then(() => action(...args)).catch(failure => error(failure.message));
@@ -471,6 +501,7 @@ function restoreDraft() {
   reviews.restore(saved.review);
   clarification.restore(saved.clarification);
   briefs.restore(saved.brief);
+  recurrence.restore(saved.recurrence);
 }
 function button(text, handler, label = text, focusKey) {
   const element = document.createElement('button'); element.textContent = text;
@@ -525,6 +556,7 @@ function render() {
   options(edit.elements.listId, moving ? [] : lists, [['', 'No list']]);
   options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
   const listMode = destination === 'lists';
+  recurrence.refresh(listMode);
   const filters = navigation[listMode ? 'lists' : 'work'];
   options($('view'), [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(project => ({ id: `project:${project.id}`, title: collectionLabel(project) }))],
     listMode ? [['', 'Choose collection']] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
@@ -597,12 +629,15 @@ function render() {
     return !!context && inCollection(record, context, scopedRecords(), listMode && !!filters.nested);
   }).map(record => {
     const article = document.createElement('article'); article.className = 'task-row'; article.dataset.id = record.id;
-    const title = document.createElement('h3'); title.append(titleButton(record));
+    const title = document.createElement('h3');
+    if (record.recurrenceTemplateId && record.occurrenceState !== 'open') title.textContent = record.title;
+    else title.append(titleButton(record));
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
     const metadata = document.createElement('p'); metadata.className = 'notes';
     metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, record.priority].filter(Boolean).join(' · ');
     for (const ref of memberships(record)) metadata.append(` · ${scopedRecords()[refKey(ref)] ? collectionLabel(scopedRecords()[refKey(ref)]) : 'Unavailable collection: ' + refKey(ref)}`);
     if (record.plannedDay) metadata.append(` · Planned: ${record.plannedDay}`);
+    if (record.recurrenceTemplateId) metadata.append(` · Repeats · intended ${record.intendedDate}`);
     if (record.dueDateUtc) { const time = document.createElement('time'); time.dateTime = record.dueDateUtc; time.textContent = ` Due ${new Date(record.dueDateUtc).toLocaleString()}`; metadata.append(time); }
     for (const [name, label] of [['dueDate', 'Deadline'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on']]) {
       if (record[name]) metadata.append(` · ${label}: ${name.endsWith('Utc') ? new Date(record[name]).toLocaleString() : record[name]}`);
@@ -613,11 +648,18 @@ function render() {
     const content = document.createElement('div'); content.className = 'task-content'; content.append(title, notes, metadata, status);
     const actions = document.createElement('div'); actions.className = 'task-actions'; actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', `Actions for ${record.title}`);
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
-    if (record.status !== 'reference') actions.append(taskIcon(button('', () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`), record.status === 'completed' ? 'reopen' : 'complete', action));
-    actions.append(taskIcon(button('', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`), 'clarify', 'Clarify'));
-    if (record.status !== 'reference') actions.append(taskIcon(button('', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`), 'brief', 'Brief'));
-    actions.append(taskIcon(deleteButton(record), 'delete', 'Delete'));
-    if (record.workflowBeforeTransition) actions.append(taskIcon(button('', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`), 'undo', 'Undo state change'));
+    if (record.recurrenceTemplateId) {
+      const template = scopedRecords()[`recurrenceTemplate:${record.recurrenceTemplateId}`];
+      if (record.occurrenceState === 'open') {
+        actions.append(taskIcon(button('', () => resolveOccurrence(record, 'completed'), `Complete ${record.title}`, `${key(record)}:complete`), 'complete', 'Complete'));
+        actions.append(button('Skip occurrence', () => resolveOccurrence(record, 'skipped'), `Skip occurrence ${record.title}`, `${key(record)}:skip`));
+      }
+      if (template) actions.append(button('Template & history', () => recurrence.open(template), `Open recurring template and history for ${record.title}`, `${key(record)}:template`));
+    } else if (record.status !== 'reference') actions.append(taskIcon(button('', () => updateRecord(record, { status: record.status === 'completed' ? record.statusBeforeCompletion || 'next' : 'completed' }), `${action} ${record.title}`, `${key(record)}:complete`), record.status === 'completed' ? 'reopen' : 'complete', action));
+    if (!record.recurrenceTemplateId || record.occurrenceState === 'open') actions.append(taskIcon(button('', () => clarification.open(record), `Clarify ${record.title}`, `${key(record)}:clarify`), 'clarify', 'Clarify'));
+    if ((!record.recurrenceTemplateId || record.occurrenceState === 'open') && record.status !== 'reference') actions.append(taskIcon(button('', () => briefs.open(record), `Brief ${record.title}`, `${key(record)}:brief`), 'brief', 'Brief'));
+    if (!record.recurrenceTemplateId) actions.append(taskIcon(deleteButton(record), 'delete', 'Delete'));
+    if (!record.recurrenceTemplateId && record.workflowBeforeTransition) actions.append(taskIcon(button('', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`), 'undo', 'Undo state change'));
     article.append(content, actions); return article;
   }));
   if (!$('items').childElementCount) $('items').textContent = listMode && !view
@@ -633,7 +675,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
@@ -655,7 +697,8 @@ function render() {
       `Pending ${mutation.type}\n${describe(mutation.fields)}\n\nServer version\n${describe(state.records[key(mutation)])}`).join('\n\n——\n\n')
       : 'The move plan and its acknowledged progress remain saved on this device.';
     const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
-    $('resolve').hidden = move || !failed?.receipt || !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    const recurrenceConflict = failed?.operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId);
+    $('resolve').hidden = move || recurrenceConflict || !failed?.receipt || !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('resolve').textContent = planConflict ? 'Apply my pending plan to latest version' : reflectionConflict ? 'Merge pending reflection after accepted snapshot' : 'Apply pending edit to latest version';
     $('discard').hidden = move;
     $('discard').textContent = failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
@@ -703,7 +746,7 @@ function render() {
     checkbox.setAttribute('aria-label', `Complete ${record.title}`); checkbox.dataset.focusKey = `${key(record)}:execute-complete`;
     checkbox.addEventListener('change', guard(async () => {
       checkbox.disabled = true;
-      try { await updateRecord(record, { status: 'completed' }); }
+      try { await (record.recurrenceTemplateId ? resolveOccurrence(record, 'completed') : updateRecord(record, { status: 'completed' })); }
       finally { if (checkbox.isConnected) { checkbox.checked = false; checkbox.disabled = !accountId || workspaceReadOnly(); } }
     }));
     const title = titleButton(record); title.dataset.focusKey = `${key(record)}:execute-edit`; title.disabled = readOnly;
@@ -723,11 +766,17 @@ function render() {
 }
 function deleteButton(record) {
   return button('Delete', async () => {
-    const linked = record.type === 'list' ? Object.values(scopedRecords()).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record)) : [];
+    const linked = record.type === 'list' ? Object.values(scopedRecords()).filter(item => item.type === 'item' && !item.recurrenceTemplateId && !item.deleted && belongsTo(item, record)) : [];
     const pending = linked.filter(item => item.status !== 'completed').length;
     if (pending && !confirm(`Delete “${record.title}”? This list has ${pending} uncompleted item${pending === 1 ? '' : 's'}. Its ${linked.length} linked item${linked.length === 1 ? '' : 's'} will also be marked deleted. Cancel to review the pending items.`)) return;
     await changeDeletion(record, 'delete', linked.map(item => `${key(item)}:${item.version}`).sort());
   }, `Delete ${record.type}: ${record.title}`, `${key(record)}:delete`);
+}
+async function resolveOccurrence(record, outcome) {
+  const template = scopedRecords()[`recurrenceTemplate:${record.recurrenceTemplateId}`];
+  if (!template) throw new Error('The recurring template is unavailable. Sync and open its history before resolving this occurrence.');
+  if (outcome === 'skipped' && !confirm('Skip this occurrence? Skipping keeps the series going from today.')) return;
+  await saveRecurrence(resolveOccurrenceMutations(record, template, outcome), outcome === 'completed' ? 'Occurrence completed; the next date is scheduled.' : 'Occurrence skipped; the series continues from today.');
 }
 function renderDeleted() {
   statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
@@ -753,7 +802,7 @@ async function changeDeletion(record, action, linkedSnapshot = []) {
     const records = projected(local), current = records[key(record)];
     if (!current || current.version !== record.version || !!current.deleted !== (action === 'restore')) throw new Error('This record changed. Review its latest state before trying again.');
     if (action === 'delete' && record.type === 'list') {
-      const linked = Object.values(records).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record));
+      const linked = Object.values(records).filter(item => item.type === 'item' && !item.recurrenceTemplateId && !item.deleted && belongsTo(item, record));
       if (JSON.stringify(linked.map(item => `${key(item)}:${item.version}`).sort()) !== JSON.stringify(linkedSnapshot)) throw new Error('This list’s items changed. Review them before deleting the list.');
       const deletions = linked.map(item => ({ type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }));
       while (deletions.length > 19) enqueue(local, owner, deletions.splice(0, 20));
@@ -842,6 +891,9 @@ function openEditor(record, focus = true, show = true) {
   $('editWorkspaceHelp').textContent = record.type === 'item'
     ? 'Moving clears collection memberships; the original text and item history move with it.'
     : 'Moving carries nested collections and linked items, including their history. Links to collections left behind are cleared.';
+  const recurringOpen = record.type === 'item' && fields.recurrenceTemplateId && fields.occurrenceState === 'open';
+  $('recurrenceEditScope').hidden = !recurringOpen;
+  edit.elements.workspaceId.disabled = !!recurringOpen;
   refreshOptions();
   fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: record.type === 'item' ? memberships(fields) : [], dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: record.type === 'item' ? fields.status : 'inbox' });
   editing.initialFields = record.fields ? structuredClone(record.initialFields) : formValues(edit);
@@ -988,24 +1040,44 @@ edit.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || !editing) return;
   saving = true;
-  let fields;
+  let fields, recurrenceManagedFields, recurrenceScope;
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
       ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { workspaceId: values.workspaceId, parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
+    const current = projected(state)[key(editing)];
+    if (current?.recurrenceTemplateId && current.occurrenceState === 'open') {
+      recurrenceScope = edit.elements.recurrenceScope.value;
+      recurrenceManagedFields = Object.fromEntries(['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks']
+        .map(name => [name, structuredClone(fields[name] ?? current[name] ?? (['collectionRefs', 'contexts', 'areas'].includes(name) ? [] : null))]));
+    }
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0) {
       const initial = { ...editing.initialFields, parentRef: editing.initialFields.parentRef ? parseRef(editing.initialFields.parentRef) : null, ...taskFields(editing.initialFields, editing.initialFields), listId: editing.initialFields.listId || null, ...(editing.type === 'project' ? { status: editing.initialFields.projectStatus } : {}) };
       fields = Object.fromEntries(Object.entries(fields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(initial[name])));
-      if (!Object.keys(fields).length) { void discardEdit(); return; }
+      if (!Object.keys(fields).length && (!recurrenceScope || recurrenceScope === 'one')) { void discardEdit(); return; }
     }
   } catch (failure) { saving = false; error(failure.message); return; }
   // Keep the submitted form stable until its local transaction commits.
   const controls = [...edit.elements]; controls.forEach(control => { control.disabled = true; });
-  void updateRecord(editing, fields, true).catch(failure => error(failure.message)).finally(() => {
+  void (recurrenceScope && recurrenceScope !== 'one' ? updateRecurringScope(editing, fields, recurrenceManagedFields, recurrenceScope) : updateRecord(editing, fields, true)).catch(failure => error(failure.message)).finally(() => {
     saving = false; controls.forEach(control => { control.disabled = false; });
   });
 });
+async function updateRecurringScope(record, itemFields, managedFields, scope) {
+  const item = projected(state)[key(record)], template = item && scopedRecords()[`recurrenceTemplate:${item.recurrenceTemplateId}`];
+  if (!item || !template || item.occurrenceState !== 'open') throw new Error('This recurring occurrence changed. Reopen it before choosing an edit scope.');
+  if (!['inbox', 'next'].includes(managedFields.status)) throw new Error('Future recurring occurrences must be generated as Inbox or Next.');
+  const templateFields = Object.fromEntries(Object.entries(managedFields).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(template[name])));
+  const mutations = [];
+  if (scope === 'this-future' && Object.keys(itemFields).length) mutations.push({ type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: itemFields });
+  if (Object.keys(templateFields).length) mutations.push({ type: 'recurrenceTemplate', id: template.id, action: 'update', expectedVersion: template.version, fields: templateFields });
+  if (!mutations.length) { await discardEdit(); return; }
+  await saveRecurrence(mutations, scope === 'future' ? 'Future occurrences updated; this occurrence is unchanged.' : 'This and future occurrences updated.');
+  editing = null; $('editor').close();
+  const owner = accountId; if (owner) state = await transact(owner, local => { currentDraft(local).edit = null; currentDraft(local).editOpen = false; });
+  render();
+}
 $('previewSplit').onclick = () => {
   if (!/[,;]/.test(capture.elements.text.value)) {
     clearSplitFeedback();
@@ -1101,7 +1173,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -1338,6 +1410,7 @@ function hideAccount() {
   $('savedEdit').hidden = true; $('savedEditStatus').textContent = '';
   clarification.hide();
   defaultsEditing = null; $('defaultsEditor').close(); $('defaultsForm').reset();
+  $('recurringEditor').close(); $('recurringTemplates').replaceChildren(); $('recurringStatus').textContent = '';
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
   $('projectOutcome').textContent = ''; $('projectActions').replaceChildren(); $('day').value = $('planDay').value = '';
@@ -1439,6 +1512,7 @@ async function sync() {
       if (accountId === owner) {
         state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL; render(); $('workspace').hidden = false;
         continueSync ||= !!state.queue.length && !state.queue[0].failure;
+        setTimeout(() => void materializeRecurrence(), 0);
       }
     }
     retryDelay = 2000; clearError('sync'); broadcast();
@@ -1587,14 +1661,14 @@ channel.onmessage = guard(async () => {
 addEventListener('online', () => { void sync(); });
 addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; render(); });
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) render();
+  if (!document.hidden) { render(); void materializeRecurrence(); }
   if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
 });
-addEventListener('focus', () => { render(); if (navigator.onLine) void sync(); });
+addEventListener('focus', () => { render(); void materializeRecurrence(); if (navigator.onLine) void sync(); });
 
 try {
   await session({ allowOffline: true });
 } catch (failure) { if (![401, 403].includes(failure.status)) error(failure.message); }
 syncing = false;
 connectionStatus();
-if (accountId) void sync();
+if (accountId) { void materializeRecurrence(); void sync(); }

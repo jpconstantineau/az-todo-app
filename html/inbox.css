@@ -95,6 +95,10 @@
 .collection-revisit h3, .collection-settings h3 { margin-top: 0; }
 .collection-settings .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); align-items: end; }
 .collection-settings .form-grid p { grid-column: 1 / -1; margin-block: 0; }
+.recurrence-schedule { grid-template-columns: minmax(6rem, 1fr) minmax(8rem, 1fr); }
+.recurring-template { margin-block: var(--space-3); padding-block: var(--space-3); border-top: var(--border-width) solid var(--border); }
+#recurringEditor { overflow-x: hidden; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .recurrence-schedule { grid-template-columns: 1fr; } }
 .save-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 .save-status { display: flex; align-items: center; justify-content: center; width: 32px; min-height: 44px; }
 .save-status[data-state="confirmed"] { color: var(--success); }

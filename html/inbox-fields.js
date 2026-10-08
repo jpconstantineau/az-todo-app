@@ -1,6 +1,6 @@
-import { refKey } from './collection-model.js?v=3';
+import { refKey } from './collection-model.js?v=4';
 export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Energy', timeRequired: 'Time required', priority: 'Priority', statuses: 'Statuses' };
-export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority'];
+export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
 
 export const readyToExecute = record => ['inbox', 'next'].includes(record.status);
@@ -36,10 +36,12 @@ export function reviewReady(record, now = new Date()) {
 
 export function formValues(form) {
   // Read disabled controls too: recovery must retain a form during a pending save.
-  const values = Object.fromEntries([...form.elements].filter(control => control.name).map(control => [control.name, control.value]));
+  const values = Object.fromEntries([...form.elements].filter(control => control.name).map(control =>
+    [control.name, control.type === 'radio' ? form.elements.namedItem(control.name).value : control.value]));
   for (const name of ['contexts', 'areas', 'collectionRefs']) {
     if (form.elements.namedItem(name)?.multiple) values[name] = [...form.elements.namedItem(name).selectedOptions].map(option => name === 'collectionRefs' ? { type: option.value.split(':')[0], id: option.value.split(':')[1] } : option.value);
   }
+  if ('referenceLinks' in values) values.referenceLinks = values.referenceLinks.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
   return values;
 }
 export function fillValues(form, values) {
@@ -52,7 +54,7 @@ export function fillValues(form, values) {
       for (const option of control.options) option.selected = selected.includes(option.value);
     } else {
       if (control.tagName === 'SELECT' && value && ![...control.options].some(option => option.value === value)) control.add(new Option(value, value));
-      control.value = value ?? '';
+      control.value = name === 'referenceLinks' && Array.isArray(value) ? value.join('\n') : value ?? '';
     }
   }
 }
@@ -89,6 +91,16 @@ export function taskFields(values, initial = null) {
   const result = { projectId: values.projectId || null, plannedDay: values.plannedDay || null, ...dates, waitingOn: values.waitingOn || '', status: values.status || 'inbox', dueDateUtc: date?.toISOString() ?? null,
     contexts: values.contexts || [], areas: values.areas || [], energy: values.energy || null,
     timeRequired: values.timeRequired || null, priority: values.priority || null };
+  if (values.referenceLinks !== undefined) {
+    if (!Array.isArray(values.referenceLinks) || values.referenceLinks.length > 20) throw new Error('Reference links must contain at most 20 HTTP(S) URLs.');
+    for (const value of values.referenceLinks) {
+      try {
+        const url = new URL(value);
+        if (!/^https?:$/.test(url.protocol) || url.username || url.password || value.length > 2048) throw new Error();
+      } catch { throw new Error('Reference links must be HTTP(S) URLs without credentials.'); }
+    }
+    result.referenceLinks = values.referenceLinks;
+  }
   for (const name of unchanged) delete result[name];
   return result;
 }
@@ -101,16 +113,16 @@ export function addTaskControls(container) {
     section.append(summary);
   }
   container.append(common, dates, metadata);
-  for (const [name, title] of [['projectId', 'Project (optional)'], ['plannedDay', 'Planned day (not a deadline)'], ['status', 'Status'], ['waitingOn', 'Waiting for (person or dependency)'], ['dueDate', 'Deadline (calendar date)'], ['dueLocal', 'Deadline time (local; repeated DST hour uses first occurrence)'], ['startDate', 'Deferred until (calendar date)'], ['startDateUtc', 'Or deferred until (ISO time with offset)'], ['reviewDate', 'Review on (optional calendar date)'], ['reviewDateUtc', 'Or review on (optional ISO time with offset)'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses')]) {
+  for (const [name, title] of [['projectId', 'Project (optional)'], ['plannedDay', 'Planned day (not a deadline)'], ['status', 'Status'], ['waitingOn', 'Waiting for (person or dependency)'], ['dueDate', 'Deadline (calendar date)'], ['dueLocal', 'Deadline time (local; repeated DST hour uses first occurrence)'], ['startDate', 'Deferred until (calendar date)'], ['startDateUtc', 'Or deferred until (ISO time with offset)'], ['reviewDate', 'Review on (optional calendar date)'], ['reviewDateUtc', 'Or review on (optional ISO time with offset)'], ...Object.entries(optionFields).filter(([name]) => name !== 'statuses'), ['referenceLinks', 'Reference links (one HTTP(S) URL per line)']]) {
     const label = document.createElement('label'); label.textContent = title;
-    const input = document.createElement(['status', 'projectId'].includes(name) || name in optionFields ? 'select' : 'input'); input.name = name;
+    const input = document.createElement(name === 'referenceLinks' ? 'textarea' : ['status', 'projectId'].includes(name) || name in optionFields ? 'select' : 'input'); input.name = name;
     if (name === 'dueLocal') input.type = 'datetime-local';
     else if (name.endsWith('Date') || name === 'plannedDay') { input.type = 'date'; input.min = '0001-01-01'; input.max = '9999-12-31'; }
     else if (name.endsWith('DateUtc')) input.placeholder = '2026-11-01T01:30:00-05:00';
     else if (name === 'waitingOn') input.maxLength = 4000;
     if (['contexts', 'areas'].includes(name)) { input.multiple = true; input.size = 3; }
     label.append(input);
-    (['status', 'projectId'].includes(name) ? common : name in optionFields ? metadata : dates).append(label);
+    (['status', 'projectId'].includes(name) ? common : name in optionFields || name === 'referenceLinks' ? metadata : dates).append(label);
     if (name === 'status') input.addEventListener('change', () => {
       if (['waiting', 'deferred'].includes(input.value)) dates.open = true;
     });

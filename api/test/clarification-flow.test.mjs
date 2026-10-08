@@ -91,7 +91,7 @@ test('mobile clarification uses the staged parent picker, resumes its draft, con
   documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
   assert.equal((await post(server.url, [create('list', 'family', { title: 'Family', kind: 'area' }), createItem('capture'), createItem('second', { title: 'Call electrician', description: '', originalText: 'Call electrician', sourceUrl: null })], undefined, 'disposable-test-user')).status, 200);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
-  assert.equal(await (await fetch(server.url + '/clarification.js?v=6')).text(), await readFile(new URL('../../html/clarification.js', import.meta.url), 'utf8'));
+  assert.equal(await (await fetch(server.url + '/clarification.js?v=9')).text(), await readFile(new URL('../../html/clarification.js', import.meta.url), 'utf8'));
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } }), page = await context.newPage(), errors = [];
   await page.addInitScript(() => { window.__earlyErrors = []; addEventListener('error', event => window.__earlyErrors.push(`${event.filename}:${event.lineno}:${event.colno} ${event.message}`)); });
   page.on('pageerror', error => errors.push(error.stack || error.message)); t.after(() => assert.deepEqual(errors, []));
@@ -167,28 +167,45 @@ test('clarification redraws preserve panel and destination scroll with logical f
     dialog.scrollTop = panel; list.scrollTop = destinations;
     return { panel: dialog.scrollTop, destinations: list.scrollTop };
   }, { panel, destinations });
-  const state = () => page.evaluate(() => ({ panel: document.querySelector('#clarifier').scrollTop,
-    destinations: document.querySelector('.clarify-destinations').scrollTop, focus: document.activeElement.dataset.focusKey || document.activeElement.textContent }));
+  const state = () => page.evaluate(() => {
+    const dialog = document.querySelector('#clarifier'), list = document.querySelector('.clarify-destinations');
+    return { panel: dialog.scrollTop, panelMax: dialog.scrollHeight - dialog.clientHeight,
+      destinations: list.scrollTop, destinationsMax: list.scrollHeight - list.clientHeight,
+      focus: document.activeElement.dataset.focusKey || document.activeElement.textContent };
+  });
+  const assertPreserved = async (before, focus) => {
+    const after = await state();
+    assert.ok(Math.abs(after.panel - Math.min(before.panel, after.panelMax)) <= 1);
+    assert.ok(Math.abs(after.destinations - Math.min(before.destinations, after.destinationsMax)) <= 1);
+    assert.equal(after.focus, focus);
+  };
 
   let before = await position(80, 80); assert.ok(before.panel > 0 && before.destinations > 0);
   await page.getByRole('button', { name: 'Plan', exact: true }).click();
-  assert.deepEqual(await state(), { ...before, focus: 'status:planned' });
+  await assertPreserved(before, 'status:planned');
 
   before = await position(550, 100);
+  await page.evaluate(() => {
+    const focus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function(options) {
+      focus.call(this, options);
+      if (this.dataset.focusKey?.startsWith('destination:')) queueMicrotask(() => { document.querySelector('#clarifier').scrollTop -= 36; });
+    };
+  });
   await page.locator('.clarify-destinations .clarify-destination').nth(3).click();
-  assert.deepEqual(await state(), { ...before, focus: 'destination:list:destination-2' });
+  await assertPreserved(before, 'destination:list:destination-2');
 
   before = await position(550, 5);
   await page.getByRole('button', { name: 'No parent', exact: true }).click();
-  let after = await state(); assert.equal(after.panel, before.panel); assert.ok(Math.abs(after.destinations - before.destinations) <= 1); assert.equal(after.focus, 'destination:none');
+  await assertPreserved(before, 'destination:none');
 
   before = await position(60, 60);
   await page.getByRole('button', { name: 'Back to choices', exact: true }).click();
-  assert.deepEqual(await state(), { ...before, focus: 'view:action' });
+  await assertPreserved(before, 'view:action');
 
   const search = page.getByRole('textbox', { name: 'Search lists and projects' }); await search.focus();
   before = await position(75, 90); await search.type('n');
-  assert.deepEqual(await state(), { ...before, focus: 'search' });
+  await assertPreserved(before, 'search');
 });
 
 test('clarifying and undoing a planned day update the canonical item and plan history atomically', { timeout: 60000 }, async t => {
