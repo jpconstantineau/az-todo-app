@@ -6,6 +6,7 @@ import { reviewFields, reviewDecisionFields, reviewReflectionFields } from "./re
 import { clarificationFields } from "./clarification.mjs";
 import { briefFields } from "./briefs.mjs";
 import { dailyPlanFields, effortEstimate } from './daily-plans.mjs';
+import { projectPlanRevisionFields } from './project-planning.mjs';
 
 import { collectionKinds, validateRef, validateRefs } from './collection-model.mjs';
 import { occurrenceId, recurrenceDate, recurrenceRule } from './recurrence-model.mjs';
@@ -36,7 +37,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "savedView", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
+  if (!["workspace", "list", "item", "project", "projectPlanRevision", "savedView", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
   return value;
 }
 function exactText(value, max, field) {
@@ -54,6 +55,7 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (type === 'projectPlanRevision') return projectPlanRevisionFields(action, input);
   if (['planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(type)) return dailyPlanFields(type, action, input);
   if (type === 'reviewDecision') return reviewDecisionFields(action, input);
   if (type === 'reviewReflection') return reviewReflectionFields(action, input);
@@ -147,7 +149,7 @@ export function fieldsFor(type, action, input) {
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const recurrenceOccurrenceFields = ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'];
   const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks", ...recurrenceOccurrenceFields];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate", "archived"] : ["defaults", "kind", "parentRef", "revisitDate", "archived"])];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate", "archived", "planningHeadId"] : ["defaults", "kind", "parentRef", "revisitDate", "archived"])];
   object(input, allowed, "fields");
   if (action === 'create') {
     if (!('workspaceId' in input)) throw new ValidationError('workspaceId is required.');
@@ -200,7 +202,7 @@ export function fieldsFor(type, action, input) {
     } else if (["description", "originalText", "sourceTitle", "selectedText", "waitingOn"].includes(key)) {
       result[key] = exactText(value, ({ originalText: 16000, selectedText: 8000, sourceTitle: 2000 })[key] || 4000, key);
     } else if (key === "sourceUrl") result[key] = value === null ? null : link(value, key);
-    else if (["listId", "projectId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
+    else if (["listId", "projectId", "planningHeadId"].includes(key)) result[key] = value === null ? null : identifier(value, key);
     else if (["plannedDay", "plannedWeek"].includes(key)) result[key] = calendarDate(value, key);
     else if (key === 'effortEstimate') result[key] = effortEstimate(value);
     else if (key === "status") {
@@ -262,6 +264,7 @@ export function validateOperation(input) {
       throw new ValidationError("expectedVersion must be 0 for create, or the last observed positive version for update/delete/restore.");
     }
     const fieldless = ["delete", "restore"].includes(action);
+    if (type === 'projectPlanRevision' && action !== 'create') throw new ValidationError('Project plan revisions are immutable. Accept a new revision instead.');
     if (type === 'recurrenceTemplate' && fieldless) throw new ValidationError('Recurring templates are paused or stopped, not deleted or restored.');
     if (fieldless && mutation.fields !== undefined) throw new ValidationError(`${action} cannot include fields.`);
     const fields = fieldless ? undefined : fieldsFor(type, action, mutation.fields);
