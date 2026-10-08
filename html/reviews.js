@@ -106,7 +106,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
     $('reviewRecord').value = String(index);
     $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
-    const archiveRoots = target && memberships(target).map(member => archivedAncestor(member, records)).filter(Boolean);
+    const archiveRoots = target && (target.type === 'project' ? [archivedAncestor(target, records)].filter(Boolean) : memberships(target).map(member => archivedAncestor(member, records)).filter(Boolean));
     const targetArchived = target && (target.type === 'project' ? isEffectivelyArchived(target, records) : target.type === 'item' && archiveOnly(target, records));
     $('reviewDetails').textContent = !ref ? 'This review is empty. Start another review after capturing work or changing your focus.' : !target || target.deleted
       ? 'This record was deleted or is unavailable. Acknowledge it to continue; it will not be recreated.'
@@ -153,11 +153,11 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
       return row;
     }));
     const unavailable = busy || failed || !target || target.deleted;
-    $('reviewEdit').disabled = unavailable;
+    $('reviewEdit').disabled = unavailable || targetArchived && target.type === 'project';
     $('reviewClarify').hidden = target?.type !== 'item';
-    $('reviewClarify').disabled = unavailable;
+    $('reviewClarify').disabled = unavailable || targetArchived;
     $('reviewProject').hidden = unavailable || target.type !== 'project';
-    $('reviewAddAction').disabled = unavailable;
+    $('reviewAddAction').disabled = unavailable || targetArchived;
     const actions = !unavailable && target.type === 'project' ? Object.values(records).filter(record => record.type === 'item' && !record.deleted && !archiveOnly(record, records) && belongsTo(record, target) && !['completed', 'dropped', 'reference'].includes(record.status)) : [];
     const nextCount = actions.filter(record => record.status === 'next').length;
     $('reviewProjectSummary').textContent = nextCount ? `${nextCount} next action${nextCount === 1 ? '' : 's'}. Other unfinished actions are shown too.` : 'No next actions. Add one or edit an unfinished action below.';

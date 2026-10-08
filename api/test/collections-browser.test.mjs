@@ -169,6 +169,7 @@ test('collections browser: clarification uses the organizer and account changes 
 test('collections browser: offline archive hides archive-only work, keeps mixed membership active and reactivates history', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t, [
     create('item', 'archive-only', { title: 'Only in renovation', status: 'inbox', collectionRefs: [ref('project', 'kitchen')], projectId: 'kitchen' }),
+    create('item', 'list-primary', { title: 'List primary history', status: 'waiting', waitingOn: 'Archive', collectionRefs: [ref('list', 'home')], listId: 'home' }),
     create('item', 'mixed', { title: 'Mixed errand', status: 'next', collectionRefs: [ref('project', 'kitchen'), ref('list', 'role')], projectId: 'kitchen', listId: 'role' }),
     create('item', 'completed-history', { title: 'Completed history', status: 'completed', collectionRefs: [ref('project', 'kitchen'), ref('list', 'role')], projectId: 'kitchen', listId: 'role' })
   ]);
@@ -176,7 +177,7 @@ test('collections browser: offline archive hides archive-only work, keeps mixed 
   await context.setOffline(true); await page.waitForFunction(() => navigator.onLine === false);
   await page.getByRole('button', { name: 'Archive collection…', exact: true }).click();
   assert.match(await page.locator('#archiveReviewCounts').textContent(), /2 descendant collections/);
-  assert.match(await page.locator('#archiveReviewCounts').textContent(), /1 unfinished action.*archive-only/);
+  assert.match(await page.locator('#archiveReviewCounts').textContent(), /2 unfinished actions.*archive-only/);
   assert.match(await page.locator('#archiveReviewCounts').textContent(), /1 linked action.*remain active/);
   await page.getByRole('button', { name: 'Archive collection', exact: true }).click();
   await waitForBrowser(page, async () => {
@@ -187,6 +188,14 @@ test('collections browser: offline archive hides archive-only work, keeps mixed 
   assert.match(await page.locator('#archiveResults').textContent(), /Home/);
   assert.match(await page.locator('#archiveResults').textContent(), /Only in renovation.*Archived with Home/s);
   assert.match(await page.locator('#archiveResults').textContent(), /Mixed errand.*Still active in Parent.*Also archived with Home/s);
+  await page.getByText('Inspect retained contents of Kitchen', { exact: true }).click();
+  assert.match(await page.locator('#archiveResults').textContent(), /Item \(inbox\): Only in renovation/);
+  assert.match(await page.locator('#archiveResults').textContent(), /Item \(completed\): Completed history/);
+  await page.getByRole('button', { name: 'Open List primary history', exact: true }).click();
+  assert.equal(await page.locator('#edit [name=listId]').inputValue(), 'home');
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  assert.equal(await page.locator('#edit [name=listId]').inputValue(), 'home', 'a background render must retain the archived primary list');
+  await page.getByRole('button', { name: 'Close editor', exact: true }).click();
   await showView(page, 'work'); await page.locator('#view').selectOption('all');
   await page.getByRole('button', { name: 'Edit Mixed errand', exact: true }).waitFor();
   assert.equal(await page.locator('article[data-id="archive-only"]').count(), 0);

@@ -478,6 +478,18 @@ function renderArchive(open, records) {
       const ancestor = archivedAncestor(record, records);
       reason.textContent = `${collectionKinds[collectionKind(record)]} · Archived with ${collectionPath(ancestor || record, records)}`;
       notes.textContent = record.outcome || record.description || 'Contents and history retained.';
+      const retained = Object.values(records).filter(candidate => !candidate.deleted && (
+        isCollection(candidate) ? candidate.parentRef && refKey(candidate.parentRef) === key(record) :
+          ['item', 'recurrenceTemplate'].includes(candidate.type) && belongsTo(candidate, record)));
+      const contents = document.createElement('details'), summary = document.createElement('summary'), list = document.createElement('ul');
+      summary.textContent = `Inspect retained contents of ${record.title}`;
+      list.append(...retained.map(candidate => {
+        const item = document.createElement('li');
+        item.textContent = `${isCollection(candidate) ? collectionKinds[collectionKind(candidate)] : candidate.type === 'recurrenceTemplate' ? 'Recurring template' : `Item (${candidate.status || 'unknown status'})`}: ${candidate.title}`;
+        return item;
+      }));
+      if (!retained.length) list.append(Object.assign(document.createElement('li'), { textContent: 'No directly retained contents.' }));
+      contents.append(summary, list); actions.append(contents);
       if (record.archived) {
         const reactivate = button(`Reactivate ${record.title}`, async () => {
           await updateRecord(record, { archived: false });
@@ -651,7 +663,7 @@ function render() {
   options(capture.elements.listId, [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(record => ({ id: refKey(record), title: collectionLabel(record) }))], [['', 'No list']], true);
   extraction.refreshLists();
   const moving = editing?.type === 'item' && edit.elements.workspaceId.value && edit.elements.workspaceId.value !== selectedWorkspace;
-  options(edit.elements.listId, moving ? [] : lists, [['', 'No list']]);
+  options(edit.elements.listId, moving ? [] : lists, [['', 'No list']], !moving);
   options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
   const listMode = destination === 'lists';
   recurrence.refresh(listMode);

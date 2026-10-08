@@ -195,8 +195,10 @@ test('clarification redraws preserve panel and destination scroll with logical f
   await page.locator('.clarify-destinations .clarify-destination').nth(3).click();
   await assertPreserved(before, 'destination:list:destination-2');
 
+  const noParent = page.getByRole('button', { name: 'No parent', exact: true });
+  await noParent.focus();
   before = await position(550, 5);
-  await page.getByRole('button', { name: 'No parent', exact: true }).click();
+  await noParent.press('Enter');
   await assertPreserved(before, 'destination:none');
 
   before = await position(60, 60);
