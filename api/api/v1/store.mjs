@@ -74,7 +74,7 @@ async function validateCollections(record, old, lookup) {
   }
 }
 function validateCurrentShape(record) {
-  if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') {
+  if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') {
     throw new ValidationError('workspaceId is required.');
   }
   if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
@@ -82,6 +82,11 @@ function validateCurrentShape(record) {
     throw new ValidationError('Choose a draft, active, someday or completed project status.');
   }
   if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new ValidationError('Add a desired outcome before activating this project.');
+  if (record.type === 'savedView' && (typeof record.title !== 'string' || !record.title.trim() || record.title.length > 200 || typeof record.query !== 'string' || record.query.length > 200 ||
+      !['all', 'item', 'list', 'project'].includes(record.resultType) ||
+      !(['active', 'all', 'archived'].includes(record.resultState) || typeof record.resultState === 'string' && /^status:[^\r\n\t]{1,64}$/.test(record.resultState)))) {
+    throw new ValidationError('Saved view has an invalid current shape.');
+  }
   if (isCollection(record) && record.archived !== undefined && typeof record.archived !== 'boolean') throw new ValidationError('archived must be true or false.');
 }
 

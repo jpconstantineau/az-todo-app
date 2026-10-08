@@ -170,10 +170,16 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
   for (const mutation of mutations) {
     if (!['workspace', 'settings'].includes(mutation.type)) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
-      if (['item', 'list', 'project', 'review', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
+      if (['item', 'list', 'project', 'savedView', 'review', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
       if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
       if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose a draft, active, someday or completed project status.');
       if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new Error('Add a desired outcome before activating this project.');
+      if (record.type === 'savedView') {
+        if (typeof record.title !== 'string' || !record.title.trim() || record.title.length > 200) throw new Error('Saved view name must be 1–200 characters.');
+        if (typeof record.query !== 'string' || record.query.length > 200) throw new Error('Saved view search must be at most 200 characters.');
+        if (!['all', 'item', 'list', 'project'].includes(record.resultType)) throw new Error('Choose a supported saved view type.');
+        if (!['active', 'all', 'archived'].includes(record.resultState) && !/^status:[^\s][\s\S]{0,63}$/.test(record.resultState || '')) throw new Error('Choose a supported saved view state.');
+      }
       if (isCollection(record) && record.archived !== undefined && typeof record.archived !== 'boolean') throw new Error('archived must be true or false.');
       for (const member of [record, ...(old ? [old] : [])]) {
         const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];

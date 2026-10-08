@@ -36,7 +36,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
+  if (!["workspace", "list", "item", "project", "savedView", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
   return value;
 }
 function exactText(value, max, field) {
@@ -70,6 +70,33 @@ export function fieldsFor(type, action, input) {
     }
     if (action === 'create' && !result.title || !Object.keys(result).length) throw new ValidationError('Workspace title is required.');
     return action === 'create' ? { archived: false, ...result } : result;
+  }
+  if (type === 'savedView') {
+    object(input, ['title', 'workspaceId', 'query', 'resultType', 'resultState'], 'fields');
+    const result = {};
+    if ('title' in input) {
+      result.title = exactText(input.title, 200, 'title');
+      if (!result.title.trim()) throw new ValidationError('Saved view title is required.');
+    }
+    if ('workspaceId' in input) result.workspaceId = identifier(input.workspaceId, 'workspaceId');
+    if ('query' in input) result.query = exactText(input.query, 200, 'query');
+    if ('resultType' in input) {
+      if (!['all', 'item', 'list', 'project'].includes(input.resultType)) throw new ValidationError('resultType must be all, item, list or project.');
+      result.resultType = input.resultType;
+    }
+    if ('resultState' in input) {
+      if (['active', 'all', 'archived'].includes(input.resultState)) result.resultState = input.resultState;
+      else if (typeof input.resultState === 'string' && input.resultState.startsWith('status:')) {
+        const status = cleanTag(exactText(input.resultState.slice(7), 64, 'resultState'), 'resultState');
+        if (!status) throw new ValidationError('resultState status is required.');
+        result.resultState = `status:${status}`;
+      } else throw new ValidationError('resultState must be active, all, archived or a validated status.');
+    }
+    if (action === 'create') {
+      for (const name of ['title', 'workspaceId', 'query', 'resultType', 'resultState']) if (!(name in result)) throw new ValidationError(`${name} is required.`);
+    }
+    if (!Object.keys(result).length) throw new ValidationError('fields must contain an edit.');
+    return result;
   }
   if (type === 'review' && action === 'create') {
     const { workspaceId, ...fields } = input || {};

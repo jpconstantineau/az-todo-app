@@ -27,6 +27,7 @@ test('workspace erasure: private dry run, resumable purge, isolation and stale-w
     create('workspace', 'work', { title: 'Former employer secret' }),
     create('workspace', 'family', { title: 'Family' }),
     create('item', 'work-task', { title: 'Confidential report', originalText: 'Private task text', workspaceId: 'work' }),
+    create('savedView', 'work-view', { title: 'Employer search', workspaceId: 'work', query: 'secret', resultType: 'all', resultState: 'all' }),
     create('item', 'family-task', { title: 'Buy milk', workspaceId: 'family' })
   ]);
   assert.equal(mixed.status, 200);
@@ -41,7 +42,7 @@ test('workspace erasure: private dry run, resumable purge, isolation and stale-w
   assert.deepEqual(documents, before, 'dry run is read-only');
   const evidence = JSON.stringify(plan);
   for (const secret of ['Former employer secret', 'Confidential report', 'Private task text', 'work-task', mixed.payload.operationId]) assert.equal(evidence.includes(secret), false);
-  assert.equal(plan.counts.records, 2);
+  assert.equal(plan.counts.records, 3);
   assert.throws(() => createWorkspaceErasurePlan(documents, 'alice', 'personal'), error => error instanceof WorkspaceErasureError && error.code === 'personal_forbidden');
 
   await assert.rejects(applyWorkspaceErasure(container, plan, { confirm: plan.erasureId, interruptAfter: 'changes' }), { code: 'interrupted' });
@@ -50,10 +51,10 @@ test('workspace erasure: private dry run, resumable purge, isolation and stale-w
   assert.equal(escape.status, 410, 'the fence checks both the old and proposed workspace');
   const result = await applyWorkspaceErasure(container, plan, { confirm: plan.erasureId });
   assert.equal(result.status, 'complete');
-  documents.push(...structuredClone(before.filter(row => row.UserID === 'alice' && ['record:workspace:work', 'record:item:work-task'].includes(row.id))));
+  documents.push(...structuredClone(before.filter(row => row.UserID === 'alice' && ['record:workspace:work', 'record:item:work-task', 'record:savedView:work-view'].includes(row.id))));
   assert.equal((await applyWorkspaceErasure(container, plan, { confirm: plan.erasureId })).status, 'complete', 'completed replay verifies and removes restored rows');
 
-  assert.equal(documents.some(row => row.UserID === 'alice' && row.kind === 'record' && ['workspace:work', 'item:work-task'].includes(`${row.record.type}:${row.record.id}`)), false);
+  assert.equal(documents.some(row => row.UserID === 'alice' && row.kind === 'record' && ['workspace:work', 'item:work-task', 'savedView:work-view'].includes(`${row.record.type}:${row.record.id}`)), false);
   assert.deepEqual(documents.find(row => row.UserID === 'alice' && row.id === 'record:item:family-task'), familyBefore);
   assert.deepEqual(documents.filter(row => row.UserID === 'bob'), bobBefore);
   const aliceChanges = documents.filter(row => row.UserID === 'alice' && row.kind === 'change').sort((a, b) => a.sequence - b.sequence);
@@ -67,6 +68,7 @@ test('workspace erasure: private dry run, resumable purge, isolation and stale-w
   });
   assert.equal(exported.state.records['workspace:work'], undefined);
   assert.equal(exported.state.records['item:work-task'], undefined);
+  assert.equal(exported.state.records['savedView:work-view'], undefined);
   assert.equal(exported.state.records['item:family-task'].title, 'Buy milk');
 
   const sequence = documents.find(row => row.UserID === 'alice' && row.id === 'state').sequence;
