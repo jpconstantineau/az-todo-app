@@ -1,5 +1,5 @@
-import { belongsTo, memberships, refKey } from './collection-model.js?v=4';
-import { key, projected } from './inbox-store.js?v=12';
+import { archiveOnly, archivedAncestor, belongsTo, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
+import { key, projected } from './inbox-store.js?v=13';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=4';
 
 const $ = id => document.getElementById(id);
@@ -67,8 +67,9 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const tomorrow = new Date(year, month - 1, date + 1).getTime();
     return Object.values(records).filter(record => {
       if (record.deleted || seen.has(key(record))) return false;
-      if (record.type === 'project') return reviewKind === 'weekly' && ['active', 'draft'].includes(record.status) || reviewKind === 'someday' && record.status === 'someday';
+      if (record.type === 'project') return !isEffectivelyArchived(record, records) && (reviewKind === 'weekly' && ['active', 'draft'].includes(record.status) || reviewKind === 'someday' && record.status === 'someday');
       if (reviewKind === 'someday' || record.type !== 'item' || ['completed', 'dropped', 'reference'].includes(record.status)) return false;
+      if (archiveOnly(record, records)) return false;
       return reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) ||
         record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow;
     }).map(({ type, id }) => ({ type, id }));
@@ -105,9 +106,12 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
     $('reviewRecord').value = String(index);
     $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
+    const archiveRoots = target && memberships(target).map(member => archivedAncestor(member, records)).filter(Boolean);
+    const targetArchived = target && (target.type === 'project' ? isEffectivelyArchived(target, records) : target.type === 'item' && archiveOnly(target, records));
     $('reviewDetails').textContent = !ref ? 'This review is empty. Start another review after capturing work or changing your focus.' : !target || target.deleted
       ? 'This record was deleted or is unavailable. Acknowledge it to continue; it will not be recreated.'
       : [target.type === 'project' ? `Project status: ${target.status === 'draft' ? 'Needs outcome' : target.status} · Project outcome: ${target.outcome || 'Not supplied yet'}` : `Status: ${target.status}`, target.description,
+        targetArchived ? `Archived with ${archiveRoots[0]?.title || target.title}. Edit to add an active membership, or reactivate it in Organize.` : archiveRoots.length ? `Still active through another membership; also archived with ${archiveRoots[0].title}.` : '',
         memberships(target).map(ref => `Membership: ${records[refKey(ref)]?.title || 'Unavailable collection'}`).join(' · '),
         ...['waitingOn', 'plannedDay', 'dueDate', 'dueDateUtc', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'].filter(name => target[name]).map(name => `${name}: ${target[name]}`),
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');
@@ -122,8 +126,8 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const followUp = reflectionDraft.followUp || { title: '', description: '' };
     $('reviewFollowUp').elements.title.value = followUp.title || '';
     $('reviewFollowUp').elements.description.value = followUp.description || '';
-    const areas = Object.values(records).filter(record => record.type === 'list' && record.kind === 'area' && !record.deleted).length;
-    const projects = Object.values(records).filter(record => record.type === 'project' && !record.deleted && ['active', 'draft'].includes(record.status));
+    const areas = Object.values(records).filter(record => record.type === 'list' && record.kind === 'area' && !record.deleted && !isEffectivelyArchived(record, records)).length;
+    const projects = Object.values(records).filter(record => record.type === 'project' && !record.deleted && !isEffectivelyArchived(record, records) && ['active', 'draft'].includes(record.status));
     $('reviewRoleSummary').textContent = `${areas} role/area collection${areas === 1 ? '' : 's'} · ${projects.length} active or unfinished project${projects.length === 1 ? '' : 's'} (${projects.filter(record => record.status === 'draft').length} need an outcome).`;
     const dayPlan = records[`dailyPlan:${workspaceId()}_${session.reviewDay}`];
     const planned = dayPlan ? dayPlan.actionIds.map(id => records[`item:${id}`]).filter(Boolean) : Object.values(records).filter(record => record.type === 'item' && record.plannedDay === session.reviewDay);
@@ -154,7 +158,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewClarify').disabled = unavailable;
     $('reviewProject').hidden = unavailable || target.type !== 'project';
     $('reviewAddAction').disabled = unavailable;
-    const actions = !unavailable && target.type === 'project' ? Object.values(records).filter(record => record.type === 'item' && !record.deleted && belongsTo(record, target) && !['completed', 'dropped', 'reference'].includes(record.status)) : [];
+    const actions = !unavailable && target.type === 'project' ? Object.values(records).filter(record => record.type === 'item' && !record.deleted && !archiveOnly(record, records) && belongsTo(record, target) && !['completed', 'dropped', 'reference'].includes(record.status)) : [];
     const nextCount = actions.filter(record => record.status === 'next').length;
     $('reviewProjectSummary').textContent = nextCount ? `${nextCount} next action${nextCount === 1 ? '' : 's'}. Other unfinished actions are shown too.` : 'No next actions. Add one or edit an unfinished action below.';
     $('reviewProjectActions').replaceChildren(...actions.map(record => {
@@ -165,7 +169,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
       button.onclick = () => void perform(() => inspect(edit, record));
       row.append(button); return row;
     }));
-    $('reviewRetain').disabled = busy || failed || !target || target.deleted || !!done(session, index);
+    $('reviewRetain').disabled = busy || failed || !target || target.deleted || targetArchived || !!done(session, index);
     $('reviewDrop').disabled = $('reviewDeferSave').disabled = $('reviewRetain').disabled || target?.type !== 'item';
     $('reviewComplete').disabled = $('reviewDrop').disabled || target?.status === 'completed';
     $('reviewNext').disabled = $('reviewDrop').disabled || target?.status === 'next';

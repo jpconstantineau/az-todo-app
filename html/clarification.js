@@ -1,4 +1,4 @@
-import { collectionKinds, collectionKind, isCollection, memberships, ancestry, refKey } from './collection-model.js?v=4';
+import { archiveOnly, collectionKinds, collectionKind, isCollection, isEffectivelyArchived, memberships, ancestry, refKey } from './collection-model.js?v=5';
 import { localGuidance } from './local-guidance.js?v=1';
 import { newFlow, flowProposal, requireTitle, membershipChange, itemFields, beforeFields } from './clarification-flow.js?v=4';
 
@@ -59,7 +59,8 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
   function availableCollections() {
     const query = active.proposal.search.trim().toLocaleLowerCase();
     const recent = new Set(active.recentRefs || []);
-    return Object.values(records()).filter(record => isCollection(record) && !record.deleted && (!query || `${record.title} ${collectionKind(record)} ${collectionPath(record)}`.toLocaleLowerCase().includes(query)))
+    const map = records();
+    return Object.values(map).filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, map) && (!query || `${record.title} ${collectionKind(record)} ${collectionPath(record)}`.toLocaleLowerCase().includes(query)))
       .sort((a, b) => Number(memberships(active.item).some(ref => refKey(ref) === refKey(b))) - Number(memberships(active.item).some(ref => refKey(ref) === refKey(a))) ||
         Number(recent.has(refKey(b))) - Number(recent.has(refKey(a))) || a.title.localeCompare(b.title));
   }
@@ -184,13 +185,14 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
       .filter(name => item[name] !== undefined).map(name => [name, item[name]]));
   }
   function inboxItems() {
-    return Object.values(records()).filter(record => record.type === 'item' && !record.deleted && record.status === 'inbox')
+    const map = records();
+    return Object.values(map).filter(record => record.type === 'item' && !record.deleted && !archiveOnly(record, map) && record.status === 'inbox')
       .sort((a, b) => (a.createdUtc || '').localeCompare(b.createdUtc || '') || a.id.localeCompare(b.id));
   }
   function nextInboxIndex(start) {
     for (let index = start; index < active.ids.length; index++) {
-      const candidate = records()[`item:${active.ids[index]}`];
-      if (candidate?.type === 'item' && !candidate.deleted && candidate.status === 'inbox') return index;
+      const map = records(), candidate = map[`item:${active.ids[index]}`];
+      if (candidate?.type === 'item' && !candidate.deleted && !archiveOnly(candidate, map) && candidate.status === 'inbox') return index;
     }
     return active.ids.length;
   }

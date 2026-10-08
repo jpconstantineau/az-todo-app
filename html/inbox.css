@@ -95,6 +95,9 @@
 .collection-revisit h3, .collection-settings h3 { margin-top: 0; }
 .collection-settings .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); align-items: end; }
 .collection-settings .form-grid p { grid-column: 1 / -1; margin-block: 0; }
+.archive-results { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.inbox-page .archive-result { margin: 0; padding: var(--space-4); border-radius: var(--radius-control); }
+.archive-result h4, .archive-result p { margin-block: 0 var(--space-2); }
 .recurrence-schedule { grid-template-columns: minmax(6rem, 1fr) minmax(8rem, 1fr); }
 .recurring-template { margin-block: var(--space-3); padding-block: var(--space-3); border-top: var(--border-width) solid var(--border); }
 #recurringEditor { overflow-x: hidden; overflow-wrap: anywhere; }

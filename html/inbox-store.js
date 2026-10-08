@@ -1,4 +1,4 @@
-import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, refKey } from './collection-model.js?v=4';
+import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, archivedAncestor, refKey } from './collection-model.js?v=5';
 import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=4';
 import { workflowFields, validateWorkflow } from './inbox-fields.js?v=4';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=5';
@@ -174,15 +174,19 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
       if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
       if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose a draft, active, someday or completed project status.');
       if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new Error('Add a desired outcome before activating this project.');
+      if (isCollection(record) && record.archived !== undefined && typeof record.archived !== 'boolean') throw new Error('archived must be true or false.');
       for (const member of [record, ...(old ? [old] : [])]) {
         const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];
         if (id !== 'personal' && (!workspace || workspace.deleted || workspace.archived)) throw new Error('This workspace is unavailable or archived. Restore or unarchive it before saving.');
       }
       if (!record.deleted) {
-        for (const ref of ['item', 'recurrenceTemplate'].includes(record.type) ? memberships(record) : record.parentRef ? [record.parentRef] : []) {
+        const refs = ['item', 'recurrenceTemplate'].includes(record.type) ? memberships(record) : record.parentRef ? [record.parentRef] : [];
+        const retained = new Set(['item', 'recurrenceTemplate'].includes(record.type) ? memberships(old).map(refKey) : old?.parentRef ? [refKey(old.parentRef)] : []);
+        for (const ref of refs) {
           const parent = proposed[refKey(ref)];
           if (!parent || parent.deleted) throw new Error('Destination collection is unavailable. Restore or remove its link.');
           if (workspaceOf(parent, proposed) !== workspaceOf(record, proposed)) throw new Error('Clear collection memberships before moving to another workspace.');
+          if (!retained.has(refKey(ref)) && archivedAncestor(ref, proposed)) throw new Error('Archived collections cannot receive new items or child collections. Reactivate it or choose an active destination.');
         }
         if (isCollection(record) && record.parentRef && ancestry(record.parentRef, proposed).some(ref => refKey(ref) === key(record))) throw new Error('A collection cannot be its own ancestor.');
       } else if (isCollection(record) && Object.values(proposed).some(child => collectionContents(child, record))) throw new Error('Move or unlink items and child collections before deleting this collection.');

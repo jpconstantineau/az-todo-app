@@ -120,7 +120,7 @@ export function fieldsFor(type, action, input) {
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const recurrenceOccurrenceFields = ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'];
   const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks", ...recurrenceOccurrenceFields];
-  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate"] : ["defaults", "kind", "parentRef", "revisitDate"])];
+  const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate", "archived"] : ["defaults", "kind", "parentRef", "revisitDate", "archived"])];
   object(input, allowed, "fields");
   if (action === 'create') {
     if (!('workspaceId' in input)) throw new ValidationError('workspaceId is required.');
@@ -132,6 +132,10 @@ export function fieldsFor(type, action, input) {
     if (key === 'collectionRefs' || key === 'parentRef') {
       try { result[key] = key === 'collectionRefs' ? validateRefs(value) : value === null ? null : validateRef(value); }
       catch (error) { throw new ValidationError(error.message); }
+    }
+    else if (key === 'archived') {
+      if (typeof value !== 'boolean') throw new ValidationError('archived must be true or false.');
+      result[key] = value;
     }
     else if (key === 'kind') {
       if (typeof value !== 'string' || !Object.hasOwn(collectionKinds, value) || value === 'project') throw new ValidationError('Choose a supported list kind. Projects retain their own identity.');
@@ -194,6 +198,7 @@ export function fieldsFor(type, action, input) {
     return {
       description: "", originalText: input.originalText ?? input.title,
       sourceUrl: null, sourceTitle: "", selectedText: "",
+      ...(['list', 'project'].includes(type) ? { archived: false } : {}),
       ...(type === 'project' ? { outcome: '' } : {}),
       ...(type === "item" ? { collectionRefs: [], listId: null, projectId: null, plannedDay: null, plannedWeek: null, status: "inbox", dueDateUtc: null, startDateUtc: null,
         reviewDateUtc: null, waitingOn: "", contexts: [], areas: [], energy: null, timeRequired: null,

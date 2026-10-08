@@ -165,3 +165,40 @@ test('collections browser: clarification uses the organizer and account changes 
   assert.doesNotMatch(await page.locator('#collectionOutline').textContent(), /Home|Packing|Parent/);
   assert.equal(await page.locator('#collectionSettings').isVisible(), false);
 });
+
+test('collections browser: offline archive hides archive-only work, keeps mixed membership active and reactivates history', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t, [
+    create('item', 'archive-only', { title: 'Only in renovation', status: 'inbox', collectionRefs: [ref('project', 'kitchen')], projectId: 'kitchen' }),
+    create('item', 'mixed', { title: 'Mixed errand', status: 'next', collectionRefs: [ref('project', 'kitchen'), ref('list', 'role')], projectId: 'kitchen', listId: 'role' }),
+    create('item', 'completed-history', { title: 'Completed history', status: 'completed', collectionRefs: [ref('project', 'kitchen'), ref('list', 'role')], projectId: 'kitchen', listId: 'role' })
+  ]);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('home');
+  await context.setOffline(true); await page.waitForFunction(() => navigator.onLine === false);
+  await page.getByRole('button', { name: 'Archive collection…', exact: true }).click();
+  assert.match(await page.locator('#archiveReviewCounts').textContent(), /2 descendant collections/);
+  assert.match(await page.locator('#archiveReviewCounts').textContent(), /1 unfinished action.*archive-only/);
+  assert.match(await page.locator('#archiveReviewCounts').textContent(), /1 linked action.*remain active/);
+  await page.getByRole('button', { name: 'Archive collection', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const store = await import('/inbox-store.js?v=13'), state = await store.transact('alice');
+    return store.projected(state)['list:home']?.archived === true && state.draft.navigation?.lists?.view === '@archived';
+  });
+  await page.reload(); await page.locator('#workspace').waitFor(); await page.locator('#archiveBrowser').waitFor();
+  assert.match(await page.locator('#archiveResults').textContent(), /Home/);
+  assert.match(await page.locator('#archiveResults').textContent(), /Only in renovation.*Archived with Home/s);
+  assert.match(await page.locator('#archiveResults').textContent(), /Mixed errand.*Still active in Parent.*Also archived with Home/s);
+  await showView(page, 'work'); await page.locator('#view').selectOption('all');
+  await page.getByRole('button', { name: 'Edit Mixed errand', exact: true }).waitFor();
+  assert.equal(await page.locator('article[data-id="archive-only"]').count(), 0);
+  await showView(page, 'plan');
+  assert.equal(await page.locator('#planFocus option').allTextContents().then(values => values.some(value => /Home|Kitchen/.test(value))), false);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('@archived');
+  await page.getByRole('button', { name: 'Reactivate Home', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const store = await import('/inbox-store.js?v=13');
+    return store.projected(await store.transact('alice'))['list:home']?.archived === false;
+  });
+  await page.locator('#view').selectOption('project:kitchen');
+  await page.getByRole('button', { name: 'Edit Only in renovation', exact: true }).waitFor();
+  await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); await synced(page);
+});

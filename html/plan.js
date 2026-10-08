@@ -1,4 +1,4 @@
-import { ancestry, collectionKind, collectionKinds, isCollection, memberships, refKey } from './collection-model.js?v=4';
+import { archiveOnly, archivedAncestor, ancestry, collectionKind, collectionKinds, isCollection, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
 
 const $ = id => document.getElementById(id);
 const dateText = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -25,7 +25,7 @@ export function inPlanningFocus(item, focus, records) {
 
 export function resolvePlanningFocus(focus, records) {
   let record = records[focus], seen = new Set();
-  while (record && (!isCollection(record) || record.deleted)) {
+  while (record && (!isCollection(record) || record.deleted || isEffectivelyArchived(record, records))) {
     if (!record.parentRef || seen.has(refKey(record.parentRef))) return '';
     seen.add(refKey(record.parentRef));
     record = records[refKey(record.parentRef)];
@@ -94,7 +94,8 @@ function itemRow(item, week, records, selected, readOnly, save, inspect) {
   const content = document.createElement('span'), title = document.createElement('strong'), details = document.createElement('span');
   title.textContent = item.title;
   const paths = membershipPaths(item, records);
-  details.className = 'muted'; details.textContent = [item.deleted ? 'Deleted' : item.status, ...paths].filter(Boolean).join(' · ') || 'No collection';
+  const archive = memberships(item).map(ref => archivedAncestor(ref, records)).find(Boolean);
+  details.className = 'muted'; details.textContent = [item.deleted ? 'Deleted' : item.status, archiveOnly(item, records) ? `Archived with ${archive?.title || 'collection'}` : archive ? `Still active; also archived with ${archive.title}` : '', ...paths].filter(Boolean).join(' · ') || 'No collection';
   content.append(title, details); label.append(checkbox, content); article.append(label);
   if (inspect) {
     const inspectButton = control(item.deleted ? 'Inspect deleted' : 'Edit', () => inspect(item),
@@ -233,7 +234,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
 
   function render() {
     const recordMap = records(), all = Object.values(recordMap);
-    const collections = all.filter(record => isCollection(record) && !record.deleted);
+    const collections = all.filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, recordMap));
     const plan = navigation();
     plan.focus = resolvePlanningFocus(typeof plan.focus === 'string' ? plan.focus : '', recordMap);
     plan.week = validDay(plan.week) ? plan.week : localMonday();
@@ -248,7 +249,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
 
     const directChildren = focusRecord ? collections.filter(record => record.parentRef && refKey(record.parentRef) === plan.focus) : collections.filter(record => !record.parentRef || !recordMap[refKey(record.parentRef)] || recordMap[refKey(record.parentRef)].deleted);
     const activeProjects = collections.filter(record => record.type === 'project' && record.status === 'active' && collectionInFocus(record, plan.focus, recordMap));
-    const next = all.filter(record => record.type === 'item' && !record.deleted && record.status === 'next' && inPlanningFocus(record, plan.focus, recordMap));
+    const next = all.filter(record => record.type === 'item' && !record.deleted && !archiveOnly(record, recordMap) && record.status === 'next' && inPlanningFocus(record, plan.focus, recordMap));
     const projectsWithNext = activeProjects.filter(project => next.some(item => inPlanningFocus(item, refKey(project), recordMap))).length;
     $('planFocusTitle').textContent = focusRecord?.title || 'Whole workspace';
     $('planFocusKind').textContent = focusRecord ? collectionKinds[collectionKind(focusRecord)] : 'Workspace';
@@ -271,12 +272,12 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     $('planWeek').value = plan.week;
     const eligible = new Map(next.map(item => [item.id, item]));
     const selected = all.filter(record => record.type === 'item' && record.plannedWeek === plan.week && inPlanningFocus(record, plan.focus, recordMap));
-    const attention = selected.filter(record => record.deleted || record.status !== 'next');
+    const attention = selected.filter(record => record.deleted || archiveOnly(record, recordMap) || record.status !== 'next');
     $('planWeekActions').replaceChildren(...[...eligible.values()].map(item => itemRow(item, plan.week, recordMap, item.plannedWeek === plan.week, readOnly(), save, edit)));
     if (!$('planWeekActions').childElementCount) $('planWeekActions').textContent = next.length ? 'No actions are available for this week.' : 'No Next actions in this planning focus. Process the inbox or choose another focus.';
     $('planAttention').hidden = !attention.length;
     $('planAttentionActions').replaceChildren(...attention.map(item => itemRow(item, plan.week, recordMap, true, readOnly(), save, item.deleted ? inspectDeleted : edit)));
-    const plannedReady = selected.filter(item => !item.deleted && item.status === 'next');
+    const plannedReady = selected.filter(item => !item.deleted && !archiveOnly(item, recordMap) && item.status === 'next');
     const branches = (focusRecord ? directChildren : collections.filter(record => !record.parentRef || !recordMap[refKey(record.parentRef)] || recordMap[refKey(record.parentRef)].deleted))
       .map(branch => [branch.title, plannedReady.filter(item => inPlanningFocus(item, refKey(branch), recordMap)).length]).filter(([, count]) => count);
     const direct = plannedReady.filter(item => focusRecord
@@ -311,7 +312,8 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
       const title = control(item.title, () => edit(item), `Edit ${item.title}`, `plan:day:${item.id}:edit`); title.disabled = readOnly();
       const meta = document.createElement('span'); meta.className = 'day-plan-meta';
       const estimate = item.effortEstimate ? item.effortEstimate.scale === method ? `${item.effortEstimate.value} ${method === 'fibonacci' ? 'points' : ''}`.trim() : `${item.effortEstimate.value} (${item.effortEstimate.scale}, previous scale)` : 'Unestimated';
-      meta.textContent = `${dayDetails(item)} · ${estimate}`;
+      const archive = memberships(item).map(ref => archivedAncestor(ref, recordMap)).find(Boolean);
+      meta.textContent = `${archiveOnly(item, recordMap) ? `Archived with ${archive?.title || 'collection'} · ` : ''}${dayDetails(item)} · ${estimate}`;
       content.append(title, meta);
       const controls = document.createElement('div'); controls.className = 'day-plan-controls'; controls.setAttribute('role', 'group'); controls.setAttribute('aria-label', `Order and plan controls for ${item.title}, position ${index + 1}`);
       const up = control('Move up', () => reorder(item, index - 1), `Move ${item.title} up from position ${index + 1}`, `plan:day:${item.id}:up`);
@@ -351,7 +353,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     }
 
     const excluded = new Set(['completed', 'dropped', 'reference']);
-    const dayEligible = all.filter(item => item.type === 'item' && !item.deleted && item.workspaceId === owner && item.plannedDay !== day && !excluded.has(item.status));
+    const dayEligible = all.filter(item => item.type === 'item' && !item.deleted && !archiveOnly(item, recordMap) && item.workspaceId === owner && item.plannedDay !== day && !excluded.has(item.status));
     $('planEligibleActions').replaceChildren(...dayEligible.map((item, index) => {
       const add = control(`Add ${item.title}`, async () => {
         const ids = [...dayItems.map(entry => entry.id), item.id], mutations = [{ type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: { plannedDay: day } }];
@@ -370,7 +372,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     $('planQuickAdd').querySelectorAll('input, button').forEach(control => { control.disabled = readOnly(); });
 
     const decided = new Set((dayPlan?.carryoverDecisions || []).map(entry => `${entry.sourceDay}:${entry.actionId}`));
-    const carryover = all.filter(item => item.type === 'item' && !item.deleted && item.workspaceId === owner && item.plannedDay && item.plannedDay < day && !excluded.has(item.status) && !decided.has(`${item.plannedDay}:${item.id}`));
+    const carryover = all.filter(item => item.type === 'item' && !item.deleted && !archiveOnly(item, recordMap) && item.workspaceId === owner && item.plannedDay && item.plannedDay < day && !excluded.has(item.status) && !decided.has(`${item.plannedDay}:${item.id}`));
     $('planCarryover').hidden = !carryover.length; $('planCarryover').open = carryover.length && navigation().carryoverOpen !== false;
     $('planCarryoverActions').replaceChildren(...carryover.map(item => {
       const article = document.createElement('article'), heading = document.createElement('strong'), actions = document.createElement('div'); actions.className = 'actions';

@@ -1,19 +1,19 @@
-import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=4';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=4';
+import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, collectionKind, isCollection, isEffectivelyArchived, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=5';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=12';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=13';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=14';
-import { clarificationUI } from './clarification.js?v=9';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=15';
+import { clarificationUI } from './clarification.js?v=10';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=10';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
 import { setupBriefs } from './briefs.js?v=4';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
-import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=4';
+import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=5';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
-import { setupRecurrence } from './recurrence-ui.js?v=2';
+import { setupRecurrence } from './recurrence-ui.js?v=3';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -131,8 +131,9 @@ $('createWorkspace').onsubmit = event => {
 edit.elements.workspaceId.onchange = () => {
   const moving = edit.elements.workspaceId.value !== selectedWorkspace;
   if (editing?.type === 'item') {
-    options(edit.elements.listId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'list' && !record.deleted), [['', 'No list']]);
-    options(edit.elements.projectId, moving ? [] : Object.values(scopedRecords()).filter(record => record.type === 'project' && !record.deleted), [['', 'No project']]);
+    const records = scopedRecords();
+    options(edit.elements.listId, moving ? [] : Object.values(records).filter(record => record.type === 'list' && !record.deleted && !isEffectivelyArchived(record, records)), [['', 'No list']]);
+    options(edit.elements.projectId, moving ? [] : Object.values(records).filter(record => record.type === 'project' && !record.deleted && !isEffectivelyArchived(record, records)), [['', 'No project']]);
     if (moving) { edit.elements.listId.value = edit.elements.projectId.value = ''; pickerOptions(edit.elements.collectionRefs, {}, []); } else pickerOptions(edit.elements.collectionRefs, scopedRecords(), selectedRefs(edit.elements.collectionRefs));
   } else {
     if (moving) edit.elements.parentRef.value = '';
@@ -181,7 +182,11 @@ async function materializeRecurrence() {
   finally { materializingRecurrence = false; }
 }
 const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
-  current: () => accountId && !workspaceReadOnly() ? { ...captureDraft(), accountId, lists: Object.values(scopedRecords()).filter(record => isCollection(record) && !record.deleted).map(record => ({ id: record.type === 'project' ? refKey(record) : record.id, title: collectionLabel(record) })) } : null,
+  current: () => {
+    if (!accountId || workspaceReadOnly()) return null;
+    const records = scopedRecords();
+    return { ...captureDraft(), accountId, lists: Object.values(records).filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, records)).map(record => ({ id: record.type === 'project' ? refKey(record) : record.id, title: collectionLabel(record) })) };
+  },
   save: async submitted => {
     const owner = accountId, generation = accountGeneration;
     if (!owner || workspaceReadOnly()) throw new Error('Choose an active workspace to accept these suggestions.');
@@ -353,7 +358,8 @@ function localDay(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 function renderCollectionSettings(context, records, listMode) {
-  const due = records.filter(record => isCollection(record) && record.revisitDate && record.revisitDate <= localDay())
+  const recordMap = scopedRecords();
+  const due = records.filter(record => isCollection(record) && !isEffectivelyArchived(record, recordMap) && record.revisitDate && record.revisitDate <= localDay())
     .sort((a, b) => a.revisitDate.localeCompare(b.revisitDate) || a.title.localeCompare(b.title));
   $('readyToRevisit').hidden = !listMode || !due.length;
   $('readyToRevisitCollections').replaceChildren(...due.map(record => button(
@@ -375,8 +381,8 @@ function renderCollectionSettings(context, records, listMode) {
     option.disabled = context.type === 'project' ? option.value !== 'project' : option.value === 'project';
   }
   collectionSettingsForm.elements.kind.disabled = context.type === 'project' || workspaceReadOnly();
-  const parents = records.filter(candidate => isCollection(candidate) && key(candidate) !== key(context) &&
-    !ancestry(candidate, scopedRecords()).some(ref => refKey(ref) === key(context)));
+  const parents = records.filter(candidate => isCollection(candidate) && !isEffectivelyArchived(candidate, recordMap) && key(candidate) !== key(context) &&
+    !ancestry(candidate, recordMap).some(ref => refKey(ref) === key(context)));
   options(collectionSettingsForm.elements.parentRef,
     parents.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']]);
   collectionSettingsForm.elements.parentRef.value = context.parentRef ? refKey(context.parentRef) : '';
@@ -385,6 +391,7 @@ function renderCollectionSettings(context, records, listMode) {
     ? 'Projects stay projects. Parent and revisit changes keep the project outcome, actions and history.'
     : `${collectionKind(context) === 'reference' ? 'Reusable reference is for non-actionable source material. A revisit date only resurfaces the collection; it does not turn entries into actions. ' : ''}Changing type, parent or revisit date keeps contents and history.`;
   for (const control of collectionSettingsForm.elements) control.disabled = workspaceReadOnly() || control.name === 'kind' && context.type === 'project';
+  $('archiveCollection').disabled = workspaceReadOnly();
 }
 collectionSettingsForm.onsubmit = event => {
   event.preventDefault();
@@ -409,6 +416,90 @@ collectionSettingsForm.onsubmit = event => {
     if (accountId) render();
   });
 };
+let archiveReviewing = null;
+const collectionPath = (record, records) => ancestry(record, records).reverse().map(ref => records[refKey(ref)]?.title || `Unavailable ${ref.type}`).join(' / ');
+function archiveImpact(record, records) {
+  const proposed = { ...records, [key(record)]: { ...record, archived: true } };
+  const descendants = Object.values(records).filter(candidate => isCollection(candidate) && !candidate.deleted && key(candidate) !== key(record) &&
+    ancestry(candidate, records).some(ref => refKey(ref) === key(record))).length;
+  const linked = Object.values(records).filter(candidate => ['item', 'recurrenceTemplate'].includes(candidate.type) && !candidate.deleted &&
+    memberships(candidate).some(ref => ancestry(ref, records).some(parent => refKey(parent) === key(record))));
+  const unfinished = linked.filter(candidate => candidate.type === 'item' && !['completed', 'dropped', 'reference'].includes(candidate.status));
+  return {
+    descendants,
+    archiveOnlyActions: unfinished.filter(candidate => !archiveOnly(candidate, records) && archiveOnly(candidate, proposed)).length,
+    stillActiveActions: unfinished.filter(candidate => !archiveOnly(candidate, proposed)).length,
+    templates: linked.filter(candidate => candidate.type === 'recurrenceTemplate' && !candidate.tombstoned && !archiveOnly(candidate, records) && archiveOnly(candidate, proposed)).length
+  };
+}
+function openArchiveReview(record) {
+  const records = scopedRecords(), impact = archiveImpact(record, records);
+  archiveReviewing = record;
+  $('archiveReviewSummary').textContent = `Archive “${record.title}” and set aside its archived-only work?`;
+  $('archiveReviewCounts').replaceChildren(...[
+    `${impact.descendants} descendant collection${impact.descendants === 1 ? '' : 's'} will be hidden with it`,
+    `${impact.archiveOnlyActions} unfinished action${impact.archiveOnlyActions === 1 ? '' : 's'} will become archive-only`,
+    `${impact.stillActiveActions} linked action${impact.stillActiveActions === 1 ? '' : 's'} will remain active through another membership`,
+    `${impact.templates} recurring template${impact.templates === 1 ? '' : 's'} will pause materialization while archive-only`
+  ].map(text => { const item = document.createElement('li'); item.textContent = text; return item; }));
+  showDialog($('archiveReview')); $('archiveReviewHeading').focus();
+}
+$('archiveCollection').onclick = () => {
+  const record = scopedRecords()[collectionSettingsForm.dataset.key];
+  if (record) openArchiveReview(record);
+};
+$('cancelArchive').onclick = () => $('archiveReview').close();
+$('confirmArchive').onclick = guard(async () => {
+  const record = archiveReviewing && scopedRecords()[key(archiveReviewing)];
+  if (!record || record.archived || isEffectivelyArchived(record, scopedRecords())) throw new Error('This collection changed. Close the review and inspect its latest state.');
+  const saved = await updateRecord(record, { archived: true });
+  if (!saved) return;
+  archiveReviewing = null; $('archiveReview').close(); navigation.lists.view = '@archived'; render(); void journal();
+  statusText('archiveStatus', 'Collection archived — saved on device, pending server confirmation.');
+  $('archiveHeading').focus();
+});
+$('archiveReview').addEventListener('close', () => { archiveReviewing = null; });
+$('archiveSearch').addEventListener('input', () => renderArchive(true, scopedRecords()));
+function renderArchive(open, records) {
+  $('archiveBrowser').hidden = !open;
+  if (!open) return;
+  const query = $('archiveSearch').value.trim().toLocaleLowerCase();
+  const archivedMemberships = record => memberships(record).map(ref => ({ ref, ancestor: archivedAncestor(ref, records) })).filter(entry => entry.ancestor);
+  const candidates = Object.values(records).filter(record => !record.deleted && (
+    isCollection(record) ? isEffectivelyArchived(record, records) : ['item', 'recurrenceTemplate'].includes(record.type) && archivedMemberships(record).length));
+  const results = candidates.filter(record => {
+    const paths = isCollection(record) ? [collectionPath(record, records)] : archivedMemberships(record).map(entry => collectionPath(records[refKey(entry.ref)] || entry.ancestor, records));
+    return !query || [record.title, record.description, record.outcome, record.originalText, record.status, ...paths].filter(Boolean).join(' ').toLocaleLowerCase().includes(query);
+  }).sort((a, b) => Number(isCollection(b)) - Number(isCollection(a)) || (a.title || '').localeCompare(b.title || ''));
+  $('archiveResults').replaceChildren(...results.map(record => {
+    const article = document.createElement('article'), heading = document.createElement('h4'), reason = document.createElement('p'), notes = document.createElement('p'), actions = document.createElement('div');
+    article.className = 'archive-result'; heading.textContent = record.title || record.id; actions.className = 'actions';
+    if (isCollection(record)) {
+      const ancestor = archivedAncestor(record, records);
+      reason.textContent = `${collectionKinds[collectionKind(record)]} · Archived with ${collectionPath(ancestor || record, records)}`;
+      notes.textContent = record.outcome || record.description || 'Contents and history retained.';
+      if (record.archived) {
+        const reactivate = button(`Reactivate ${record.title}`, async () => {
+          await updateRecord(record, { archived: false });
+          statusText('archiveStatus', 'Collection reactivated — saved on device, pending server confirmation.');
+          $('view').focus();
+        }, `Reactivate ${record.title}`, `archive:${key(record)}:reactivate`);
+        reactivate.disabled = workspaceReadOnly(); actions.append(reactivate);
+      } else reason.append(` · Reactivate ${ancestor.title} to restore this route.`);
+    } else {
+      const archived = archivedMemberships(record), active = activeMemberships(record, records);
+      reason.textContent = archiveOnly(record, records)
+        ? `Archived with ${collectionPath(archived[0].ancestor, records)}`
+        : `Still active in ${active.map(ref => collectionPath(records[refKey(ref)], records)).join(', ')} · Also archived with ${collectionPath(archived[0].ancestor, records)}`;
+      notes.textContent = `${record.type === 'recurrenceTemplate' ? 'Recurring template' : record.status || 'Item'} · ${record.description || record.originalText || 'History retained.'}`;
+      const inspect = button(record.type === 'item' ? 'Open item' : 'Open template and history', () => record.type === 'item' ? openEditor(record) : recurrence.open(record), `Open ${record.title}`, `archive:${key(record)}:open`);
+      inspect.disabled = workspaceReadOnly() && record.type === 'item'; actions.append(inspect);
+    }
+    article.append(heading, reason, notes, actions); return article;
+  }));
+  statusText('archiveStatus', `${results.length} archived result${results.length === 1 ? '' : 's'}${query ? ` for “${$('archiveSearch').value.trim()}”` : ''}.`);
+  if (!results.length) $('archiveResults').textContent = query ? 'No archived history matches this search.' : 'No collections are archived in this workspace.';
+}
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
 function statusText(id, text) {
@@ -509,6 +600,11 @@ function button(text, handler, label = text, focusKey) {
   if (focusKey) element.dataset.focusKey = focusKey;
   element.addEventListener('click', guard(handler)); return element;
 }
+function archivedLink() {
+  const link = document.createElement('a'); link.href = '#lists'; link.textContent = 'Archived collections'; link.className = 'button';
+  link.onclick = () => { navigation.lists.view = '@archived'; };
+  return link;
+}
 const taskIcons = {
   complete: ['M5 12l4 4L19 6'],
   reopen: ['M4 10h11a5 5 0 0 1 0 10h-1', 'M4 10l4-4M4 10l4 4'],
@@ -528,9 +624,11 @@ function taskIcon(control, name, title) {
 function render() {
   if (!accountId || !state) return;
   const focused = document.activeElement;
-  const records = Object.values(scopedRecords()).filter(record => !record.deleted);
-  const lists = records.filter(record => record.type === 'list');
-  const projects = records.filter(record => record.type === 'project');
+  const recordMap = scopedRecords();
+  const records = Object.values(recordMap).filter(record => !record.deleted);
+  const lists = records.filter(record => record.type === 'list' && !isEffectivelyArchived(record, recordMap));
+  const projects = records.filter(record => record.type === 'project' && !isEffectivelyArchived(record, recordMap));
+  const archivedCount = records.filter(record => isCollection(record) && record.archived).length;
   renderWorkspaces();
   // A conflict can replace the optimistic record with a different record at the same version.
   if (state.queue.some(entry => entry.failure)) recentTaskChange = null;
@@ -559,7 +657,7 @@ function render() {
   recurrence.refresh(listMode);
   const filters = navigation[listMode ? 'lists' : 'work'];
   options($('view'), [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(project => ({ id: `project:${project.id}`, title: collectionLabel(project) }))],
-    listMode ? [['', 'Choose collection']] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
+    listMode ? [['', 'Choose collection'], ['@archived', `Archived collections (${archivedCount})`]] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day']]);
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'inbox';
   filters.view = $('view').value;
   $('collectionBrowser').hidden = !listMode;
@@ -600,21 +698,30 @@ function render() {
   connectionStatus();
   $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Defaults', () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
   const view = $('view').value;
+  const archiveMode = listMode && view === '@archived';
+  $('listTools').hidden = !listMode || archiveMode;
+  $('recurringSection').hidden = !listMode || archiveMode;
+  $('statusFilter').closest('label').hidden = archiveMode;
+  $('statusSelection').hidden = archiveMode || $('statusSelection').hidden;
+  $('executionFilters').hidden = !listMode || archiveMode;
+  $('items').hidden = archiveMode;
   $('dayLabel').hidden = view !== 'day';
   const project = projects.find(project => view === `project:${project.id}`);
   const context = project || lists.find(list => list.id === view);
-  $('collectionBreadcrumbs').textContent = context ? ancestry(context, scopedRecords()).reverse().map(ref => scopedRecords()[refKey(ref)]?.title || 'Unavailable parent').join(' / ') : 'Choose a collection.';
-  $('collectionChildren').replaceChildren(...(listMode && context ? records.filter(record => isCollection(record) && record.parentRef && refKey(record.parentRef) === key(context)).map(child => button(collectionLabel(child), () => { navigation.lists.view = viewKey(child); render(); void journal(); }, `Open ${collectionLabel(child)}`, `child:${key(child)}`)) : []));
-  renderCollectionSettings(context, records, listMode);
+  renderArchive(view === '@archived', recordMap);
+  $('collectionBreadcrumbs').textContent = context ? ancestry(context, scopedRecords()).reverse().map(ref => scopedRecords()[refKey(ref)]?.title || 'Unavailable parent').join(' / ') : archiveMode ? 'Archived history for this workspace.' : 'Choose a collection.';
+  $('collectionChildren').replaceChildren(...(listMode && context ? records.filter(record => isCollection(record) && !isEffectivelyArchived(record, recordMap) && record.parentRef && refKey(record.parentRef) === key(context)).map(child => button(collectionLabel(child), () => { navigation.lists.view = viewKey(child); render(); void journal(); }, `Open ${collectionLabel(child)}`, `child:${key(child)}`)) : []));
+  renderCollectionSettings(context, records, listMode && !archiveMode);
   $('addContextItem').hidden = !context;
   $('addContextItem').disabled = workspaceReadOnly();
   $('addContextItem').textContent = project ? 'Add next action' : 'Add item';
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
-  $('projectOutcome').textContent = project ? `Project status: ${project.status === 'draft' ? 'Needs outcome' : project.status} · Desired outcome: ${project.outcome || 'Not supplied yet'} · ${records.filter(record => record.type === 'item' && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
+  $('projectOutcome').textContent = project ? `Project status: ${project.status === 'draft' ? 'Needs outcome' : project.status} · Desired outcome: ${project.outcome || 'Not supplied yet'} · ${records.filter(record => record.type === 'item' && !archiveOnly(record, recordMap) && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
   $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
+    if (archiveOnly(record, recordMap)) return false;
     if (listMode && !matchesExecutionFilters(record, filters)) return false;
     if (collectionKind(context || { type: 'list' }) !== 'reference' && !filters.status && ['completed', 'reference'].includes(record.status)) return false;
     if (view === 'day' && record.status === 'reference') return false;
@@ -635,7 +742,10 @@ function render() {
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
     const metadata = document.createElement('p'); metadata.className = 'notes';
     metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, record.priority].filter(Boolean).join(' · ');
-    for (const ref of memberships(record)) metadata.append(` · ${scopedRecords()[refKey(ref)] ? collectionLabel(scopedRecords()[refKey(ref)]) : 'Unavailable collection: ' + refKey(ref)}`);
+    for (const ref of memberships(record)) {
+      const collection = recordMap[refKey(ref)], archived = archivedAncestor(ref, recordMap);
+      metadata.append(` · ${collection ? collectionLabel(collection) : 'Unavailable collection: ' + refKey(ref)}${archived ? ` (Archived with ${archived.title})` : ''}`);
+    }
     if (record.plannedDay) metadata.append(` · Planned: ${record.plannedDay}`);
     if (record.recurrenceTemplateId) metadata.append(` · Repeats · intended ${record.intendedDate}`);
     if (record.dueDateUtc) { const time = document.createElement('time'); time.dateTime = record.dueDateUtc; time.textContent = ` Due ${new Date(record.dueDateUtc).toLocaleString()}`; metadata.append(time); }
@@ -662,12 +772,15 @@ function render() {
     if (!record.recurrenceTemplateId && record.workflowBeforeTransition) actions.append(taskIcon(button('', () => updateRecord(record, record.workflowBeforeTransition), `Undo state change ${record.title}`, `${key(record)}:undo`), 'undo', 'Undo state change'));
     article.append(content, actions); return article;
   }));
-  if (!$('items').childElementCount) $('items').textContent = listMode && !view
-    ? (lists.length ? 'Choose a collection to see its items and manage its details.' : 'No collections yet. Create one with New list, or use Capture without one.')
-    : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
-    : view === 'inbox' ? 'No unprocessed captures match this view. Check Status for additional filters, or use Capture to add work.'
-    : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
-    : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
+  if (!$('items').childElementCount) {
+    $('items').textContent = listMode && !view
+      ? (lists.length ? 'Choose a collection to see its items and manage its details.' : 'No collections yet. Create one with New list, or use Capture without one.')
+      : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
+      : view === 'inbox' ? 'No unprocessed captures match this view. Check Status for additional filters, or use Capture to add work.'
+      : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
+      : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
+    if (archivedCount && !archiveMode) $('items').append(' ', archivedLink());
+  }
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   const moveFailure = state.workspaceMove?.failure;
   $('failure').hidden = !failed && !moveFailure;
@@ -675,7 +788,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['archived', 'Archived'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
@@ -737,7 +850,7 @@ function render() {
   const executeFilterCount = [execute.context, execute.minutes, execute.energy].filter(Boolean).length;
   $('executeFilterSummary').textContent = `Context, time & energy${executeFilterCount ? ` (${executeFilterCount} active)` : ''}`;
   const executeCollection = executeCollections.find(record => viewKey(record) === execute.view);
-  const executeItems = records.filter(record => executeCollection && record.type === 'item' && belongsTo(record, executeCollection));
+  const executeItems = records.filter(record => executeCollection && record.type === 'item' && !archiveOnly(record, recordMap) && belongsTo(record, executeCollection));
   const readyItems = executeItems.filter(readyToExecute);
   $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).map(record => {
     const article = document.createElement('article'); article.className = 'execute-item'; article.dataset.id = record.id;
@@ -755,6 +868,7 @@ function render() {
   if (!$('executeItems').childElementCount) $('executeItems').textContent = execute.view
     ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Inspect saved work in Organize, or choose another ${execute.kind}.`
     : executeCollections.length ? `Choose a ${execute.kind} to start working through its items.` : `No ${execute.kind}s yet. Create one in Organize.`;
+  if (!$('executeItems').querySelector('article') && archivedCount) $('executeItems').append(' ', archivedLink());
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
   $('captureAI').hidden = readOnly;
   if (readOnly) { extraction.suspend(); $('editor').close(); $('defaultsEditor').close(); clarification.close(); briefs.close(); }
@@ -881,7 +995,8 @@ function openEditor(record, focus = true, show = true) {
   $('editCollectionFields').hidden = !isCollection(record) || record.version > 0;
   edit.elements.kind.value = collectionKind(record);
   for (const option of edit.elements.kind.options) option.disabled = !!record.version && (record.type === 'project' ? option.value !== 'project' : option.value === 'project');
-  const parentOptions = Object.values(scopedRecords()).filter(candidate => isCollection(candidate) && !candidate.deleted && !ancestry(candidate, scopedRecords()).some(ref => refKey(ref) === key(record)));
+  const scoped = scopedRecords();
+  const parentOptions = Object.values(scoped).filter(candidate => isCollection(candidate) && !candidate.deleted && !isEffectivelyArchived(candidate, scoped) && !ancestry(candidate, scoped).some(ref => refKey(ref) === key(record)));
   options(edit.elements.parentRef, parentOptions.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']], true);
   edit.elements.parentRef.value = fields.parentRef ? refKey(fields.parentRef) : '';
   edit.elements.parentRef.disabled = false;
@@ -1173,7 +1288,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -1373,6 +1488,7 @@ function hideAccount() {
   $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
   $('appMenu').open = false; $('preferences').close();
   $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); $('readyToRevisitCollections').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
+  $('archiveReview').close(); archiveReviewing = null; $('archiveSearch').value = ''; $('archiveResults').replaceChildren(); $('archiveStatus').textContent = '';
   extraction.reset();
   $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();

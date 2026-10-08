@@ -42,6 +42,16 @@ export function ancestry(ref, records) {
   }
   return result;
 }
+export function archivedAncestor(ref, records) {
+  for (const candidate of ancestry(ref, records)) {
+    const record = records[refKey(candidate)];
+    if (record?.archived) return record;
+  }
+  return null;
+}
+export const isEffectivelyArchived = (record, records) => isCollection(record) && !!archivedAncestor(record, records);
+export const activeMemberships = (item, records) => memberships(item).filter(ref => !archivedAncestor(ref, records));
+export const archiveOnly = (item, records) => memberships(item).length > 0 && activeMemberships(item, records).length === 0;
 export function inCollection(item, ref, records, nested = false) {
   return memberships(item).some(member => (nested ? ancestry(member, records) : [member]).some(candidate => refKey(candidate) === refKey(ref)));
 }

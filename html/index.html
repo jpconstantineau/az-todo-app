@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=22" defer></script>
+  <script src="/pwa.js?v=23" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=24"></script>
+  <script type="module" src="/inbox.js?v=25"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -139,8 +139,15 @@
           <label>Collection type<select name="kind" aria-describedby="collectionSettingsHelp"></select></label>
           <label>Parent collection<select name="parentRef"></select></label>
           <label>Revisit on (optional)<input name="revisitDate" type="date" min="0001-01-01" max="9999-12-31"></label>
-          <p id="collectionSettingsHelp" class="muted"></p><button type="submit">Save collection settings on device</button><p id="collectionSettingsStatus" role="status"></p>
+          <p id="collectionSettingsHelp" class="muted"></p><div class="actions"><button type="submit">Save collection settings on device</button><button id="archiveCollection" type="button">Archive collection…</button></div><p id="collectionSettingsStatus" role="status" aria-live="polite"></p>
         </form>
+      </section>
+      <section id="archiveBrowser" class="collection-settings archive-browser" aria-labelledby="archiveHeading" hidden>
+        <p class="eyebrow">History</p><h3 id="archiveHeading" tabindex="-1">Archived collections</h3>
+        <p class="muted">Current workspace · this device’s synchronized copy. Search includes retained collection paths, notes, outcomes, actions, original captures and recurring templates. While offline, newer records from the server or another device may be missing.</p>
+        <label>Search archived history<input id="archiveSearch" type="search" maxlength="200" aria-describedby="archiveScope"></label>
+        <p id="archiveScope" class="muted">Completed and unfinished history is included. Records with another active membership remain available in active views.</p>
+        <p id="archiveStatus" role="status" aria-live="polite"></p><div id="archiveResults" class="archive-results"></div>
       </section>
       <section id="recurringSection" class="collection-settings" aria-labelledby="recurringHeading" hidden>
         <p class="eyebrow">Scheduled work</p><h3 id="recurringHeading" tabindex="-1">Recurring templates</h3>
@@ -168,6 +175,12 @@
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
       <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
     </section>
+    <dialog id="archiveReview" class="side-panel" aria-labelledby="archiveReviewHeading">
+      <p class="eyebrow">Organize</p><h2 id="archiveReviewHeading" tabindex="-1">Archive collection</h2>
+      <p id="archiveReviewSummary"></p><ul id="archiveReviewCounts"></ul>
+      <p>Archiving changes only the collection. It does not complete actions, reopen or close projects, rewrite history, or delete anything.</p>
+      <div class="actions"><button id="confirmArchive" type="button">Archive collection</button><button id="cancelArchive" type="button">Cancel and refile</button></div>
+    </dialog>
     <section class="card plan-panel" id="plan" aria-labelledby="planHeading" hidden>
       <p class="eyebrow">Align</p><h2 id="planHeading" tabindex="-1">Plan</h2>
       <p>Start at the right level, choose the Next actions that matter this week, then inspect the day already planned.</p>
