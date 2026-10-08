@@ -91,7 +91,7 @@ test('mobile clarification uses the staged parent picker, resumes its draft, con
   documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
   assert.equal((await post(server.url, [create('list', 'family', { title: 'Family', kind: 'area' }), createItem('capture'), createItem('second', { title: 'Call electrician', description: '', originalText: 'Call electrician', sourceUrl: null })], undefined, 'disposable-test-user')).status, 200);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
-  assert.equal(await (await fetch(server.url + '/clarification.js?v=6')).text(), await readFile(new URL('../../html/clarification.js', import.meta.url), 'utf8'));
+  assert.equal(await (await fetch(server.url + '/clarification.js?v=8')).text(), await readFile(new URL('../../html/clarification.js', import.meta.url), 'utf8'));
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } }), page = await context.newPage(), errors = [];
   await page.addInitScript(() => { window.__earlyErrors = []; addEventListener('error', event => window.__earlyErrors.push(`${event.filename}:${event.lineno}:${event.colno} ${event.message}`)); });
   page.on('pageerror', error => errors.push(error.stack || error.message)); t.after(() => assert.deepEqual(errors, []));

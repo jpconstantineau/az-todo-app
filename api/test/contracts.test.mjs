@@ -38,7 +38,7 @@ test('canonical shell uses local assets, safe routing and no fragment runtime', 
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
   assert.match(html, /src="\/pwa.js\?v=22"/);
-  assert.match(html, /type="module" src="\/inbox.js\?v=22"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=23"/);
   assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=22"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });

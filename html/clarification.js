@@ -143,12 +143,12 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     $('clarifySave').hidden = false; $('clarifySkip').hidden = false; $('clarifyStop').textContent = 'Stop';
     if (active.proposal.view === 'classify') drawClassify(container); else drawItemDecision(container);
     updateSaveState();
+    const target = focusKey === 'heading' ? $('clarifyHeading') : [...form.querySelectorAll('[data-focus-key]')].find(control => control.dataset.focusKey === focusKey);
+    target?.focus({ preventScroll: preserve });
     if (preserve) {
       dialog.scrollTop = panelScroll;
       const list = form.querySelector('.clarify-destinations'); if (list) list.scrollTop = destinationsScroll;
     }
-    const target = focusKey === 'heading' ? $('clarifyHeading') : [...form.querySelectorAll('[data-focus-key]')].find(control => control.dataset.focusKey === focusKey);
-    target?.focus({ preventScroll: preserve });
   }
   function updateSaveState() {
     if (active.finished) return;
