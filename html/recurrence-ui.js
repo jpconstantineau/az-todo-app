@@ -1,4 +1,5 @@
 import { materializeMutations, nextAfterResolution, recurrenceDate, recurrenceRule, recurrenceZone, zonedDate } from './recurrence-model.js?v=1';
+import { archiveOnly, isEffectivelyArchived } from './collection-model.js?v=5';
 
 const fields = ['title', 'description', 'mode', 'interval', 'unit', 'anchorDate', 'timeZone', 'destination', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
 const split = value => [...new Set(value.split(/[,\n]/).map(entry => entry.trim()).filter(Boolean))];
@@ -27,7 +28,8 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
   const values = () => Object.fromEntries(fields.map(name => [name, form.elements.namedItem(name)?.value ?? '']));
   const snapshot = () => editing || dialog.open ? { editing: editing && { id: editing.id, version: editing.version }, values: values(), open: dialog.open } : null;
   function destinations(selected = '') {
-    const choices = Object.values(records()).filter(record => ['list', 'project'].includes(record.type) && !record.deleted && record.workspaceId === workspaceId());
+    const map = records();
+    const choices = Object.values(map).filter(record => ['list', 'project'].includes(record.type) && !record.deleted && !isEffectivelyArchived(record, map) && record.workspaceId === workspaceId());
     form.elements.destination.replaceChildren(new Option('No collection', ''), ...choices.map(record => new Option(label(record), `${record.type}:${record.id}`)));
     if (selected && ![...form.elements.destination.options].some(option => option.value === selected)) form.elements.destination.add(new Option('Unavailable destination', selected));
     form.elements.destination.value = selected;
@@ -89,7 +91,8 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
   function refresh(listMode) {
     $('recurringSection').hidden = !listMode;
     if (!listMode) return;
-    const rows = templates().filter(template => template.workspaceId === workspaceId()).sort((a, b) => a.title.localeCompare(b.title));
+    const map = records();
+    const rows = templates().filter(template => template.workspaceId === workspaceId() && !archiveOnly(template, map)).sort((a, b) => a.title.localeCompare(b.title));
     $('recurringTemplates').replaceChildren(...rows.map(template => {
       const article = document.createElement('article'), heading = document.createElement('h4'), state = document.createElement('p'), control = document.createElement('button');
       article.className = 'recurring-template'; heading.textContent = template.title; state.className = 'muted';
@@ -101,7 +104,8 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     if (!rows.length) $('recurringTemplates').textContent = 'No recurring templates in this workspace.';
   }
   async function materialize() {
-    for (const template of templates().filter(template => !readOnly(template.workspaceId))) {
+    const map = records();
+    for (const template of templates().filter(template => !archiveOnly(template, map) && !readOnly(template.workspaceId))) {
       const mutations = materializeMutations(template);
       if (mutations.length) { await save(mutations, 'Recurring occurrence created on device.', false, template.workspaceId); return true; }
     }

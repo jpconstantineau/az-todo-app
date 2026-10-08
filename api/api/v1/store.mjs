@@ -42,13 +42,26 @@ async function hasContents(accountId, target, pending, workspaceId = null) {
   return [...resources.map(row => row.record).filter(record => !pending.some(next => refKey(next) === refKey(record))), ...pending]
     .some(record => collectionContents(record, target) && (workspaceId === null || record.workspaceId !== workspaceId));
 }
-async function validateCollections(record, lookup) {
+async function archivedCollection(ref, lookup) {
+  const seen = new Set();
+  while (ref && !seen.has(refKey(ref))) {
+    seen.add(refKey(ref));
+    const collection = await lookup(ref.type, ref.id);
+    if (!collection || collection.deleted) return null;
+    if (collection.archived) return collection;
+    ref = collection.parentRef;
+  }
+  return null;
+}
+async function validateCollections(record, old, lookup) {
   if (record.deleted) return;
   const refs = ['item', 'recurrenceTemplate'].includes(record.type) ? memberships(record) : isCollection(record) && record.parentRef ? [record.parentRef] : [];
+  const retained = new Set(['item', 'recurrenceTemplate'].includes(record.type) ? memberships(old).map(refKey) : old?.parentRef ? [refKey(old.parentRef)] : []);
   for (const ref of refs) {
     const target = await lookup(ref.type, ref.id);
     if (!target || target.deleted) throw new ApiError(404, `${ref.type}_not_found`, 'Destination collection is unavailable. Restore or remove its link.');
     if (target.workspaceId !== record.workspaceId) throw new ValidationError('Collections and items must belong to the same workspace. Clear memberships before moving.');
+    if (!retained.has(refKey(ref)) && await archivedCollection(ref, lookup)) throw new ValidationError('Archived collections cannot receive new items or child collections. Reactivate it or choose an active destination.');
   }
   if (isCollection(record)) {
     let parent = record.parentRef;
@@ -69,6 +82,7 @@ function validateCurrentShape(record) {
     throw new ValidationError('Choose a draft, active, someday or completed project status.');
   }
   if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new ValidationError('Add a desired outcome before activating this project.');
+  if (isCollection(record) && record.archived !== undefined && typeof record.archived !== 'boolean') throw new ValidationError('archived must be true or false.');
 }
 
 export async function commit(accountId, input, requestHash = digest(input)) {
@@ -142,7 +156,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
         throw new ValidationError('Plan preference identity must match its workspace.');
       }
       await validateWorkspace(record, current[i]?.record, lookup);
-      await validateCollections(record, lookup);
+      await validateCollections(record, current[i]?.record, lookup);
       await validateRecurrence(record, current[i]?.record, input.mutations[i], records, lookup, now);
       if (record.type === 'reviewDecision') validateReviewDecision(record, current[i]?.record, records);
       if (record.type === 'reviewReflection') await validateReviewReflection(record, current[i]?.record, records,

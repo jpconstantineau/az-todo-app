@@ -174,6 +174,12 @@ test('clarification redraws preserve panel and destination scroll with logical f
       focus: document.activeElement.dataset.focusKey || document.activeElement.textContent };
   });
   const assertPreserved = async (before, focus) => {
+    await waitForBrowser(page, ({ before, focus }) => {
+      const dialog = document.querySelector('#clarifier'), list = document.querySelector('.clarify-destinations');
+      return Math.abs(dialog.scrollTop - Math.min(before.panel, dialog.scrollHeight - dialog.clientHeight)) <= 1
+        && Math.abs(list.scrollTop - Math.min(before.destinations, list.scrollHeight - list.clientHeight)) <= 1
+        && (document.activeElement.dataset.focusKey || document.activeElement.textContent) === focus;
+    }, { before, focus }, 3000);
     const after = await state();
     assert.ok(Math.abs(after.panel - Math.min(before.panel, after.panelMax)) <= 1);
     assert.ok(Math.abs(after.destinations - Math.min(before.destinations, after.destinationsMax)) <= 1);
@@ -195,8 +201,10 @@ test('clarification redraws preserve panel and destination scroll with logical f
   await page.locator('.clarify-destinations .clarify-destination').nth(3).click();
   await assertPreserved(before, 'destination:list:destination-2');
 
+  const noParent = page.getByRole('button', { name: 'No parent', exact: true });
+  await noParent.focus();
   before = await position(550, 5);
-  await page.getByRole('button', { name: 'No parent', exact: true }).click();
+  await noParent.press('Enter');
   await assertPreserved(before, 'destination:none');
 
   before = await position(60, 60);

@@ -93,6 +93,7 @@ function validateExport(value, server = false) {
     }
     if (entry.type === 'project') require(['draft', 'active', 'someday', 'completed'].includes(entry.status) &&
       (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
+    if (['list', 'project'].includes(entry.type) && entry.archived !== undefined) require(typeof entry.archived === 'boolean', `${path}: archived must be true or false.`);
     if (entry.type === 'planPreference') require(['none', 'tshirt', 'fibonacci'].includes(entry.estimationMethod), `${path}: invalid estimation method.`);
     if (entry.type === 'dailyPlan') require(/^\d{4}-\d{2}-\d{2}$/.test(entry.planDay) && Array.isArray(entry.actionIds) &&
       Array.isArray(entry.carryoverDecisions) && typeof entry.revisionHead === 'string' && Number.isSafeInteger(entry.revisionCount) && entry.revisionCount > 0,

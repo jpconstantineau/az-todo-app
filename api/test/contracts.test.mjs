@@ -37,9 +37,9 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /src="\/pwa.js\?v=22"/);
-  assert.match(html, /type="module" src="\/inbox.js\?v=24"/);
-  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=22"/);
+  assert.match(html, /src="\/pwa.js\?v=23"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=25"/);
+  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=23"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {
@@ -59,6 +59,10 @@ test('current create contract requires canonical workspace, membership and proje
   assert.throws(() => fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal' }), /collectionRefs/);
   assert.throws(() => fieldsFor('list', 'create', { title: 'List' }), /workspaceId/);
   assert.throws(() => fieldsFor('project', 'create', { title: 'Project', outcome: 'Done', workspaceId: 'personal' }), /status/);
+  assert.equal(fieldsFor('list', 'create', { title: 'List', workspaceId: 'personal' }).archived, false);
+  assert.equal(fieldsFor('project', 'create', { title: 'Project', outcome: 'Done', status: 'active', workspaceId: 'personal' }).archived, false);
+  assert.deepEqual(fieldsFor('list', 'update', { archived: true }), { archived: true });
+  assert.throws(() => fieldsFor('project', 'update', { archived: 'yes' }), /true or false/);
   assert.throws(() => fieldsFor('review', 'create', { reviewKind: 'weekly', reviewDay: '2026-10-05', included: [], decisionHeads: [], decisionCount: 0 }), /workspaceId/);
   assert.deepEqual(fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal', collectionRefs: [] }).collectionRefs, []);
   assert.equal(fieldsFor('item', 'create', { title: 'Task', workspaceId: 'personal', collectionRefs: [] }).plannedWeek, null);

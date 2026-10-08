@@ -1,12 +1,12 @@
-import { collectionKinds, collectionKind, isCollection, refKey, ancestry, normalizeMembership } from './collection-model.js?v=4';
+import { collectionKinds, collectionKind, isCollection, isEffectivelyArchived, refKey, ancestry, normalizeMembership } from './collection-model.js?v=5';
 
 export const viewKey = record => record.type === 'project' ? refKey(record) : record.id;
 export const parseRef = value => { const [type, id] = value.split(':'); return { type, id }; };
 export const collectionLabel = record => collectionKind(record) === 'list' ? record.title : `${collectionKinds[collectionKind(record)]}: ${record.title}${record.type === 'project' ? ` (${record.status === 'draft' ? 'Needs outcome' : record.status === 'someday' ? 'Someday / on hold' : record.status === 'completed' ? 'Completed' : 'Active'})` : ''}`;
 export function pickerOptions(control, records, refs = []) {
-  const selected = refs.map(refKey), available = Object.values(records).filter(record => isCollection(record) && !record.deleted);
+  const selected = refs.map(refKey), available = Object.values(records).filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, records));
   control.replaceChildren(...available.map(record => new Option(ancestry(record, records).reverse().map(ref => records[refKey(ref)]?.title || 'Unavailable').join(' / ') + ` · ${collectionKinds[collectionKind(record)]}`, refKey(record))));
-  for (const value of selected) if (![...control.options].some(option => option.value === value)) control.add(new Option(`Unavailable collection (${value}) — remove or restore`, value));
+  for (const value of selected) if (![...control.options].some(option => option.value === value)) control.add(new Option(`${records[value] && isEffectivelyArchived(records[value], records) ? 'Archived collection' : 'Unavailable collection'} (${value}) — keep or remove`, value));
   for (const option of control.options) option.selected = selected.includes(option.value);
 }
 export function organizer(container, records, refs, name = 'collectionRefs') {
@@ -23,7 +23,7 @@ export function membershipFields(refs, old = {}) {
 }
 export function drawOutline(container, records, open) {
   const expanded = new Set([...container.querySelectorAll('details[open]')].map(node => node.dataset.ref));
-  const available = Object.values(records).filter(record => isCollection(record) && !record.deleted);
+  const available = Object.values(records).filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, records));
   const row = (record, seen = new Set()) => {
     const node = document.createElement('li'), button = document.createElement('button');
     button.type = 'button'; button.textContent = collectionLabel(record); button.dataset.focusKey = `collection:${refKey(record)}`; button.onclick = () => open(record);
