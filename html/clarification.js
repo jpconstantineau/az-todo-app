@@ -151,6 +151,7 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
       const restoreScroll = () => { dialog.scrollTop = panelScroll; if (list) list.scrollTop = destinationsScroll; };
       restoreScroll();
       queueMicrotask(restoreScroll);
+      requestAnimationFrame(restoreScroll);
     }
   }
   function updateSaveState() {
