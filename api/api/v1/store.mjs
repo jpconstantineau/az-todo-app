@@ -6,6 +6,7 @@ import { applyWorkflow } from "./workflow.mjs";
 import { validateReview, validateReviewDecision, validateReviewReflection } from "./reviews.mjs";
 import { validateBrief } from "./briefs.mjs";
 import { validateDailyPlan, validateDailyPlanRevision } from './daily-plans.mjs';
+import { validateProjectPlanning } from './project-planning.mjs';
 
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
 import { erasedWorkspaceIds } from './workspace-erasure.mjs';
@@ -155,6 +156,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
     const settings = records.find(record => record.type === "settings") ?? (await read(accountId, recordId("settings", "settings")))?.record;
     const userDefaults = { ...defaultSettings, ...(settings?.defaults ?? {}) };
     const lookup = async (type, id) => records.find(r => r.type === type && r.id === id) ?? (await read(accountId, recordId(type, id)))?.record;
+    if (!conflicts.length) await validateProjectPlanning(records, current, input.mutations, lookup);
     for (const [i, record] of records.entries()) {
       validateCurrentShape(record);
       if (record.type === 'planPreference' && (record.id !== record.workspaceId || current[i]?.record && record.workspaceId !== current[i].record.workspaceId)) {

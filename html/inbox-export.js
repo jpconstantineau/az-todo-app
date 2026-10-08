@@ -1,21 +1,21 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=5';
-import { purgeWorkspaceState } from './workspaces.js?v=4';
+import { readableBrief } from './briefs.js?v=6';
+import { purgeWorkspaceState } from './workspaces.js?v=5';
 import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=1';
-const knownTypes = ['workspace', 'item', 'list', 'project', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
+const knownTypes = ['workspace', 'item', 'list', 'project', 'projectPlanRevision', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
   'collectionRefs', 'parentRef', 'kind', 'revisitDate', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
+  'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'planningHeadId', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
   'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates',
   'rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc', 'recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc',
-  'query', 'resultType', 'resultState'];
+  'previousRevisionId', 'sections', 'candidates', 'mappings', 'query', 'resultType', 'resultState'];
 
 export const validateDeviceExport = value => validateExport(value);
 export const validateAccountExport = value => validateExport(value, true);
@@ -105,12 +105,17 @@ function validateExport(value, server = false) {
     if (entry.type === 'dailyPlanRevision') require(/^\d{4}-\d{2}-\d{2}$/.test(entry.planDay) && typeof entry.planId === 'string' &&
       Number.isSafeInteger(entry.sequence) && entry.sequence > 0 && object(entry.before) && object(entry.after) && Array.isArray(entry.estimates),
     `${path}: invalid daily plan revision.`);
+    if (entry.type === 'projectPlanRevision') require(entry.deleted !== true && typeof entry.projectId === 'string' &&
+      Number.isSafeInteger(entry.sourceVersion) && entry.sourceVersion > 0 && object(entry.sections) &&
+      ['purposePrinciples', 'desiredEvidence', 'organizationApproach', 'unresolvedQuestions'].every(name => typeof entry.sections[name] === 'string') &&
+      Array.isArray(entry.candidates) && entry.candidates.length <= 50 && Array.isArray(entry.mappings) && entry.mappings.length <= 18,
+    `${path}: invalid project plan revision.`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
   unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');
   const draft = (entry, path) => {
     require(object(entry), `${path}: draft must be an object.`);
-    unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'collectionUtility', 'day', 'navigation', 'review', 'extraction', 'recurrence'], path);
+    unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'projectPlanning', 'collectionUtility', 'day', 'navigation', 'review', 'extraction', 'recurrence'], path);
     if (entry.capture) unknown(entry.capture, ['text', 'body', 'listId', 'newList', 'contexts', 'original'], `${path}.capture`);
     if (entry.edit && !object(entry.edit.initialFields)) warnings.push(`${path}.edit: missing saved baseline; preserved for recovery, editor restore unsupported`);
   };

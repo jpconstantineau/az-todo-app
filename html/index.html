@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=25" defer></script>
+  <script src="/pwa.js?v=26" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=27"></script>
+  <script type="module" src="/inbox.js?v=28"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -125,6 +125,7 @@
       <h2 id="failureHeading">A save needs attention</h2><p id="failureMessage"></p>
       <details><summary>Compare pending and server versions</summary><pre id="comparison"></pre></details>
       <button id="resumeMove" hidden>Resume collection move</button>
+      <button id="recoverProjectPlan" hidden>Recover pending plan as a draft against latest</button>
       <button id="resolve">Apply my pending edit to the latest version</button>
       <button id="discard">Use server version for this save</button>
     </section>
@@ -451,6 +452,19 @@
         <pre id="guidancePreview" hidden></pre>
         <button id="guidanceUse" type="button" hidden>Use as proposed answer</button>
       </details>
+    </dialog>
+    <dialog class="side-panel" id="projectPlanner" aria-labelledby="projectPlanningHeading">
+      <p class="eyebrow">Natural planning</p><h2 id="projectPlanningHeading" tabindex="-1">Plan project</h2>
+      <p>Explore before committing. Candidate ideas are not tasks until you select Action or Bounded learning step and choose Accept plan. No dates, estimates or targets are added automatically.</p>
+      <form id="projectPlanningForm">
+        <section class="project-plan-section"><h3>Purpose &amp; principles</h3><label class="sr-only" for="projectPlanPurpose">Purpose &amp; principles</label><textarea id="projectPlanPurpose" name="purposePrinciples" rows="3" maxlength="4000"></textarea></section>
+        <section class="project-plan-section"><h3>Desired evidence</h3><label class="sr-only" for="projectPlanEvidence">Desired evidence</label><textarea id="projectPlanEvidence" name="desiredEvidence" rows="3" maxlength="4000"></textarea></section>
+        <section class="project-plan-section" aria-labelledby="projectPlanIdeasHeading"><h3 id="projectPlanIdeasHeading">Candidate ideas</h3><p class="muted">Brainstorming stays uncommitted. Select at most 18 ideas as actions or bounded learning steps in one acceptance.</p><div id="projectPlanCandidates"></div><button id="addProjectPlanCandidate" type="button">Add candidate idea</button></section>
+        <section class="project-plan-section"><h3>Organization / approach</h3><label class="sr-only" for="projectPlanOrganization">Organization / approach</label><textarea id="projectPlanOrganization" name="organizationApproach" rows="3" maxlength="4000"></textarea></section>
+        <section class="project-plan-section"><h3>Unresolved questions</h3><label class="sr-only" for="projectPlanQuestions">Unresolved questions</label><textarea id="projectPlanQuestions" name="unresolvedQuestions" rows="3" maxlength="4000"></textarea></section>
+        <p id="projectPlanningStatus" role="status" aria-live="polite"></p>
+        <div class="actions"><button id="acceptProjectPlan" type="submit">Accept plan</button><button id="closeProjectPlanning" type="button">Stop and keep draft</button><button id="discardProjectPlanning" type="button">Discard draft</button></div>
+      </form>
     </dialog>
     <dialog class="side-panel" id="briefs" aria-labelledby="briefHeading">
       <p class="eyebrow">Prepare a brief</p><h2 id="briefHeading" tabindex="-1">Brief</h2>

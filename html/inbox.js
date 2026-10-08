@@ -1,15 +1,17 @@
 import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, collectionKind, isCollection, isEffectivelyArchived, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=5';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
-import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
+import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=14';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=15';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=17';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=18';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=10';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
-import { setupBriefs } from './briefs.js?v=5';
+import { setupBriefs } from './briefs.js?v=6';
+import { setupProjectPlanning } from './project-planning.js?v=1';
+import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=5';
@@ -107,7 +109,7 @@ async function switchWorkspace(id) {
     editing = defaultsEditing = null;
     $('createdDestination').replaceChildren();
     $('editor').close(); $('defaultsEditor').close(); $('savedViewEditor').close(); $('deletedRecords').close();
-    extraction.reset(); clarification.hide(); reviews.reset(); briefs.reset();
+    extraction.reset(); clarification.hide(); reviews.reset(); briefs.reset(); projectPlanning.reset();
     state = saved; selectedWorkspace = id;
     render(); restoreDraft();
     if (!document.querySelector('dialog[open]')) $('workspaceSelect').focus();
@@ -227,6 +229,22 @@ const briefs = setupBriefs({ records: () => accountId ? scopedRecords() : {}, jo
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the save stays with its original account.');
   state = saved; render(); broadcast(); void sync();
+} });
+const projectPlanning = setupProjectPlanning({ records: () => accountId ? scopedRecords() : {}, journal, showDialog, save: async (mutations, draft) => {
+  const owner = accountId, generation = accountGeneration;
+  if (!owner) throw new Error('Sign in to accept this project plan.');
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before accepting this plan. Your draft is kept.');
+    const records = projected(local), projectMutation = mutations.find(mutation => mutation.type === 'project');
+    const project = records[`project:${projectMutation.id}`];
+    if (!project || project.deleted || project.version !== projectMutation.expectedVersion || project.localState) throw new Error('This project changed. Recover the draft against the latest project before accepting.');
+    const stored = currentDraft(local).projectPlanning;
+    if (!stored || stored.projectId !== draft.projectId || JSON.stringify(stored.sections) !== JSON.stringify(draft.sections) || JSON.stringify(stored.candidates) !== JSON.stringify(draft.candidates)) throw new Error('The saved planning draft changed in another tab. Reload and review it before accepting.');
+    enqueue(local, owner, mutations);
+    currentDraft(local).projectPlanning = null;
+  }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
+  if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the plan remains with its original account.');
+  state = saved; clearError(); render(); broadcast(); void sync();
 } });
 const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog, actions: currentClarificationActions });
 async function saveClarification(mutations, next) {
@@ -550,7 +568,7 @@ function draft() {
   return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: hasEditDraft() ? { ...editing, fields: formValues(edit) } : null, editOpen: $('editor').open,
     defaults: defaultsEditing ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
     defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
-    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot(), recurrence: recurrence.snapshot() };
+    day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot(), recurrence: recurrence.snapshot(), projectPlanning: projectPlanning.snapshot() };
 }
 function storageFailure(failure) {
   error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
@@ -561,6 +579,7 @@ function storageFailure(failure) {
   $('defaultsEditor').close();
   clarification.close();
   briefs.close();
+  projectPlanning.close();
   extraction.close();
   $('recurringEditor').close();
 }
@@ -607,6 +626,7 @@ function restoreDraft() {
   reviews.restore(saved.review);
   clarification.restore(saved.clarification);
   briefs.restore(saved.brief);
+  projectPlanning.restore(saved.projectPlanning);
   recurrence.restore(saved.recurrence);
 }
 function button(text, handler, label = text, focusKey) {
@@ -831,7 +851,7 @@ function render() {
   $('addContextItem').onclick = guard(() => addContextItem(context));
   $('projectOutcome').hidden = !project;
   $('projectOutcome').textContent = project ? `Project status: ${project.status === 'draft' ? 'Needs outcome' : project.status} · Desired outcome: ${project.outcome || 'Not supplied yet'} · ${records.filter(record => record.type === 'item' && !archiveOnly(record, recordMap) && record.status === 'next' && belongsTo(record, project)).length} next action(s)` : '';
-  $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
+  $('projectActions').replaceChildren(...(project ? [titleButton(project, `Edit project: ${project.title}`), button('Plan project', () => projectPlanning.open(project), `Plan project ${project.title}`, `${key(project)}:plan`), button('Brief', () => briefs.open(project), `Brief ${project.title}`, `${key(project)}:brief`), deleteButton(project)] : []));
   $('items').replaceChildren(...records.filter(record => {
     if (record.type !== 'item') return false;
     if (archiveOnly(record, recordMap)) return false;
@@ -896,8 +916,10 @@ function render() {
   }
   const failed = state.queue[0]?.failure ? state.queue[0] : null;
   const moveFailure = state.workspaceMove?.failure;
+  const projectPlanFailure = failed?.operation.mutations.some(mutation => mutation.type === 'projectPlanRevision');
   $('failure').hidden = !failed && !moveFailure;
   $('resumeMove').hidden = !state.workspaceMove || !failed?.workspaceMoveId && !moveFailure;
+  $('recoverProjectPlan').hidden = !projectPlanFailure;
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
@@ -905,7 +927,19 @@ function render() {
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
-    if (planConflict) {
+    if (projectPlanFailure) {
+      const pending = failed.operation.mutations.find(mutation => mutation.type === 'projectPlanRevision').fields;
+      const project = state.records[`project:${pending.projectId}`];
+      const accepted = project?.planningHeadId && state.records[`projectPlanRevision:${project.planningHeadId}`];
+      const describeProjectPlan = revision => revision ? [
+        `Purpose & principles: ${revision.sections.purposePrinciples || '(blank)'}`,
+        `Desired evidence: ${revision.sections.desiredEvidence || '(blank)'}`,
+        `Organization / approach: ${revision.sections.organizationApproach || '(blank)'}`,
+        `Unresolved questions: ${revision.sections.unresolvedQuestions || '(blank)'}`,
+        `Candidates: ${revision.candidates.map(candidate => `${candidate.title} [${candidate.kind}]`).join('; ') || '(none)'}`
+      ].join('\n') : 'No accepted project plan';
+      $('comparison').textContent = `My pending plan\n${describeProjectPlan(pending)}\n\nLatest accepted plan\n${describeProjectPlan(accepted)}`;
+    } else if (planConflict) {
       const projectedRecords = projected(state);
       const describePlan = (record, revision, pending) => {
         if (!record) return 'No plan';
@@ -924,13 +958,14 @@ function render() {
       : 'The move plan and its acknowledged progress remain saved on this device.';
     const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
     const recurrenceConflict = failed?.operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId);
-    $('resolve').hidden = move || recurrenceConflict || !failed?.receipt || !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').hidden = projectPlanFailure || move || recurrenceConflict || !failed?.receipt || !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('resolve').textContent = planConflict ? 'Apply my pending plan to latest version' : reflectionConflict ? 'Merge pending reflection after accepted snapshot' : 'Apply pending edit to latest version';
     $('discard').hidden = move;
     $('discard').textContent = failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
   reviews.render();
   briefs.render();
+  projectPlanning.render();
   renderDeleted();
   renderEditorDraft();
   $('planDay').value = $('day').value;
@@ -1401,7 +1436,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('projectPlanner'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -1628,7 +1663,7 @@ function hideAccount() {
   exportController?.abort();
   $('exportStatus').textContent = '';
   reviews.reset();
-  briefs.reset();
+  briefs.reset(); projectPlanning.reset();
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
   navigation = emptyNavigation();
   $('view').replaceChildren(new Option('All items', 'all'));
@@ -1791,6 +1826,21 @@ $('resumeMove').onclick = guard(async () => {
   const saved = await transact(owner, local => resumeCollectionMove(local, owner));
   if (owner !== accountId) return;
   state = saved; render(); broadcast(); void sync();
+});
+$('recoverProjectPlan').onclick = guard(async () => {
+  const owner = accountId, id = state.queue[0]?.operation.operationId;
+  const saved = await transact(owner, local => {
+    const entry = local.queue[0];
+    if (entry?.operation.operationId !== id || !entry.failure || !entry.operation.mutations.some(mutation => mutation.type === 'projectPlanRevision')) throw new Error('Queue changed; review it again.');
+    const revision = entry.operation.mutations.find(mutation => mutation.type === 'projectPlanRevision').fields;
+    const project = local.records[`project:${revision.projectId}`];
+    const recovered = recoverProjectPlanDraft(entry.operation, project, local.records);
+    local.queue.shift();
+    workspaceDraft(local, project.workspaceId).projectPlanning = { ...recovered, open: true };
+    local.selectedWorkspace = project.workspaceId;
+  });
+  if (owner !== accountId) return;
+  state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL; render(); restoreDraft(); broadcast(); void sync();
 });
 $('resolve').onclick = guard(async () => {
   const owner = accountId, id = state.queue[0].operation.operationId;

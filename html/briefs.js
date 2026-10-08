@@ -1,4 +1,5 @@
 import { belongsTo } from './collection-model.js?v=4';
+import { acceptedPlanBriefContext } from './project-planning-model.js?v=1';
 export const briefSections = [
   ['outcome', 'Desired outcome'], ['context', 'Context and supplied sources'], ['scope', 'Scope'],
   ['exclusions', 'Exclusions'], ['nextAction', 'Proposed next action'],
@@ -40,12 +41,13 @@ function acceptedV2Context(subject, clarification, records) {
 export function templateBrief(subject, clarification, records = {}) {
   const outcome = subject.outcome || acceptedV1(clarification, 'outcome');
   const v2 = acceptedV2Context(subject, clarification, records);
+  const plan = acceptedPlanBriefContext(subject, records);
   const missing = [!outcome && 'Desired outcome is not yet specified.', 'Confirm scope, exclusions and acceptance checks.',
     subject.type === 'project' && 'Choose a concrete next action.', acceptedV1(clarification, 'missingFacts') && `Clarification: ${acceptedV1(clarification, 'missingFacts')}`,
-    ...v2.missing].filter(Boolean);
+    ...v2.missing, ...plan.missing].filter(Boolean);
   return {
     outcome: outcome || 'Unknown — describe what done looks like.',
-    context: [subject.title, subject.description, subject.sourceTitle, subject.sourceUrl, ...(subject.referenceLinks || []), ...v2.context].filter(Boolean).join('\n'),
+    context: [subject.title, subject.description, subject.sourceTitle, subject.sourceUrl, ...(subject.referenceLinks || []), ...v2.context, ...plan.context].filter(Boolean).join('\n'),
     scope: 'Unknown — specify what is included.', exclusions: 'Unknown — specify what is excluded, or explicitly None known.',
     nextAction: subject.type === 'item' ? subject.title : Object.values(records).filter(item => item.type === 'item' && !item.deleted && item.status === 'next' && belongsTo(item, subject)).map(item => item.title).join('\n') || 'Unknown — choose a concrete next action.',
     acceptanceChecks: 'Unknown — specify how the outcome will be checked.', missingInformation: missing.join('\n')

@@ -226,10 +226,28 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
     await confirmed(page);
   };
   await selectEstimationMethod('tshirt', 'Needs assessment · No current-scale estimates · 2 unestimated · 0 previous-scale');
-  await page.getByLabel('Estimate First day action using T-shirt').selectOption('L'); await confirmed(page);
+  await page.getByLabel('Estimate First day action using T-shirt').selectOption('L');
+  await waitForBrowser(page, async () => {
+    const { projected, transact } = await import('/inbox-store.js?v=9');
+    const records = Object.values(projected(await transact('alice')));
+    return records.find(record => record.title === 'First day action')?.effortEstimate?.value === 'L';
+  });
+  await confirmed(page);
   assert.match(await page.locator('#planLoadSummary').textContent(), /1 L · 1 unestimated · 0 previous-scale/);
-  await page.locator('#planLoadAssessment').selectOption('full'); await confirmed(page);
-  await page.getByLabel('Estimate Second day action using T-shirt').selectOption('M'); await confirmed(page);
+  await page.locator('#planLoadAssessment').selectOption('full');
+  await waitForBrowser(page, async () => {
+    const { projected, transact } = await import('/inbox-store.js?v=9');
+    return Object.values(projected(await transact('alice'))).find(record => record.type === 'dailyPlan' && record.planDay === '2030-05-06')?.loadAssessment === 'full';
+  });
+  await confirmed(page);
+  await page.getByLabel('Estimate Second day action using T-shirt').selectOption('M');
+  await waitForBrowser(page, async () => {
+    const { projected, transact } = await import('/inbox-store.js?v=9');
+    const records = Object.values(projected(await transact('alice')));
+    return records.find(record => record.title === 'Second day action')?.effortEstimate?.value === 'M' &&
+      records.find(record => record.type === 'dailyPlan' && record.planDay === '2030-05-06')?.loadAssessment === 'needs_reassessment';
+  });
+  await confirmed(page);
   assert.equal(await page.locator('#planLoadAssessment').inputValue(), 'needs_reassessment');
   await page.locator('#planHistory').getByText('Plan history').click();
   assert.match(await page.locator('#planHistoryEntries').innerText(), /Full → Needs reassessment/);
@@ -302,8 +320,13 @@ test('Day exposes whole-plan stale conflicts and preserves unrelated queued work
   const contextA = await browser.newContext(), contextB = await browser.newContext();
   const pageA = await contextA.newPage(), pageB = await contextB.newPage();
   for (const page of [pageA, pageB]) {
-    await page.goto(server.url + '/#plan'); await page.locator('#workspace').waitFor(); await confirmed(page); await page.locator('#planDay').fill(day);
-    assert.deepEqual(await page.locator('#planDayActions > li[data-id]').evaluateAll(rows => rows.map(row => row.dataset.id)), ['one', 'two']);
+    await page.goto(server.url + '/#plan'); await page.locator('#workspace').waitFor(); await confirmed(page);
+    await waitForBrowser(page, async ({ id, plannedDay }) => {
+      const local = await (await import('/inbox-store.js?v=9')).transact('alice');
+      return local.records[`dailyPlan:${id}`]?.version === 1 && local.records['item:one']?.plannedDay === plannedDay && local.records['item:two']?.plannedDay === plannedDay;
+    }, { id: planId, plannedDay: day });
+    await page.locator('#planDay').fill(day);
+    await page.waitForFunction(ids => JSON.stringify([...document.querySelectorAll('#planDayActions > li[data-id]')].map(row => row.dataset.id)) === JSON.stringify(ids), ['one', 'two']);
   }
 
   await pageA.getByRole('button', { name: 'Move Two up from position 2' }).click();

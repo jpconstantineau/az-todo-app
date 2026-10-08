@@ -42,6 +42,7 @@ function ownerKey(record) {
   if (record.type === 'clarification') return `item:${record.id}`;
   if (record.type === 'reviewDecision') return `review:${record.reviewId}`;
   if (record.type === 'brief') return `${record.subjectType}:${record.subjectId}`;
+  if (record.type === 'projectPlanRevision') return `project:${record.projectId}`;
   return null;
 }
 
@@ -212,6 +213,7 @@ export async function erasedWorkspaceIds(accountId, input, current, lookup, read
     if (record.type === 'clarification') workspaceId = (await lookup('item', record.id))?.workspaceId;
     if (record.type === 'reviewDecision') workspaceId = (await lookup('review', record.reviewId))?.workspaceId;
     if (record.type === 'brief') workspaceId = (await lookup(record.subjectType, record.subjectId))?.workspaceId;
+    if (record.type === 'projectPlanRevision') workspaceId = (await lookup('project', record.projectId))?.workspaceId;
     if (workspaceId) workspaces.add(workspaceId);
   };
   for (const [index, mutation] of input.mutations.entries()) {
