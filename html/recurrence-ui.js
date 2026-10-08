@@ -1,7 +1,12 @@
-import { materializeMutations, nextAfterResolution, recurrenceDate, recurrenceRule, recurrenceZone } from './recurrence-model.js?v=1';
+import { materializeMutations, nextAfterResolution, recurrenceDate, recurrenceRule, recurrenceZone, zonedDate } from './recurrence-model.js?v=1';
 
 const fields = ['title', 'description', 'mode', 'interval', 'unit', 'anchorDate', 'timeZone', 'destination', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
 const split = value => [...new Set(value.split(/[,\n]/).map(entry => entry.trim()).filter(Boolean))];
+const tags = (value, field) => {
+  const entries = split(value);
+  if (entries.length > 20 || entries.some(entry => entry.length > 64 || /[\u0000-\u001f\u007f]/.test(entry))) throw new Error(`${field} must contain at most 20 single-line values of at most 64 characters.`);
+  return entries;
+};
 const referenceLinks = value => [...new Set(value.split(/\r?\n/).map(entry => entry.trim()).filter(Boolean))].map(entry => {
   try {
     const url = new URL(entry);
@@ -41,7 +46,7 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     form.reset(); destinations(destination || template?.collectionRefs?.[0] && `${template.collectionRefs[0].type}:${template.collectionRefs[0].id}` || '');
     const defaults = template ? { ...template, mode: template.rule.mode, interval: template.rule.interval, unit: template.rule.unit, anchorDate: template.rule.anchorDate, timeZone: template.rule.timeZone,
       contexts: (template.contexts || []).join(', '), areas: (template.areas || []).join(', '), referenceLinks: (template.referenceLinks || []).join('\n') }
-      : { interval: '1', mode: 'fixed', unit: 'day', anchorDate: new Date().toISOString().slice(0, 10), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, status: 'inbox' };
+      : (() => { const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; return { interval: '1', mode: 'fixed', unit: 'day', anchorDate: zonedDate(new Date(), timeZone), timeZone, status: 'inbox' }; })();
     for (const [name, value] of Object.entries(defaults)) { const control = form.elements.namedItem(name); if (control) control.value = value ?? ''; }
     if (defaults.mode) form.elements.mode.value = defaults.mode;
     $('recurringEditorHeading').textContent = template ? `Recurring template: ${template.title}` : 'New recurring template';
@@ -58,7 +63,10 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     try {
       const input = values(), rule = recurrenceRule({ mode: input.mode, unit: input.unit, interval: Number(input.interval), anchorDate: recurrenceDate(input.anchorDate), timeZone: recurrenceZone(input.timeZone) });
       const managed = { title: input.title, description: input.description, workspaceId: workspaceId(), ...destinationFields(input.destination), status: input.status,
-        contexts: split(input.contexts), areas: split(input.areas), energy: input.energy || null, timeRequired: input.timeRequired || null, priority: input.priority || null, referenceLinks: referenceLinks(input.referenceLinks) };
+        contexts: tags(input.contexts, 'Contexts'), areas: tags(input.areas, 'Areas'), energy: input.energy || null, timeRequired: input.timeRequired || null, priority: input.priority || null, referenceLinks: referenceLinks(input.referenceLinks) };
+      for (const [name, value] of [['Energy', managed.energy], ['Time', managed.timeRequired], ['Priority', managed.priority]]) {
+        if (value && (value.length > 64 || /[\u0000-\u001f\u007f]/.test(value))) throw new Error(`${name} must be a single-line value of at most 64 characters.`);
+      }
       if (managed.referenceLinks.length > 20) throw new Error('Reference links must contain at most 20 URLs.');
       const fields = editing ? { ...managed, rule, ...(!editing.openOccurrenceId && JSON.stringify(rule) !== JSON.stringify(editing.rule)
         ? { nextIntendedDate: editing.lastResolvedUtc ? nextAfterResolution(rule, editing.lastResolvedUtc) : rule.anchorDate } : {}) }
@@ -93,10 +101,9 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     if (!rows.length) $('recurringTemplates').textContent = 'No recurring templates in this workspace.';
   }
   async function materialize() {
-    if (readOnly()) return;
-    for (const template of templates().filter(template => template.workspaceId === workspaceId())) {
+    for (const template of templates().filter(template => !readOnly(template.workspaceId))) {
       const mutations = materializeMutations(template);
-      if (mutations.length) { await save(mutations, 'Recurring occurrence created on device.'); return true; }
+      if (mutations.length) { await save(mutations, 'Recurring occurrence created on device.', false, template.workspaceId); return true; }
     }
     return false;
   }

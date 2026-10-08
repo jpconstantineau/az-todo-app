@@ -115,10 +115,10 @@ function validateRecurrenceMutation(mutation, record, old, proposed, records) {
   if (record.type === 'recurrenceTemplate') {
     if (record.deleted) fail('Recurring templates are stopped, not deleted.');
     if (!old) return;
-    if (old.tombstoned && !record.tombstoned) fail('A stopped recurring template cannot be restored.');
     const opening = !old.openOccurrenceId && record.openOccurrenceId;
     const resolving = old.openOccurrenceId && !record.openOccurrenceId;
     const cursor = ['nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc'];
+    if (old.tombstoned && !(resolving && Object.keys(mutation.fields).every(name => cursor.includes(name)))) fail('A stopped recurring template is read-only history.');
     if (!cursor.some(name => !same(record[name] ?? null, old[name] ?? null))) return;
     if (!old.openOccurrenceId && !record.openOccurrenceId && !same(record.rule, old.rule) && record.nextOccurrenceNumber === old.nextOccurrenceNumber && record.lastResolvedUtc === old.lastResolvedUtc && record.nextIntendedDate === (record.lastResolvedUtc ? nextAfterResolution(record.rule, record.lastResolvedUtc) : record.rule.anchorDate)) return;
     if (opening) {
@@ -148,7 +148,10 @@ function validateRecurrenceMutation(mutation, record, old, proposed, records) {
   }
   for (const name of ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion']) if (!same(record[name], old[name])) fail('Recurring occurrence identity and intended date are immutable.');
   if (record.workspaceId !== old.workspaceId && template.workspaceId !== record.workspaceId) fail('Move the recurring template and its history together.');
-  if (old.occurrenceState !== 'open') fail('Completed and skipped occurrences are read-only history.');
+  if (old.occurrenceState !== 'open') {
+    if (Object.keys(mutation.fields).every(name => ['workspaceId', 'collectionRefs', 'listId', 'projectId'].includes(name)) && template.workspaceId === record.workspaceId) return;
+    fail('Completed and skipped occurrences are read-only history.');
+  }
   if (record.occurrenceState === 'open') {
     if (record.occurrenceResolvedUtc !== null || ['completed', 'dropped'].includes(record.status)) fail('Complete or skip recurring work through its terminal action.');
     return;

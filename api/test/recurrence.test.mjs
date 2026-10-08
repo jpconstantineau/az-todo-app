@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { documents, faults, startServer } from './harness.mjs';
 import { materializeMutations, resolveOccurrenceMutations, zonedDate } from '../../html/recurrence-model.js';
+import { accountExport } from '../../html/inbox-export.js';
 
 async function fixture(t) {
   documents.length = 0; Object.assign(faults, { nextWrite: false, batchIndex: -1, loseBatchResponse: false });
@@ -11,7 +12,12 @@ async function fixture(t) {
       'x-ms-client-principal': Buffer.from(JSON.stringify({ userId: 'alice', userRoles: ['authenticated'] })).toString('base64') }, body: JSON.stringify(operation) });
     return { status: response.status, body: await response.json() };
   };
-  return { post };
+  const get = async path => {
+    const response = await fetch(server.url + '/api/v1/' + path, { headers: { origin: server.url,
+      'x-ms-client-principal': Buffer.from(JSON.stringify({ userId: 'alice', userRoles: ['authenticated'] })).toString('base64') } });
+    assert.equal(response.status, 200); return response.json();
+  };
+  return { post, get };
 }
 
 const templateFields = anchorDate => ({ title: 'Water plants', description: 'Kitchen first', workspaceId: 'personal', collectionRefs: [], listId: null, projectId: null, status: 'inbox', contexts: ['Home'], areas: [], energy: 'Low', timeRequired: '5m', priority: null, referenceLinks: [],
@@ -27,6 +33,14 @@ test('recurrence transitions are repeat-safe, cross-device deterministic and ter
   assert.deepEqual([a.status, b.status], [200, 200]);
   assert.equal(a.body.records.find(record => record.type === 'item').id, b.body.records.find(record => record.type === 'item').id);
   assert.deepEqual(await f.post(operation('materialize-a', first)), a, 'same operation ID returns the same receipt');
+  const unrelatedConflict = await f.post(operation('not-materialization', [
+    { type: 'recurrenceTemplate', id: 'plants', action: 'update', expectedVersion: template.version, fields: { title: template.title } },
+    first[1]
+  ]));
+  assert.equal(unrelatedConflict.status, 409, 'only the exact linked materialization shape may be treated as already satisfied');
+  const exported = await accountExport('alice', f.get);
+  assert.equal(Object.values(exported.state.records).filter(record => record.type === 'item' && record.recurrenceTemplateId === 'plants').length, 1,
+    'the equivalent cross-device receipt must remain replayable in account export history');
   const currentTemplate = [a, b].flatMap(result => result.body.records).filter(record => record.type === 'recurrenceTemplate').sort((x, y) => y.version - x.version)[0];
   const item = [a, b].flatMap(result => result.body.records).find(record => record.type === 'item');
   const cursorOnly = await f.post(operation('cursor-forgery', [{ type: 'recurrenceTemplate', id: 'plants', action: 'update', expectedVersion: currentTemplate.version, fields: { openOccurrenceId: null } }]));
@@ -38,6 +52,15 @@ test('recurrence transitions are repeat-safe, cross-device deterministic and ter
   assert.equal(terminal.occurrenceState, 'completed'); assert.equal(terminal.status, 'completed');
   const rewrite = await f.post(operation('rewrite-history', [{ type: 'item', id: terminal.id, action: 'update', expectedVersion: terminal.version, fields: { title: 'Changed history' } }]));
   assert.equal(rewrite.status, 400);
+  const workspace = await f.post(operation('create-workspace', [{ type: 'workspace', id: 'work', action: 'create', expectedVersion: 0, fields: { title: 'Work' } }]));
+  assert.equal(workspace.status, 200, JSON.stringify(workspace.body));
+  const resolvedTemplate = completed.body.records.find(record => record.type === 'recurrenceTemplate');
+  const moved = await f.post(operation('move-history', [
+    { type: 'recurrenceTemplate', id: resolvedTemplate.id, action: 'update', expectedVersion: resolvedTemplate.version, fields: { workspaceId: 'work' } },
+    { type: 'item', id: terminal.id, action: 'update', expectedVersion: terminal.version, fields: { workspaceId: 'work' } }
+  ]));
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.ok(moved.body.records.every(record => record.workspaceId === 'work'), 'template and terminal history move together without rewriting the snapshot');
 });
 
 test('recurrence trust boundary rejects orphan, forged and unpaired occurrence transitions', async t => {
@@ -74,4 +97,13 @@ test('skip maps to dropped history and competing terminal transitions accept onl
   assert.deepEqual([complete.status, skipCompeting.status].sort(), [200, 409]);
   const winner = [complete, skipCompeting].find(result => result.status === 200).body.records.find(record => record.type === 'item');
   assert.equal(winner.status, winner.occurrenceState === 'completed' ? 'completed' : 'dropped');
+
+  const stopped = await open('stopped-series');
+  const stop = await f.post(operation('stop-series', [{ type: 'recurrenceTemplate', id: stopped.template.id, action: 'update', expectedVersion: stopped.template.version, fields: { paused: true, tombstoned: true } }]));
+  assert.equal(stop.status, 200, JSON.stringify(stop.body));
+  const stoppedTemplate = stop.body.records[0];
+  assert.equal((await f.post(operation('rewrite-stopped', [{ type: 'recurrenceTemplate', id: stoppedTemplate.id, action: 'update', expectedVersion: stoppedTemplate.version, fields: { title: 'Rewritten stop' } }]))).status, 400);
+  const resolvedStopped = await f.post(operation('resolve-stopped', resolveOccurrenceMutations(stopped.item, stoppedTemplate, 'completed', resolved)));
+  assert.equal(resolvedStopped.status, 200, JSON.stringify(resolvedStopped.body));
+  assert.equal(resolvedStopped.body.records.find(record => record.type === 'recurrenceTemplate').nextIntendedDate, stoppedTemplate.nextIntendedDate);
 });

@@ -5,16 +5,19 @@ const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const fail = message => { throw new ValidationError(message); };
 const cursor = ['nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc'];
 const immutableOccurrence = ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion'];
+const organization = ['workspaceId', 'collectionRefs', 'listId', 'projectId'];
 
 export async function validateRecurrence(record, old, mutation, records, lookup, now) {
   if (record.type === 'recurrenceTemplate') {
     if (record.deleted) fail('Recurring templates are stopped, not deleted.');
     if (!old) return;
-    if (old.tombstoned && !record.tombstoned) fail('A stopped recurring template cannot be restored.');
     const changed = name => !equal(record[name] ?? null, old[name] ?? null);
-    if (!cursor.some(changed)) return;
     const opening = !old.openOccurrenceId && record.openOccurrenceId;
     const resolving = old.openOccurrenceId && !record.openOccurrenceId;
+    if (old.tombstoned && !(resolving && Object.keys(mutation.fields).every(name => cursor.includes(name)))) {
+      fail('A stopped recurring template is read-only history.');
+    }
+    if (!cursor.some(changed)) return;
     const rescheduled = !old.openOccurrenceId && !record.openOccurrenceId && !equal(record.rule, old.rule) && record.nextOccurrenceNumber === old.nextOccurrenceNumber && record.lastResolvedUtc === old.lastResolvedUtc &&
       record.nextIntendedDate === (record.lastResolvedUtc ? nextAfterResolution(record.rule, record.lastResolvedUtc) : record.rule.anchorDate);
     if (rescheduled) return;
@@ -57,8 +60,8 @@ export async function validateRecurrence(record, old, mutation, records, lookup,
   for (const name of immutableOccurrence) if (!equal(record[name], old[name])) fail('Recurring occurrence identity and intended date are immutable.');
   if (record.workspaceId !== old.workspaceId && template.workspaceId !== record.workspaceId) fail('Move the recurring template and its history together.');
   if (old.occurrenceState !== 'open') {
-    if (!equal(record, old)) fail('Completed and skipped occurrences are read-only history.');
-    return;
+    if (Object.keys(mutation.fields).every(name => organization.includes(name)) && template.workspaceId === record.workspaceId) return;
+    fail('Completed and skipped occurrences are read-only history.');
   }
   const terminal = record.occurrenceState !== 'open';
   if (!terminal) {
@@ -75,7 +78,10 @@ export function recurrenceAlreadySatisfied(input, current, sequence) {
   if (input.mutations.length !== 2) return null;
   const templateMutation = input.mutations.find(mutation => mutation.type === 'recurrenceTemplate');
   const itemMutation = input.mutations.find(mutation => mutation.type === 'item' && mutation.action === 'create');
-  if (!templateMutation || !itemMutation) return null;
+  if (!templateMutation || templateMutation.action !== 'update' || !itemMutation ||
+      itemMutation.fields.recurrenceTemplateId !== templateMutation.id || templateMutation.fields.openOccurrenceId !== itemMutation.id ||
+      templateMutation.fields.nextOccurrenceNumber !== itemMutation.fields.recurrenceNumber + 1 || templateMutation.fields.nextIntendedDate !== itemMutation.fields.intendedDate ||
+      itemMutation.fields.sourceTemplateVersion !== templateMutation.expectedVersion || itemMutation.fields.occurrenceState !== 'open' || itemMutation.fields.occurrenceResolvedUtc !== null) return null;
   const template = current[input.mutations.indexOf(templateMutation)]?.record;
   const item = current[input.mutations.indexOf(itemMutation)]?.record;
   if (!template || !item || template.version !== templateMutation.expectedVersion + 1 || item.version !== 1) return null;

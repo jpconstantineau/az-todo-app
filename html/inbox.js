@@ -2,18 +2,18 @@ import { collectionKinds, collectionKind, isCollection, memberships, belongsTo, 
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=4';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=4';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=11';
+import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=12';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=13';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=14';
 import { clarificationUI } from './clarification.js?v=7';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=9';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=10';
 import { setupBriefs } from './briefs.js?v=4';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=4';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
-import { setupRecurrence } from './recurrence-ui.js?v=1';
+import { setupRecurrence } from './recurrence-ui.js?v=2';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
@@ -149,16 +149,16 @@ function ensurePlanMutationsAvailable(local, mutations) {
     throw new Error('Resolve this plan conflict before changing the same day. Other dates remain available.');
   }
 }
-function workspaceReadOnly() {
-  const space = projected(state)['workspace:' + selectedWorkspace];
-  return selectedWorkspace !== PERSONAL && (!space || space.deleted || space.archived);
+function workspaceReadOnly(workspaceId = selectedWorkspace) {
+  const space = projected(state)['workspace:' + workspaceId];
+  return workspaceId !== PERSONAL && (!space || space.deleted || space.archived);
 }
 const dialogOpeners = new Map();
 const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
   readOnly: workspaceReadOnly, showDialog, restoreFocus, journal, label: collectionLabel, save: saveRecurrence });
-async function saveRecurrence(mutations, message, clearRecurrenceDraft = false) {
+async function saveRecurrence(mutations, message, clearRecurrenceDraft = false, targetWorkspaceId = selectedWorkspace) {
   const owner = accountId, generation = accountGeneration;
-  if (!owner || workspaceReadOnly()) throw new Error('Choose an active workspace before changing recurring work.');
+  if (!owner || workspaceReadOnly(targetWorkspaceId)) throw new Error('Choose an active workspace before changing recurring work.');
   const saved = await transact(owner, local => {
     if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before changing recurring work.');
     const records = projected(local);
@@ -174,7 +174,7 @@ async function saveRecurrence(mutations, message, clearRecurrenceDraft = false) 
   setTimeout(() => void materializeRecurrence(), 0);
 }
 async function materializeRecurrence() {
-  if (materializingRecurrence || !accountId || document.hidden || workspaceReadOnly()) return;
+  if (materializingRecurrence || !accountId || document.hidden) return;
   materializingRecurrence = true;
   try { while (await recurrence.materialize()) { /* One bounded operation at a time; each template creates at most one open item. */ } }
   catch (failure) { if (accountId) error(`Recurring work was not created: ${failure.message}`); }
@@ -675,7 +675,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
@@ -766,7 +766,7 @@ function render() {
 }
 function deleteButton(record) {
   return button('Delete', async () => {
-    const linked = record.type === 'list' ? Object.values(scopedRecords()).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record)) : [];
+    const linked = record.type === 'list' ? Object.values(scopedRecords()).filter(item => item.type === 'item' && !item.recurrenceTemplateId && !item.deleted && belongsTo(item, record)) : [];
     const pending = linked.filter(item => item.status !== 'completed').length;
     if (pending && !confirm(`Delete “${record.title}”? This list has ${pending} uncompleted item${pending === 1 ? '' : 's'}. Its ${linked.length} linked item${linked.length === 1 ? '' : 's'} will also be marked deleted. Cancel to review the pending items.`)) return;
     await changeDeletion(record, 'delete', linked.map(item => `${key(item)}:${item.version}`).sort());
@@ -802,7 +802,7 @@ async function changeDeletion(record, action, linkedSnapshot = []) {
     const records = projected(local), current = records[key(record)];
     if (!current || current.version !== record.version || !!current.deleted !== (action === 'restore')) throw new Error('This record changed. Review its latest state before trying again.');
     if (action === 'delete' && record.type === 'list') {
-      const linked = Object.values(records).filter(item => item.type === 'item' && !item.deleted && belongsTo(item, record));
+      const linked = Object.values(records).filter(item => item.type === 'item' && !item.recurrenceTemplateId && !item.deleted && belongsTo(item, record));
       if (JSON.stringify(linked.map(item => `${key(item)}:${item.version}`).sort()) !== JSON.stringify(linkedSnapshot)) throw new Error('This list’s items changed. Review them before deleting the list.');
       const deletions = linked.map(item => ({ type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }));
       while (deletions.length > 19) enqueue(local, owner, deletions.splice(0, 20));

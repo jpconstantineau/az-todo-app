@@ -241,7 +241,8 @@ export async function accountExport(accountId, request, { signal, onProgress = (
       for (const record of entry.records) {
         if (!object(record) || record.accountId !== accountId) invalid();
         const key = `${record.type}:${record.id}`;
-        if (state.records[key] && record.version <= state.records[key].version) invalid();
+        if (state.records[key] && (record.version < state.records[key].version ||
+            record.version === state.records[key].version && JSON.stringify(record) !== JSON.stringify(state.records[key]))) invalid();
         state.records[key] = record;
       }
       state.after = entry.sequence;

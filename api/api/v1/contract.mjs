@@ -107,7 +107,9 @@ export function fieldsFor(type, action, input) {
         if (!(name in result)) throw new ValidationError(`${name} is required.`);
       }
       if (!['inbox', 'next'].includes(result.status)) throw new ValidationError('Generated state must be Inbox or Next.');
-      if (result.nextOccurrenceNumber !== 1 || result.nextIntendedDate !== result.rule.anchorDate || result.openOccurrenceId) throw new ValidationError('A new recurrence template must begin at occurrence 1 with no open occurrence.');
+      if (result.nextOccurrenceNumber !== 1 || result.nextIntendedDate !== result.rule.anchorDate || result.openOccurrenceId || result.lastResolvedUtc || result.paused || result.tombstoned) {
+        throw new ValidationError('A new recurrence template must begin active at occurrence 1 with no open or resolved occurrence.');
+      }
       return { description: '', listId: null, projectId: null, contexts: [], areas: [], energy: null, timeRequired: null, priority: null, referenceLinks: [], paused: false, tombstoned: false, openOccurrenceId: null, lastResolvedUtc: null, ...result };
     }
     if (!Object.keys(result).length) throw new ValidationError('fields must contain an edit.');

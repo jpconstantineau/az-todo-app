@@ -1,5 +1,5 @@
 import { belongsTo, memberships, refKey } from './collection-model.js?v=4';
-import { key, projected } from './inbox-store.js?v=11';
+import { key, projected } from './inbox-store.js?v=12';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=4';
 
 const $ = id => document.getElementById(id);

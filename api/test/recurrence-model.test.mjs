@@ -45,6 +45,9 @@ test('contract validates template rules and exact derived occurrence identities'
   const template = { title: 'Pay rent', description: '', workspaceId: 'personal', collectionRefs: [], listId: null, projectId: null, status: 'inbox', contexts: [], areas: [], energy: null, timeRequired: null, priority: null, referenceLinks: [], rule: fixed('month'), paused: false, tombstoned: false, nextOccurrenceNumber: 1, nextIntendedDate: '2024-01-31', openOccurrenceId: null, lastResolvedUtc: null };
   assert.equal(validateOperation({ apiVersion: 1, accountId: 'alice', operationId: 'template-create', mutations: [{ type: 'recurrenceTemplate', id: 'rent', action: 'create', expectedVersion: 0, fields: template }] }).mutations[0].fields.rule.timeZone, 'America/Regina');
   assert.throws(() => validateOperation({ apiVersion: 1, accountId: 'alice', operationId: 'bad-zone', mutations: [{ type: 'recurrenceTemplate', id: 'rent', action: 'create', expectedVersion: 0, fields: { ...template, rule: { ...template.rule, timeZone: 'Mars/Olympus' } } }] }), /timezone/);
+  for (const fields of [{ lastResolvedUtc: '2026-10-07T18:00:00.000Z' }, { paused: true }, { tombstoned: true }]) {
+    assert.throws(() => validateOperation({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [{ type: 'recurrenceTemplate', id: 'rent', action: 'create', expectedVersion: 0, fields: { ...template, ...fields } }] }), /begin active/);
+  }
   const occurrence = { ...client.recurrenceSnapshot(template), recurrenceTemplateId: 'rent', recurrenceNumber: 1, intendedDate: '2024-01-31', sourceTemplateVersion: 1, occurrenceState: 'open', occurrenceResolvedUtc: null };
   assert.throws(() => validateOperation({ apiVersion: 1, accountId: 'alice', operationId: 'forged', mutations: [{ type: 'item', id: 'forged', action: 'create', expectedVersion: 0, fields: occurrence }] }), /identity/);
 });

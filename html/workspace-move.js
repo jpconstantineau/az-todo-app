@@ -19,8 +19,8 @@ function movingRecords(record, records) {
     }
   } while (moving.size !== previousSize);
   const selected = Object.values(records).filter(candidate => !candidate.deleted &&
-    (moving.has(refKey(candidate)) || linkedRecord(candidate) && memberships(candidate).some(ref => moving.has(refKey(ref)))));
-  const recurrenceIds = new Set(selected.flatMap(candidate => candidate.type === 'recurrenceTemplate' ? [candidate.id] : candidate.recurrenceTemplateId ? [candidate.recurrenceTemplateId] : []));
+    (moving.has(refKey(candidate)) || (candidate.type === 'item' && !candidate.recurrenceTemplateId || candidate.type === 'recurrenceTemplate' && !candidate.tombstoned) && memberships(candidate).some(ref => moving.has(refKey(ref)))));
+  const recurrenceIds = new Set(selected.filter(candidate => candidate.type === 'recurrenceTemplate').map(candidate => candidate.id));
   return Object.values(records).filter(candidate => !candidate.deleted && (selected.includes(candidate) || candidate.type === 'recurrenceTemplate' && recurrenceIds.has(candidate.id) || candidate.type === 'item' && recurrenceIds.has(candidate.recurrenceTemplateId)))
     .sort((left, right) => (left.type === 'recurrenceTemplate' ? -1 : right.type === 'recurrenceTemplate' ? 1 : refKey(left).localeCompare(refKey(right))));
 }

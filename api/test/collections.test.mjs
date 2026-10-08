@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { documents, startServer } from './harness.mjs';
-import { memberships, normalizeMembership, inCollection } from '../../html/collection-model.js';
+import { collectionContents, memberships, normalizeMembership, inCollection } from '../../html/collection-model.js';
 import { projected, enqueue, rememberEdit, undoEdit } from '../../html/inbox-store.js';
 import { deviceExport, validateDeviceExport } from '../../html/inbox-export.js';
 import { currentCreate } from './current-record.mjs';
@@ -28,6 +28,10 @@ test('collections: server and offline membership normalization share the same co
   assert.throws(() => normalizeMembership({}, old, { collectionRefs: [], projectId: 'kitchen' }), /Primary/);
   const records = { 'list:home': { type: 'list', id: 'home' }, 'project:kitchen': { parentRef: ref('list', 'home') } };
   assert.ok(inCollection({ type: 'item', collectionRefs: [ref('project', 'kitchen'), ref('list', 'home')] }, ref('list', 'home'), records, true));
+  const destination = records['list:home'], membership = { collectionRefs: [ref('list', 'home')] };
+  assert.equal(collectionContents({ type: 'recurrenceTemplate', tombstoned: false, ...membership }, destination), true);
+  assert.equal(collectionContents({ type: 'recurrenceTemplate', tombstoned: true, ...membership }, destination), false);
+  assert.equal(collectionContents({ type: 'item', recurrenceTemplateId: 'series', ...membership }, destination), false);
 });
 test('collections: multi-membership, primary edits, workspace boundaries, cycles and atomic unlink/delete', async t => {
   const post = await setup(t);
