@@ -39,6 +39,7 @@ export function validateProjectPlanDraft(draft) {
     if (candidate.itemId !== undefined && (typeof candidate.itemId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(candidate.itemId))) throw new Error('A candidate item mapping is invalid.');
   }
   const selected = draft.candidates.filter(candidate => candidate.kind !== 'brainstorm');
+  if (!selected.length) throw new Error('Select at least one Action or Bounded learning step before accepting.');
   if (selected.length > 18) throw new Error('Select at most 18 actions or bounded learning steps per acceptance.');
   if (!draft.candidates.length && !Object.values(draft.sections).some(value => value.trim())) throw new Error('Add planning context or a candidate idea before accepting.');
   return draft;
@@ -90,11 +91,11 @@ export function validateProjectPlanOperation(mutations, records, proposed) {
     if (!item || item.deleted || item.workspaceId !== project.workspaceId || item.status !== 'next' || !projectMember(item, project)) throw new Error('Every accepted candidate must map to a live project-member Next item.');
     const mutation = mutations.find(entry => entry.type === 'item' && entry.id === mapping.itemId);
     const candidate = revision.candidates.find(entry => entry.id === mapping.candidateId);
-    const itemFields = ['title', 'description', 'originalText', 'sourceUrl', 'sourceTitle', 'selectedText', 'workspaceId', 'collectionRefs',
-      'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts',
-      'areas', 'energy', 'timeRequired', 'priority', 'effortEstimate', 'referenceLinks'];
-    if (mutation && (mutation.action !== 'create' || Object.keys(mutation.fields).some(field => !itemFields.includes(field)) ||
-        item.title !== candidate.title || item.originalText !== candidate.title || item.description !== '' || item.listId !== null)) {
+    const itemFields = ['title', 'description', 'originalText', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status'];
+    if (mutation && (mutation.action !== 'create' || Object.keys(mutation.fields).length !== itemFields.length ||
+        Object.keys(mutation.fields).some(field => !itemFields.includes(field)) || item.title !== candidate.title ||
+        item.originalText !== candidate.title || item.description !== '' || item.listId !== null ||
+        item.collectionRefs.length !== 1 || item.collectionRefs[0].type !== 'project' || item.collectionRefs[0].id !== project.id)) {
       throw new Error('New accepted actions must exactly match their selected candidate without fabricated scheduling or targets.');
     }
   }

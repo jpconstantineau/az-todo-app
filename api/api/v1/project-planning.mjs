@@ -42,6 +42,7 @@ export function projectPlanRevisionFields(action, input) {
   if (!candidates.length && !Object.values(sections).some(value => value.trim())) fail('Add planning context or a candidate idea before accepting.');
   if (!Array.isArray(input.mappings)) fail('Plan mappings must be an array.');
   const selected = candidates.filter(candidate => candidate.kind !== 'brainstorm');
+  if (!selected.length) fail('Select at least one Action or Bounded learning step before accepting.');
   if (selected.length > 18) fail('Accept at most 18 actions or bounded learning steps at once.');
   const mappedCandidates = new Set(), mappedItems = new Set();
   const mappings = input.mappings.map((mapping, index) => {
@@ -86,7 +87,11 @@ export async function validateProjectPlanning(records, oldRecords, mutations, lo
       'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts',
       'areas', 'energy', 'timeRequired', 'priority', 'effortEstimate', 'referenceLinks'];
     if (mutation && (mutation.action !== 'create' || Object.keys(mutation.fields).some(field => !itemFields.includes(field)) ||
-        item.title !== candidate.title || item.originalText !== candidate.title || item.description !== '' || item.listId !== null)) {
+        item.title !== candidate.title || item.originalText !== candidate.title || item.description !== '' || item.sourceUrl !== null ||
+        item.sourceTitle !== '' || item.selectedText !== '' || item.listId !== null || item.plannedDay !== null || item.plannedWeek !== null ||
+        item.dueDateUtc !== null || item.startDateUtc !== null || item.reviewDateUtc !== null || item.waitingOn !== '' || item.energy !== null ||
+        item.timeRequired !== null || item.priority !== null || item.effortEstimate !== null || item.contexts.length || item.areas.length ||
+        item.referenceLinks.length || item.collectionRefs.length !== 1 || item.collectionRefs[0].type !== 'project' || item.collectionRefs[0].id !== head.record.id)) {
       fail('New accepted actions must exactly match their selected candidate without fabricated scheduling or targets.');
     }
   }

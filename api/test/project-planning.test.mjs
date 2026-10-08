@@ -47,6 +47,9 @@ test('project planning model creates only selected canonical Next items without 
   const tooMany = draft(source);
   tooMany.candidates = Array.from({ length: 19 }, (_, index) => ({ id: `action-${index}`, title: `Action ${index}`, kind: 'action' }));
   assert.throws(() => projectPlanMutations(source, tooMany, { 'project:launch': source }), /at most 18/i);
+  const uncommitted = draft(source);
+  uncommitted.candidates = uncommitted.candidates.map(candidate => ({ ...candidate, kind: 'brainstorm' }));
+  assert.throws(() => projectPlanMutations(source, uncommitted, { 'project:launch': source }), /at least one Action or Bounded learning step/i);
 });
 
 test('project planning API atomically preserves immutable revisions, retries and conflicts', async t => {
@@ -59,6 +62,20 @@ test('project planning API atomically preserves immutable revisions, retries and
   const scheduled = structuredClone(first);
   scheduled[2].fields.dueDate = '2026-10-12';
   assert.equal((await post(scheduled)).status, 400, 'plan acceptance cannot fabricate scheduling on canonical actions');
+  const noNextStep = structuredClone(first);
+  noNextStep[1].fields.candidates = noNextStep[1].fields.candidates.map(candidate => ({ ...candidate, kind: 'brainstorm' }));
+  noNextStep[1].fields.mappings = [];
+  noNextStep.splice(2);
+  assert.equal((await post(noNextStep)).status, 400, 'accepted revisions require an explicit next action or bounded learning step');
+  for (const [field, value] of [['plannedDay', '2026-10-12'], ['dueDateUtc', '2026-10-12T18:00:00.000Z'], ['timeRequired', '30m'], ['effortEstimate', { scale: 'tshirt', value: 'M' }]]) {
+    const fabricated = structuredClone(first);
+    fabricated[2].fields[field] = value;
+    assert.equal((await post(fabricated)).status, 400, `plan acceptance cannot fabricate ${field}`);
+  }
+  assert.equal((await post([create('list', 'unrelated', { title: 'Unrelated', workspaceId: 'personal' })])).status, 200);
+  const extraMembership = structuredClone(first);
+  extraMembership[2].fields.collectionRefs.push({ type: 'list', id: 'unrelated' });
+  assert.equal((await post(extraMembership)).status, 400, 'new accepted actions have exact project membership');
   const combinedEdit = structuredClone(first);
   combinedEdit[0].fields.title = 'Hidden concurrent title change';
   assert.equal((await post(combinedEdit)).status, 400, 'the paired project mutation advances only the planning head');

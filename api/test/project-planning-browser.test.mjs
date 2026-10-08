@@ -33,6 +33,15 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   const opener = page.getByRole('button', { name: /^Plan project / });
   await clickControl(opener);
   assert.ok(await page.locator('#projectPlanner').isVisible());
+  await page.locator('#closeProjectPlanning').click();
+  assert.equal((await local(page)).draft.projectPlanning ?? null, null, 'opening and closing an untouched planner creates no draft');
+  await clickControl(opener);
+  await page.locator('[name=purposePrinciples]').fill('Discard this draft');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.sections.purposePrinciples === 'Discard this draft');
+  page.once('dialog', dialog => { void dialog.accept(); });
+  await page.locator('#discardProjectPlanning').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning == null);
+  await clickControl(opener);
   await page.locator('[name=purposePrinciples]').fill('Help customers finish a first run');
   await page.locator('[name=desiredEvidence]').fill('A customer completes setup');
   await page.locator('[name=organizationApproach]').fill('Learn, then publish');
@@ -104,7 +113,7 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), 'Exact conflicted purpose');
   await page.locator('#closeProjectPlanning').click();
   browserUser = 'bob'; await clickControl(page.locator('#sync'));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'bob');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'bob' && !document.querySelector('#workspace').hidden);
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), '', 'another account cannot expose the planning draft');
   browserUser = 'alice'; await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'alice' && !document.querySelector('#workspace').hidden);

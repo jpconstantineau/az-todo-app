@@ -2,7 +2,7 @@ import { draftFromAccepted, projectPlanMutations, validateProjectPlanDraft } fro
 
 export function setupProjectPlanning({ records, journal, showDialog, save }) {
   const $ = id => document.getElementById(id), dialog = $('projectPlanner'), form = $('projectPlanningForm');
-  let active = null, busy = false;
+  let active = null, busy = false, dirty = false;
   const read = () => active ? { ...structuredClone(active), sections: {
     purposePrinciples: form.elements.purposePrinciples.value,
     desiredEvidence: form.elements.desiredEvidence.value,
@@ -23,7 +23,7 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
     select.append(new Option('Brainstorming only', 'brainstorm'), new Option('Action', 'action'), new Option('Bounded learning step', 'learning'));
     select.value = candidate.kind; kind.append(select);
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove idea'; remove.setAttribute('aria-label', `Remove candidate idea: ${candidate.title || 'Untitled'}`);
-    remove.onclick = () => { row.remove(); active = read(); status('Draft changed — saving on device…'); void journal(); };
+    remove.onclick = () => { row.remove(); active = read(); dirty = true; status('Draft changed — saving on device…'); void journal(); };
     row.append(title, kind, remove); return row;
   }
   function draw() {
@@ -36,11 +36,11 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
     status(accepted && !accepted.localState ? `Editing from accepted revision ${accepted.id}. Ideas remain uncommitted until Accept plan.` : 'Draft saved only on this device until you accept it.');
     $('acceptProjectPlan').disabled = busy || !project || project.deleted || !!project.localState;
   }
-  form.addEventListener('input', () => { if (active && !busy) { active = read(); status('Draft changed — saving on device…'); void journal(); } });
+  form.addEventListener('input', () => { if (active && !busy) { active = read(); dirty = true; status('Draft changed — saving on device…'); void journal(); } });
   $('addProjectPlanCandidate').onclick = () => {
     if (!active || $('projectPlanCandidates').children.length >= 50) { status('A project plan supports at most 50 candidate ideas.'); return; }
     const row = candidateRow({ id: crypto.randomUUID(), title: '', kind: 'brainstorm' });
-    $('projectPlanCandidates').append(row); active = read(); row.querySelector('input').focus(); void journal();
+    $('projectPlanCandidates').append(row); active = read(); dirty = true; row.querySelector('input').focus(); void journal();
   };
   form.onsubmit = event => {
     event.preventDefault();
@@ -48,30 +48,44 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
     void (async () => {
       try {
         const draft = validateProjectPlanDraft(read());
-        active = structuredClone(draft); busy = true; draw();
+        active = structuredClone(draft); dirty = true; busy = true; draw();
         if (!await journal()) throw new Error('The latest planning draft was not saved on this device. Copy or export it before leaving.');
         const project = records()[`project:${draft.projectId}`];
         const mutations = projectPlanMutations(project, draft, records());
         await save(mutations, draft);
-        active = null; dialog.close();
+        active = null; dirty = false; dialog.close();
       } catch (failure) { status(failure.message); }
       finally { busy = false; if (active) draw(); }
     })();
   };
-  $('closeProjectPlanning').onclick = () => { dialog.close(); void journal(); };
+  $('closeProjectPlanning').onclick = () => {
+    dialog.close();
+    if (dirty) void journal();
+    else active = null;
+  };
+  $('discardProjectPlanning').onclick = () => {
+    if (!active || !confirm('Discard this project planning draft from this device? Accepted revisions and canonical actions are unchanged.')) return;
+    active = null; dirty = false; dialog.close(); void journal();
+  };
   return {
     open(project, draft = null) {
       if (project.deleted) throw new Error('Restore this project before planning it.');
-      active = structuredClone(draft || (active?.projectId === project.id ? read() : draftFromAccepted(project, records())));
-      draw(); showDialog(dialog); form.elements.purposePrinciples.focus(); void journal();
+      const discardedOther = active?.projectId !== project.id && dirty;
+      if (discardedOther && !confirm('Discard the saved planning draft for the other project and open this one? Accepted revisions and canonical actions are unchanged.')) return;
+      const resume = active?.projectId === project.id;
+      active = structuredClone(draft || (resume ? read() : draftFromAccepted(project, records())));
+      dirty = draft ? true : resume && dirty;
+      draw(); showDialog(dialog); form.elements.purposePrinciples.focus();
+      if (discardedOther) void journal();
     },
-    snapshot() { return active ? { ...read(), open: dialog.open } : null; },
+    snapshot() { return active && dirty ? { ...read(), open: dialog.open } : null; },
     restore(saved) {
       active = saved ? structuredClone(saved) : null;
+      dirty = !!active;
       if (active) { draw(); if (saved.open) { showDialog(dialog); form.elements.purposePrinciples.focus(); } }
       else if (dialog.open) dialog.close();
     },
-    reset() { active = null; form.reset(); $('projectPlanCandidates').replaceChildren(); status(''); if (dialog.open) dialog.close(); },
+    reset() { active = null; dirty = false; form.reset(); $('projectPlanCandidates').replaceChildren(); status(''); if (dialog.open) dialog.close(); },
     render() { if (active) draw(); },
     close() { if (dialog.open) dialog.close(); }
   };
