@@ -4,12 +4,12 @@ import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './works
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
 import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=14';
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=16';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=17';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=10';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
-import { setupBriefs } from './briefs.js?v=4';
+import { setupBriefs } from './briefs.js?v=5';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
 import { setupAgentStatus } from './local-agent.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=5';
