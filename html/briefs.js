@@ -5,14 +5,45 @@ export const briefSections = [
   ['acceptanceChecks', 'Acceptance checks'], ['missingInformation', 'Missing information (or explicitly None known)']
 ];
 
+function acceptedV1(clarification, name) {
+  if (clarification?.flowVersion != null && clarification.flowVersion !== 1) return '';
+  return clarification?.answers?.[name]?.decision === 'accepted' ? clarification.answers[name].value : '';
+}
+
+function acceptedV2Context(subject, clarification, records) {
+  if (clarification?.flowVersion !== 2 || clarification.step !== 'complete') return { context: [], missing: [] };
+  const answer = clarification.answers?.project, notes = clarification.answers?.organize?.notes || '';
+  const missing = notes ? [`Accepted clarification notes: ${notes}`] : [];
+  if (!answer || answer.choice === 'none') return { context: [], missing };
+
+  const projectId = subject.projectId || (answer.choice === 'existing' ? answer.projectId : '');
+  const project = projectId ? records[`project:${projectId}`] : null;
+  if (project && !project.deleted) {
+    const context = [`Linked project: ${project.title} (project:${project.id} at version ${project.version})`];
+    if (project.outcome) context.push(`Linked project desired outcome: ${project.outcome}`);
+    else missing.push("Confirm the linked project's desired outcome.");
+    return { context, missing };
+  }
+
+  const unavailable = project?.deleted ? `current project unavailable (project:${project.id} at version ${project.version} is deleted)` : projectId ? `current project unavailable (project:${projectId})` : 'current project unavailable';
+  const context = answer.choice === 'new' ? [
+    `Linked project from accepted clarification: ${answer.projectTitle}`,
+    `Linked project desired outcome from accepted clarification: ${answer.outcome}`,
+    `Project context source: clarification:${clarification.id || subject.id} at version ${clarification.version ?? 'unknown'}; ${unavailable}.`
+  ] : [`Linked project context: ${unavailable}.`];
+  missing.push('Confirm the current project relationship and outcome.');
+  return { context, missing };
+}
+
 export function templateBrief(subject, clarification, records = {}) {
-  const outcome = subject.outcome || clarification?.answers?.project?.outcome || '';
-  const notes = clarification?.answers?.organize?.notes || '';
+  const outcome = subject.outcome || acceptedV1(clarification, 'outcome');
+  const v2 = acceptedV2Context(subject, clarification, records);
   const missing = [!outcome && 'Desired outcome is not yet specified.', 'Confirm scope, exclusions and acceptance checks.',
-    subject.type === 'project' && 'Choose a concrete next action.', notes && `Clarification: ${notes}`].filter(Boolean);
+    subject.type === 'project' && 'Choose a concrete next action.', acceptedV1(clarification, 'missingFacts') && `Clarification: ${acceptedV1(clarification, 'missingFacts')}`,
+    ...v2.missing].filter(Boolean);
   return {
     outcome: outcome || 'Unknown — describe what done looks like.',
-    context: [subject.title, subject.description, subject.sourceTitle, subject.sourceUrl, ...(subject.referenceLinks || [])].filter(Boolean).join('\n'),
+    context: [subject.title, subject.description, subject.sourceTitle, subject.sourceUrl, ...(subject.referenceLinks || []), ...v2.context].filter(Boolean).join('\n'),
     scope: 'Unknown — specify what is included.', exclusions: 'Unknown — specify what is excluded, or explicitly None known.',
     nextAction: subject.type === 'item' ? subject.title : Object.values(records).filter(item => item.type === 'item' && !item.deleted && item.status === 'next' && belongsTo(item, subject)).map(item => item.title).join('\n') || 'Unknown — choose a concrete next action.',
     acceptanceChecks: 'Unknown — specify how the outcome will be checked.', missingInformation: missing.join('\n')

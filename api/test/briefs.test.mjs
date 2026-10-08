@@ -62,11 +62,52 @@ test('brief API: immutable revisions, explicit decisions, retries, conflicts, so
   assert.equal(record('r1').status, 'accepted', 'source deletion does not erase accepted history');
 });
 
-test('brief templates use accepted facts, retain unknowns and export exact revision status', () => {
-  const clarification = { flowVersion: 2, answers: { project: { choice: 'new', projectTitle: 'Insurance', outcome: 'Coverage in place' }, organize: { notes: 'Confirm the policy number' } }, proposal: { text: 'Unaccepted claim' } };
-  const generated = templateBrief(item, clarification);
-  assert.equal(generated.outcome, 'Coverage in place'); assert.match(generated.context, /https:\/\/example.com\/policy/);
-  assert.match(generated.missingInformation, /Confirm the policy number/); assert.ok(!JSON.stringify(generated).includes('Unaccepted claim'));
+test('brief templates use only accepted clarification facts and keep linked project context separate', () => {
+  const v1 = answers => ({ step: 4, answers, proposal: { text: 'Unaccepted claim' } });
+  const acceptedV1 = templateBrief(item, v1({ outcome: { decision: 'accepted', value: 'Coverage in place' }, missingFacts: { decision: 'accepted', value: 'Confirm the policy number' } }));
+  assert.equal(acceptedV1.outcome, 'Coverage in place'); assert.match(acceptedV1.missingInformation, /Clarification: Confirm the policy number/);
+  for (const clarification of [v1({ outcome: { decision: 'skipped', value: null } }), v1({}), { flowVersion: 1, answers: {}, proposal: { text: 'Proposed outcome' } }]) {
+    assert.match(templateBrief(item, clarification).outcome, /Unknown/);
+    assert.ok(!JSON.stringify(templateBrief(item, clarification)).includes('Proposed outcome'));
+  }
+
+  const project = { type: 'project', id: 'roof', version: 3, title: 'Repair roof', outcome: 'Roof no longer leaks' };
+  const complete = (choice, extra = {}) => ({ type: 'clarification', id: item.id, version: 7, flowVersion: 2, step: 'complete', answers: {
+    project: { choice, projectId: choice === 'existing' ? project.id : '', projectTitle: choice === 'new' ? 'Original roof project' : '', outcome: choice === 'new' ? 'Original roof outcome' : '' },
+    organize: { notes: 'Unknown: warranty coverage', ...extra }
+  }, proposal: { text: 'Unaccepted claim' } });
+  for (const choice of ['new', 'existing', 'keep']) {
+    const generated = templateBrief({ ...item, projectId: project.id }, complete(choice), { [`project:${project.id}`]: project });
+    assert.match(generated.outcome, /Unknown/, `${choice} project outcome is not the task outcome`);
+    assert.match(generated.context, /Linked project: Repair roof \(project:roof at version 3\)/);
+    assert.match(generated.context, /Linked project desired outcome: Roof no longer leaks/);
+    assert.match(generated.missingInformation, /Accepted clarification notes: Unknown: warranty coverage/);
+    assert.ok(!JSON.stringify(generated).includes('Unaccepted claim'));
+  }
+  const noProject = templateBrief({ ...item, projectId: null }, complete('none'));
+  assert.doesNotMatch(noProject.context, /Linked project/);
+  assert.doesNotMatch(noProject.missingInformation, /current project relationship/);
+
+  for (const step of ['summary', 'project']) {
+    const ignored = templateBrief({ ...item, projectId: project.id }, { ...complete('new'), step }, { [`project:${project.id}`]: project });
+    assert.doesNotMatch(ignored.context, /Linked project/); assert.doesNotMatch(ignored.missingInformation, /warranty coverage/);
+  }
+  assert.doesNotMatch(templateBrief(item, { flowVersion: 3, step: 'complete', answers: complete('new').answers }).context, /Original roof/);
+
+  const unavailableNew = templateBrief({ ...item, projectId: 'missing' }, complete('new'));
+  assert.match(unavailableNew.context, /Linked project from accepted clarification: Original roof project/);
+  assert.match(unavailableNew.context, /clarification:insurance at version 7; current project unavailable \(project:missing\)/);
+  assert.match(unavailableNew.missingInformation, /Confirm the current project relationship and outcome/);
+  const deleted = templateBrief({ ...item, projectId: project.id }, complete('existing'), { [`project:${project.id}`]: { ...project, version: 4, deleted: true } });
+  assert.match(deleted.context, /current project unavailable \(project:roof at version 4 is deleted\)/); assert.doesNotMatch(deleted.context, /Roof no longer leaks/);
+  const missingKeep = templateBrief({ ...item, projectId: null }, complete('keep'));
+  assert.match(missingKeep.context, /current project unavailable/); assert.doesNotMatch(missingKeep.context, /Original roof outcome/);
+
+  const changed = { ...project, id: 'replacement', version: 2, title: 'Replacement project', outcome: 'Replacement complete' };
+  const refreshed = templateBrief({ ...item, projectId: changed.id, version: 4 }, complete('existing'), { [`project:${changed.id}`]: changed });
+  assert.match(refreshed.context, /project:replacement at version 2/); assert.doesNotMatch(refreshed.context, /project:roof/);
+  assert.match(refreshed.context, /Replacement complete/);
+  assert.match(refreshed.context, /https:\/\/example.com\/policy/);
   assert.equal(templateBrief({ ...item, type: 'project', outcome: 'Launch complete' }).outcome, 'Launch complete');
   assert.match(templateBrief({ ...item, type: 'project' }).nextAction, /Unknown/);
   for (const change of [f => { f.content.missingInformation = ''; }, f => { f.content.outcome = 'a'.repeat(4001); }, f => { f.content.extra = 'x'; }, f => { f.sourceVersion = 0; }]) {

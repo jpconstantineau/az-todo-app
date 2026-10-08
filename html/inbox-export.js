@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=4';
+import { readableBrief } from './briefs.js?v=5';
 import { purgeWorkspaceState } from './workspaces.js?v=4';
 import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=1';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
