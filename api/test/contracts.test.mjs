@@ -37,9 +37,9 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /src="\/pwa.js\?v=23"/);
-  assert.match(html, /type="module" src="\/inbox.js\?v=25"/);
-  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=23"/);
+  assert.match(html, /src="\/pwa.js\?v=24"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=26"/);
+  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=24"/);
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {
@@ -78,4 +78,9 @@ test('current create contract requires canonical workspace, membership and proje
   assert.deepEqual(plan.actionIds, ['one']);
   assert.throws(() => fieldsFor('dailyPlan', 'create', { ...plan, actionIds: ['one', 'one'] }), /unique/);
   assert.throws(() => fieldsFor('dailyPlanRevision', 'update', {}), /immutable/);
+  const view = fieldsFor('savedView', 'create', { title: 'Completed reports', workspaceId: 'personal', query: 'report', resultType: 'item', resultState: 'status:completed' });
+  assert.deepEqual(view, { title: 'Completed reports', workspaceId: 'personal', query: 'report', resultType: 'item', resultState: 'status:completed' });
+  for (const fields of [{ title: ' ' }, { query: 'x'.repeat(201) }, { resultType: 'task' }, { resultState: 'status:in\nvalid' }]) {
+    assert.throws(() => fieldsFor('savedView', 'create', { ...view, ...fields }));
+  }
 });

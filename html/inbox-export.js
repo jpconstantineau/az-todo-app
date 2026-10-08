@@ -4,7 +4,7 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 import { readableBrief } from './briefs.js?v=4';
 import { purgeWorkspaceState } from './workspaces.js?v=4';
 import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=1';
-const knownTypes = ['workspace', 'item', 'list', 'project', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
+const knownTypes = ['workspace', 'item', 'list', 'project', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
   'collectionRefs', 'parentRef', 'kind', 'revisitDate', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
@@ -14,7 +14,8 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
   'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates',
-  'rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc', 'recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'];
+  'rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc', 'recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc',
+  'query', 'resultType', 'resultState'];
 
 export const validateDeviceExport = value => validateExport(value);
 export const validateAccountExport = value => validateExport(value, true);
@@ -75,7 +76,7 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   const currentShape = (entry, path) => {
-    if (['item', 'list', 'project', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(entry.type)) {
+    if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(entry.type)) {
       require(typeof entry.workspaceId === 'string' && entry.workspaceId.length > 0, `${path}: workspaceId is required.`);
     }
     if (entry.type === 'item') {
@@ -93,6 +94,9 @@ function validateExport(value, server = false) {
     }
     if (entry.type === 'project') require(['draft', 'active', 'someday', 'completed'].includes(entry.status) &&
       (entry.status === 'draft' || typeof entry.outcome === 'string' && entry.outcome.trim()), `${path}: invalid project status/outcome.`);
+    if (entry.type === 'savedView') require(typeof entry.title === 'string' && entry.title.trim() && entry.title.length <= 200 &&
+      typeof entry.query === 'string' && entry.query.length <= 200 && ['all', 'item', 'list', 'project'].includes(entry.resultType) &&
+      (['active', 'all', 'archived'].includes(entry.resultState) || typeof entry.resultState === 'string' && /^status:[^\r\n\t]{1,64}$/.test(entry.resultState)), `${path}: invalid saved view.`);
     if (['list', 'project'].includes(entry.type) && entry.archived !== undefined) require(typeof entry.archived === 'boolean', `${path}: archived must be true or false.`);
     if (entry.type === 'planPreference') require(['none', 'tshirt', 'fibonacci'].includes(entry.estimationMethod), `${path}: invalid estimation method.`);
     if (entry.type === 'dailyPlan') require(/^\d{4}-\d{2}-\d{2}$/.test(entry.planDay) && Array.isArray(entry.actionIds) &&

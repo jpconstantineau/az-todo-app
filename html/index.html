@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=23" defer></script>
+  <script src="/pwa.js?v=24" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=25"></script>
+  <script type="module" src="/inbox.js?v=26"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -133,6 +133,18 @@
       <div class="actions"><button id="clarifyInbox" type="button">Clarify inbox</button><button id="addContextItem" type="button" hidden>Add item</button></div>
       <div id="collectionBrowser" hidden><details class="collection-outline"><summary>Browse collections and their children</summary><nav id="collectionOutline" aria-label="Collection outline"></nav></details><p id="collectionBreadcrumbs" class="muted"></p><div id="collectionChildren" class="actions"></div><label class="collection-check"><input id="includeNested" type="checkbox"> Include nested items</label></div>
       <label><span id="viewLabel" class="sr-only">View</span><select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
+      <section id="searchWorkspace" class="collection-settings search-workspace" aria-labelledby="searchHeading" hidden>
+        <p class="eyebrow">Find</p><h3 id="searchHeading" tabindex="-1" data-focus-key="search:heading">Search workspace</h3>
+        <p id="searchScope" class="muted">Results come from this device: last synchronized workspace records plus pending device saves. Offline, newer server or other-device changes may be missing.</p>
+        <form id="searchForm" class="form-grid">
+          <label>Search <input id="searchQuery" name="query" type="search" maxlength="200" aria-describedby="searchScope"></label>
+          <label>Type <select id="searchType" name="resultType"><option value="all">All types</option><option value="item">Items</option><option value="list">Lists</option><option value="project">Projects</option></select></label>
+          <label>State <select id="searchState" name="resultState"></select></label>
+          <div class="actions"><button id="saveSearchView" type="button">Save current view</button><button id="resetSearch" type="button">Reset search</button></div>
+        </form>
+        <details id="savedViews"><summary id="savedViewsSummary">Saved views</summary><div id="savedViewEntries"></div></details>
+        <p id="searchStatus" role="status" aria-live="polite"></p><div id="searchResults" class="search-results"></div>
+      </section>
       <section id="readyToRevisit" class="collection-revisit" aria-labelledby="readyToRevisitHeading" hidden><h3 id="readyToRevisitHeading">Ready to revisit</h3><p class="muted">Collections scheduled for today or earlier stay here until you clear or reschedule them.</p><div id="readyToRevisitCollections" class="actions"></div></section>
       <section id="collectionSettings" class="collection-settings" aria-labelledby="collectionSettingsHeading" hidden><h3 id="collectionSettingsHeading">Collection settings</h3>
         <form id="collectionSettingsForm" class="form-grid">
@@ -360,6 +372,18 @@
       <p>Deleting a list also marks its linked items deleted; projects must be empty before deletion. Restore a deleted list or project before its items. Related clarification, review and brief history stays stored.</p>
       <p id="deletedError" role="alert"></p><p id="deletedStatus" role="status"></p>
       <div id="deletedItems"></div><button id="closeDeleted" type="button">Close deleted records</button>
+    </dialog>
+    <dialog class="side-panel" id="savedViewEditor" aria-labelledby="savedViewHeading">
+      <p class="eyebrow">Find</p><h2 id="savedViewHeading" tabindex="-1">Save view</h2>
+      <p>A saved view stores only this query and its filters. Matching tasks, lists and projects are not copied.</p>
+      <form id="savedViewForm" class="form-grid">
+        <label>View name <input name="title" maxlength="200" required></label>
+        <label>Search <input name="query" type="search" maxlength="200"></label>
+        <label>Type <select name="resultType"><option value="all">All types</option><option value="item">Items</option><option value="list">Lists</option><option value="project">Projects</option></select></label>
+        <label>State <select name="resultState"></select></label>
+        <p id="savedViewError" role="alert"></p>
+        <div class="actions"><button type="submit">Save view on device</button><button id="closeSavedView" type="button">Close</button></div>
+      </form>
     </dialog>
     <dialog class="side-panel" id="editor" aria-labelledby="editHeading">
       <p class="eyebrow">Update</p><h2 id="editHeading">Edit</h2>
