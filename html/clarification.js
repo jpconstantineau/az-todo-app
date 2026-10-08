@@ -146,8 +146,10 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     const target = focusKey === 'heading' ? $('clarifyHeading') : [...form.querySelectorAll('[data-focus-key]')].find(control => control.dataset.focusKey === focusKey);
     target?.focus({ preventScroll: preserve });
     if (preserve) {
-      dialog.scrollTop = panelScroll;
-      const list = form.querySelector('.clarify-destinations'); if (list) list.scrollTop = destinationsScroll;
+      const list = form.querySelector('.clarify-destinations');
+      const restoreScroll = () => { dialog.scrollTop = panelScroll; if (list) list.scrollTop = destinationsScroll; };
+      restoreScroll();
+      queueMicrotask(restoreScroll);
     }
   }
   function updateSaveState() {
