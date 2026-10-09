@@ -149,10 +149,14 @@ export function refreshTaskOptions(form, defaults) {
     else control.value = selected[0] || (name === 'status' ? 'inbox' : '');
   }
 }
+export function optionsFromText(name, value) {
+  const values = [...new Set(value.split(/\r?\n/).map(option => option.trim()).filter(Boolean))];
+  if (values.length > 200 || values.some(option => option.length > 64 || /[\u0000-\u001f\u007f]/.test(option))) {
+    throw new Error(`${name}: use at most 200 unique options, each a single line of at most 64 characters.`);
+  }
+  return values;
+}
+
 export function defaultsFrom(form) {
-  return Object.fromEntries(Object.keys(optionFields).map(name => {
-    const values = form.elements.namedItem(name).value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-    if (values.length > 200 || values.some(value => value.length > 64 || /[\u0000-\u001f\u007f]/.test(value))) throw new Error(`${name}: use at most 200 options, each a single line of at most 64 characters.`);
-    return [name, [...new Set(values)]];
-  }));
+  return Object.fromEntries(Object.keys(optionFields).map(name => [name, optionsFromText(name, form.elements.namedItem(name).value)]));
 }

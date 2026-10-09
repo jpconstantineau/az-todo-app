@@ -2,9 +2,13 @@ export async function showView(page, view) {
   await page.locator('#workspace').waitFor({ state: 'visible' });
   if (await page.locator('#dataRecovery:modal').count()) await page.locator('#closeDataRecovery').click();
   if (await page.locator('#appDevice:modal').count()) await page.locator('#closeAppDevice').click();
-  while (new URL(page.url()).hash.startsWith('#preferences')) {
+  while (new URL(page.url()).hash.startsWith('#preferences') || /^#lists\/[A-Za-z0-9_-]+\/task-options/.test(new URL(page.url()).hash)) {
     const hash = new URL(page.url()).hash;
-    const back = hash === '#preferences' ? '#preferencesBack'
+    const back = /^#lists\/[A-Za-z0-9_-]+\/task-options\//.test(hash) ? '#taskOptionEditorBack'
+      : /^#lists\/[A-Za-z0-9_-]+\/task-options$/.test(hash) ? '#taskOptionsMasterBack'
+      : hash === '#preferences' ? '#preferencesBack'
+      : hash.startsWith('#preferences/task-options/') ? '#taskOptionEditorBack'
+      : hash === '#preferences/task-options' ? '#taskOptionsMasterBack'
       : hash.startsWith('#preferences/process/clarify-actions/edit/') || hash === '#preferences/process/clarify-actions/add' ? '#clarifyActionEditorBack'
         : hash === '#preferences/process/clarify-actions' ? '#clarifyActionsBack' : '.preferences-detail:not([hidden]) .preference-back:visible';
     await page.locator(back).click();
@@ -38,6 +42,7 @@ export async function openMenu(page) {
 }
 export async function openPreferences(page) {
   if (new URL(page.url()).hash !== '#preferences') {
+    if (new URL(page.url()).hash.startsWith('#preferences/') || /^#lists\/[A-Za-z0-9_-]+\/task-options/.test(new URL(page.url()).hash)) await showView(page, 'capture');
     await openMenu(page);
     await page.locator('#openPreferences').click();
     await page.waitForFunction(() => location.hash === '#preferences' && document.activeElement?.id === 'preferencesHeading');
@@ -48,8 +53,26 @@ export async function openPreference(page, id) {
   if (new URL(page.url()).hash !== route) {
     await openPreferences(page);
     await page.locator(`[data-preference-id="${id}"]`).click();
-    await page.waitForFunction(expected => location.hash === expected && document.activeElement?.closest('.preferences-detail')?.hidden === false, route);
+    await page.waitForFunction(({ expected, taskOptions }) => location.hash === expected && (taskOptions
+      ? !document.querySelector('#taskOptionsView').hidden && document.activeElement?.id === 'taskOptionsMasterHeading'
+      : document.activeElement?.closest('.preferences-detail')?.hidden === false), { expected: route, taskOptions: id === 'task-options' });
   }
+}
+export async function openAccountTaskOption(page, field = 'contexts') {
+  const route = `#preferences/task-options/${field}`;
+  if (new URL(page.url()).hash !== route) {
+    await openPreference(page, 'task-options');
+    await page.locator(`#task-option-${field}`).click();
+    await page.waitForFunction(expected => location.hash === expected && document.activeElement?.id === 'taskOptionHeading', route);
+  }
+}
+export async function openListTaskOption(page, listLabel, field = 'contexts') {
+  await showView(page, 'lists');
+  await page.locator('#view').selectOption({ label: listLabel });
+  await page.getByRole('button', { name: `Task options: ${listLabel}`, exact: true }).click();
+  await page.waitForFunction(() => /^#lists\/[A-Za-z0-9_-]+\/task-options$/.test(location.hash) && document.activeElement?.id === 'taskOptionsMasterHeading');
+  await page.locator(`#task-option-${field}`).click();
+  await page.waitForFunction(expected => location.hash.endsWith(`/task-options/${expected}`) && document.activeElement?.id === 'taskOptionHeading', field);
 }
 export async function openClarificationPreferences(page) {
   if (new URL(page.url()).hash !== '#preferences/process/clarify-actions') {

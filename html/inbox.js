@@ -3,7 +3,7 @@ import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLab
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
 import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=15';
-import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
+import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=18';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=11';
@@ -25,6 +25,8 @@ const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
 let defaultsEditing = null, recentTaskChange = null;
+let renderedTaskOptionField = null;
+let taskOptionJournalPromise = Promise.resolve(true);
 let exportController;
 let splitFeedbackTimer;
 let materializingRecurrence = false;
@@ -39,11 +41,21 @@ const preferenceCategories = [
   { id: 'plan', label: 'Plan' },
   { id: 'do', label: 'Do' },
   { id: 'review', label: 'Review' },
-  { id: 'task-options', label: 'Task options', scope: 'Account', section: 'preferencesTaskOptions' }
+  { id: 'task-options', label: 'Task options', scope: 'Account', section: 'taskOptionsView' }
 ];
 const livePreferenceCategories = preferenceCategories.filter(category => category.section);
 const preferenceRoutes = new Map(livePreferenceCategories.map(category => [`preferences/${category.id}`, category]));
 const clarifyPreferenceRoot = 'preferences/process/clarify-actions';
+const taskOptionSlugs = new Map(Object.keys(optionFields).map(name => [name === 'timeRequired' ? 'time-required' : name, name]));
+const taskOptionSlug = name => name === 'timeRequired' ? 'time-required' : name;
+function taskOptionRoute(route) {
+  if (typeof route !== 'string') return null;
+  let match = route.match(/^preferences\/task-options(?:\/([a-z-]+))?$/);
+  if (match) return !match[1] || taskOptionSlugs.has(match[1]) ? { type: 'settings', id: 'settings', field: match[1] ? taskOptionSlugs.get(match[1]) : null } : null;
+  match = route.match(/^lists\/([A-Za-z0-9_-]{1,128})\/task-options(?:\/([a-z-]+))?$/);
+  return match && (!match[2] || taskOptionSlugs.has(match[2])) ? { type: 'list', id: match[1], field: match[2] ? taskOptionSlugs.get(match[2]) : null } : null;
+}
+const taskOptionBaseRoute = target => target.type === 'settings' ? 'preferences/task-options' : `lists/${target.id}/task-options`;
 function clarifyPreferenceRoute(route) {
   if (typeof route !== 'string') return null;
   if (route === clarifyPreferenceRoot) return { view: 'list' };
@@ -51,15 +63,19 @@ function clarifyPreferenceRoute(route) {
   const match = route.match(/^preferences\/process\/clarify-actions\/edit\/([A-Za-z0-9_-]{1,128})$/);
   return match ? { view: 'editor', id: match[1] } : null;
 }
-const preferenceCategory = route => preferenceRoutes.get(route) || (clarifyPreferenceRoute(route) ? preferenceRoutes.get('preferences/process') : null);
+const preferenceCategory = route => preferenceRoutes.get(route) || (clarifyPreferenceRoute(route) ? preferenceRoutes.get('preferences/process') : null) || (taskOptionRoute(route)?.type === 'settings' ? preferenceRoutes.get('preferences/task-options') : null);
 const isPreferenceRoute = route => route === 'preferences' || !!preferenceCategory(route);
 function preferenceRouteTitle(route) {
+  const taskOption = taskOptionRoute(route);
+  if (taskOption?.type === 'settings') return taskOption.field ? `Account · ${optionFields[taskOption.field]}` : 'Account task options';
   const clarify = clarifyPreferenceRoute(route);
   if (clarify?.view === 'list') return 'Clarify actions';
   if (clarify?.view === 'editor') return clarify.id ? 'Edit Clarify action' : 'Add Clarify action';
   return preferenceRoutes.get(route)?.label;
 }
 function preferenceRouteParent(route) {
+  const taskOption = taskOptionRoute(route);
+  if (taskOption?.type === 'settings' && taskOption.field) return { parent: 'preferences/task-options', target: `task-option-${taskOptionSlug(taskOption.field)}` };
   const clarify = clarifyPreferenceRoute(route);
   if (clarify?.view === 'list') return { parent: 'preferences/process', target: 'openClarifyActions' };
   if (clarify?.view === 'editor') return { parent: clarifyPreferenceRoot, target: clarify.id ? `clarify-action-${clarify.id}` : 'addClarifyAction' };
@@ -90,7 +106,8 @@ function renderWorkspaces() {
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
   const workspaceTitle = $('workspaceSelect').selectedOptions[0].textContent;
-  const preferenceTitle = preferenceRouteTitle(destination);
+  const taskOption = taskOptionTarget(destination);
+  const preferenceTitle = preferenceRouteTitle(destination) || (taskOption ? `${taskOption.type === 'settings' ? 'Account' : `List “${taskOption.title}”`} ${taskOption.field ? `· ${optionFields[taskOption.field]}` : 'task options'}` : null);
   document.title = (preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
   statusText('menuWorkspaceValue', workspaceTitle);
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Workspaces to unarchive or restore it. Drafts are kept.' : '');
@@ -149,7 +166,7 @@ async function switchWorkspace(id) {
     if (owner !== accountId) return;
     editing = defaultsEditing = null;
     $('createdDestination').replaceChildren();
-    $('editor').close(); $('defaultsEditor').close(); $('savedViewEditor').close(); $('deletedRecords').close();
+    $('editor').close(); $('savedViewEditor').close(); $('deletedRecords').close();
     extraction.reset(); clarification.hide(); reviews.reset(); briefs.reset(); projectPlanning.reset();
     state = saved; selectedWorkspace = id;
     render(); restoreDraft();
@@ -406,11 +423,6 @@ edit.elements.kind.onchange = () => {
 edit.elements.projectStatus.addEventListener('change', () => { edit.elements.outcome.required = edit.elements.projectStatus.value !== 'draft'; void journal(); });
 $('includeNested').onchange = () => { navigation.lists.nested = $('includeNested').checked; render(); void journal(); };
 
-for (const [name, title] of Object.entries(optionFields)) {
-  const label = document.createElement('label'); label.textContent = title;
-  const input = document.createElement('textarea'); input.name = name; input.rows = 3;
-  label.append(input); $('defaultsFields').append(label);
-}
 function userDefaults() { return { ...state.defaultSettings, ...(projected(state)['settings:settings']?.defaults ?? {}) }; }
 function effectiveDefaults(listId) { return { ...userDefaults(), ...projected(state)[`list:${listId}`]?.defaults }; }
 function refreshOptions() {
@@ -596,12 +608,12 @@ function connectionStatus() {
 function error(message, kind = 'local') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
   if ($('editor').open) { $('editError').hidden = false; statusText('editError', message); }
-  if ($('defaultsEditor').open || destination === 'preferences/task-options') { $('defaultsError').hidden = false; statusText('defaultsError', message); }
+  if (taskOptionRoute(destination)) { $('defaultsError').hidden = false; statusText('defaultsError', message); }
   if ($('deletedRecords').open) statusText('deletedError', message);
   connectionStatus();
 }
 function clearError(kind) {
-  if (!kind || $('error').dataset.kind === kind) { $('error').hidden = true; $('editError').hidden = true; }
+  if (!kind || $('error').dataset.kind === kind) { $('error').hidden = true; $('editError').hidden = true; $('defaultsError').hidden = true; }
   connectionStatus();
 }
 function captureDraft() {
@@ -610,15 +622,24 @@ function captureDraft() {
 function hasEditDraft() {
   return editing && (editing.version === 0 || JSON.stringify(formValues(edit)) !== JSON.stringify(editing.initialFields));
 }
+function snapshotTaskOptionValue() {
+  if (!defaultsEditing || !renderedTaskOptionField) return;
+  defaultsEditing.values[renderedTaskOptionField] = $('taskOptionValue').value;
+  defaultsEditing.selectedField = renderedTaskOptionField;
+}
+function taskOptionDraftSnapshot() {
+  snapshotTaskOptionValue();
+  return defaultsEditing ? structuredClone(defaultsEditing) : null;
+}
 function draft() {
   return { workspaceId: selectedWorkspace, capture: captureDraft(), edit: hasEditDraft() ? { ...editing, fields: formValues(edit) } : null, editOpen: $('editor').open,
-    defaults: defaultsEditing?.type === 'list' ? { ...defaultsEditing, values: formValues($('defaultsForm')) } : null,
-    defaultsOpen: $('defaultsEditor').open, clarification: clarification.snapshot(), brief: briefs.snapshot(),
+    defaults: defaultsEditing?.type === 'list' ? taskOptionDraftSnapshot() : null,
+    clarification: clarification.snapshot(), brief: briefs.snapshot(),
     day: $('day').value, navigation: structuredClone(navigation), review: reviews.draft(), extraction: extraction.snapshot(), recurrence: recurrence.snapshot(), projectPlanning: projectPlanning.snapshot() };
 }
 function preferenceDraft() {
   return defaultsEditing?.type === 'settings'
-    ? { ...(state.preferenceDraft || {}), defaults: { ...defaultsEditing, values: formValues($('defaultsForm')) } }
+    ? { ...(state.preferenceDraft || {}), defaults: taskOptionDraftSnapshot() }
     : state.preferenceDraft;
 }
 function storageFailure(failure) {
@@ -627,7 +648,6 @@ function storageFailure(failure) {
   $('recovery').hidden = false;
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), preferenceDraft: preferenceDraft(), localCopy: state }, null, 2);
   $('editor').close(); // Make the recovery copy outside the modal reachable.
-  $('defaultsEditor').close();
   clarification.close();
   briefs.close();
   projectPlanning.close();
@@ -676,7 +696,6 @@ function restoreDraft() {
   // Keep unfinished list creation available through New list without opening it on arrival.
   if (saved.edit) openEditor(saved.edit, false, saved.editOpen === true && !(saved.edit.type === 'list' && saved.edit.version === 0));
   else $('editor').close();
-  if (saved.defaults) openDefaults(saved.defaults, false, saved.defaultsOpen === true);
   refreshOptions(); render();
   reviews.restore(saved.review);
   clarification.restore(saved.clarification);
@@ -808,6 +827,17 @@ function taskIcon(control, name, title) {
 }
 function render() {
   if (!accountId || !state) return;
+  if (taskOptionRoute(destination)) {
+    if (!taskOptionTarget()) {
+      history.replaceState(null, '', location.pathname + location.search + '#capture'); destination = 'capture';
+      workspace(false, { save: false });
+      error(state.defaultSettings
+        ? 'This task-options target is no longer available. Its device draft remains with the original account and workspace.'
+        : 'Reconnect once to load the built-in options before editing defaults. Your work is kept.');
+      return;
+    }
+    renderTaskOptions();
+  }
   const focused = document.activeElement;
   const recordMap = scopedRecords();
   const records = Object.values(recordMap).filter(record => !record.deleted);
@@ -881,7 +911,7 @@ function render() {
     ? `Collection move ${state.workspaceMove.failure || state.queue.some(entry => entry.workspaceMoveId && entry.failure) ? 'paused — review and resume it.' : 'saved on device — pending server confirmation.'}`
     : state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
   connectionStatus();
-  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Defaults', () => openDefaults(list), `Defaults: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
+  $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Task options', () => enterListTaskOptions(list), `Task options: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
   const view = $('view').value;
   const archiveMode = listMode && view === '@archived';
   const searchMode = !listMode && view === '@search';
@@ -1074,7 +1104,7 @@ function render() {
   if (!$('executeItems').querySelector('article') && archivedCount) $('executeItems').append(' ', archivedLink());
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
   $('captureAI').hidden = readOnly;
-  if (readOnly) { extraction.suspend(); $('editor').close(); $('defaultsEditor').close(); clarification.close(); briefs.close(); }
+  if (readOnly) { extraction.suspend(); $('editor').close(); clarification.close(); briefs.close(); }
   $('captureWorkspaceFields').disabled = readOnly;
   $('reviewWorkspaceFields').disabled = readOnly;
   $('newList').disabled = readOnly;
@@ -1457,6 +1487,96 @@ function setupPreferenceRows() {
 setupPreferenceRows();
 document.addEventListener('clarification-actions-change', refreshPreferenceRows);
 addEventListener('todo-appearance-change', refreshPreferenceRows);
+function taskOptionTarget(route = destination) {
+  const parsed = taskOptionRoute(route);
+  if (!parsed || !accountId || !state?.defaultSettings) return null;
+  const records = projected(state);
+  if (parsed.type === 'settings') {
+    const record = records['settings:settings'] || { type: 'settings', id: 'settings', version: 0 };
+    return { accountId, type: 'settings', id: 'settings', workspaceId: null, version: record.version || 0, title: 'Account', field: parsed.field, record };
+  }
+  const record = records[`list:${parsed.id}`];
+  if (!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) {
+    const stored = currentDraft(state).defaults;
+    const target = { accountId, type: 'list', id: parsed.id, workspaceId: selectedWorkspace };
+    if (!matchingTaskOptionDraft(stored, target)) return null;
+    return { ...target, version: stored.version || 0, title: stored.title || record?.title || 'Unavailable list', field: parsed.field, record: null, unavailable: true };
+  }
+  return { accountId, type: 'list', id: record.id, workspaceId: selectedWorkspace, version: record.version, title: record.title, field: parsed.field, record };
+}
+function journalTaskOptions() {
+  taskOptionJournalPromise = taskOptionJournalPromise.then(() => journal());
+  return taskOptionJournalPromise;
+}
+function matchingTaskOptionDraft(draft, target) {
+  return draft?.type === target.type && draft.id === target.id && (!draft.accountId || draft.accountId === target.accountId)
+    && (target.type === 'settings' || !draft.workspaceId || draft.workspaceId === target.workspaceId) && draft.values && typeof draft.values === 'object';
+}
+function freshTaskOptionValues(target) {
+  const defaults = target.unavailable ? {} : target.type === 'settings' ? userDefaults() : effectiveDefaults(target.id);
+  return Object.fromEntries(Object.keys(optionFields).map(name => [name, (defaults[name] || []).join('\n')]));
+}
+function ensureTaskOptionEditing(target) {
+  if (defaultsEditing?.accountId === target.accountId && defaultsEditing.type === target.type && defaultsEditing.id === target.id) return;
+  const stored = target.type === 'settings' ? state.preferenceDraft?.defaults : currentDraft(state).defaults;
+  const draft = matchingTaskOptionDraft(stored, target) ? stored : null;
+  defaultsEditing = {
+    accountId: target.accountId, type: target.type, id: target.id, workspaceId: target.workspaceId,
+    version: draft?.version ?? target.version, title: draft?.title || target.title,
+    selectedField: draft?.selectedField || null,
+    values: { ...freshTaskOptionValues(target), ...(draft?.values || {}) }
+  };
+  renderedTaskOptionField = null;
+}
+function taskOptionCount(value) {
+  return new Set(value.split(/\r?\n/).map(option => option.trim()).filter(Boolean)).size;
+}
+function renderTaskOptions() {
+  const target = taskOptionTarget();
+  if (!target) return;
+  ensureTaskOptionEditing(target);
+  snapshotTaskOptionValue();
+  const field = target.field;
+  const scopeTitle = target.type === 'settings' ? 'Account' : `List “${target.title}”`;
+  $('taskOptionsView').dataset.route = field ? 'editor' : 'master';
+  $('taskOptionsMasterHeading').textContent = `${scopeTitle} task options`;
+  $('taskOptionsMaster').hidden = false;
+  $('taskOptionEditor').hidden = !field;
+  const baseline = freshTaskOptionValues(target);
+  for (const [name, title] of Object.entries(optionFields)) {
+    const slug = taskOptionSlug(name), row = $(`task-option-${slug}`), value = defaultsEditing.values[name] || '';
+    row.href = `#${taskOptionBaseRoute(target)}/${slug}`;
+    statusText(`task-option-${slug}-summary`, `${taskOptionCount(value)} option${taskOptionCount(value) === 1 ? '' : 's'}${value !== baseline[name] ? ' · Draft' : ''}`);
+    if (name === field) row.setAttribute('aria-current', 'page'); else row.removeAttribute('aria-current');
+    row.querySelector('[data-task-option-label]').textContent = title;
+  }
+  if (!field) { renderedTaskOptionField = null; return; }
+  const title = optionFields[field];
+  $('taskOptionHeading').textContent = `${scopeTitle} · ${title}`;
+  $('taskOptionLabel').textContent = `${title} — one per line`;
+  $('taskOptionScope').textContent = target.unavailable
+    ? `List “${target.title}” is no longer available in this workspace. Copy the draft values or discard the draft; it cannot be saved to another list or workspace.`
+    : target.type === 'settings'
+    ? 'Account options sync through your settings record. Existing task values are unchanged.'
+    : `List “${target.title}” options override account options for this list. Existing task values are unchanged.`;
+  $('resetDefaults').textContent = target.type === 'settings' ? 'Use built-in defaults' : 'Copy user defaults';
+  if (!saving) $('defaultsForm').querySelector('[type=submit]').disabled = !!target.unavailable;
+  if (renderedTaskOptionField !== field) {
+    renderedTaskOptionField = field;
+    $('taskOptionValue').value = defaultsEditing.values[field] || '';
+  }
+}
+function setupTaskOptionRows() {
+  $('taskOptionRows').replaceChildren(...Object.entries(optionFields).map(([name, title]) => {
+    const slug = taskOptionSlug(name), item = document.createElement('li'), link = document.createElement('a');
+    const label = document.createElement('span'), end = document.createElement('span'), summary = document.createElement('span'), arrow = document.createElement('span');
+    link.id = `task-option-${slug}`; link.className = 'menu-row'; link.dataset.taskOption = name;
+    label.dataset.taskOptionLabel = ''; label.textContent = title; end.className = 'menu-row-end';
+    summary.id = `task-option-${slug}-summary`; summary.className = 'menu-row-value'; arrow.textContent = '›'; arrow.setAttribute('aria-hidden', 'true');
+    end.append(summary, arrow); link.append(label, end); item.append(link); return item;
+  }));
+}
+setupTaskOptionRows();
 function renderPreferences() {
   const category = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), hub = destination === 'preferences';
   $('preferencesView').dataset.route = hub ? 'hub' : clarify ? `clarify-${clarify.view}` : 'detail';
@@ -1471,10 +1591,6 @@ function renderPreferences() {
   $('clarifyActionsPage').hidden = !clarify;
   if (clarify) clarificationPreferences.render(destination);
   refreshPreferenceRows();
-  if (category?.id === 'task-options' && !$('defaultsEditor').open) {
-    const record = projected(state)['settings:settings'] || { type: 'settings', id: 'settings', version: 0 };
-    openDefaults({ ...record, values: state.preferenceDraft?.defaults?.values }, false, false);
-  }
 }
 function focusDestination() {
   if (!accountId || $('workspace').hidden) return;
@@ -1483,9 +1599,10 @@ function focusDestination() {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  const preference = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination);
+  const preference = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), taskOption = taskOptionRoute(destination);
   if (destination === 'menu') $('menuHeading').focus({ preventScroll: true });
   else if (destination === 'preferences') $('preferencesHeading').focus({ preventScroll: true });
+  else if (taskOption) $(taskOption.field ? 'taskOptionHeading' : 'taskOptionsMasterHeading').focus({ preventScroll: true });
   else if (clarify) clarificationPreferences.focus();
   else if (preference) $(`${preference.section}Heading`).focus({ preventScroll: true });
   else (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'plan' ? $('planHeading') : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
@@ -1535,11 +1652,26 @@ function preferenceReturnEntry(route = destination) {
   const validTarget = descriptor?.parent === route && descriptor.target === entry?.target;
   return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && entry.route === route && validTarget && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
 }
+function listTaskOptionEntry(route = destination) {
+  const entry = history.state?.todoTaskOption, parsed = taskOptionRoute(route);
+  const parent = parsed?.field ? taskOptionBaseRoute(parsed) : 'lists';
+  const target = parsed?.field ? `task-option-${taskOptionSlug(parsed.field)}` : `list:${parsed?.id}:defaults`;
+  return parsed?.type === 'list' && entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin
+    && entry.route === route && entry.parent === parent && entry.target === target && entry.workspaceId === selectedWorkspace ? entry : null;
+}
+function taskOptionReturnEntry(route = destination) {
+  const entry = history.state?.todoTaskOptionReturn, child = taskOptionRoute(entry?.child);
+  const valid = route === 'lists'
+    ? child?.type === 'list' && !child.field && entry.target === `list:${child.id}:defaults`
+    : taskOptionRoute(route)?.type === 'list' && child?.field && taskOptionBaseRoute(child) === route && entry.target === `task-option-${taskOptionSlug(child.field)}`;
+  return valid && entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin
+    && entry.route === route && entry.workspaceId === selectedWorkspace && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
+}
 function restoreRoutePosition(entry) {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (!accountId || destination !== entry.route || document.querySelector('dialog[open]')) return;
     scrollTo(entry.scrollX, entry.scrollY);
-    const target = $(entry.target);
+    const target = $(entry.target) || document.querySelector(`[data-focus-key="${CSS.escape(entry.target)}"]`);
     if (target) target.focus({ preventScroll: true });
     else focusDestination();
   }));
@@ -1570,9 +1702,10 @@ async function enterPreferences() {
 }
 async function enterPreferenceCategory(category) {
   if (!accountId || !category?.section || document.querySelector('dialog[open]')) return;
+  if (category.id === 'task-options' && !state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
   const route = `preferences/${category.id}`;
   if (destination === route) { focusDestination(); return; }
-  if (defaultsEditing?.type === 'settings') await journal();
+  if (defaultsEditing?.type === 'settings') await journalTaskOptions();
   if (destination === 'preferences') {
     markUtilityReturn(route, `preference-${category.id}`);
     history.pushState({ todoPreference: { session: menuHistorySession, accountId, origin: location.origin, route, parent: 'preferences', target: `preference-${category.id}`, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
@@ -1592,7 +1725,8 @@ function markPreferenceReturn(child, target) {
 function enterPreferenceRoute(route, { replace = false } = {}) {
   const descriptor = preferenceRouteParent(route);
   if (!accountId || !descriptor || !isPreferenceRoute(destination) || document.querySelector('dialog[open]')) return;
-  const switchingEditor = clarifyPreferenceRoute(destination)?.view === 'editor' && clarifyPreferenceRoute(route)?.view === 'editor';
+  const switchingEditor = clarifyPreferenceRoute(destination)?.view === 'editor' && clarifyPreferenceRoute(route)?.view === 'editor'
+    || taskOptionRoute(destination)?.type === 'settings' && taskOptionRoute(destination)?.field && taskOptionRoute(route)?.field;
   if (replace || switchingEditor) {
     const current = history.state && typeof history.state === 'object' ? { ...history.state } : {};
     current.todoPreference = { session: menuHistorySession, accountId, origin: location.origin, route, parent: descriptor.parent, target: descriptor.target, scrollX: window.scrollX, scrollY: window.scrollY };
@@ -1603,29 +1737,96 @@ function enterPreferenceRoute(route, { replace = false } = {}) {
   }
   workspace(true, { save: false });
 }
+async function enterListTaskOptions(record) {
+  if (!accountId || destination !== 'lists' || workspaceReadOnly()) return;
+  if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
+  const stored = currentDraft(state).defaults;
+  let recoveringUnavailableDraft = false;
+  if (stored?.type === 'list' && stored.id !== record.id) {
+    const previous = projected(state)[`list:${stored.id}`];
+    if (previous && !previous.deleted && workspaceOf(previous, projected(state)) === selectedWorkspace) {
+      throw new Error(`A task-options draft for “${previous.title || stored.title || 'another list'}” is still saved. Reopen it and Save or Discard draft before editing another list.`);
+    }
+    record = { id: stored.id };
+    recoveringUnavailableDraft = true;
+  }
+  const route = `lists/${record.id}/task-options`, target = `list:${record.id}:defaults`;
+  const scrollX = window.scrollX, scrollY = window.scrollY;
+  await journal();
+  const current = history.state && typeof history.state === 'object' ? history.state : {};
+  history.replaceState({ ...current, todoTaskOptionReturn: { session: menuHistorySession, accountId, origin: location.origin, route: 'lists', child: route, target, workspaceId: selectedWorkspace, scrollX, scrollY } }, '', '#lists');
+  history.pushState({ todoTaskOption: { session: menuHistorySession, accountId, origin: location.origin, route, parent: 'lists', target, workspaceId: selectedWorkspace } }, '', '#' + route);
+  workspace(true, { save: false });
+  if (recoveringUnavailableDraft) error('The earlier list is no longer available in this workspace. Its draft opened instead so you can copy or discard it before editing another list.');
+}
+async function enterTaskOptionField(field) {
+  const target = taskOptionTarget();
+  if (!target) return;
+  snapshotTaskOptionValue();
+  if (!await journalTaskOptions()) return;
+  const route = `${taskOptionBaseRoute(target)}/${taskOptionSlug(field)}`;
+  if (target.type === 'settings') { enterPreferenceRoute(route); return; }
+  const descriptor = { parent: taskOptionBaseRoute(target), target: `task-option-${taskOptionSlug(field)}` };
+  const switching = !!taskOptionRoute(destination)?.field;
+  if (switching) {
+    const current = history.state && typeof history.state === 'object' ? { ...history.state } : {};
+    current.todoTaskOption = { session: menuHistorySession, accountId, origin: location.origin, route, ...descriptor, workspaceId: selectedWorkspace };
+    history.replaceState(current, '', '#' + route);
+  } else {
+    const current = history.state && typeof history.state === 'object' ? history.state : {};
+    history.replaceState({ ...current, todoTaskOptionReturn: { session: menuHistorySession, accountId, origin: location.origin, route: destination, child: route, target: descriptor.target, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + destination);
+    history.pushState({ todoTaskOption: { session: menuHistorySession, accountId, origin: location.origin, route, ...descriptor, workspaceId: selectedWorkspace } }, '', '#' + route);
+  }
+  workspace(true, { save: false });
+}
 async function leavePreferences() {
-  if (destination === 'preferences/task-options') await journal();
+  if (taskOptionRoute(destination)) await journalTaskOptions();
   if (preferenceEntry()) history.back();
   else {
-    const parent = clarifyPreferenceRoute(destination) ? preferenceRouteParent(destination)?.parent : null;
+    const parent = clarifyPreferenceRoute(destination) || taskOptionRoute(destination)?.field ? preferenceRouteParent(destination)?.parent : null;
     history.replaceState(null, '', location.pathname + location.search + '#' + (parent || 'capture'));
+    workspace(true, { save: false });
+  }
+}
+async function leaveTaskOptions() {
+  const parsed = taskOptionRoute(destination);
+  if (!parsed) return;
+  snapshotTaskOptionValue();
+  await journalTaskOptions();
+  if (parsed.type === 'settings') { await leavePreferences(); return; }
+  if (listTaskOptionEntry()) history.back();
+  else {
+    const fallback = parsed.field ? taskOptionBaseRoute(parsed) : 'capture';
+    history.replaceState(null, '', location.pathname + location.search + '#' + fallback);
     workspace(true, { save: false });
   }
 }
 function workspace(focus = true, { save = true, historyNavigation = false } = {}) {
   if (!accountId || !state || $('workspace').hidden) return;
-  const requested = location.hash.slice(1) || 'capture';
-  destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || preferenceCategory(requested) ? requested : requested.startsWith(clarifyPreferenceRoot + '/') ? clarifyPreferenceRoot : 'capture';
+  let requested = location.hash.slice(1) || 'capture', parsedTaskOption = taskOptionRoute(requested);
+  if (parsedTaskOption?.type === 'list') {
+    const stored = currentDraft(state).defaults, records = projected(state);
+    if (stored?.type === 'list' && stored.id !== parsedTaskOption.id && matchingTaskOptionDraft(stored, { accountId, type: 'list', id: stored.id, workspaceId: selectedWorkspace })) {
+      requested = `${taskOptionBaseRoute(stored)}${stored.selectedField ? `/${taskOptionSlug(stored.selectedField)}` : ''}`;
+      parsedTaskOption = taskOptionRoute(requested);
+      history.replaceState(null, '', location.pathname + location.search + '#' + requested);
+    }
+    const record = records[`list:${parsedTaskOption.id}`];
+    const recoverable = matchingTaskOptionDraft(stored, { accountId, type: 'list', id: parsedTaskOption.id, workspaceId: selectedWorkspace });
+    if ((!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) && !recoverable) parsedTaskOption = null;
+  }
+  destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || preferenceCategory(requested) || parsedTaskOption ? requested : requested.startsWith(clarifyPreferenceRoot + '/') ? clarifyPreferenceRoot : 'capture';
   if (destination === 'menu' && !menuEntry()) {
     destination = 'capture';
     history.replaceState(null, '', location.pathname + location.search + '#capture');
   } else if (requested !== destination) history.replaceState(null, '', location.pathname + location.search + '#capture');
-  const menu = destination === 'menu', preferences = isPreferenceRoute(destination), utility = menu || preferences;
+  const taskOptions = !!taskOptionRoute(destination), menu = destination === 'menu', preferences = isPreferenceRoute(destination) && !taskOptions, utility = menu || preferences || taskOptions;
   const listMode = destination === 'lists';
   document.body.classList.toggle('menu-route', menu);
   document.body.classList.toggle('utility-route', utility);
   $('menuView').hidden = !menu;
   $('preferencesView').hidden = !preferences;
+  $('taskOptionsView').hidden = !taskOptions;
   document.querySelector('.workspace-nav').hidden = utility;
   document.querySelector('.inbox-grid').hidden = utility;
   $('workspaceStatus').hidden = utility;
@@ -1645,11 +1846,12 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
     else link.removeAttribute('aria-current');
   }
   if (preferences) renderPreferences();
+  if (taskOptions) renderTaskOptions();
   render();
   if (utility) $('savedEdit').hidden = true;
   if (focus) {
     $('createdDestination').replaceChildren();
-    const returning = historyNavigation && (workflowEntry() || utilityReturnEntry() || preferenceReturnEntry());
+    const returning = historyNavigation && (workflowEntry() || utilityReturnEntry() || preferenceReturnEntry() || taskOptionReturnEntry());
     if (returning) restoreRoutePosition(returning);
     else {
       if (utility) focusDestination(); else requestAnimationFrame(focusDestination);
@@ -1660,7 +1862,10 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
 $('closeReviews').onclick = () => {
   history.replaceState(null, '', '#capture'); workspace(false); $('openReviews').focus(); void journal();
 };
-addEventListener('popstate', () => workspace(true, { save: false, historyNavigation: true }));
+addEventListener('popstate', () => { void (async () => {
+  if (taskOptionRoute(destination)) { snapshotTaskOptionValue(); await journalTaskOptions(); }
+  workspace(true, { save: false, historyNavigation: true });
+})(); });
 $('appMenu').addEventListener('click', event => {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
   event.preventDefault(); void enterMenu();
@@ -1689,6 +1894,7 @@ $('clarifyActionsBack').onclick = () => { void leavePreferences(); };
 $('clarifyActionEditorBack').onclick = () => { void leavePreferences(); };
 matchMedia('(min-width: 1024px)').addEventListener('change', event => {
   if (!event.matches && clarifyPreferenceRoute(destination)?.view === 'editor' && !$('clarifyActionEditorPanel').contains(document.activeElement)) clarificationPreferences.focus();
+  if (!event.matches && taskOptionRoute(destination)?.field && !$('taskOptionEditor').contains(document.activeElement)) $('taskOptionHeading').focus();
 });
 $('menuBack').onclick = () => {
   if (menuEntry()) history.back();
@@ -1703,7 +1909,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('appDevice'), $('dataRecovery'), $('clarifier'), $('briefs'), $('projectPlanner'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
+for (const dialog of [$('editor'), $('appDevice'), $('dataRecovery'), $('clarifier'), $('briefs'), $('projectPlanner'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -1774,62 +1980,91 @@ $('savedViewForm').onsubmit = event => {
 $('newList').onclick = () => openEditor(editing?.type === 'list' && editing.version === 0
   ? editing : { type: 'list', id: crypto.randomUUID(), version: 0, title: '', description: '', workspaceId: selectedWorkspace });
 $('clarifyInbox').onclick = guard(() => clarification.openInbox());
-function openDefaults(record, focus = true, show = true) {
-  if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
-  if (defaultsEditing?.id !== record.id || defaultsEditing?.type !== record.type || defaultsEditing?.version !== record.version) {
-    defaultsEditing = { type: record.type, id: record.id, version: record.version };
-    const defaults = record.type === 'list' ? effectiveDefaults(record.id) : userDefaults();
-    const values = record.values || Object.fromEntries(Object.keys(optionFields).map(name => [name, (defaults[name] || []).join('\n')]));
-    fillValues($('defaultsForm'), values);
-  }
-  const accountDefaults = record.type === 'settings';
-  const host = accountDefaults ? $('accountDefaultsHost') : $('listDefaultsHost');
-  host.append($('defaultsSurface')); $('defaultsSurface').hidden = false;
-  $('defaultsHeading').textContent = accountDefaults ? 'Options' : 'List defaults';
-  $('resetDefaults').textContent = record.type === 'settings' ? 'Reset to built-in defaults' : 'Copy user defaults';
-  $('closeDefaults').hidden = accountDefaults;
-  $('defaultsError').hidden = true;
-  if (show && !accountDefaults) showDialog($('defaultsEditor'));
-  if (focus) {
-    const control = $('defaultsForm').elements.contexts;
-    control.focus(); control.setSelectionRange(0, 0); control.scrollTop = 0;
-    void journal();
-  }
+function taskOptionsFromDraft(draft) {
+  return Object.fromEntries(Object.keys(optionFields).map(name => [name, optionsFromText(name, draft.values[name] || '')]));
 }
-$('closeDefaults').onclick = () => $('defaultsEditor').close();
-$('defaultsEditor').addEventListener('close', () => { if (defaultsEditing) void journal(); });
-$('defaultsEditor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
-$('defaultsForm').addEventListener('input', () => { void journal(); });
+function taskOptionLogical(message) {
+  const failure = new Error(message); failure.taskOptionLogical = true; return failure;
+}
+function currentTaskOptionRecord(local, target, { checkVersion = true, checkAvailability = true } = {}) {
+  const records = projected(local), current = records[`${target.type}:${target.id}`];
+  if (checkAvailability && target.type === 'list' && (!current || current.deleted || workspaceOf(current, records) !== target.workspaceId)) {
+    throw taskOptionLogical('This list is no longer available in this workspace. Restore or reopen the list to compare, copy, or discard this draft.');
+  }
+  if (checkVersion && (current?.version || 0) !== target.version) throw taskOptionLogical('Defaults changed while editing. Copy your options and reopen the latest defaults to compare.');
+  return current;
+}
+$('taskOptionRows').addEventListener('click', event => {
+  const link = event.target.closest('[data-task-option]');
+  if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault(); void enterTaskOptionField(link.dataset.taskOption);
+});
+$('taskOptionsMasterBack').onclick = () => { void leaveTaskOptions(); };
+$('taskOptionEditorBack').onclick = () => { void leaveTaskOptions(); };
+$('taskOptionValue').addEventListener('input', () => {
+  snapshotTaskOptionValue(); $('defaultsError').hidden = true; statusText('taskOptionStatus', 'Saving draft on this device…');
+  const pending = journalTaskOptions();
+  void pending.then(saved => {
+    if (pending === taskOptionJournalPromise && taskOptionRoute(destination)) statusText('taskOptionStatus', saved ? 'Draft saved on this device.' : 'Draft not saved on this device.');
+  });
+});
 $('resetDefaults').onclick = () => {
+  if (!defaultsEditing) return;
   const values = defaultsEditing.type === 'settings' ? state.defaultSettings : userDefaults();
-  fillValues($('defaultsForm'), Object.fromEntries(Object.keys(optionFields).map(name => [name, (values[name] || []).join('\n')])));
-  void journal();
+  defaultsEditing.values = Object.fromEntries(Object.keys(optionFields).map(name => [name, (values[name] || []).join('\n')]));
+  $('taskOptionValue').value = defaultsEditing.values[renderedTaskOptionField] || '';
+  $('defaultsError').hidden = true; statusText('taskOptionStatus', 'All six draft vocabularies were replaced. Save to apply them.');
+  renderTaskOptions(); void journalTaskOptions();
+};
+$('discardDefaultsDraft').onclick = () => {
+  if (saving || !defaultsEditing || !accountId) return;
+  snapshotTaskOptionValue();
+  const owner = accountId, generation = accountGeneration, target = structuredClone(defaultsEditing), controls = [...$('defaultsForm').elements], focusControl = document.activeElement;
+  saving = true; controls.forEach(control => { control.disabled = true; });
+  void taskOptionJournalPromise.then(() => transact(owner, local => {
+    try {
+      currentTaskOptionRecord(local, target, { checkVersion: false, checkAvailability: false });
+      if (target.type === 'settings') {
+        const draft = local.preferenceDraft?.defaults;
+        if (matchingTaskOptionDraft(draft, target)) local.preferenceDraft = { ...(local.preferenceDraft || {}), defaults: null };
+      } else {
+        const draft = workspaceDraft(local, target.workspaceId).defaults;
+        if (matchingTaskOptionDraft(draft, target)) workspaceDraft(local, target.workspaceId).defaults = null;
+      }
+    } catch (failure) { failure.taskOptionLogical = true; throw failure; }
+  })).then(saved => {
+    if (owner !== accountId || generation !== accountGeneration) return;
+    state = saved; defaultsEditing = null; renderedTaskOptionField = null; clearError(); renderTaskOptions(); render();
+    statusText('taskOptionStatus', 'Draft discarded. Latest saved options restored.'); $('taskOptionValue').focus();
+  }).catch(failure => {
+    if (owner !== accountId || generation !== accountGeneration) return;
+    if (failure.taskOptionLogical) error(failure.message); else storageFailure(failure);
+  }).finally(() => { saving = false; controls.forEach(control => { control.disabled = false; }); if (focusControl?.isConnected && taskOptionRoute(destination)) focusControl.focus(); });
 };
 $('defaultsForm').addEventListener('submit', event => {
   event.preventDefault();
   if (saving || !defaultsEditing || !accountId) return;
+  snapshotTaskOptionValue();
+  const target = structuredClone(defaultsEditing), owner = accountId, generation = accountGeneration, controls = [...$('defaultsForm').elements], focusControl = document.activeElement;
   let defaults;
-  try { defaults = defaultsFrom($('defaultsForm')); } catch (failure) { error(failure.message); return; }
-  saving = true;
-  const owner = accountId, record = { ...defaultsEditing }, controls = [...$('defaultsForm').elements];
-  controls.forEach(control => { control.disabled = true; });
-  void (async () => {
+  try { defaults = taskOptionsFromDraft(target); } catch (failure) { error(failure.message); return; }
+  saving = true; controls.forEach(control => { control.disabled = true; });
+  void taskOptionJournalPromise.then(() => transact(owner, local => {
     try {
-      const saved = await transact(owner, local => {
-        const current = projected(local)[key(record)];
-        if ((current?.version || 0) !== record.version) throw new Error('Defaults changed while editing. Copy your options and reopen the latest defaults to compare.');
-        enqueue(local, owner, [{ type: record.type, id: record.id, action: record.version ? 'update' : 'create', expectedVersion: record.version, fields: { defaults } }]);
-        if (record.type === 'settings') local.preferenceDraft = { ...(local.preferenceDraft || {}), defaults: null };
-        else currentDraft(local).defaults = null;
-      });
-      if (owner !== accountId) return;
-      state = saved; defaultsEditing = null; clearError(); render();
-      if (record.type === 'settings' && destination === 'preferences/task-options') openDefaults(projected(state)['settings:settings'] || { type: 'settings', id: 'settings', version: 0 }, false, false);
-      else $('defaultsEditor').close();
-      broadcast(); void sync();
-    } catch (failure) { if (owner === accountId) storageFailure(failure); }
-    finally { saving = false; controls.forEach(control => { control.disabled = false; }); }
-  })();
+      if (local.queue.some(entry => entry.failure)) throw taskOptionLogical('Resolve the failed save before changing task options.');
+      currentTaskOptionRecord(local, target);
+      enqueue(local, owner, [{ type: target.type, id: target.id, action: target.version ? 'update' : 'create', expectedVersion: target.version, fields: { defaults } }]);
+      if (target.type === 'settings') local.preferenceDraft = { ...(local.preferenceDraft || {}), defaults: null };
+      else workspaceDraft(local, target.workspaceId).defaults = null;
+    } catch (failure) { failure.taskOptionLogical = true; throw failure; }
+  })).then(saved => {
+    if (owner !== accountId || generation !== accountGeneration) return;
+    state = saved; defaultsEditing = null; renderedTaskOptionField = null; clearError(); renderTaskOptions(); render();
+    statusText('taskOptionStatus', 'Saved on device; sync pending'); broadcast(); void sync();
+  }).catch(failure => {
+    if (owner !== accountId || generation !== accountGeneration) return;
+    if (failure.taskOptionLogical) error(failure.message); else storageFailure(failure);
+  }).finally(() => { saving = false; controls.forEach(control => { control.disabled = false; }); if (focusControl?.isConnected && taskOptionRoute(destination)) focusControl.focus(); });
 });
 capture.addEventListener('keydown', event => {
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.repeat) { event.preventDefault(); capture.requestSubmit(); }
@@ -1971,7 +2206,7 @@ function hideAccount() {
   accountId = null; state = undefined; editing = null; originalInput = undefined;
   $('savedEdit').hidden = true; $('savedEditStatus').textContent = '';
   clarification.hide();
-  defaultsEditing = null; $('defaultsEditor').close(); $('listDefaultsHost').append($('defaultsSurface')); $('defaultsSurface').hidden = true; $('defaultsForm').reset();
+  defaultsEditing = null; renderedTaskOptionField = null; taskOptionJournalPromise = Promise.resolve(true); $('defaultsForm').reset(); $('taskOptionsView').hidden = true;
   $('recurringEditor').close(); $('recurringTemplates').replaceChildren(); $('recurringStatus').textContent = '';
   $('editor').close(); $('editError').hidden = true; $('original').textContent = '';
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();

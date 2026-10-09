@@ -1,5 +1,5 @@
 import { revealControl } from './navigation-helper.mjs';
-import { clickControl, openMenu, openPreference } from './navigation-helper.mjs';
+import { clickControl, openAccountTaskOption, openMenu, openPreference } from './navigation-helper.mjs';
 import { showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
@@ -199,15 +199,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v34')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v35')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=32', '/inbox.js?v=31', '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/search-model.js?v=1',
+    '/inbox.js?v=33', '/inbox.js?v=32', '/inbox.js?v=31', '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=5', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/search-model.js?v=1',
     '/collection-model.js?v=5', '/collection-model.js?v=4', '/collection-model.js?v=3', '/collections.js?v=5', '/collections.js?v=4', '/workspace-move.js?v=5', '/workspace-move.js?v=4', '/workspaces.js?v=5', '/workspaces.js?v=4', '/recurrence-model.js?v=1', '/recurrence-ui.js?v=3', '/recurrence-ui.js?v=2', '/recurrence-ui.js?v=1',
     '/clarification.js?v=11', '/clarification.js?v=10', '/clarification.js?v=9', '/clarification.js?v=8', '/clarification-preferences.js?v=3', '/clarification-preferences.js?v=2', '/clarification-flow.js?v=4', '/reviews.js?v=11', '/reviews.js?v=10', '/reviews.js?v=9', '/briefs.js?v=6', '/briefs.js?v=5', '/briefs.js?v=4', '/project-planning.js?v=1', '/project-planning-model.js?v=1',
-    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=30', '/shared.js?v=29', '/shared.js?v=28', '/shared.js?v=27', '/shared.js?v=26', '/shared.js?v=25', '/shared.js?v=24', '/shared.js?v=23', '/shared.js?v=22', '/shared.js?v=21',
-    '/pwa.js?v=30', '/pwa.js?v=29', '/pwa.js?v=28', '/pwa.js?v=27', '/pwa.js?v=26', '/pwa.js?v=25', '/pwa.js?v=24', '/pwa.js?v=23', '/pwa.js?v=22', '/pwa.js?v=21', '/manifest.json',
+    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=31', '/shared.js?v=30', '/shared.js?v=29', '/shared.js?v=28', '/shared.js?v=27', '/shared.js?v=26', '/shared.js?v=25', '/shared.js?v=24', '/shared.js?v=23', '/shared.js?v=22', '/shared.js?v=21',
+    '/pwa.js?v=31', '/pwa.js?v=30', '/pwa.js?v=29', '/pwa.js?v=28', '/pwa.js?v=27', '/pwa.js?v=26', '/pwa.js?v=25', '/pwa.js?v=24', '/pwa.js?v=23', '/pwa.js?v=22', '/pwa.js?v=21', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -481,13 +481,14 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v33 to v34 preserves a draft and exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v34 to v35 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v34', 'shell-v33')
-      .replace('/inbox.js?v=32', '/inbox.js?v=31').replace('/pwa.js?v=30', '/pwa.js?v=29').replace('/shared.js?v=30', '/shared.js?v=29')
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v35', 'shell-v34')
+      .replace('/inbox.js?v=33', '/inbox.js?v=32').replace('/pwa.js?v=31', '/pwa.js?v=30').replace('/shared.js?v=31', '/shared.js?v=30')
+      .replace('./inbox-fields.js?v=5', './inbox-fields.js?v=4')
       .replace("./clarification.js?v=11", "./clarification.js?v=10").replace("./clarification-preferences.js?v=3", "./clarification-preferences.js?v=2")
       .replace('/inbox-export.js?v=18', '/inbox-export.js?v=17').replace('/briefs.js?v=6', '/briefs.js?v=5'),
   ])));
@@ -496,7 +497,7 @@ test('shell upgrade from v33 to v34 preserves a draft and exact queued operation
   // Keep the current/prior asset pairs intact in the synthetic old worker. Rewriting
   // its current query to the already-retained prior query would make cache.addAll
   // reject duplicate requests before the upgrade scenario can begin.
-  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v34', 'shell-v33'));
+  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v35', 'shell-v34'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => {
     if (!nextShell) return previousAssets.get(path);
@@ -510,10 +511,13 @@ test('shell upgrade from v33 to v34 preserves a draft and exact queued operation
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v33')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v34')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
+  await openAccountTaskOption(page, 'contexts'); await page.locator('#taskOptionValue').fill('@Upgrade');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).preferenceDraft?.defaults?.values.contexts === '@Upgrade');
+  await showView(page, 'capture');
   const before = await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
   assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
   nextShell = true; rejectUpgrade = true;
@@ -536,7 +540,7 @@ test('shell upgrade from v33 to v34 preserves a draft and exact queued operation
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v34')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v35')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.equal(await page.evaluate(async operation => (await fetch('/api/v1/operations', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation)
@@ -555,16 +559,16 @@ test('shell upgrade from v33 to v34 preserves a draft and exact queued operation
 
 test('defaults draft survives reload and failed storage remains recoverable; date conversion rejects DST gaps', { timeout: 90000 }, async t => {
   const { page } = await setup(t, { timezoneId: 'America/New_York' });
-  await openPreference(page, 'task-options');
-  await page.locator('#defaultsForm [name=contexts]').fill('@Draft');
+  await openAccountTaskOption(page, 'contexts');
+  await page.locator('#taskOptionValue').fill('@Draft');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).preferenceDraft?.defaults?.values.contexts === '@Draft');
-  await page.reload(); await page.locator('#preferencesTaskOptionsHeading').waitFor();
-  assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Draft');
+  await page.reload(); await page.locator('#taskOptionHeading').waitFor();
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Draft');
   await page.evaluate(() => {
     const original = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function () { if (this.name === 'accounts') throw new DOMException('Full', 'QuotaExceededError'); return original.apply(this, arguments); };
   });
-  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.locator('#recovery').waitFor();
   assert.match(await page.locator('#recoveryText').inputValue(), /@Draft/);
   assert.equal(records().length, 0);
@@ -579,8 +583,8 @@ test('defaults draft survives reload and failed storage remains recoverable; dat
 
 test('independent clients page through all work and resolve defaults conflicts without losing either proposal', { timeout: 90000 }, async t => {
   const { page, browser, url } = await setup(t);
-  await openPreference(page, 'task-options');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await openAccountTaskOption(page, 'contexts');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).records['settings:settings']?.version === 1);
   await confirmed(page);
   // More than one 50-entry change page, using real handlers and independent intents.
@@ -588,17 +592,17 @@ test('independent clients page through all work and resolve defaults conflicts w
   const otherContext = await browser.newContext(); t.after(() => otherContext.close());
   const other = await otherContext.newPage(); await other.goto(url); await other.locator('#workspace').waitFor();
   await other.waitForFunction(() => document.querySelectorAll('#items article').length === 52);
-  await openPreference(other, 'task-options');
-  await other.locator('#defaultsForm [name=contexts]').fill('@Laptop');
+  await openAccountTaskOption(other, 'contexts');
+  await other.locator('#taskOptionValue').fill('@Laptop');
   await other.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await otherContext.setOffline(true);
-  await other.getByRole('button', { name: 'Save defaults on device' }).click();
+  await other.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForBrowser(other, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry =>
     entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.includes('@Laptop'))));
   const pending = (await local(other)).queue[0].operation;
-  await openPreference(page, 'task-options');
-  await page.locator('#defaultsForm [name=contexts]').fill('@Phone');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await openAccountTaskOption(page, 'contexts');
+  await page.locator('#taskOptionValue').fill('@Phone');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForBrowser(page, async () => {
     const settings = (await (await import('/inbox-store.js?v=9')).transact('alice')).records['settings:settings'];
     return settings?.version === 2 && settings.defaults.contexts.includes('@Phone');

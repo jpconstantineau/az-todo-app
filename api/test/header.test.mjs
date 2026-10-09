@@ -284,7 +284,7 @@ test('sign-out in another tab clears a preference route and hides account chrome
   const second = await context.newPage();
   await second.goto(url); await status(second, 'confirmed');
   await openPreference(second, 'task-options');
-  await second.locator('#preferencesTaskOptionsHeading').waitFor();
+  await second.locator('#taskOptionsMasterHeading').waitFor();
   setUser(null);
   await clickControl(page.locator('#signOut'));
   await page.locator('#workspace').waitFor({ state: 'hidden' });
