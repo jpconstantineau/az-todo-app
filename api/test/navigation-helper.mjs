@@ -13,6 +13,10 @@ export async function showView(page, view) {
   if (await link.getAttribute('aria-current') !== 'page') {
     await link.click();
     await page.waitForFunction(hash => document.querySelector('.workspace-nav [aria-current="page"]').hash === hash, '#' + view);
+    await page.waitForFunction(ids => ids.includes(document.activeElement?.id), {
+      capture: ['captureText', 'workspaceSelect'], work: ['itemsHeading'], lists: ['itemsHeading'],
+      plan: ['planHeading'], execute: ['executeHeading'], reviews: ['reviewsHeading']
+    }[view]);
   }
 }
 
