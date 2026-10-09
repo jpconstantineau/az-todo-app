@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=29" defer></script>
+  <script src="/pwa.js?v=30" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=31"></script>
+  <script type="module" src="/inbox.js?v=32"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -101,13 +101,42 @@
           <div class="preferences-content appearance-preference"><label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label><p class="preference-scope">Browser</p></div>
         </section>
         <section id="preferencesProcess" class="preferences-detail" aria-labelledby="preferencesProcessHeading" hidden>
-          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Process preferences">← Back</button><h1 id="preferencesProcessHeading" tabindex="-1">Process</h1></div>
-          <div class="preferences-content"><p class="preference-scope">Browser</p>
-            <section aria-labelledby="clarifyActionsHeading"><h2 id="clarifyActionsHeading">Clarify actions</h2>
-              <p>Choose the order and whether each action appears in the primary grid or under More. Custom types are labels for an existing Clarify behavior.</p>
-              <ol id="clarifyActionPreferences" class="clarify-preferences"></ol>
-              <form id="addClarifyAction" class="form-grid"><label>Custom label<input name="label" required maxlength="64"></label><label>Behavior<select name="behavior"></select></label><label>Section<select name="placement"><option value="primary">Primary</option><option value="more">More</option></select></label><button type="submit">Add custom type</button></form>
-              <div class="actions"><button id="resetClarifyActions" type="button">Restore Clarify defaults</button></div><p id="clarifyActionStatus" class="muted" role="status" aria-live="polite"></p>
+          <div id="preferencesProcessPage">
+            <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Process preferences">← Back</button><h1 id="preferencesProcessHeading" tabindex="-1">Process</h1></div>
+            <div class="preferences-content"><p class="preference-scope">Browser</p>
+              <a id="openClarifyActions" class="menu-row process-preference-row" href="#preferences/process/clarify-actions"><span>Clarify actions</span><span class="menu-row-end"><span id="clarifyActionCount" class="menu-row-value">12 actions · Browser</span><span aria-hidden="true">›</span></span></a>
+            </div>
+          </div>
+          <div id="clarifyActionsPage" class="clarify-preferences-page" hidden>
+            <section id="clarifyActionMaster" class="clarify-action-master" aria-labelledby="clarifyActionsHeading">
+              <div class="menu-page-bar"><button id="clarifyActionsBack" type="button" aria-label="Back from Clarify actions">← Back</button><h1 id="clarifyActionsHeading" tabindex="-1">Clarify actions</h1><h2 id="clarifyActionsMasterHeading" hidden>Clarify actions</h2></div>
+              <div class="preferences-content">
+                <p>Choose which actions appear in Primary or More and their order.</p>
+                <div id="clarifyActionGroups">
+                  <section class="clarify-action-group" aria-labelledby="clarifyPrimaryHeading"><h2 id="clarifyPrimaryHeading">Primary</h2><ol id="clarifyPrimaryActions"></ol></section>
+                  <section class="clarify-action-group" aria-labelledby="clarifyMoreHeading"><h2 id="clarifyMoreHeading">More</h2><ol id="clarifyMoreActions"></ol></section>
+                </div>
+                <div class="clarify-master-actions"><a id="addClarifyAction" class="button" href="#preferences/process/clarify-actions/add">Add action</a><span id="clarifyAddDraft" class="clarify-action-draft" hidden>Draft</span></div>
+                <button id="resetClarifyActions" type="button">Restore 12 default actions</button>
+                <p class="muted">Replaces custom labels, aliases, grouping, and order for this browser.</p>
+                <div id="restoreClarifyConfirmation" class="clarify-consequence" hidden><p>Replace every current Clarify action with the 12 defaults for this browser?</p><div class="actions"><button id="confirmResetClarifyActions" type="button">Restore defaults</button><button id="cancelResetClarifyActions" type="button">Cancel</button></div></div>
+                <p id="clarifyActionStatus" class="muted" role="status" aria-live="polite"></p>
+                <p id="clarifyActionError" role="alert" hidden></p>
+              </div>
+            </section>
+            <section id="clarifyActionEditorPanel" class="clarify-action-editor" aria-labelledby="clarifyActionEditorHeading" hidden>
+              <div class="menu-page-bar"><button id="clarifyActionEditorBack" type="button" aria-label="Back from Clarify action editor">← Back</button><h1 id="clarifyActionEditorHeading" tabindex="-1">Edit Clarify action</h1></div>
+              <div class="preferences-content">
+                <form id="clarifyActionEditor" class="form-grid">
+                  <label>Label<input name="label" required maxlength="64"></label>
+                  <label>Behavior<select name="behavior"></select></label>
+                  <label>Section<select name="placement"><option value="primary">Primary</option><option value="more">More</option></select></label>
+                  <label>Position in Primary/More<select name="position"></select></label>
+                  <div class="actions"><button type="submit">Save</button><button id="discardClarifyActionDraft" type="button">Discard draft</button></div>
+                </form>
+                <p id="clarifyActionEditorStatus" class="muted" role="status" aria-live="polite"></p>
+                <section class="clarify-remove" aria-labelledby="clarifyRemoveHeading"><h2 id="clarifyRemoveHeading">Remove action</h2><p id="clarifyRemoveHelp"></p><button id="removeClarifyAction" class="danger-button" type="button">Remove action</button></section>
+              </div>
             </section>
           </div>
         </section>

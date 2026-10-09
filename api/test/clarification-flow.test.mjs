@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, faults, startServer } from './harness.mjs';
-import { clickControl, openPreference, showView } from './navigation-helper.mjs';
+import { clickControl, openClarificationPreferences, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { newFlow, flowProposal, membershipChange, itemFields, beforeFields } from '../../html/clarification-flow.js';
 import { clarificationFields } from '../api/v1/clarification.mjs';
@@ -174,12 +174,12 @@ test('clarification redraws preserve panel and destination scroll with logical f
       focus: document.activeElement.dataset.focusKey || document.activeElement.textContent };
   });
   const assertPreserved = async (before, focus) => {
-    await waitForBrowser(page, ({ before, focus }) => {
+    await page.waitForFunction(({ before, focus }) => {
       const dialog = document.querySelector('#clarifier'), list = document.querySelector('.clarify-destinations');
       return Math.abs(dialog.scrollTop - Math.min(before.panel, dialog.scrollHeight - dialog.clientHeight)) <= 1
         && Math.abs(list.scrollTop - Math.min(before.destinations, list.scrollHeight - list.clientHeight)) <= 1
         && (document.activeElement.dataset.focusKey || document.activeElement.textContent) === focus;
-    }, { before, focus }, 3000);
+    }, { before, focus });
     const after = await state();
     assert.ok(Math.abs(after.panel - Math.min(before.panel, after.panelMax)) <= 1);
     assert.ok(Math.abs(after.destinations - Math.min(before.destinations, after.destinationsMax)) <= 1);
@@ -256,16 +256,20 @@ test('clarification preferences persist order and a custom alias dispatches its 
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed(page);
-  await openPreference(page, 'process');
-  const rows = page.locator('#clarifyActionPreferences > li');
-  assert.deepEqual(await rows.locator('[data-field="label"]').evaluateAll(inputs => inputs.slice(0, 6).map(input => input.value)),
+  await openClarificationPreferences(page);
+  assert.deepEqual(await page.locator('#clarifyPrimaryActions .clarify-action-link > span:first-child').allTextContents(),
     ['Make project', 'Make list', 'Make checklist', 'Action', 'Reference', 'Someday']);
-  await page.locator('#addClarifyAction [name="label"]').fill('Make shopping list');
-  await page.locator('#addClarifyAction [name="behavior"]').selectOption('make-checklist');
-  await page.locator('#addClarifyAction [type="submit"]').click();
+  await page.locator('#addClarifyAction').click();
+  await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions/add');
+  await page.locator('#clarifyActionEditor [name="label"]').fill('Make shopping list');
+  await page.locator('#clarifyActionEditor [name="behavior"]').selectOption('make-checklist');
+  await page.locator('#clarifyActionEditor [type="submit"]').click();
+  await page.waitForFunction(() => location.hash.includes('/clarify-actions/edit/'));
   await page.reload(); await page.locator('#workspace').waitFor();
-  await openPreference(page, 'process');
-  assert.equal(await page.locator('#clarifyActionPreferences [data-field="label"]').last().inputValue(), 'Make shopping list');
+  assert.equal(await page.locator('#clarifyActionEditor [name="label"]').inputValue(), 'Make shopping list');
+  await page.locator('#clarifyActionEditorBack').click();
+  await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions');
+  assert.equal(await page.locator('#clarifyPrimaryActions .clarify-action-link > span:first-child').last().textContent(), 'Make shopping list');
   await showView(page, 'work');
   await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
   await page.getByRole('button', { name: 'No parent', exact: true }).click();

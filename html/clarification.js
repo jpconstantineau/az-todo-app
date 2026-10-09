@@ -292,6 +292,11 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
     } else drawResult();
     void journal();
   });
+  document.addEventListener('clarification-actions-change', () => {
+    if (!dialog.open || !active || active.finished || values().view !== 'classify') return;
+    const focusKey = document.activeElement?.dataset.focusKey || 'question';
+    active.proposal = values(); draw({ preserve: true, focusKey });
+  });
   $('clarifySave').onclick = () => void perform(saveChoice);
   $('clarifySkip').onclick = () => void perform(skip);
   $('clarifyStop').onclick = () => { guidance.hide(); dialog.close(); };

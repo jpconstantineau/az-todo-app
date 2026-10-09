@@ -4,7 +4,10 @@ export async function showView(page, view) {
   if (await page.locator('#appDevice:modal').count()) await page.locator('#closeAppDevice').click();
   while (new URL(page.url()).hash.startsWith('#preferences')) {
     const hash = new URL(page.url()).hash;
-    await page.locator(hash === '#preferences' ? '#preferencesBack' : '.preferences-detail:not([hidden]) .preference-back').click();
+    const back = hash === '#preferences' ? '#preferencesBack'
+      : hash.startsWith('#preferences/process/clarify-actions/edit/') || hash === '#preferences/process/clarify-actions/add' ? '#clarifyActionEditorBack'
+        : hash === '#preferences/process/clarify-actions' ? '#clarifyActionsBack' : '.preferences-detail:not([hidden]) .preference-back:visible';
+    await page.locator(back).click();
     await page.waitForFunction(previous => location.hash !== previous, hash);
   }
   if (new URL(page.url()).hash === '#menu') {
@@ -48,6 +51,13 @@ export async function openPreference(page, id) {
     await page.waitForFunction(expected => location.hash === expected && document.activeElement?.closest('.preferences-detail')?.hidden === false, route);
   }
 }
+export async function openClarificationPreferences(page) {
+  if (new URL(page.url()).hash !== '#preferences/process/clarify-actions') {
+    await openPreference(page, 'process');
+    await page.locator('#openClarifyActions').click();
+    await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions' && document.activeElement?.id === 'clarifyActionsHeading');
+  }
+}
 export async function revealControl(control) {
   // Open the routed utility hub and its current native surface before controls.
   await control.waitFor({ state: 'attached' });
@@ -81,6 +91,7 @@ export async function clickControl(control) {
   await control.click();
   if (id === 'sync' && new URL(page.url()).hash === '#menu' && await page.locator('#workspace').isVisible()) {
     await page.locator('#menuBack').evaluate(button => button.click());
-    await page.waitForFunction(() => location.hash !== '#menu');
+    await page.waitForFunction(() => document.querySelector('#workspace').hidden
+      || (location.hash !== '#menu' && document.querySelector('#menuView').hidden));
   }
 }
