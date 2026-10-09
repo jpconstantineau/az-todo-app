@@ -182,6 +182,9 @@
 @media (max-width: 1023px) {
   .preferences-shell[data-route="detail"] #preferencesNav { display: none; }
 }
+@media (min-width: 600px) and (max-width: 767px) {
+  .inbox-page.container { padding-inline: max(var(--space-6), env(safe-area-inset-left)) max(var(--space-6), env(safe-area-inset-right)); }
+}
 @media (min-width: 1600px) {
   .inbox-page.container { max-width: 1440px; }
 }

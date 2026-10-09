@@ -112,7 +112,7 @@ function validateExport(value, server = false) {
     `${path}: invalid project plan revision.`);
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
-  unknown(state, ['records', 'queue', 'after', 'draft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');
+  unknown(state, ['records', 'queue', 'after', 'draft', 'preferenceDraft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');
   const draft = (entry, path) => {
     require(object(entry), `${path}: draft must be an object.`);
     unknown(entry, ['workspaceId', 'capture', 'edit', 'editOpen', 'defaults', 'defaultsOpen', 'clarification', 'brief', 'projectPlanning', 'collectionUtility', 'day', 'navigation', 'review', 'extraction', 'recurrence'], path);
@@ -313,6 +313,7 @@ export function readableExport(value) {
   }
   lines.push('', 'CURRENT FORM DRAFT (not submitted)', JSON.stringify(value.draft, null, 2),
     '', 'SAVED DEVICE DRAFT (may differ from current form)', JSON.stringify(value.state.draft, null, 2));
+  if (value.state.preferenceDraft?.defaults) lines.push('', 'ACCOUNT PREFERENCE DRAFT (not submitted)', JSON.stringify(value.state.preferenceDraft, null, 2));
   if (value.state.workspaceDrafts) lines.push('', 'WORKSPACE DRAFTS (not submitted)', JSON.stringify(value.state.workspaceDrafts, null, 2));
   if (value.state.undoEdit) lines.push('', 'LAST DEVICE EDIT RECOVERY (not a restore instruction)', JSON.stringify(value.state.undoEdit, null, 2));
   if (value.state.workspaceMove) lines.push('', 'RESUMABLE COLLECTION MOVE (not server-confirmed until complete)', JSON.stringify(value.state.workspaceMove, null, 2));

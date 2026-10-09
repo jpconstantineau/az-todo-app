@@ -46,7 +46,7 @@ test('Preferences routes expose only live categories with route, focus, Back and
   await page.locator('[data-appearance]').selectOption('light');
   assert.equal(await page.locator('#preference-appearance-summary').textContent(), 'Light · Browser');
 
-  for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
+  for (const [width, height] of [[320, 568], [390, 844], [600, 900], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
     await page.setViewportSize({ width, height });
     assert.equal(new URL(page.url()).hash, '#preferences/appearance');
     assert.equal(await page.locator('#preferencesAppearanceHeading').evaluate(element => element === document.activeElement), true);
@@ -54,6 +54,11 @@ test('Preferences routes expose only live categories with route, focus, Back and
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px has no horizontal overflow`);
     assert.equal(await page.locator('#preferencesNav').isVisible(), width >= 1024);
     if (width >= 1024) assert.equal(Math.round((await page.locator('#preferencesNav').boundingBox()).width), 280);
+    if (width === 600) {
+      const shell = await page.locator('#preferencesView').boundingBox();
+      assert.equal(Math.round(shell.x), 24);
+      assert.equal(Math.round(width - shell.x - shell.width), 24);
+    }
     assert.ok(await page.locator('.preferences-detail:visible .menu-page-bar').evaluate(element => element.getBoundingClientRect().height >= 48));
   }
   await page.setViewportSize({ width: 320, height: 568 });
@@ -68,6 +73,9 @@ test('Preferences routes expose only live categories with route, focus, Back and
 
   await page.goto(server.url + '#preferences/process'); await page.locator('#preferencesProcessHeading').waitFor();
   assert.equal(await page.locator('#preferencesProcessHeading').evaluate(element => element === document.activeElement), true);
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.locator('#preference-appearance').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance');
   await page.locator('.preferences-detail:visible .preference-back').click();
   await page.waitForFunction(() => location.hash === '#capture');
   await page.goto(server.url + '#preferences'); await page.locator('#preferencesHeading').waitFor();

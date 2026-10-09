@@ -1542,8 +1542,11 @@ async function enterPreferenceCategory(category) {
     markUtilityReturn(route, `preference-${category.id}`);
     history.pushState({ todoPreference: { session: menuHistorySession, accountId, origin: location.origin, route, parent: 'preferences', target: `preference-${category.id}`, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
   } else if (preferenceRoutes.has(destination)) {
-    const current = history.state && typeof history.state === 'object' ? history.state : {};
-    history.replaceState({ ...current, todoPreference: { session: menuHistorySession, accountId, origin: location.origin, route, parent: 'preferences', target: `preference-${category.id}`, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
+    const current = history.state && typeof history.state === 'object' ? { ...history.state } : {};
+    const returning = preferenceEntry();
+    if (returning) current.todoPreference = { ...returning, route, target: `preference-${category.id}` };
+    else delete current.todoPreference;
+    history.replaceState(current, '', '#' + route);
   } else return;
   workspace(true, { save: false });
 }
