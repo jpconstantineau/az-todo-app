@@ -1539,7 +1539,9 @@ function restoreRoutePosition(entry) {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     if (!accountId || destination !== entry.route || document.querySelector('dialog[open]')) return;
     scrollTo(entry.scrollX, entry.scrollY);
-    $(entry.target)?.focus({ preventScroll: true });
+    const target = $(entry.target);
+    if (target) target.focus({ preventScroll: true });
+    else focusDestination();
   }));
 }
 async function enterMenu() {

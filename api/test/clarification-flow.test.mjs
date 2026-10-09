@@ -174,12 +174,12 @@ test('clarification redraws preserve panel and destination scroll with logical f
       focus: document.activeElement.dataset.focusKey || document.activeElement.textContent };
   });
   const assertPreserved = async (before, focus) => {
-    await waitForBrowser(page, ({ before, focus }) => {
+    await page.waitForFunction(({ before, focus }) => {
       const dialog = document.querySelector('#clarifier'), list = document.querySelector('.clarify-destinations');
       return Math.abs(dialog.scrollTop - Math.min(before.panel, dialog.scrollHeight - dialog.clientHeight)) <= 1
         && Math.abs(list.scrollTop - Math.min(before.destinations, list.scrollHeight - list.clientHeight)) <= 1
         && (document.activeElement.dataset.focusKey || document.activeElement.textContent) === focus;
-    }, { before, focus }, 3000);
+    }, { before, focus });
     const after = await state();
     assert.ok(Math.abs(after.panel - Math.min(before.panel, after.panelMax)) <= 1);
     assert.ok(Math.abs(after.destinations - Math.min(before.destinations, after.destinationsMax)) <= 1);

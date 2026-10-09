@@ -91,6 +91,7 @@ export async function clickControl(control) {
   await control.click();
   if (id === 'sync' && new URL(page.url()).hash === '#menu' && await page.locator('#workspace').isVisible()) {
     await page.locator('#menuBack').evaluate(button => button.click());
-    await page.waitForFunction(() => location.hash !== '#menu');
+    await page.waitForFunction(() => document.querySelector('#workspace').hidden
+      || (location.hash !== '#menu' && document.querySelector('#menuView').hidden));
   }
 }

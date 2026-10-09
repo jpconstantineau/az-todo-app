@@ -205,6 +205,8 @@ test('Clarify action pages keep ordered browser settings, explicit drafts, focus
   await page.locator('#removeClarifyAction').click();
   await page.waitForFunction(route => location.hash !== route && document.activeElement?.id === 'clarifyActionEditorHeading', customRoute);
   assert.equal(await page.getByText('Make shopping list', { exact: true }).count(), 0);
+  await page.locator('#clarifyActionEditorBack').click();
+  await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions' && document.activeElement?.id === 'clarifyActionsHeading');
   await page.goto(server.url + customRoute);
   await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions' && document.activeElement?.id === 'clarifyActionsHeading');
   await page.locator('#resetClarifyActions').click();
