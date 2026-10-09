@@ -283,17 +283,20 @@ test('accessibility: contextual add, list, project, defaults and clarification d
   await page.locator('#defaultsForm [name=contexts]').fill('At home');
   await page.locator('#defaultsForm [type=submit]').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '[aria-label="Defaults: Household"]');
-  await page.locator('#appMenu > summary').focus(); await page.keyboard.press('Enter');
+  await page.locator('#appMenu').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#menuHeading');
   await page.locator('#userDefaults').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#defaultsEditor:modal #defaultsForm [name=contexts]');
   await page.keyboard.press('Escape'); await expectFocus(page, '#userDefaults');
   await page.getByRole('button', { name: 'Preferences', exact: true }).focus(); await page.keyboard.press('Enter');
-  await expectFocus(page, '#preferences:modal [data-appearance]');
+  await expectFocus(page, '#preferencesTitle');
   await page.keyboard.press('Escape'); await expectFocus(page, '[data-open-preferences]');
+  await keyboardActivate(page, '#menuBack'); await expectFocus(page, '#appMenu');
   await page.locator('#openReviews').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#reviewsHeading');
   assert.equal(await page.locator('dialog:modal').count(), 0);
   await keyboardActivate(page, '#closeReviews'); await expectFocus(page, '#openReviews');
+  await page.locator('#appMenu').focus(); await page.keyboard.press('Enter'); await expectFocus(page, '#menuHeading');
   // Force native closes into one task so the earlier close events arrive
   // after focus has moved on. It must not steal the later dialog's return focus.
   await page.evaluate(async () => {
@@ -305,6 +308,7 @@ test('accessibility: contextual add, list, project, defaults and clarification d
     await Promise.all(closed);
   });
   await expectFocus(page, '[data-open-preferences]');
+  await page.locator('#openDataRecovery').click(); await expectFocus(page, '#dataRecoveryHeading');
   await page.locator('#exportTools > summary').focus(); await page.keyboard.press('Enter');
   await page.locator('#export').focus();
   const download = page.waitForEvent('download'); await page.keyboard.press('Enter');

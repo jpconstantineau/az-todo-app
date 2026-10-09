@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=26" defer></script>
+  <script src="/pwa.js?v=27" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=28"></script>
+  <script type="module" src="/inbox.js?v=29"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -19,29 +19,9 @@
     <span id="saveStatus" class="save-status" role="status" hidden><svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z M7 3v6h10V3 M7 21v-8h10v8"/></svg><span id="connectionLabel" class="sr-only"></span></span>
     <button id="agentStatus" class="agent-status" type="button" aria-label="Checking AI agent availability." aria-disabled="true" data-state="busy"><svg class="agent-icon" viewBox="0 0 32 32" aria-hidden="true"><g class="agent-robot" transform="translate(3.2 3.2) scale(.8)"><rect x="7" y="11" width="18" height="15" rx="1.5"/><path d="M7 15H4v7h3m18-7h3v7h-3M16 7v4"/><circle cx="16" cy="5" r="2"/><circle cx="12" cy="18" r="1.2"/><circle cx="20" cy="18" r="1.2"/></g><g class="agent-unavailable"><circle cx="16" cy="16" r="14"/><path d="M6 6l20 20"/></g></svg></button>
     <span id="agentLabel" class="sr-only" role="status"></span>
-    <details id="appMenu" class="responsive-menu"><summary aria-label="Menu" title="Menu">☰ Menu</summary>
-      <div class="menu-content">
-        <nav class="row" aria-label="Account"><button type="button" data-open-preferences>Preferences</button><a href="/help.html" target="_blank" rel="noopener">Help <span class="sr-only">(opens in a new tab)</span></a><button id="signOut" hidden>Sign out</button></nav>
-        <div id="menuDeviceTools" hidden><div class="toolbar device-tools"><button id="sync">Sync now</button><button id="manageWorkspaces" type="button">Manage workspaces</button><button id="userDefaults">User defaults</button></div>
-        <details id="connection"><summary>Account &amp; device status<span id="offlineBadge" role="status"></span></summary>
-          <p id="sessionStatus" role="status"></p><p id="offlineStatus" role="status"></p><p id="syncStatus" role="status"></p>
-        </details>
-        <button id="openDeleted" type="button">Deleted records</button><a class="button" href="/shared.html">Shared lists</a>
-        <details id="exportTools"><summary>Export</summary>
-        <div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div>
-        <p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p>
-        <p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p>
-        <p id="exportStatus" role="status" class="muted"></p>
-        </details>
-        <details><summary>Edit recovery</summary>
-          <button id="undoEdit" type="button" disabled aria-describedby="undoEditHelp undoEditStatus">Undo last edit</button>
-          <p id="undoEditStatus" role="status" class="muted"></p>
-          <p id="undoEditHelp" class="muted">Undo the latest item, list or project editor save on this device for seven days, until another editor save or change to that record. Works after reload and offline. Recovery stays with this browser and account; sync sends the undo as a new save and checks for newer edits or deletions.</p>
-        </details></div>
-      </div>
-    </details>
+    <a id="appMenu" class="button menu-trigger" href="#menu" aria-label="Menu" title="Menu">☰ Menu</a>
   </header>
-  <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle">Appearance</h2>
+  <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle" tabindex="-1">Appearance</h2>
     <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
     <p class="muted">Saved for this browser.</p>
     <section aria-labelledby="clarifyActionsHeading"><p class="eyebrow">Clarify</p><h2 id="clarifyActionsHeading">Clarify actions</h2>
@@ -51,6 +31,9 @@
       <div class="actions"><button id="resetClarifyActions" type="button">Restore Clarify defaults</button></div><p id="clarifyActionStatus" class="muted" role="status" aria-live="polite"></p>
     </section>
     <section aria-labelledby="installHeading"><p class="eyebrow">On this device</p><h2 id="installHeading">Install To-Do</h2>
+      <details id="connection"><summary>Account &amp; device status<span id="offlineBadge" role="status"></span></summary>
+        <p id="sessionStatus" role="status"></p><p id="offlineStatus" role="status"></p><p id="syncStatus" role="status"></p>
+      </details>
       <button id="installApp" type="button" hidden>Install app</button>
       <p id="installStatus" role="status"></p>
       <details id="installHelp"><summary>Installation help</summary>
@@ -63,17 +46,61 @@
       <p id="checkAppUpdateStatus" role="status"></p>
       <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section>
+    <button type="button" data-close-preferences>Close preferences</button></dialog>
+  <dialog id="dataRecovery" class="side-panel" aria-labelledby="dataRecoveryHeading"><p class="eyebrow">Data &amp; recovery</p><h2 id="dataRecoveryHeading" tabindex="-1">Keep control of your data</h2>
+    <details id="exportTools"><summary>Export</summary>
+      <div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div>
+      <p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p>
+      <p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p>
+      <p id="exportStatus" role="status" class="muted"></p>
+    </details>
+    <details><summary>Edit recovery</summary>
+      <button id="undoEdit" type="button" disabled aria-describedby="undoEditHelp undoEditStatus">Undo last edit</button>
+      <p id="undoEditStatus" role="status" class="muted"></p>
+      <p id="undoEditHelp" class="muted">Undo the latest item, list or project editor save on this device for seven days, until another editor save or change to that record. Works after reload and offline. Recovery stays with this browser and account; sync sends the undo as a new save and checks for newer edits or deletions.</p>
+    </details>
+    <button id="openDeleted" type="button">Deleted records</button>
     <section aria-labelledby="deviceResetHeading"><p class="eyebrow">Device recovery</p><h2 id="deviceResetHeading">Restore from cloud</h2>
       <button id="resetDeviceData" type="button" aria-describedby="resetDeviceDataHelp">Clear device database</button>
       <p id="resetDeviceDataStatus" role="status"></p>
       <p id="resetDeviceDataHelp" class="muted">Delete this browser's To-Do database and reload your cloud copy. Pending saves and unfinished drafts stored only on this device will be lost. Export anything you need first. Online sign-in is required.</p>
-    </section><button type="button" data-close-preferences>Close preferences</button></dialog>
+    </section>
+    <button id="closeDataRecovery" type="button">Close data &amp; recovery</button>
+  </dialog>
   <section id="signedOut" aria-label="Sign in"><h1>Welcome</h1><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
   <p id="appUpdateStatus" role="status" hidden></p>
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to continue.</noscript>
   <main id="workspace" hidden>
     <p id="workspaceStatus" role="status" class="muted"></p>
+    <section id="menuView" class="utility-shell" aria-labelledby="menuHeading" hidden>
+      <div class="menu-page-bar"><button id="menuBack" type="button" aria-label="Back to workspace">← Back</button><h1 id="menuHeading" tabindex="-1">Menu</h1></div>
+      <div class="menu-master">
+        <section class="menu-group" aria-labelledby="menuWorkspaceHeading"><h2 id="menuWorkspaceHeading">Workspace</h2>
+          <nav aria-label="Workspace utilities"><ul>
+            <li><button id="manageWorkspaces" class="menu-row" type="button" aria-label="Workspaces" aria-describedby="menuWorkspaceValue"><span>Workspaces</span><span class="menu-row-end"><span id="menuWorkspaceValue"></span><span aria-hidden="true">›</span></span></button></li>
+            <li><a class="menu-row" href="/shared.html" target="_blank" rel="noopener"><span>Shared lists</span><span class="menu-row-end"><span aria-hidden="true">↗</span><span class="sr-only">opens in a new tab</span></span></a></li>
+          </ul></nav>
+        </section>
+        <section class="menu-group" aria-labelledby="menuSettingsHeading"><h2 id="menuSettingsHeading">Settings</h2>
+          <nav aria-label="Settings"><ul>
+            <li><button class="menu-row" type="button" data-open-preferences aria-label="Preferences" aria-controls="preferences"><span>Preferences</span><span aria-hidden="true">›</span></button></li>
+            <li><button id="userDefaults" class="menu-row" type="button" aria-label="User defaults"><span>User defaults</span><span aria-hidden="true">›</span></button></li>
+            <li><button id="openDataRecovery" class="menu-row" type="button" aria-label="Data &amp; recovery" aria-controls="dataRecovery"><span>Data &amp; recovery</span><span aria-hidden="true">›</span></button></li>
+            <li><button id="openAppDevice" class="menu-row" type="button" aria-label="App &amp; device" aria-controls="preferences"><span>App &amp; device</span><span aria-hidden="true">›</span></button></li>
+          </ul></nav>
+        </section>
+        <section class="menu-group" aria-labelledby="menuSupportHeading"><h2 id="menuSupportHeading">Support</h2>
+          <nav aria-label="Support"><ul><li><a class="menu-row" href="/help.html" target="_blank" rel="noopener"><span>Help</span><span class="menu-row-end"><span aria-hidden="true">↗</span><span class="sr-only">opens in a new tab</span></span></a></li></ul></nav>
+        </section>
+        <section class="menu-group" aria-labelledby="menuAccountHeading"><h2 id="menuAccountHeading">Account</h2>
+          <nav aria-label="Account"><ul>
+            <li><button id="sync" class="menu-row" type="button" aria-label="Sync now" aria-describedby="menuSyncState"><span>Sync now</span><span id="menuSyncState" class="menu-row-value"></span></button></li>
+            <li><button id="signOut" class="menu-row" type="button" aria-label="Sign out" hidden><span>Sign out</span></button></li>
+          </ul></nav>
+        </section>
+      </div>
+    </section>
     <dialog id="workspaceManager" class="side-panel" aria-labelledby="workspaceHeading">
       <p class="eyebrow">Organize</p><h2 id="workspaceHeading">Workspaces</h2>
       <p>Keep work, family and volunteering separate. Personal holds existing work. Defaults and exports cover your whole account.</p>

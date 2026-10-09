@@ -90,6 +90,7 @@ test('a delayed workspace create preserves a later focus choice and newly typed 
   await page.locator('#createWorkspace button').click();
   await page.waitForFunction(() => !!window.releaseWorkspaceSave);
   await page.keyboard.press('Escape'); await focus(page, '#manageWorkspaces');
+  await page.locator('#menuBack').click(); await page.waitForFunction(() => location.hash !== '#menu'); await focus(page, '#appMenu');
   await page.locator('#captureText').focus();
   await page.evaluate(() => releaseWorkspaceSave());
   await page.waitForFunction(() => !document.querySelector('#createWorkspace button').disabled);

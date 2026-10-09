@@ -58,7 +58,6 @@ test('collections browser: one editor creates kinds and parents; offline multi-m
   await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); await synced(page);
   assert.equal(documents.filter(doc => doc.id === 'record:item:task').length, 1);
   if (process.env.COLLECTION_SCREENSHOTS) {
-    await page.locator('#appMenu').evaluate(el => { el.open = false; });
     await mkdir(process.env.COLLECTION_SCREENSHOTS, { recursive: true });
     for (const theme of ['light', 'dark']) for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 }); await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

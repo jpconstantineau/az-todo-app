@@ -172,6 +172,7 @@ test('Plan preferences stay isolated by workspace and account while archived wor
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).workspaceDrafts.work.navigation.plan.focus === 'list:work-role');
   await clickControl(page.locator('#manageWorkspaces')); await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor(); await page.locator('#closeWorkspaces').click();
+  await showView(page, 'plan');
   assert.match(await page.locator('#planStatus').textContent(), /read-only/);
   assert.equal(await page.getByRole('checkbox', { name: 'Plan Work next for this week', exact: true }).isDisabled(), true);
   await page.locator('#workspaceSelect').selectOption('personal');

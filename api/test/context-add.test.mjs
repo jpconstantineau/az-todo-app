@@ -151,6 +151,7 @@ test('context add: workspace changes keep pending additions isolated and archive
   await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click();
+  await showView(page, 'work');
   assert.equal(await page.locator('#addContextItem').isDisabled(), true);
   await page.locator('#workspaceSelect').selectOption('personal');
   await page.locator('#resumeEdit').click();

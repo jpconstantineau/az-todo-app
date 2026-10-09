@@ -38,6 +38,8 @@ async function createSpace(page, title) {
   await page.locator('#createWorkspace button').click();
   await page.getByRole('heading', { name: title, exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click();
+  await page.locator('#menuBack').click();
+  await page.waitForFunction(() => location.hash !== '#menu');
   return page.locator('#workspaceSelect option').evaluateAll((options, title) => options.find(option => option.textContent === title).value, title);
 }
 async function switchTo(page, id) {
@@ -259,6 +261,7 @@ test('workspaces: archive, delete, offline recovery and responsive management pr
   await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click();
+  await showView(page, 'capture');
   assert.equal(await page.locator('#captureText').isDisabled(), true);
   await showView(page, 'work'); assert.equal(await page.locator('#items article').count(), 1);
   assert.equal(await page.getByRole('button', { name: 'Complete Preserved report', exact: true }).isDisabled(), true);
@@ -267,7 +270,7 @@ test('workspaces: archive, delete, offline recovery and responsive management pr
   await clickControl(page.locator('#manageWorkspaces'));
   await page.getByRole('button', { name: 'Delete workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Restore workspace: Work', exact: true }).waitFor();
-  await page.locator('#closeWorkspaces').click(); await synced(page);
+  await page.locator('#closeWorkspaces').click(); await showView(page, 'work'); await synced(page);
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#items article').count(), 0);
   await switchTo(page, 'personal');
@@ -276,7 +279,7 @@ test('workspaces: archive, delete, offline recovery and responsive management pr
   await page.getByRole('button', { name: 'Restore workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).waitFor();
-  await page.locator('#closeWorkspaces').click(); await switchTo(page, work); await showView(page, 'capture');
+  await page.locator('#closeWorkspaces').click(); await showView(page, 'capture'); await switchTo(page, work); await showView(page, 'capture');
   assert.equal(await page.locator('#captureText').inputValue(), 'Preserved draft');
   assert.equal(await page.locator('#captureText').isDisabled(), false);
   await showView(page, 'work'); assert.equal(await page.locator('#items article').count(), 1);

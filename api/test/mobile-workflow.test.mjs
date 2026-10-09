@@ -17,7 +17,7 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
-  assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
+  assert.notEqual(new URL(page.url()).hash, '#menu');
   assert.equal(await page.locator('#connection').evaluate(el => el.open), false);
   assert.equal(await page.locator('#export').isVisible(), false);
   assert.equal(await page.locator('#capture button:visible').count(), 2, 'capture exposes Split and Save initially');
@@ -38,13 +38,15 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
     await page.locator('#captureOptions > summary').click();
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('#appMenu > summary').focus();
+  await page.locator('#appMenu').focus();
   await page.keyboard.press('Enter');
-  assert.equal(await page.locator('#exportTools > summary').isVisible(), true);
+  await page.waitForFunction(() => location.hash === '#menu' && document.activeElement.id === 'menuHeading');
+  assert.equal(await page.locator('#exportTools > summary').isVisible(), false);
   assert.equal(await page.locator('#export').isVisible(), false);
   await page.locator('#sync').focus(); await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
-  assert.equal(await page.locator('#appMenu > summary').evaluate(el => el === document.activeElement), true);
+  assert.equal(new URL(page.url()).hash, '#menu', 'Escape does not close a routed page');
+  await page.locator('#menuBack').click();
+  await page.waitForFunction(() => location.hash === '#capture' && document.activeElement.id === 'appMenu');
   await context.setOffline(true);
   await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Working offline');
   await page.locator('#captureText').fill('Milk');
@@ -75,7 +77,7 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Keep this help draft');
   await openMenu(page);
   const popup = page.waitForEvent('popup');
-  await page.getByRole('link', { name: 'Help (opens in a new tab)', exact: true }).click();
+  await page.getByRole('link', { name: 'Help opens in a new tab', exact: true }).click();
   const help = await popup; await help.waitForLoadState();
   assert.match(await help.locator('h1').textContent(), /Help/);
   assert.match(await help.locator('#device').textContent(), /Unsynced work cannot be recovered/);
@@ -101,7 +103,7 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
   await page.locator('#captureText').fill('Recover this text'); await page.locator('#recovery').waitFor();
-  assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
+  assert.notEqual(new URL(page.url()).hash, '#menu');
   assert.equal(await page.locator('#error').isVisible(), true);
   assert.equal(await page.locator('#copyRecovery').isVisible(), true);
   assert.match(await page.locator('#recoveryText').inputValue(), /Recover this text/);

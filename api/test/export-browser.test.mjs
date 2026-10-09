@@ -88,7 +88,7 @@ test('export works offline after reload, includes unfiltered work, fresh IDB sta
   user = 'bob'; await context.setOffline(false);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).accountId === 'bob');
   await (await bobPull).finished();
-  await page.waitForFunction(() => !document.querySelector('#menuDeviceTools').hidden);
+  await page.locator('#appHeader').waitFor();
   await page.evaluate(async () => { window.releaseExport(); await window.pendingExport; });
   assert.equal(downloads.length, 0, 'a delayed Alice export cannot download in Bob’s session');
   const bob = await download(page);
@@ -176,9 +176,10 @@ test('server export cancels promptly, rejects malformed/error pages and discards
     await page.route(pattern, route => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ apiVersion: 1, message: 'Try again' }) }));
     await page.locator('#accountExport').click();
     await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('Export failed'));
-    await page.locator('#appMenu > summary').click();
-    assert.equal(await page.locator('#error').isVisible(), true, 'export failures remain visible with Menu closed');
-    await page.locator('#appMenu > summary').click();
+    await page.locator('#closeDataRecovery').click();
+    await page.locator('#menuBack').click();
+    assert.equal(await page.locator('#error').isVisible(), true, 'export failures remain visible after returning to work');
+    await openMenu(page); await page.locator('#openDataRecovery').click();
     await page.unroute(pattern);
   }
   let release;
@@ -199,7 +200,7 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   // The stored account changes before its controls return and sync requests finish.
   // Let Bob's change request finish before simulating a separate sign-out.
   await bobChanges;
-  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' && !document.querySelector('#menuDeviceTools').hidden);
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' && !document.querySelector('#appHeader').hidden);
   user = null;
   await clickControl(page.locator('#accountExport'));
   await page.waitForFunction(() => document.querySelector('#workspace').hidden);

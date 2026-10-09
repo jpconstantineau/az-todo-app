@@ -30,6 +30,9 @@ let splitFeedbackTimer;
 let materializingRecurrence = false;
 let savedViewEditing = null;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
+const workflowRoutes = ['capture', 'work', 'lists', 'plan', 'execute', 'reviews'];
+const menuHistorySession = crypto.randomUUID();
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 const scopedRecords = () => workspaceRecords(projected(state), selectedWorkspace);
 const currentDraft = local => workspaceDraft(local, selectedWorkspace);
 function normalizeCaptureDraft(value = {}) {
@@ -51,8 +54,10 @@ function renderWorkspaces() {
   options($('workspaceSelect'), spaces.map(space => ({ ...space, title: space.title + (space.archived ? ' (archived)' : '') })), []);
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
-  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : 'Process') + ' · ' + $('workspaceSelect').selectedOptions[0].textContent;
-  statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Manage workspaces to unarchive or restore it. Drafts are kept.' : '');
+  const workspaceTitle = $('workspaceSelect').selectedOptions[0].textContent;
+  document.title = (destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process') + ' · ' + workspaceTitle;
+  statusText('menuWorkspaceValue', workspaceTitle);
+  statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
   $('workspaceEntries').replaceChildren(...records.map(record => {
     const article = document.createElement('article'), heading = document.createElement('h3'), status = document.createElement('p');
@@ -119,6 +124,10 @@ async function switchWorkspace(id) {
 $('workspaceSelect').onchange = guard(() => switchWorkspace($('workspaceSelect').value));
 $('manageWorkspaces').onclick = () => { renderWorkspaces(); showDialog($('workspaceManager')); };
 $('closeWorkspaces').onclick = () => $('workspaceManager').close();
+$('openDataRecovery').onclick = () => { showDialog($('dataRecovery')); $('dataRecoveryHeading').focus(); };
+$('closeDataRecovery').onclick = () => $('dataRecovery').close();
+$('openAppDevice').onclick = () => { showDialog($('preferences')); $('installHeading').tabIndex = -1; $('installHeading').focus(); };
+document.querySelector('[data-open-preferences]').addEventListener('click', () => requestAnimationFrame(() => $('preferencesTitle').focus()));
 $('createWorkspace').onsubmit = event => {
   event.preventDefault();
   const form = event.currentTarget, control = form.querySelector('button');
@@ -213,7 +222,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   const menu = document.activeElement.closest('details');
-  if (menu?.open && (menu.id === 'connection' || menu.classList.contains('responsive-menu'))) {
+  if (menu?.open && menu.id === 'connection') {
     menu.open = false; menu.querySelector('summary').focus(); event.preventDefault();
   }
 });
@@ -546,6 +555,7 @@ function connectionStatus() {
   const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.workspaceMove ? 'Collection move pending' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : state.workspaceErasureNotice ? 'Workspace permanently erased; local copies removed after sync' : 'Saved to cloud';
   $('saveStatus').title = label;
   statusText('connectionLabel', label);
+  statusText('menuSyncState', !navigator.onLine ? 'Offline' : needsAttention ? 'Needs attention' : pending || syncing ? 'Pending' : 'Saved');
 }
 function error(message, kind = 'local') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
@@ -1381,15 +1391,16 @@ $('editor').addEventListener('close', () => {
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
 function focusDestination() {
   if (!accountId || $('workspace').hidden) return;
-  const modal = document.querySelector('dialog[open]');
+  const modal = [...document.querySelectorAll('dialog[open]')].at(-1);
   if (modal) {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'plan' ? $('planHeading') : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
+  if (destination === 'menu') $('menuHeading').focus({ preventScroll: true });
+  else (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'plan' ? $('planHeading') : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
 }
 function restoreFocus(control) {
-  const modal = document.querySelector('dialog[open]'), scope = modal || document;
+  const modal = [...document.querySelectorAll('dialog[open]')].at(-1), scope = modal || document;
   if (modal?.contains(document.activeElement) && document.activeElement !== control) return;
   // Labels and DOM nodes can change; record ID plus action remains stable.
   const matching = value => value ? scope.querySelector(`[data-focus-key="${CSS.escape(value)}"]`) : null;
@@ -1403,9 +1414,51 @@ function showDialog(dialog) {
   dialogOpeners.set(dialog, { control: document.activeElement, generation: accountGeneration });
   dialog.showModal();
 }
-function workspace(focus = true) {
-  destination = ['work', 'lists', 'plan', 'execute', 'reviews'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'capture';
+function menuEntry() {
+  const entry = history.state?.todoMenu;
+  return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && workflowRoutes.includes(entry.returnRoute) && entry.target === 'appMenu' ? entry : null;
+}
+function workflowEntry(route = destination) {
+  const entry = history.state?.todoWorkflow;
+  return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && entry.route === route && entry.target === 'appMenu' && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
+}
+function restoreWorkflowPosition(entry) {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!accountId || destination !== entry.route || document.querySelector('dialog[open]')) return;
+    scrollTo(entry.scrollX, entry.scrollY);
+    $(entry.target)?.focus({ preventScroll: true });
+  }));
+}
+async function enterMenu() {
+  if (!accountId || destination === 'menu' || document.querySelector('dialog[open]')) {
+    if (destination === 'menu') focusDestination();
+    return;
+  }
+  const scrollX = window.scrollX, scrollY = window.scrollY;
+  const deleted = projected(state)['workspace:' + selectedWorkspace]?.deleted;
+  if (!deleted) await journal();
+  const marker = { session: menuHistorySession, accountId, origin: location.origin, route: destination, scrollX, scrollY, target: 'appMenu' };
+  const current = history.state && typeof history.state === 'object' ? history.state : {};
+  history.replaceState({ ...current, todoWorkflow: marker }, '', '#' + destination);
+  history.pushState({ todoMenu: { session: menuHistorySession, accountId, origin: location.origin, returnRoute: destination, target: 'appMenu' } }, '', '#menu');
+  workspace(true, { save: false });
+}
+function workspace(focus = true, { save = true, historyNavigation = false } = {}) {
+  if (!accountId || !state || $('workspace').hidden) return;
+  const requested = location.hash.slice(1) || 'capture';
+  destination = [...workflowRoutes, 'menu'].includes(requested) ? requested : 'capture';
+  if (destination === 'menu' && !menuEntry()) {
+    destination = 'capture';
+    history.replaceState(null, '', location.pathname + location.search + '#capture');
+  } else if (requested !== destination) history.replaceState(null, '', location.pathname + location.search + '#capture');
+  const menu = destination === 'menu';
   const listMode = destination === 'lists';
+  document.body.classList.toggle('menu-route', menu);
+  $('menuView').hidden = !menu;
+  document.querySelector('.workspace-nav').hidden = menu;
+  document.querySelector('.inbox-grid').hidden = menu;
+  $('workspaceStatus').hidden = menu;
+  if (menu) $('appMenu').setAttribute('aria-current', 'page'); else $('appMenu').removeAttribute('aria-current');
   document.querySelector('.capture-panel').hidden = destination !== 'capture';
   document.querySelector('.work-panel').hidden = !['work', 'lists'].includes(destination);
   $('plan').hidden = destination !== 'plan';
@@ -1421,12 +1474,29 @@ function workspace(focus = true) {
     else link.removeAttribute('aria-current');
   }
   render();
-  if (focus) { $('createdDestination').replaceChildren(); focusDestination(); void journal(); }
+  if (menu) $('savedEdit').hidden = true;
+  if (focus) {
+    $('createdDestination').replaceChildren();
+    const returning = historyNavigation && workflowEntry();
+    if (returning) restoreWorkflowPosition(returning);
+    else {
+      if (menu) focusDestination(); else requestAnimationFrame(focusDestination);
+      if (save && !menu) void journal();
+    }
+  }
 }
 $('closeReviews').onclick = () => {
   history.replaceState(null, '', '#capture'); workspace(false); $('openReviews').focus(); void journal();
 };
-addEventListener('hashchange', () => workspace());
+addEventListener('popstate', () => workspace(true, { save: false, historyNavigation: true }));
+$('appMenu').addEventListener('click', event => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault(); void enterMenu();
+});
+$('menuBack').onclick = () => {
+  if (menuEntry()) history.back();
+  else { history.replaceState(null, '', location.pathname + location.search + '#capture'); workspace(true, { save: false }); }
+};
 for (const link of document.querySelectorAll('.workspace-nav a')) {
   link.addEventListener('click', event => {
     if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && link.hash === location.hash) focusDestination();
@@ -1436,7 +1506,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('clarifier'), $('briefs'), $('projectPlanner'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
+for (const dialog of [$('editor'), $('defaultsEditor'), $('preferences'), $('dataRecovery'), $('clarifier'), $('briefs'), $('projectPlanner'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -1654,7 +1724,10 @@ async function showAccountName(owner, generation, verified) {
 }
 function hideAccount() {
   $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
-  $('appMenu').open = false; $('preferences').close();
+  if (location.hash === '#menu') history.replaceState(null, '', location.pathname + location.search + '#capture');
+  document.body.classList.remove('menu-route'); $('menuView').hidden = true; $('appMenu').removeAttribute('aria-current');
+  document.querySelectorAll('.workspace-nav [aria-current]').forEach(link => link.removeAttribute('aria-current'));
+  $('preferences').close(); $('dataRecovery').close();
   $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); $('readyToRevisitCollections').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
   $('archiveReview').close(); archiveReviewing = null; $('archiveSearch').value = ''; $('archiveResults').replaceChildren(); $('archiveStatus').textContent = '';
   $('savedViewEditor').close(); savedViewEditing = null; savedViewForm.reset(); $('savedViewEntries').replaceChildren(); $('searchResults').replaceChildren(); $('searchStatus').textContent = '';
@@ -1679,11 +1752,11 @@ function hideAccount() {
   $('failure').hidden = true; $('comparison').textContent = ''; $('failureMessage').textContent = '';
   $('syncStatus').textContent = ''; clearError();
   $('connectionLabel').textContent = ''; $('saveStatus').hidden = true;
+  $('menuSyncState').textContent = ''; $('menuWorkspaceValue').textContent = '';
   delete $('saveStatus').dataset.state; $('saveStatus').removeAttribute('title');
   $('accountName').textContent = 'Welcome'; $('workspaceSelect').hidden = true;
   $('signedOut').hidden = false; $('loginStatus').textContent = 'Sign in to continue.';
   document.title = 'Sign in';
-  $('menuDeviceTools').hidden = true;
   $('undoEdit').disabled = true; $('undoEditStatus').textContent = '';
   recentTaskChange = null; $('recentTaskChange').hidden = true; $('recentTaskChangeStatus').textContent = '';
   accountGeneration++;
@@ -1740,7 +1813,6 @@ async function session({ allowOffline = false } = {}) {
     render(); $('workspace').hidden = false; restoreDraft(); broadcast();
   }
   $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
-  $('menuDeviceTools').hidden = false;
   $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
   $('appHeader').hidden = false; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
   void showAccountName(accountId, generation, verified);

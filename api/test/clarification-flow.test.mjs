@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, faults, startServer } from './harness.mjs';
-import { clickControl } from './navigation-helper.mjs';
+import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { newFlow, flowProposal, membershipChange, itemFields, beforeFields } from '../../html/clarification-flow.js';
 import { clarificationFields } from '../api/v1/clarification.mjs';
@@ -256,7 +256,7 @@ test('clarification preferences persist order and a custom alias dispatches its 
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed(page);
-  await clickControl(page.getByRole('button', { name: 'Preferences', exact: true, includeHidden: true }));
+  await clickControl(page.locator('[data-open-preferences]'));
   const rows = page.locator('#clarifyActionPreferences > li');
   assert.deepEqual(await rows.locator('[data-field="label"]').evaluateAll(inputs => inputs.slice(0, 6).map(input => input.value)),
     ['Make project', 'Make list', 'Make checklist', 'Action', 'Reference', 'Someday']);
@@ -264,9 +264,10 @@ test('clarification preferences persist order and a custom alias dispatches its 
   await page.locator('#addClarifyAction [name="behavior"]').selectOption('make-checklist');
   await page.locator('#addClarifyAction [type="submit"]').click();
   await page.reload(); await page.locator('#workspace').waitFor();
-  await clickControl(page.getByRole('button', { name: 'Preferences', exact: true, includeHidden: true }));
+  await clickControl(page.locator('[data-open-preferences]'));
   assert.equal(await page.locator('#clarifyActionPreferences [data-field="label"]').last().inputValue(), 'Make shopping list');
   await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await showView(page, 'work');
   await clickControl(page.locator('#clarifyInbox')); await page.locator('#clarifier').waitFor();
   await page.getByRole('button', { name: 'No parent', exact: true }).click();
   await page.getByRole('button', { name: 'Make shopping list', exact: true }).click();

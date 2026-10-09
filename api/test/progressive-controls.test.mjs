@@ -21,8 +21,8 @@ test('progressive controls keep capture and editor actions reachable without exp
   for (const width of [320, 400, 767, 768, 936, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => scrollTo(0, 0));
-    assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false);
-    assert.equal(await page.locator('#appMenu > summary').isVisible(), true);
+    assert.notEqual(new URL(page.url()).hash, '#menu');
+    assert.equal(await page.locator('#appMenu').isVisible(), true);
     assert.equal(await page.locator('#export').isVisible(), false);
     for (const selector of ['#captureText', '#capture button[type=submit]:visible', '#openReviews']) {
       const rect = await page.locator(selector).boundingBox();
@@ -31,13 +31,16 @@ test('progressive controls keep capture and editor actions reachable without exp
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     if (shots) await page.screenshot({ path: `${shots}/capture-${width}.png` });
   }
-  await page.locator('#appMenu > summary').focus(); await page.keyboard.press('Enter');
+  await page.locator('#appMenu').focus(); await page.keyboard.press('Enter');
+  await page.waitForFunction(() => location.hash === '#menu' && document.activeElement.id === 'menuHeading');
   await page.setViewportSize({ width: 767, height: 900 });
-  assert.equal(await page.locator('#appMenu').evaluate(el => el.open), true, 'resizing respects an open menu');
+  assert.equal(new URL(page.url()).hash, '#menu', 'resizing preserves the Menu route');
   await page.locator('#sync').focus(); await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#appMenu > summary').evaluate(el => el === document.activeElement), true);
+  assert.equal(new URL(page.url()).hash, '#menu', 'Escape does not close a routed page');
   await page.setViewportSize({ width: 768, height: 900 });
-  assert.equal(await page.locator('#appMenu').evaluate(el => el.open), false, 'resizing respects a closed menu');
+  assert.equal(new URL(page.url()).hash, '#menu', 'crossing the layout breakpoint preserves the route');
+  await page.locator('#menuBack').click();
+  await page.waitForFunction(() => location.hash === '#capture' && document.activeElement.id === 'appMenu');
 
   await context.setOffline(true);
   await page.locator('#captureText').fill('Prepare the room');

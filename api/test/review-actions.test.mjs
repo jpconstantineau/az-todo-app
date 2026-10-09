@@ -150,7 +150,6 @@ test('review actions edit, clarify and add project actions in place with offline
     } });
   });
   await page.locator('#reviewEdit').click(); await page.waitForFunction(() => !!window.releaseReviewSave);
-  await page.locator('#appMenu > summary').click();
   await page.locator('#workspaceSelect').selectOption('other');
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Wait for the device save'));
   assert.equal(await page.locator('#workspaceSelect').inputValue(), 'personal');
