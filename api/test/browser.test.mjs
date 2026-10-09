@@ -84,7 +84,11 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
     entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.join('\n') === '@Offline')));
   await openListTaskOption(page, 'Groceries', 'contexts');
   await page.locator('#taskOptionValue').fill('@List draft');
-  await page.locator('#taskOptionEditorBack').click(); await page.locator('#taskOptionsMasterBack').click();
+  await page.locator('#taskOptionEditorBack').click();
+  await page.waitForFunction(() => /^#lists\/[A-Za-z0-9_-]+\/task-options$/.test(location.hash)
+    && !document.querySelector('#taskOptionsMaster').hidden);
+  await page.locator('#taskOptionsMasterBack').click();
+  await page.waitForFunction(() => location.hash === '#lists' && document.querySelector('#taskOptionsView').hidden);
   await openListTaskOption(page, 'Groceries', 'contexts');
   assert.equal(await page.locator('#taskOptionValue').inputValue(), '@List draft');
   await page.getByRole('button', { name: 'Copy user defaults', exact: true }).click();
