@@ -185,7 +185,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
   // can reject that still-running request and hide the controls for Alice's sync.
   await (await bobPull).finished();
   await page.locator('#appHeader').waitFor(); await openMenu(page);
-  await page.locator('#menuDeviceTools').waitFor();
+  await page.locator('#openDataRecovery').click();
   assert.equal(await page.locator('#undoEdit').isDisabled(), true);
   assert.doesNotMatch(await page.locator('#undoEditStatus').textContent(), /Original/);
   setUser('alice'); await clickControl(page.locator('#sync')); await confirmed(page);
@@ -197,6 +197,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
       await page.setViewportSize({ width, height: 1000 });
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
       await openMenu(page);
+      if (!await page.locator('#dataRecovery').evaluate(element => element.open)) await page.locator('#openDataRecovery').click();
       const recovery = page.locator('#undoEdit').locator('xpath=ancestor::details[1]');
       if (!await recovery.evaluate(element => element.open)) await recovery.locator(':scope > summary').click();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

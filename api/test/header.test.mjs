@@ -229,7 +229,7 @@ test('header follows workspace selection and save state, then clears identity on
   await page.locator('#createWorkspace button').click();
   await page.getByRole('button', { name: 'Rename workspace: Family', exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click();
-  await page.locator('#appMenu > summary').click();
+  await page.locator('#menuBack').click();
   await page.getByRole('combobox', { name: 'Workspace', exact: true }).selectOption({ label: 'Family' });
   await page.waitForFunction(() => document.title === 'Capture · Family');
   await status(page, 'confirmed');
@@ -290,8 +290,9 @@ test('sign-out in another tab closes preferences and hides account chrome, then 
   await page.locator('#workspace').waitFor({ state: 'hidden' });
   await second.locator('#workspace').waitFor({ state: 'hidden' });
   await signedOut(page); await signedOut(second);
-  // A previously opened menu must also be closed when the session ends.
-  assert.equal(await second.locator('#appMenu').getAttribute('open'), null);
+  // A previously opened utility route must also be cleared when the session ends.
+  assert.equal(new URL(second.url()).hash, '#capture');
+  assert.equal(await second.locator('#menuView').isVisible(), false);
   setUser('alice');
   await page.reload(); await status(page, 'confirmed');
   assert.equal(await page.locator('#appHeader').isVisible(), true);

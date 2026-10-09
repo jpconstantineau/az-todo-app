@@ -25,7 +25,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     }
   }
   async function appearance(value, target = page) {
-    await clickControl(target.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+    await clickControl(target.locator('[data-open-preferences]'));
     await target.locator('[data-appearance]').selectOption(value);
     await target.getByRole('button', { name: 'Close preferences', exact: true }).click();
   }
@@ -105,11 +105,11 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
   await page.setViewportSize({ width: 320, height: 900 });
-  if (await page.locator('#appMenu').evaluate(el => el.open)) await page.locator('#appMenu > summary').click();
+  if (new URL(page.url()).hash === '#menu') await page.locator('#menuBack').click();
 
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await clickControl(page.getByRole('button', { includeHidden: true, name: 'User defaults', exact: true }));
+    await clickControl(page.locator('#userDefaults'));
     assert.ok(await page.locator('#defaultsEditor').evaluate(el => el.matches(':modal')));
     await fits(); await shot('native-defaults-' + width);
     await page.getByRole('button', { name: 'Close defaults', exact: true }).click();
@@ -118,7 +118,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   }
   await page.setViewportSize({ width: 320, height: 900 });
-  if (await page.locator('#appMenu').evaluate(el => el.open)) await page.locator('#appMenu > summary').click();
+  if (new URL(page.url()).hash === '#menu') await page.locator('#menuBack').click();
 
   // Measure resolved semantic colors, not just literal token values.
   function luminance(rgb) {

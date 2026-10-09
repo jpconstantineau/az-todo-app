@@ -42,7 +42,7 @@ test('navigation: reviews stay in a page card with history, editing, offline rel
   assert.equal(await page.locator('dialog:modal').count(), 0);
   await capture(page, 'Review this'); await confirmed(page);
   await showView(page, 'reviews');
-  assert.equal(await page.locator('#reviewsHeading').evaluate(el => el === document.activeElement), true);
+  await page.waitForFunction(() => document.activeElement.id === 'reviewsHeading');
   await page.locator('#startWeekly').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 1')); await confirmed(page);
   await page.locator('#reviewEdit').click(); await page.locator('#editor').waitFor();
@@ -386,6 +386,7 @@ test('navigation: Execute scopes lists and saved selection to each workspace and
   await page.getByRole('button', { name: 'Archive workspace: Work', exact: true }).click();
   await page.getByRole('button', { name: 'Unarchive workspace: Work', exact: true }).waitFor();
   await page.locator('#closeWorkspaces').click();
+  await showView(page, 'execute');
   assert.equal(await page.locator('#executeList').inputValue(), 'work-list');
   assert.equal(await page.getByRole('checkbox', { name: 'Complete Work task', exact: true }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: 'Edit Work task', exact: true }).isDisabled(), true);
@@ -624,7 +625,7 @@ test('navigation: new lists open only on request and resume the same draft after
   assert.equal(await page.locator('#workspace').isVisible(), false);
   let navigated = false;
   const navigation = showView(page, 'lists').then(() => { navigated = true; });
-  assert.equal(await page.locator('#listWorkspace').getAttribute('aria-current'), 'page', 'the hidden link still describes Alice’s old view');
+  assert.equal(await page.locator('.workspace-nav [aria-current="page"]').count(), 0, 'hidden account chrome exposes no prior-account current route');
   assert.equal(navigated, false, 'navigation waits for the restored account view');
   await page.evaluate(() => window.releaseAccountOpen());
   await navigation; await confirmed(page);
@@ -733,8 +734,13 @@ test('navigation: failures stay reachable in every view, deleted selections clea
     assert.ok(await page.locator('#discard').isVisible());
     await openMenu(page);
     assert.ok(await page.locator('#sync').isVisible());
+    assert.equal(await page.locator('#failure').isVisible(), false, 'workflow recovery stays outside Menu');
+    await page.locator('#openDataRecovery').click();
     if (!await page.locator('#exportTools').evaluate(el => el.open)) await page.locator('#exportTools > summary').click();
     assert.ok(await page.locator('#export').isVisible());
+    await page.locator('#closeDataRecovery').click();
+    await page.locator('#menuBack').click();
+    await page.locator('#failure').waitFor();
     assert.match(await page.locator('#comparison').textContent(), /Rejected private task/);
   }
   await context.setOffline(true);
@@ -783,10 +789,9 @@ test('navigation: keyboard links, responsive layout and appearance across all si
   const shots = process.env.NAVIGATION_SCREENSHOTS;
   if (shots) await mkdir(shots, { recursive: true });
   for (const theme of ['dark', 'light']) {
-    await clickControl(page.getByRole('button', { includeHidden: true, name: 'Preferences', exact: true }));
+    await clickControl(page.locator('[data-open-preferences]'));
     await page.locator('[data-appearance]').selectOption(theme);
     await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
-    if (await page.locator('#appMenu').evaluate(element => element.open)) await page.locator('#appMenu > summary').click();
     for (const width of [320, 390, 768, 1440, 2560]) {
       await page.setViewportSize({ width, height: 900 });
       for (const view of ['capture', 'work', 'lists', 'plan', 'execute', 'reviews']) {
