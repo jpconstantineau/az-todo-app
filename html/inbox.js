@@ -1433,7 +1433,7 @@ function setupPreferenceRows() {
 }
 setupPreferenceRows();
 document.addEventListener('clarification-actions-change', refreshPreferenceRows);
-document.addEventListener('change', event => { if (event.target.matches('[data-appearance]')) refreshPreferenceRows(); });
+addEventListener('todo-appearance-change', refreshPreferenceRows);
 function renderPreferences() {
   const category = preferenceRoutes.get(destination), hub = destination === 'preferences';
   $('preferencesView').dataset.route = hub ? 'hub' : 'detail';

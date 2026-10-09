@@ -43,17 +43,30 @@ test('Preferences routes expose only live categories with route, focus, Back and
   assert.equal(await page.locator('h1:visible').count(), 1);
   assert.equal(await page.locator('#preferencesAppearanceHeading').evaluate(element => element === document.activeElement), true);
   assert.equal(await page.locator('#preference-appearance').getAttribute('aria-current'), 'page');
-  await page.locator('[data-appearance]').selectOption('light');
+  assert.equal(await page.locator('#preferencesAppearance select[data-appearance]').count(), 1);
+  assert.equal(await page.locator('#preferencesAppearance dialog').count(), 0);
+  assert.deepEqual(await page.locator('#preferencesAppearance p').allTextContents(), ['Browser']);
+  const theme = page.locator('#preferencesAppearance [data-appearance]');
+  await theme.selectOption('light');
   assert.equal(await page.locator('#preference-appearance-summary').textContent(), 'Light · Browser');
+  assert.equal(await page.evaluate(() => localStorage.getItem('todo-appearance')), 'light');
+  await theme.focus();
 
   for (const [width, height] of [[320, 568], [390, 844], [600, 900], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
     await page.setViewportSize({ width, height });
     assert.equal(new URL(page.url()).hash, '#preferences/appearance');
-    assert.equal(await page.locator('#preferencesAppearanceHeading').evaluate(element => element === document.activeElement), true);
+    assert.equal(await theme.evaluate(element => element === document.activeElement), true);
+    assert.equal(await theme.inputValue(), 'light');
     assert.equal(await page.locator('#preference-appearance').getAttribute('aria-current'), 'page');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px has no horizontal overflow`);
     assert.equal(await page.locator('#preferencesNav').isVisible(), width >= 1024);
     if (width >= 1024) assert.equal(Math.round((await page.locator('#preferencesNav').boundingBox()).width), 280);
+    const control = await theme.boundingBox();
+    assert.ok(control.height >= 48, `${width}px Theme is at least 48px high`);
+    if (width < 600) {
+      const detail = await page.locator('#preferencesAppearance').boundingBox();
+      assert.ok(Math.abs(control.width - detail.width) <= 1, `${width}px Theme fills the detail column`);
+    } else assert.ok(control.width <= 384, `${width}px Theme keeps its readable width cap`);
     if (width === 600) {
       const shell = await page.locator('#preferencesView').boundingBox();
       assert.equal(Math.round(shell.x), 24);
@@ -64,6 +77,8 @@ test('Preferences routes expose only live categories with route, focus, Back and
   await page.setViewportSize({ width: 320, height: 568 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.equal(await theme.evaluate(element => element === document.activeElement), true);
+  assert.ok((await theme.boundingBox()).height >= 48);
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   const afterResize = await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
   assert.deepEqual(afterResize.queue, before.queue);
@@ -83,6 +98,43 @@ test('Preferences routes expose only live categories with route, focus, Back and
   await context.setOffline(false);
   await page.goto(server.url + '#preferences/capture'); await page.waitForFunction(() => location.hash === '#capture');
   assert.equal(await page.locator('#captureText').isVisible(), true);
+});
+
+test('Appearance storage updates every tab and visible summary without native change echoes', { timeout: 90000 }, async t => {
+  const { page, context, server } = await setup(t);
+  const other = await context.newPage();
+  await other.goto(server.url); await other.locator('#workspace').waitFor();
+  await openPreference(page, 'appearance');
+  await openPreferences(other);
+  await other.evaluate(() => {
+    window.appearanceEvents = { storage: 0, applied: 0, native: 0 };
+    addEventListener('storage', event => { if (event.key === 'todo-appearance' || event.key === null) appearanceEvents.storage++; });
+    addEventListener('todo-appearance-change', () => appearanceEvents.applied++);
+    document.addEventListener('change', event => { if (event.target.matches('[data-appearance]')) appearanceEvents.native++; });
+  });
+  const before = await page.evaluate(async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return { queue: local.queue, preferenceDraft: local.preferenceDraft };
+  });
+
+  for (const [value, label] of [['light', 'Light'], ['system', 'System'], ['dark', 'Dark']]) {
+    await page.locator('[data-appearance]').selectOption(value);
+    await other.waitForFunction(expected => document.documentElement.dataset.theme === expected &&
+      document.querySelector('[data-appearance]').value === expected &&
+      document.querySelector('#preference-appearance-summary').textContent === `${expected[0].toUpperCase()}${expected.slice(1)} · Browser`, value);
+    assert.equal(await page.evaluate(() => localStorage.getItem('todo-appearance')), value);
+    assert.equal(await other.locator('#preference-appearance-summary').textContent(), `${label} · Browser`);
+  }
+  await page.evaluate(() => localStorage.clear());
+  await other.waitForFunction(() => document.documentElement.dataset.theme === 'dark' &&
+    document.querySelector('[data-appearance]').value === 'dark' &&
+    document.querySelector('#preference-appearance-summary').textContent === 'Dark · Browser');
+  assert.deepEqual(await other.evaluate(() => appearanceEvents), { storage: 4, applied: 4, native: 0 });
+  const after = await page.evaluate(async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return { queue: local.queue, preferenceDraft: local.preferenceDraft };
+  });
+  assert.deepEqual(after, before);
 });
 
 test('Task options use account draft storage while browser preferences stay browser-scoped', { timeout: 90000 }, async t => {

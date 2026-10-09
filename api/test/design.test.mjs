@@ -184,6 +184,8 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await context.setOffline(true);
   await page.reload();
   await page.locator('#workspace').waitFor();
+  assert.equal(new URL(page.url()).hash, '#preferences/appearance');
+  assert.equal(await page.locator('[data-appearance]').inputValue(), 'system');
   assert.equal(await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(0, 0, 0)');
   await fits();
   await dropdownContrast();

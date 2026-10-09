@@ -199,15 +199,15 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v32')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v33')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/search-model.js?v=1',
+    '/inbox.js?v=31', '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/search-model.js?v=1',
     '/collection-model.js?v=5', '/collection-model.js?v=4', '/collection-model.js?v=3', '/collections.js?v=5', '/collections.js?v=4', '/workspace-move.js?v=5', '/workspace-move.js?v=4', '/workspaces.js?v=5', '/workspaces.js?v=4', '/recurrence-model.js?v=1', '/recurrence-ui.js?v=3', '/recurrence-ui.js?v=2', '/recurrence-ui.js?v=1',
     '/clarification.js?v=10', '/clarification.js?v=9', '/clarification.js?v=8', '/clarification-preferences.js?v=2', '/clarification-flow.js?v=4', '/reviews.js?v=11', '/reviews.js?v=10', '/reviews.js?v=9', '/briefs.js?v=6', '/briefs.js?v=5', '/briefs.js?v=4', '/project-planning.js?v=1', '/project-planning-model.js?v=1',
-    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=28', '/shared.js?v=27', '/shared.js?v=26', '/shared.js?v=25', '/shared.js?v=24', '/shared.js?v=23', '/shared.js?v=22', '/shared.js?v=21',
-    '/pwa.js?v=28', '/pwa.js?v=27', '/pwa.js?v=26', '/pwa.js?v=25', '/pwa.js?v=24', '/pwa.js?v=23', '/pwa.js?v=22', '/pwa.js?v=21', '/manifest.json',
+    '/capture-extraction.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=1', '/shared.js?v=29', '/shared.js?v=28', '/shared.js?v=27', '/shared.js?v=26', '/shared.js?v=25', '/shared.js?v=24', '/shared.js?v=23', '/shared.js?v=22', '/shared.js?v=21',
+    '/pwa.js?v=29', '/pwa.js?v=28', '/pwa.js?v=27', '/pwa.js?v=26', '/pwa.js?v=25', '/pwa.js?v=24', '/pwa.js?v=23', '/pwa.js?v=22', '/pwa.js?v=21', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
   ].sort());
   await context.setOffline(false); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
@@ -481,13 +481,13 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v31 to v32 preserves a draft and exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v32 to v33 preserves a draft and exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v32', 'shell-v31')
-      .replace('/inbox.js?v=30', '/inbox.js?v=29').replace('/pwa.js?v=28', '/pwa.js?v=27').replace('/shared.js?v=28', '/shared.js?v=27')
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v33', 'shell-v32')
+      .replace('/inbox.js?v=31', '/inbox.js?v=30').replace('/pwa.js?v=29', '/pwa.js?v=28').replace('/shared.js?v=29', '/shared.js?v=28')
       .replace('/inbox-export.js?v=18', '/inbox-export.js?v=17').replace('/briefs.js?v=6', '/briefs.js?v=5'),
   ])));
   previousAssets.set('/', previousAssets.get('/index.html'));
@@ -495,7 +495,7 @@ test('shell upgrade from v31 to v32 preserves a draft and exact queued operation
   // Keep the current/prior asset pairs intact in the synthetic old worker. Rewriting
   // its current query to the already-retained prior query would make cache.addAll
   // reject duplicate requests before the upgrade scenario can begin.
-  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v32', 'shell-v31'));
+  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v33', 'shell-v32'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => {
     if (!nextShell) return previousAssets.get(path);
@@ -509,7 +509,7 @@ test('shell upgrade from v31 to v32 preserves a draft and exact queued operation
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v31')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v32')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
@@ -535,7 +535,7 @@ test('shell upgrade from v31 to v32 preserves a draft and exact queued operation
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v32')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v33')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.equal(await page.evaluate(async operation => (await fetch('/api/v1/operations', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation)
