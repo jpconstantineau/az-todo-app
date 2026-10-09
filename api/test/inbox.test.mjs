@@ -579,7 +579,9 @@ test('defaults draft survives reload and failed storage remains recoverable; dat
 test('independent clients page through all work and resolve defaults conflicts without losing either proposal', { timeout: 90000 }, async t => {
   const { page, browser, url } = await setup(t);
   await openPreference(page, 'task-options');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
+  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).records['settings:settings']?.version === 1);
+  await confirmed(page);
   // More than one 50-entry change page, using real handlers and independent intents.
   for (let i = 0; i < 52; i++) await serverEdit(url, { type: 'item', id: 'paged-' + i, version: 0 }, { title: 'Page ' + i }, 'create');
   const otherContext = await browser.newContext(); t.after(() => otherContext.close());
@@ -587,12 +589,20 @@ test('independent clients page through all work and resolve defaults conflicts w
   await other.waitForFunction(() => document.querySelectorAll('#items article').length === 52);
   await openPreference(other, 'task-options');
   await other.locator('#defaultsForm [name=contexts]').fill('@Laptop');
+  await other.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await otherContext.setOffline(true);
-  await other.getByRole('button', { name: 'Save defaults on device' }).click(); await other.locator('#defaultsEditor').waitFor({ state: 'hidden' });
+  await other.getByRole('button', { name: 'Save defaults on device' }).click();
+  await waitForBrowser(other, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry =>
+    entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.includes('@Laptop'))));
   const pending = (await local(other)).queue[0].operation;
   await openPreference(page, 'task-options');
   await page.locator('#defaultsForm [name=contexts]').fill('@Phone');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
+  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await waitForBrowser(page, async () => {
+    const settings = (await (await import('/inbox-store.js?v=9')).transact('alice')).records['settings:settings'];
+    return settings?.version === 2 && settings.defaults.contexts.includes('@Phone');
+  });
+  await confirmed(page);
   await otherContext.setOffline(false); await clickControl(other.getByRole('button', { includeHidden: true, name: 'Sync now' })); await showView(other, 'work'); await other.locator('#failure').waitFor();
   assert.match(await other.locator('#comparison').textContent(), /@Phone/); assert.match(await other.locator('#comparison').textContent(), /@Laptop/);
   other.once('dialog', dialog => dialog.accept()); await other.locator('#resolve').click(); await confirmed(other);

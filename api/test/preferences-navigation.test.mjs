@@ -105,9 +105,15 @@ test('Task options use account draft storage while browser preferences stay brow
   assert.equal(new URL(page.url()).hash, '#preferences/task-options');
   await page.locator('[data-appearance]').count();
   await context.setOffline(false);
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return local.queue.length === 0 && local.records['settings:settings']?.defaults?.contexts?.includes('@Draft');
+  });
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   setUser('bob');
   await page.locator('#sync').evaluate(button => button.click());
-  await page.waitForFunction(() => location.hash === '#capture' && !document.querySelector('#workspace').hidden);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'bob');
+  await page.waitForFunction(() => location.hash === '#capture' && !document.querySelector('#workspace').hidden && !document.querySelector('#workspaceSelect').hidden);
   assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '');
   await openPreference(page, 'appearance');
   assert.equal(await page.locator('[data-appearance]').inputValue(), 'light');

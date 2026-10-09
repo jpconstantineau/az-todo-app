@@ -22,7 +22,11 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#defaultsForm [name=contexts]').fill('@Kitchen\n@Shop');
   await page.locator('#defaultsForm [name=statuses]').fill('next\nwaiting\ncustom');
   await page.getByRole('button', { name: 'Save defaults on device' }).click();
-  await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=9')).transact('alice');
+    return local.records['settings:settings']?.defaults?.contexts?.join('\n') === '@Kitchen\n@Shop';
+  });
+  await confirmed(page);
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep this draft');
   assert.deepEqual(records().find(r => r.type === 'settings').defaults.contexts, ['@Kitchen', '@Shop']);
   await showView(page, 'lists'); await page.getByRole('button', { name: 'New list', exact: true }).click();
@@ -73,14 +77,18 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
   await openPreference(page, 'task-options');
   await page.locator('#defaultsForm [name=contexts]').fill('@Offline');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry =>
+    entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.join('\n') === '@Offline')));
   await showView(page, 'lists'); await page.locator('#view').selectOption({ label: 'Groceries' }); await page.getByRole('button', { name: 'Defaults: Groceries', exact: true }).click();
   await page.getByRole('button', { name: 'Copy user defaults', exact: true }).click();
   assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Offline');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await openPreference(page, 'task-options');
   await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
-  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry =>
+    entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.includes('@Home'))));
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Unsaved after settings');
   await page.reload(); await page.locator('#workspace').waitFor();
