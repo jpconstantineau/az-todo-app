@@ -6,6 +6,7 @@
     choice = value;
     document.documentElement.dataset.theme = value;
     document.querySelectorAll('[data-appearance]').forEach(select => { select.value = value; });
+    dispatchEvent(new CustomEvent('todo-appearance-change', { detail: { value } }));
   }
   function restore() {
     let value;

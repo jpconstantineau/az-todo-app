@@ -169,6 +169,8 @@
 .preferences-master .menu-row-end { max-width: 100%; flex-wrap: wrap; }
 .preferences-detail { min-width: 0; width: min(100%, 720px); margin-inline: auto; }
 .preferences-content { min-width: 0; padding-top: var(--space-4); overflow-wrap: anywhere; }
+.appearance-preference label { width: 100%; }
+.appearance-preference select { min-height: 48px; }
 .preference-scope { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
 #defaultsSurface, #defaultsForm, #defaultsFields { min-width: 0; }
 @media (min-width: 1024px) {
@@ -181,6 +183,9 @@
 }
 @media (max-width: 1023px) {
   .preferences-shell[data-route="detail"] #preferencesNav { display: none; }
+}
+@media (min-width: 600px) {
+  .appearance-preference { max-width: 24rem; }
 }
 @media (min-width: 600px) and (max-width: 767px) {
   .inbox-page.container { padding-inline: max(var(--space-6), env(safe-area-inset-left)) max(var(--space-6), env(safe-area-inset-right)); }
