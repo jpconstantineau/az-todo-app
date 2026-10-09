@@ -31,7 +31,7 @@ test('PWA: installation is user-triggered, dismissal persists, and accepted/inst
   const { page, server } = await setup(t);
   await page.goto(server.url); await ready(page);
   assert.equal(await page.locator('#appUpdateStatus').textContent(), '');
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   assert.equal(await page.locator('#installApp').isVisible(), false);
   assert.equal(await offer(page), true);
   assert.equal(await page.evaluate(() => window.promptCalls || 0), 0);
@@ -40,13 +40,13 @@ test('PWA: installation is user-triggered, dismissal persists, and accepted/inst
   assert.equal(await page.locator('#installApp').isVisible(), false);
   assert.equal(await page.locator('#installHelp summary').evaluate(el => el === document.activeElement), true);
   await page.reload(); await ready(page);
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false, 'dismissal survives reload');
   assert.equal(await page.locator('#installHelp').isVisible(), true);
   await page.evaluate(() => localStorage.removeItem('todo-install-dismissed'));
   await page.reload(); await ready(page);
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await offer(page, 'accepted');
   await page.getByRole('button', { name: 'Install app', exact: true }).click();
   assert.match(await page.locator('#installStatus').textContent(), /is installed/);
@@ -55,7 +55,7 @@ test('PWA: installation is user-triggered, dismissal persists, and accepted/inst
   assert.equal(await page.locator('#installApp').isVisible(), false);
   await page.reload(); await ready(page);
   await page.evaluate(() => dispatchEvent(new Event('appinstalled')));
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false);
 });
@@ -67,7 +67,7 @@ test('PWA: prompt failure and blocked preference storage leave capture and manua
   });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
   await page.locator('#captureText').fill('Keep my capture');
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await offer(page, 'dismissed', true);
   await page.getByRole('button', { name: 'Install app', exact: true }).click();
   assert.match(await page.locator('#installStatus').textContent(), /could not open/);
@@ -76,16 +76,16 @@ test('PWA: prompt failure and blocked preference storage leave capture and manua
   await page.getByRole('button', { name: 'Install app', exact: true }).click();
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false);
-  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep my capture');
 });
 
-test('PWA: iPhone guidance, standalone suppression and responsive preferences', async t => {
+test('PWA: iPhone guidance, standalone suppression and responsive App & device', async t => {
   const { page, context, server, browser } = await setup(t, {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
   });
   await page.goto(server.url); await ready(page);
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await page.locator('#installHelp summary').click();
   assert.match(await page.locator('#installInstructions').textContent(), /Safari.*Share.*Add to Home Screen/);
   const screenshots = process.env.PWA_SCREENSHOTS;
@@ -93,16 +93,16 @@ test('PWA: iPhone guidance, standalone suppression and responsive preferences', 
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     for (const theme of ['dark', 'light']) {
-      await page.locator('[data-appearance]').selectOption(theme);
+      await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
       await page.locator('#installHelp summary').focus();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-      assert.ok(await page.locator('#preferences').evaluate(el => el.scrollWidth <= el.clientWidth));
+      assert.ok(await page.locator('#appDevice').evaluate(el => el.scrollWidth <= el.clientWidth));
       if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: screenshots + '/install-' + theme + '-' + width + '.png' });
     }
   }
   await context.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true }));
   await page.reload(); await ready(page);
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await offer(page);
   assert.equal(await page.locator('#installApp').isVisible(), false);
   assert.equal(await page.locator('#installHelp').isVisible(), false);
@@ -142,7 +142,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v31', 'shell-next');
+    const next = worker.replaceAll('shell-v32', 'shell-next');
     return version === 'failure' ? next.replace('const ASSETS = [', "const ASSETS = ['/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -154,7 +154,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   const local = () => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
   const before = await local();
   assert.equal(before.queue.length, 1, 'the update must exercise a pending operation');
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   version = 'failure';
   await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#appUpdateStatus').textContent.includes('could not finish'));
@@ -166,7 +166,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across update');
   await context.setOffline(false);
   version = 'success';
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#appUpdateStatus').textContent.includes('update is ready'));
   await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
@@ -175,14 +175,14 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v31')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v32')));
 });
 
 test('PWA: update checks report current/offline, prevent duplicate checks, and recover from failure and timeout', async t => {
   const { page, context, server } = await setup(t);
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
   await page.locator('#captureText').fill('Keep working while checking');
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   const check = page.getByRole('button', { name: 'Check for updates', exact: true });
   await check.focus(); await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelector('#checkAppUpdateStatus').textContent === 'To-Do is up to date.');
@@ -224,7 +224,7 @@ test('PWA: update checks report current/offline, prevent duplicate checks, and r
   await check.click();
   await page.waitForFunction(() => document.querySelector('#checkAppUpdateStatus').textContent === 'To-Do is up to date.');
   assert.equal(await page.locator('#appUpdateStatus').textContent(), '');
-  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep working while checking');
 });
 
@@ -276,23 +276,23 @@ test('PWA: a failed initial registration can be retried without reloading or los
   });
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.locator('#captureText').fill('Preserve this first visit');
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await ready(page);
   await page.waitForFunction(() => !document.querySelector('#checkAppUpdate').hasAttribute('aria-disabled'));
-  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
   assert.equal(await page.locator('#captureText').inputValue(), 'Preserve this first visit');
 });
 
-test('PWA: unsupported browsers explain update checks and keep the rest of Preferences usable', async t => {
+test('PWA: unsupported browsers explain update checks in App & device', async t => {
   const { page, server } = await setup(t);
   await page.addInitScript(() => { delete Navigator.prototype.serviceWorker; });
   await page.goto(server.url); await page.locator('#workspace').waitFor();
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   assert.equal(await page.locator('#checkAppUpdate').isVisible(), false);
   assert.match(await page.locator('#checkAppUpdateStatus').textContent(), /unavailable in this browser/);
-  await page.locator('[data-appearance]').selectOption('light');
-  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  assert.equal(await page.locator('[data-appearance]').isVisible(), false);
+  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
   await page.locator('#menuBack').click();
   assert.ok(await page.locator('#captureText').isVisible());
 });
@@ -306,9 +306,9 @@ test('PWA: retry rebuilds a registration removed after its first shell download 
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('not ready'));
   await page.locator('#captureText').fill('Keep the first offline draft');
   broken = false;
-  await clickControl(page.locator('[data-open-preferences]'));
+  await clickControl(page.locator('#openAppDevice'));
   await page.getByRole('button', { name: 'Check for updates', exact: true }).click();
   await ready(page);
-  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep the first offline draft');
 });

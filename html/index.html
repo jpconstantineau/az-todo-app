@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=27" defer></script>
+  <script src="/pwa.js?v=28" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=29"></script>
+  <script type="module" src="/inbox.js?v=30"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -21,16 +21,8 @@
     <span id="agentLabel" class="sr-only" role="status"></span>
     <a id="appMenu" class="button menu-trigger" href="#menu" aria-label="Menu" title="Menu">☰ Menu</a>
   </header>
-  <dialog id="preferences" class="side-panel" aria-labelledby="preferencesTitle"><p class="eyebrow">Preferences</p><h2 id="preferencesTitle" tabindex="-1">Appearance</h2>
-    <label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
-    <p class="muted">Saved for this browser.</p>
-    <section aria-labelledby="clarifyActionsHeading"><p class="eyebrow">Clarify</p><h2 id="clarifyActionsHeading">Clarify actions</h2>
-      <p>Choose the order and whether each action appears in the primary grid or under More. Custom types are labels for an existing Clarify behavior.</p>
-      <ol id="clarifyActionPreferences" class="clarify-preferences"></ol>
-      <form id="addClarifyAction" class="form-grid"><label>Custom label<input name="label" required maxlength="64"></label><label>Behavior<select name="behavior"></select></label><label>Section<select name="placement"><option value="primary">Primary</option><option value="more">More</option></select></label><button type="submit">Add custom type</button></form>
-      <div class="actions"><button id="resetClarifyActions" type="button">Restore Clarify defaults</button></div><p id="clarifyActionStatus" class="muted" role="status" aria-live="polite"></p>
-    </section>
-    <section aria-labelledby="installHeading"><p class="eyebrow">On this device</p><h2 id="installHeading">Install To-Do</h2>
+  <dialog id="appDevice" class="side-panel" aria-labelledby="appDeviceHeading"><p class="eyebrow">On this device</p><h2 id="appDeviceHeading" tabindex="-1">App &amp; device</h2>
+    <section aria-labelledby="installHeading"><h3 id="installHeading">Install To-Do</h3>
       <details id="connection"><summary>Account &amp; device status<span id="offlineBadge" role="status"></span></summary>
         <p id="sessionStatus" role="status"></p><p id="offlineStatus" role="status"></p><p id="syncStatus" role="status"></p>
       </details>
@@ -46,7 +38,7 @@
       <p id="checkAppUpdateStatus" role="status"></p>
       <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
     </section>
-    <button type="button" data-close-preferences>Close preferences</button></dialog>
+    <button id="closeAppDevice" type="button">Close App &amp; device</button></dialog>
   <dialog id="dataRecovery" class="side-panel" aria-labelledby="dataRecoveryHeading"><p class="eyebrow">Data &amp; recovery</p><h2 id="dataRecoveryHeading" tabindex="-1">Keep control of your data</h2>
     <details id="exportTools"><summary>Export</summary>
       <div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div>
@@ -84,10 +76,9 @@
         </section>
         <section class="menu-group" aria-labelledby="menuSettingsHeading"><h2 id="menuSettingsHeading">Settings</h2>
           <nav aria-label="Settings"><ul>
-            <li><button class="menu-row" type="button" data-open-preferences aria-label="Preferences" aria-controls="preferences"><span>Preferences</span><span aria-hidden="true">›</span></button></li>
-            <li><button id="userDefaults" class="menu-row" type="button" aria-label="User defaults"><span>User defaults</span><span aria-hidden="true">›</span></button></li>
+            <li><a id="openPreferences" class="menu-row" href="#preferences" aria-label="Preferences"><span>Preferences</span><span aria-hidden="true">›</span></a></li>
             <li><button id="openDataRecovery" class="menu-row" type="button" aria-label="Data &amp; recovery" aria-controls="dataRecovery"><span>Data &amp; recovery</span><span aria-hidden="true">›</span></button></li>
-            <li><button id="openAppDevice" class="menu-row" type="button" aria-label="App &amp; device" aria-controls="preferences"><span>App &amp; device</span><span aria-hidden="true">›</span></button></li>
+            <li><button id="openAppDevice" class="menu-row" type="button" aria-label="App &amp; device" aria-controls="appDevice"><span>App &amp; device</span><span aria-hidden="true">›</span></button></li>
           </ul></nav>
         </section>
         <section class="menu-group" aria-labelledby="menuSupportHeading"><h2 id="menuSupportHeading">Support</h2>
@@ -98,6 +89,31 @@
             <li><button id="sync" class="menu-row" type="button" aria-label="Sync now" aria-describedby="menuSyncState"><span>Sync now</span><span id="menuSyncState" class="menu-row-value"></span></button></li>
             <li><button id="signOut" class="menu-row" type="button" aria-label="Sign out" hidden><span>Sign out</span></button></li>
           </ul></nav>
+        </section>
+      </div>
+    </section>
+    <section id="preferencesView" class="preferences-shell" aria-label="Preferences" hidden>
+      <div id="preferencesHubBar" class="menu-page-bar"><button id="preferencesBack" type="button" aria-label="Back from Preferences">← Back</button><h1 id="preferencesHeading" tabindex="-1">Preferences</h1></div>
+      <div class="preferences-layout">
+        <nav id="preferencesNav" class="preferences-master" aria-label="Preference categories"><ul id="preferencesCategories"></ul></nav>
+        <section id="preferencesAppearance" class="preferences-detail" aria-labelledby="preferencesAppearanceHeading" hidden>
+          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Appearance preferences">← Back</button><h1 id="preferencesAppearanceHeading" tabindex="-1">Appearance</h1></div>
+          <div class="preferences-content"><label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label><p class="preference-scope">Browser</p></div>
+        </section>
+        <section id="preferencesProcess" class="preferences-detail" aria-labelledby="preferencesProcessHeading" hidden>
+          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Process preferences">← Back</button><h1 id="preferencesProcessHeading" tabindex="-1">Process</h1></div>
+          <div class="preferences-content"><p class="preference-scope">Browser</p>
+            <section aria-labelledby="clarifyActionsHeading"><h2 id="clarifyActionsHeading">Clarify actions</h2>
+              <p>Choose the order and whether each action appears in the primary grid or under More. Custom types are labels for an existing Clarify behavior.</p>
+              <ol id="clarifyActionPreferences" class="clarify-preferences"></ol>
+              <form id="addClarifyAction" class="form-grid"><label>Custom label<input name="label" required maxlength="64"></label><label>Behavior<select name="behavior"></select></label><label>Section<select name="placement"><option value="primary">Primary</option><option value="more">More</option></select></label><button type="submit">Add custom type</button></form>
+              <div class="actions"><button id="resetClarifyActions" type="button">Restore Clarify defaults</button></div><p id="clarifyActionStatus" class="muted" role="status" aria-live="polite"></p>
+            </section>
+          </div>
+        </section>
+        <section id="preferencesTaskOptions" class="preferences-detail" aria-labelledby="preferencesTaskOptionsHeading" hidden>
+          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Task options preferences">← Back</button><h1 id="preferencesTaskOptionsHeading" tabindex="-1">Task options</h1></div>
+          <div class="preferences-content"><p class="preference-scope">Account</p><div id="accountDefaultsHost"></div></div>
         </section>
       </div>
     </section>
@@ -505,13 +521,14 @@
       <div class="actions"><button id="briefExport" type="button">Export selected revision</button><button id="closeBriefs" type="button">Stop and close brief</button></div>
       <p><a href="/help.html#briefs" target="_blank" rel="noopener">Brief help (new tab)</a></p>
     </dialog>
-    <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading">
+    <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading"><div id="listDefaultsHost"></div></dialog>
+    <div id="defaultsSurface" hidden>
       <h2 id="defaultsHeading">Defaults</h2><p>One option per line. Changing options keeps existing task values.</p>
       <p id="defaultsError" role="alert" hidden></p>
       <form id="defaultsForm"><div id="defaultsFields" class="form-grid"></div>
         <button type="submit">Save defaults on device</button><button id="resetDefaults" type="button">Reset to built-in defaults</button><button id="closeDefaults" type="button">Close defaults</button>
       </form>
-    </dialog>
+    </div>
   </main>
   <section class="card" id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>
 </body>

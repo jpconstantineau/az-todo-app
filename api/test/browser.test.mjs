@@ -1,5 +1,5 @@
 import { clickControl } from './navigation-helper.mjs';
-import { showView } from './navigation-helper.mjs';
+import { openPreference, showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
@@ -18,7 +18,7 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
-  await clickControl(page.locator('#userDefaults'));
+  await openPreference(page, 'task-options');
   await page.locator('#defaultsForm [name=contexts]').fill('@Kitchen\n@Shop');
   await page.locator('#defaultsForm [name=statuses]').fill('next\nwaiting\ncustom');
   await page.getByRole('button', { name: 'Save defaults on device' }).click();
@@ -71,14 +71,14 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#edit .task-dates > summary').click(); await page.locator('#edit [name=dueLocal]').fill('');
   await page.locator('#edit [name=title]').fill('Milk');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
-  await clickControl(page.locator('#userDefaults'));
+  await openPreference(page, 'task-options');
   await page.locator('#defaultsForm [name=contexts]').fill('@Offline');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'lists'); await page.locator('#view').selectOption({ label: 'Groceries' }); await page.getByRole('button', { name: 'Defaults: Groceries', exact: true }).click();
   await page.getByRole('button', { name: 'Copy user defaults', exact: true }).click();
   assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Offline');
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
-  await clickControl(page.locator('#userDefaults'));
+  await openPreference(page, 'task-options');
   await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
   await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');

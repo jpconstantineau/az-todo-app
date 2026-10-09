@@ -50,8 +50,8 @@
     } finally {
       button.disabled = false;
       render();
-      if (document.getElementById('preferences').open) {
-        document.querySelector(installed ? '[data-close-preferences]' : '#installHelp summary').focus();
+      if (document.getElementById('appDevice').open) {
+        document.querySelector(installed ? '#closeAppDevice' : '#installHelp summary').focus();
       }
     }
   });
@@ -77,12 +77,12 @@
   }
   const waiting = () => {
     updateStatus('An app update is ready. Wait for your draft to be saved on device, then close all app tabs and app windows and reopen. Pending saves stay on this device.');
-    update.textContent = 'An app update is ready. Open Menu → Preferences for details.';
+    update.textContent = 'An app update is ready. Open Menu → App & device for details.';
   };
   const failed = () => {
-    updateStatus('The app update could not finish. Your saved work stays on this device. Use Check for updates in Preferences to retry online.');
+    updateStatus('The app update could not finish. Your saved work stays on this device. Use Check for updates in Menu → App & device to retry online.');
   };
-  const notReady = () => offlineStatus('Offline reopening is not ready. Retry online with Check for updates in Preferences. If an update is ready, save your work on device, close all app tabs and app windows, then reopen.');
+  const notReady = () => offlineStatus('Offline reopening is not ready. Retry online with Check for updates in Menu → App & device. If an update is ready, save your work on device, close all app tabs and app windows, then reopen.');
   let registration;
   offlineStatus('Preparing offline reopening… Keep this page open until ready.');
   async function register() {
@@ -94,7 +94,7 @@
         if (worker.state === 'installed' && registration.active && registration.waiting) waiting();
         if (worker.state === 'redundant') {
           if (registration.active) failed();
-          else offlineStatus('Offline reopening is not ready. Retry online with Check for updates in Preferences; keep a copy of any unsynced work.');
+          else offlineStatus('Offline reopening is not ready. Retry online with Check for updates in Menu → App & device; keep a copy of any unsynced work.');
         }
       });
     }
@@ -111,7 +111,7 @@
       const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
       reply.port1.onmessage = event => {
         clearTimeout(timeout); reply.port1.close();
-        if (event.data === 'todo-inbox-shell-v31') resolve(); else reject(new Error('Old shell is still active'));
+        if (event.data === 'todo-inbox-shell-v32') resolve(); else reject(new Error('Old shell is still active'));
       };
       (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
     });

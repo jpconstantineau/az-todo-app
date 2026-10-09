@@ -244,7 +244,7 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
   assert.ok((await page.evaluate(() => window.announcements)).includes('syncStatus'));
 });
 
-test('accessibility: contextual add, list, project, defaults and clarification dialogs return to their original controls', { timeout: 60000 }, async t => {
+test('accessibility: contextual dialogs and routed preferences return to their original controls', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Insurance');
   await showView(page, 'work');
@@ -285,12 +285,15 @@ test('accessibility: contextual add, list, project, defaults and clarification d
   await expectFocus(page, '[aria-label="Defaults: Household"]');
   await page.locator('#appMenu').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#menuHeading');
-  await page.locator('#userDefaults').focus(); await page.keyboard.press('Enter');
-  await expectFocus(page, '#defaultsEditor:modal #defaultsForm [name=contexts]');
-  await page.keyboard.press('Escape'); await expectFocus(page, '#userDefaults');
-  await page.getByRole('button', { name: 'Preferences', exact: true }).focus(); await page.keyboard.press('Enter');
-  await expectFocus(page, '#preferencesTitle');
-  await page.keyboard.press('Escape'); await expectFocus(page, '[data-open-preferences]');
+  await page.locator('#openPreferences').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#preferencesHeading');
+  await page.locator('#preference-task-options').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#preferencesTaskOptionsHeading');
+  await keyboardActivate(page, '#preferencesTaskOptions .preference-back'); await expectFocus(page, '#preference-task-options');
+  await keyboardActivate(page, '#preferencesBack'); await expectFocus(page, '#openPreferences');
+  await page.locator('#openAppDevice').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#appDeviceHeading');
+  await page.keyboard.press('Escape'); await expectFocus(page, '#openAppDevice');
   await keyboardActivate(page, '#menuBack'); await expectFocus(page, '#appMenu');
   await page.locator('#openReviews').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#reviewsHeading');
@@ -300,14 +303,14 @@ test('accessibility: contextual add, list, project, defaults and clarification d
   // Force native closes into one task so the earlier close events arrive
   // after focus has moved on. It must not steal the later dialog's return focus.
   await page.evaluate(async () => {
-    const defaults = document.querySelector('#defaultsEditor'), preferences = document.querySelector('#preferences');
-    const closed = [defaults, preferences].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
-    const defaultsButton = document.querySelector('#userDefaults'), preferencesButton = document.querySelector('[data-open-preferences]');
-    defaultsButton.focus(); defaultsButton.click(); defaults.close();
-    preferencesButton.focus(); preferencesButton.click(); preferences.close();
+    const appDevice = document.querySelector('#appDevice'), recovery = document.querySelector('#dataRecovery');
+    const closed = [appDevice, recovery].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
+    const appDeviceButton = document.querySelector('#openAppDevice'), recoveryButton = document.querySelector('#openDataRecovery');
+    appDeviceButton.focus(); appDeviceButton.click(); appDevice.close();
+    recoveryButton.focus(); recoveryButton.click(); recovery.close();
     await Promise.all(closed);
   });
-  await expectFocus(page, '[data-open-preferences]');
+  await expectFocus(page, '#openDataRecovery');
   await page.locator('#openDataRecovery').click(); await expectFocus(page, '#dataRecoveryHeading');
   await page.locator('#exportTools > summary').focus(); await page.keyboard.press('Enter');
   await page.locator('#export').focus();

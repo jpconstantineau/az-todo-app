@@ -1,6 +1,12 @@
 export async function showView(page, view) {
   await page.locator('#workspace').waitFor({ state: 'visible' });
   if (await page.locator('#dataRecovery:modal').count()) await page.locator('#closeDataRecovery').click();
+  if (await page.locator('#appDevice:modal').count()) await page.locator('#closeAppDevice').click();
+  while (new URL(page.url()).hash.startsWith('#preferences')) {
+    const hash = new URL(page.url()).hash;
+    await page.locator(hash === '#preferences' ? '#preferencesBack' : '.preferences-detail:not([hidden]) .preference-back').click();
+    await page.waitForFunction(previous => location.hash !== previous, hash);
+  }
   if (new URL(page.url()).hash === '#menu') {
     await page.waitForFunction(() => location.hash !== '#menu' || !document.querySelector('#menuView').hidden);
     if (new URL(page.url()).hash === '#menu') {
@@ -27,6 +33,21 @@ export async function openMenu(page) {
     await page.waitForFunction(() => location.hash === '#menu' && document.activeElement?.id === 'menuHeading');
   } else await page.locator('#menuView').waitFor();
 }
+export async function openPreferences(page) {
+  if (new URL(page.url()).hash !== '#preferences') {
+    await openMenu(page);
+    await page.locator('#openPreferences').click();
+    await page.waitForFunction(() => location.hash === '#preferences' && document.activeElement?.id === 'preferencesHeading');
+  } else await page.locator('#preferencesView').waitFor();
+}
+export async function openPreference(page, id) {
+  const route = `#preferences/${id}`;
+  if (new URL(page.url()).hash !== route) {
+    await openPreferences(page);
+    await page.locator(`[data-preference-id="${id}"]`).click();
+    await page.waitForFunction(expected => location.hash === expected && document.activeElement?.closest('.preferences-detail')?.hidden === false, route);
+  }
+}
 export async function revealControl(control) {
   // Open the routed utility hub and its current native surface before controls.
   await control.waitFor({ state: 'attached' });
@@ -34,6 +55,13 @@ export async function revealControl(control) {
   const inMenu = await control.evaluate(element => !!element.closest('#menuView'));
   if (inMenu && await page.locator('dialog:modal').count()) await page.keyboard.press('Escape');
   if (inMenu && !await control.isVisible()) await openMenu(page);
+  const preference = control.locator('xpath=ancestor::section[contains(@class,"preferences-detail")][1]');
+  if (await preference.count() && !await preference.isVisible()) {
+    await openPreferences(page);
+    const id = (await preference.getAttribute('id')).replace('preferences', '').replace(/^[A-Z]/, value => value.toLowerCase()).replace(/[A-Z]/g, value => '-' + value.toLowerCase());
+    await page.locator(`[data-preference-id="${id}"]`).click();
+    await preference.waitFor({ state: 'visible' });
+  }
   const dialog = control.locator('xpath=ancestor::dialog[1]');
   if (await dialog.count() && !await dialog.evaluate(element => element.open)) {
     const id = await dialog.getAttribute('id');
