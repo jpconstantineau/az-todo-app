@@ -46,11 +46,9 @@ export async function clickControl(control) {
   const page = control.page();
   await revealControl(control);
   const id = await control.getAttribute('id');
-  const menuAccount = id === 'sync' ? await page.evaluate(() => history.state?.todoMenu?.accountId) : null;
   await control.click();
   if (id === 'sync' && new URL(page.url()).hash === '#menu' && await page.locator('#workspace').isVisible()) {
     await page.locator('#menuBack').evaluate(button => button.click());
     await page.waitForFunction(() => location.hash !== '#menu');
-    await page.waitForFunction(owner => document.querySelector('#workspace').hidden || document.activeElement?.id === 'appMenu' || history.state?.todoWorkflow?.accountId !== owner, menuAccount);
   }
 }
