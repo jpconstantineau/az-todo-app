@@ -22,9 +22,4 @@
     } catch { /* Keep the current tab's choice when storage is unavailable. */ }
   });
   addEventListener('storage', event => { if (event.key === key || event.key === null) restore(); });
-  document.addEventListener('click', event => {
-    const opener = event.target.closest('[data-open-preferences]');
-    if (opener) document.getElementById('preferences').showModal();
-    if (event.target.closest('[data-close-preferences]')) document.getElementById('preferences').close();
-  });
 })();

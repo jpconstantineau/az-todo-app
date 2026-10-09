@@ -1,5 +1,5 @@
 import { clickControl } from './navigation-helper.mjs';
-import { showView } from './navigation-helper.mjs';
+import { openPreference, showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
@@ -25,9 +25,8 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     }
   }
   async function appearance(value, target = page) {
-    await clickControl(target.locator('[data-open-preferences]'));
+    await openPreference(target, 'appearance');
     await target.locator('[data-appearance]').selectOption(value);
-    await target.getByRole('button', { name: 'Close preferences', exact: true }).click();
   }
   async function fits() {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal page overflow');
@@ -109,10 +108,9 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
 
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await clickControl(page.locator('#userDefaults'));
-    assert.ok(await page.locator('#defaultsEditor').evaluate(el => el.matches(':modal')));
+    await openPreference(page, 'task-options');
+    assert.equal(await page.locator('#defaultsSurface').isVisible(), true);
     await fits(); await shot('native-defaults-' + width);
-    await page.getByRole('button', { name: 'Close defaults', exact: true }).click();
     await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
     await fits(); await shot('native-fields-' + width);
     await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();

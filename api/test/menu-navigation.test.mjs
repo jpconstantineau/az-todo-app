@@ -41,15 +41,15 @@ test('routed Menu preserves work, history, focus and responsive row behavior', {
     assert.equal(await page.locator('#captureText').inputValue(), 'Draft kept through Menu');
   }
   await page.locator('#openAppDevice').click();
-  await page.waitForFunction(() => document.querySelector('#preferences').open && document.activeElement.id === 'installHeading');
-  await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#appDevice').open && document.activeElement.id === 'appDeviceHeading');
+  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
   assert.equal(await page.locator('#openAppDevice').evaluate(element => element === document.activeElement), true);
 
   for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
     await page.setViewportSize({ width, height });
     assert.equal(new URL(page.url()).hash, '#menu');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width} px has no horizontal overflow`);
-    const rows = await page.locator('.menu-row').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+    const rows = await page.locator('#menuView .menu-row').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
     assert.ok(rows.every(rowHeight => rowHeight >= 48), `${width} px rows remain 48 px targets`);
     const menuWidth = (await page.locator('.menu-master').boundingBox()).width;
     if (width >= 1024) assert.ok(menuWidth >= 280 && menuWidth <= 320, `${width} px uses the focused desktop column`);

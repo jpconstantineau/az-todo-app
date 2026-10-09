@@ -1,5 +1,5 @@
 import { revealControl } from './navigation-helper.mjs';
-import { clickControl, openMenu } from './navigation-helper.mjs';
+import { clickControl, openMenu, openPreference } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -789,9 +789,8 @@ test('navigation: keyboard links, responsive layout and appearance across all si
   const shots = process.env.NAVIGATION_SCREENSHOTS;
   if (shots) await mkdir(shots, { recursive: true });
   for (const theme of ['dark', 'light']) {
-    await clickControl(page.locator('[data-open-preferences]'));
+    await openPreference(page, 'appearance');
     await page.locator('[data-appearance]').selectOption(theme);
-    await page.getByRole('button', { name: 'Close preferences', exact: true }).click();
     for (const width of [320, 390, 768, 1440, 2560]) {
       await page.setViewportSize({ width, height: 900 });
       for (const view of ['capture', 'work', 'lists', 'plan', 'execute', 'reviews']) {
