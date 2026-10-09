@@ -1,6 +1,6 @@
 import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, archivedAncestor, refKey } from './collection-model.js?v=5';
 import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=5';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=4';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=5';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=5';
 import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=1';
 import { validateProjectPlanOperation } from './project-planning-model.js?v=1';

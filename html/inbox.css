@@ -183,7 +183,15 @@
 .appearance-preference label { width: 100%; }
 .appearance-preference select { min-height: 48px; }
 .preference-scope { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
-#defaultsSurface, #defaultsForm, #defaultsFields { min-width: 0; }
+.task-options-shell { width: min(100%, 1440px); margin-inline: auto; }
+.task-options-layout, .task-options-master, .task-option-editor, #defaultsForm { min-width: 0; }
+.task-options-master { width: min(100%, 720px); margin-inline: auto; }
+.task-options-master ul { margin: var(--space-6) 0 0; padding: 0; list-style: none; border-top: var(--border-width) solid var(--border); }
+.task-options-master li { margin: 0; border-bottom: var(--border-width) solid var(--border); }
+.task-option-editor { width: min(100%, 720px); margin-inline: auto; }
+.task-option-content { min-width: 0; padding-top: var(--space-4); overflow-wrap: anywhere; }
+#taskOptionValue { width: 100%; max-width: 720px; min-height: 16rem; resize: vertical; overflow-wrap: anywhere; white-space: pre-wrap; }
+#taskOptionStatus:empty { display: none; }
 @media (min-width: 1024px) {
   .utility-shell { width: min(100%, 320px); max-width: 1200px; }
   .preferences-shell[data-route="detail"] { width: min(100%, 1064px); }
@@ -199,12 +207,20 @@
   .preferences-shell[data-route="clarify-editor"] .clarify-preferences-page { display: grid; grid-template-columns: 320px minmax(640px, 720px); gap: var(--space-6); align-items: start; }
   .preferences-shell[data-route="clarify-editor"] .clarify-action-master { padding-right: var(--space-4); border-right: var(--border-width) solid var(--border); }
   .preferences-shell[data-route="clarify-editor"] #clarifyActionsBack { display: none; }
+  .task-options-shell[data-route="master"] { width: min(100%, 280px); }
+  .task-options-shell[data-route="editor"] { width: min(100%, 1024px); }
+  .task-options-shell[data-route="editor"] .task-options-layout { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: var(--space-6); align-items: start; }
+  .task-options-shell[data-route="editor"] .task-options-master { width: 280px; margin: 0; padding-right: var(--space-4); border-right: var(--border-width) solid var(--border); }
+  .task-options-shell[data-route="editor"] .task-options-master .menu-page-bar { display: none; }
+  .task-options-shell[data-route="editor"] .task-options-master ul { margin-top: 0; }
+  .task-options-shell[data-route="editor"] .task-option-editor { width: 100%; margin: 0; }
 }
 @media (max-width: 1023px) {
   .preferences-shell[data-route="detail"] #preferencesNav { display: none; }
   .preferences-shell[data-route^="clarify"] #preferencesNav { display: none; }
   .preferences-shell[data-route="clarify-editor"] .clarify-action-master { display: none; }
   .clarify-action-master, .clarify-action-editor { width: min(100%, 720px); margin-inline: auto; }
+  .task-options-shell[data-route="editor"] .task-options-master { display: none; }
 }
 @media (min-width: 600px) {
   .appearance-preference { max-width: 24rem; }
@@ -217,7 +233,7 @@
 }
 @media (forced-colors: active) {
   #appMenu[aria-current="page"], .menu-row[aria-current="page"], .clarify-action-link[aria-current="page"] { outline: 2px solid Highlight; }
-  .menu-group ul, .menu-group li, .menu-page-bar, .preferences-master ul, .preferences-master li { border-color: CanvasText; }
+  .menu-group ul, .menu-group li, .menu-page-bar, .preferences-master ul, .preferences-master li, .task-options-master ul, .task-options-master li { border-color: CanvasText; }
 }
 #appUpdateStatus:empty { display: none; }
 .editable-title { background: transparent; border-color: transparent; color: var(--ink); padding: var(--space-2); font: inherit; font-weight: var(--weight-title); text-align: left; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }

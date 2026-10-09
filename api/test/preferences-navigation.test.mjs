@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
-import { openClarificationPreferences, openPreference, openPreferences, showView } from './navigation-helper.mjs';
+import { openAccountTaskOption, openClarificationPreferences, openPreference, openPreferences, showView } from './navigation-helper.mjs';
 
 async function setup(t, user = 'alice') {
   documents.length = 0;
@@ -307,17 +307,36 @@ test('Task options use account draft storage while browser preferences stay brow
   await openPreference(page, 'appearance');
   await page.locator('[data-appearance]').selectOption('light');
   await openPreference(page, 'task-options');
-  await page.locator('#defaultsForm [name=contexts]').fill('@Home\n@Draft');
+  assert.equal(await page.locator('#taskOptionRows > li').count(), 6);
+  assert.equal(await page.locator('#taskOptionsView dialog').count(), 0);
+  await openAccountTaskOption(page, 'contexts');
+  assert.equal(await page.locator('#taskOptionLabel').textContent(), 'Contexts — one per line');
+  await page.locator('#taskOptionValue').fill('@Home\n@Draft');
+  await page.locator('#taskOptionValue').focus();
+  for (const width of [320, 390, 599, 600, 1023, 1024, 1920, 3840]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(new URL(page.url()).hash, '#preferences/task-options/contexts');
+    assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Home\n@Draft');
+    assert.equal(await page.locator('#taskOptionValue').evaluate(element => element === document.activeElement), true);
+    assert.equal(await page.locator('#taskOptionsMaster').isVisible(), width >= 1024);
+    assert.ok((await page.locator('#taskOptionEditor').boundingBox()).width <= 720);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Home\n@Draft');
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).preferenceDraft?.defaults?.values.contexts === '@Home\n@Draft');
-  await page.reload(); await page.locator('#preferencesTaskOptionsHeading').waitFor();
-  assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Home\n@Draft');
+  await page.reload(); await page.locator('#taskOptionHeading').waitFor();
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Home\n@Draft');
   await context.setOffline(true);
   await page.locator('#defaultsForm [type=submit]').click();
   await waitForBrowser(page, async () => {
     const local = await (await import('/inbox-store.js?v=15')).transact('alice');
     return local.queue.length === 1 && local.preferenceDraft?.defaults === null;
   });
-  assert.equal(new URL(page.url()).hash, '#preferences/task-options');
+  assert.equal(new URL(page.url()).hash, '#preferences/task-options/contexts');
   await page.locator('[data-appearance]').count();
   await context.setOffline(false);
   await waitForBrowser(page, async () => {
@@ -329,7 +348,8 @@ test('Task options use account draft storage while browser preferences stay brow
   await page.locator('#sync').evaluate(button => button.click());
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'bob');
   await page.waitForFunction(() => location.hash === '#capture' && !document.querySelector('#workspace').hidden && !document.querySelector('#workspaceSelect').hidden);
-  assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '');
+  assert.equal((await page.locator('#taskOptionValue').inputValue()).includes('@Draft'), false);
+  assert.equal(await page.locator('#taskOptionsView').isVisible(), false);
   await openPreference(page, 'appearance');
   assert.equal(await page.locator('[data-appearance]').inputValue(), 'light');
   assert.equal((await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('bob'))).queue.length, 0);

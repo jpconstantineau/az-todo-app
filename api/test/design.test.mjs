@@ -109,7 +109,7 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await openPreference(page, 'task-options');
-    assert.equal(await page.locator('#defaultsSurface').isVisible(), true);
+    assert.equal(await page.locator('#taskOptionsView').isVisible(), true);
     await fits(); await shot('native-defaults-' + width);
     await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
     await fits(); await shot('native-fields-' + width);

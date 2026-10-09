@@ -1,6 +1,6 @@
 import { archiveOnly, archivedAncestor, belongsTo, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
 import { key, projected } from './inbox-store.js?v=13';
-import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=4';
+import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=5';
 
 const $ = id => document.getElementById(id);
 const snapshot = record => record.type === 'project' ? {} : Object.fromEntries(workflowFields.map(name => [name, record[name] ?? (name === 'waitingOn' ? '' : null)]));

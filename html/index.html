@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=30" defer></script>
+  <script src="/pwa.js?v=31" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=32"></script>
+  <script type="module" src="/inbox.js?v=33"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -140,9 +140,26 @@
             </section>
           </div>
         </section>
-        <section id="preferencesTaskOptions" class="preferences-detail" aria-labelledby="preferencesTaskOptionsHeading" hidden>
-          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Task options preferences">← Back</button><h1 id="preferencesTaskOptionsHeading" tabindex="-1">Task options</h1></div>
-          <div class="preferences-content"><p class="preference-scope">Account</p><div id="accountDefaultsHost"></div></div>
+      </div>
+    </section>
+    <section id="taskOptionsView" class="task-options-shell" aria-label="Task options" hidden>
+      <div class="task-options-layout">
+        <section id="taskOptionsMaster" class="task-options-master" aria-labelledby="taskOptionsMasterHeading">
+          <div class="menu-page-bar"><button id="taskOptionsMasterBack" type="button" aria-label="Back from task options">← Back</button><h1 id="taskOptionsMasterHeading" tabindex="-1">Account task options</h1></div>
+          <nav aria-label="Task option vocabularies"><ul id="taskOptionRows"></ul></nav>
+        </section>
+        <section id="taskOptionEditor" class="task-option-editor" aria-labelledby="taskOptionHeading" hidden>
+          <div class="menu-page-bar"><button id="taskOptionEditorBack" type="button" aria-label="Back from task option editor">← Back</button><h1 id="taskOptionHeading" tabindex="-1">Account · Contexts</h1></div>
+          <div class="task-option-content">
+            <p id="taskOptionScope" class="preference-scope"></p>
+            <p id="defaultsError" role="alert" hidden></p>
+            <form id="defaultsForm" class="form-grid">
+              <label id="taskOptionLabel" for="taskOptionValue">Contexts — one per line</label>
+              <textarea id="taskOptionValue" rows="12" wrap="soft" spellcheck="false"></textarea>
+              <p id="taskOptionStatus" class="muted" role="status" aria-live="polite"></p>
+              <div class="actions"><button type="submit">Save</button><button id="discardDefaultsDraft" type="button">Discard draft</button><button id="resetDefaults" type="button">Use built-in defaults</button></div>
+            </form>
+          </div>
         </section>
       </div>
     </section>
@@ -550,14 +567,6 @@
       <div class="actions"><button id="briefExport" type="button">Export selected revision</button><button id="closeBriefs" type="button">Stop and close brief</button></div>
       <p><a href="/help.html#briefs" target="_blank" rel="noopener">Brief help (new tab)</a></p>
     </dialog>
-    <dialog class="side-panel" id="defaultsEditor" aria-labelledby="defaultsHeading"><div id="listDefaultsHost"></div></dialog>
-    <div id="defaultsSurface" hidden>
-      <h2 id="defaultsHeading">Defaults</h2><p>One option per line. Changing options keeps existing task values.</p>
-      <p id="defaultsError" role="alert" hidden></p>
-      <form id="defaultsForm"><div id="defaultsFields" class="form-grid"></div>
-        <button type="submit">Save defaults on device</button><button id="resetDefaults" type="button">Reset to built-in defaults</button><button id="closeDefaults" type="button">Close defaults</button>
-      </form>
-    </div>
   </main>
   <section class="card" id="recovery" hidden><h2>Keep a copy</h2><p>Local storage could not save this change. Copy this text before closing the page.</p><textarea id="recoveryText" rows="8" readonly aria-label="Recovery copy"></textarea><button id="copyRecovery">Copy recovery text</button></section>
 </body>

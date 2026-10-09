@@ -1,5 +1,5 @@
 import { clickControl } from './navigation-helper.mjs';
-import { openPreference, showView } from './navigation-helper.mjs';
+import { openAccountTaskOption, openListTaskOption, showView } from './navigation-helper.mjs';
 import { test } from 'node:test';
 import { waitForBrowser } from './browser-wait.mjs';
 import assert from 'node:assert/strict';
@@ -18,10 +18,12 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
-  await openPreference(page, 'task-options');
-  await page.locator('#defaultsForm [name=contexts]').fill('@Kitchen\n@Shop');
-  await page.locator('#defaultsForm [name=statuses]').fill('next\nwaiting\ncustom');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await openAccountTaskOption(page, 'contexts');
+  await page.locator('#taskOptionValue').fill('@Kitchen\n@Shop');
+  await page.locator('#taskOptionEditorBack').click();
+  await page.locator('#task-option-statuses').click();
+  await page.locator('#taskOptionValue').fill('next\nwaiting\ncustom');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForBrowser(page, async () => {
     const local = await (await import('/inbox-store.js?v=9')).transact('alice');
     return local.records['settings:settings']?.defaults?.contexts?.join('\n') === '@Kitchen\n@Shop';
@@ -34,9 +36,9 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' }); await confirmed(page);
   const list = records().find(r => r.type === 'list'); assert.equal(list.description, 'Weekly supplies');
   assert.deepEqual(list.defaults.contexts, ['@Kitchen', '@Shop']);
-  await showView(page, 'lists'); await page.locator('#view').selectOption({ label: 'Groceries' }); await page.getByRole('button', { name: 'Defaults: Groceries', exact: true }).click();
-  await page.locator('#defaultsForm [name=priority]').fill('Urgent');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' }); await confirmed(page);
+  await openListTaskOption(page, 'Groceries', 'priority');
+  await page.locator('#taskOptionValue').fill('Urgent');
+  await page.getByRole('button', { name: 'Save', exact: true }).click(); await confirmed(page);
   await showView(page, 'capture'); await page.locator('#captureOptions > summary').click();
   await page.locator('#capture [name=listId]').selectOption(list.id);
   await showView(page, 'capture'); await page.locator('#captureText').fill('<img src=x onerror=alert(1)>');
@@ -75,18 +77,22 @@ test('native parity: defaults, list creation, advanced fields, filters and offli
   await page.locator('#edit .task-dates > summary').click(); await page.locator('#edit [name=dueLocal]').fill('');
   await page.locator('#edit [name=title]').fill('Milk');
   await page.getByRole('button', { name: 'Save edit on device' }).click(); await page.locator('#editor').waitFor({ state: 'hidden' });
-  await openPreference(page, 'task-options');
-  await page.locator('#defaultsForm [name=contexts]').fill('@Offline');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  await openAccountTaskOption(page, 'contexts');
+  await page.locator('#taskOptionValue').fill('@Offline');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry =>
     entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.join('\n') === '@Offline')));
-  await showView(page, 'lists'); await page.locator('#view').selectOption({ label: 'Groceries' }); await page.getByRole('button', { name: 'Defaults: Groceries', exact: true }).click();
+  await openListTaskOption(page, 'Groceries', 'contexts');
+  await page.locator('#taskOptionValue').fill('@List draft');
+  await page.locator('#taskOptionEditorBack').click(); await page.locator('#taskOptionsMasterBack').click();
+  await openListTaskOption(page, 'Groceries', 'contexts');
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@List draft');
   await page.getByRole('button', { name: 'Copy user defaults', exact: true }).click();
-  assert.equal(await page.locator('#defaultsForm [name=contexts]').inputValue(), '@Offline');
-  await page.getByRole('button', { name: 'Save defaults on device' }).click(); await page.locator('#defaultsEditor').waitFor({ state: 'hidden' });
-  await openPreference(page, 'task-options');
-  await page.getByRole('button', { name: 'Reset to built-in defaults', exact: true }).click();
-  await page.getByRole('button', { name: 'Save defaults on device' }).click();
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Offline');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await openAccountTaskOption(page, 'contexts');
+  await page.getByRole('button', { name: 'Use built-in defaults', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry =>
     entry.operation.mutations.some(mutation => mutation.type === 'settings' && mutation.fields?.defaults?.contexts?.includes('@Home'))));
   await showView(page, 'capture'); await page.locator('#captureText').fill('Unsaved after settings');
