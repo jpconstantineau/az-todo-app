@@ -831,7 +831,9 @@ function render() {
     if (!taskOptionTarget()) {
       history.replaceState(null, '', location.pathname + location.search + '#capture'); destination = 'capture';
       workspace(false, { save: false });
-      error('This task-options target is no longer available. Its device draft remains with the original account and workspace.');
+      error(state.defaultSettings
+        ? 'This task-options target is no longer available. Its device draft remains with the original account and workspace.'
+        : 'Reconnect once to load the built-in options before editing defaults. Your work is kept.');
       return;
     }
     renderTaskOptions();
@@ -1487,14 +1489,19 @@ document.addEventListener('clarification-actions-change', refreshPreferenceRows)
 addEventListener('todo-appearance-change', refreshPreferenceRows);
 function taskOptionTarget(route = destination) {
   const parsed = taskOptionRoute(route);
-  if (!parsed || !accountId || !state) return null;
+  if (!parsed || !accountId || !state?.defaultSettings) return null;
   const records = projected(state);
   if (parsed.type === 'settings') {
     const record = records['settings:settings'] || { type: 'settings', id: 'settings', version: 0 };
     return { accountId, type: 'settings', id: 'settings', workspaceId: null, version: record.version || 0, title: 'Account', field: parsed.field, record };
   }
   const record = records[`list:${parsed.id}`];
-  if (!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) return null;
+  if (!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) {
+    const stored = currentDraft(state).defaults;
+    const target = { accountId, type: 'list', id: parsed.id, workspaceId: selectedWorkspace };
+    if (!matchingTaskOptionDraft(stored, target)) return null;
+    return { ...target, version: stored.version || 0, title: stored.title || record?.title || 'Unavailable list', field: parsed.field, record: null, unavailable: true };
+  }
   return { accountId, type: 'list', id: record.id, workspaceId: selectedWorkspace, version: record.version, title: record.title, field: parsed.field, record };
 }
 function journalTaskOptions() {
@@ -1506,7 +1513,7 @@ function matchingTaskOptionDraft(draft, target) {
     && (target.type === 'settings' || !draft.workspaceId || draft.workspaceId === target.workspaceId) && draft.values && typeof draft.values === 'object';
 }
 function freshTaskOptionValues(target) {
-  const defaults = target.type === 'settings' ? userDefaults() : effectiveDefaults(target.id);
+  const defaults = target.unavailable ? {} : target.type === 'settings' ? userDefaults() : effectiveDefaults(target.id);
   return Object.fromEntries(Object.keys(optionFields).map(name => [name, (defaults[name] || []).join('\n')]));
 }
 function ensureTaskOptionEditing(target) {
@@ -1547,10 +1554,13 @@ function renderTaskOptions() {
   const title = optionFields[field];
   $('taskOptionHeading').textContent = `${scopeTitle} · ${title}`;
   $('taskOptionLabel').textContent = `${title} — one per line`;
-  $('taskOptionScope').textContent = target.type === 'settings'
+  $('taskOptionScope').textContent = target.unavailable
+    ? `List “${target.title}” is no longer available in this workspace. Copy the draft values or discard the draft; it cannot be saved to another list or workspace.`
+    : target.type === 'settings'
     ? 'Account options sync through your settings record. Existing task values are unchanged.'
     : `List “${target.title}” options override account options for this list. Existing task values are unchanged.`;
   $('resetDefaults').textContent = target.type === 'settings' ? 'Use built-in defaults' : 'Copy user defaults';
+  if (!saving) $('defaultsForm').querySelector('[type=submit]').disabled = !!target.unavailable;
   if (renderedTaskOptionField !== field) {
     renderedTaskOptionField = field;
     $('taskOptionValue').value = defaultsEditing.values[field] || '';
@@ -1692,6 +1702,7 @@ async function enterPreferences() {
 }
 async function enterPreferenceCategory(category) {
   if (!accountId || !category?.section || document.querySelector('dialog[open]')) return;
+  if (category.id === 'task-options' && !state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
   const route = `preferences/${category.id}`;
   if (destination === route) { focusDestination(); return; }
   if (defaultsEditing?.type === 'settings') await journalTaskOptions();
@@ -1728,10 +1739,16 @@ function enterPreferenceRoute(route, { replace = false } = {}) {
 }
 async function enterListTaskOptions(record) {
   if (!accountId || destination !== 'lists' || workspaceReadOnly()) return;
+  if (!state.defaultSettings) { error('Reconnect once to load the built-in options before editing defaults. Your work is kept.'); return; }
   const stored = currentDraft(state).defaults;
+  let recoveringUnavailableDraft = false;
   if (stored?.type === 'list' && stored.id !== record.id) {
     const previous = projected(state)[`list:${stored.id}`];
-    throw new Error(`A task-options draft for “${previous?.title || stored.title || 'another list'}” is still saved. Reopen it and Save or Discard draft before editing another list.`);
+    if (previous && !previous.deleted && workspaceOf(previous, projected(state)) === selectedWorkspace) {
+      throw new Error(`A task-options draft for “${previous.title || stored.title || 'another list'}” is still saved. Reopen it and Save or Discard draft before editing another list.`);
+    }
+    record = { id: stored.id };
+    recoveringUnavailableDraft = true;
   }
   const route = `lists/${record.id}/task-options`, target = `list:${record.id}:defaults`;
   const scrollX = window.scrollX, scrollY = window.scrollY;
@@ -1740,6 +1757,7 @@ async function enterListTaskOptions(record) {
   history.replaceState({ ...current, todoTaskOptionReturn: { session: menuHistorySession, accountId, origin: location.origin, route: 'lists', child: route, target, workspaceId: selectedWorkspace, scrollX, scrollY } }, '', '#lists');
   history.pushState({ todoTaskOption: { session: menuHistorySession, accountId, origin: location.origin, route, parent: 'lists', target, workspaceId: selectedWorkspace } }, '', '#' + route);
   workspace(true, { save: false });
+  if (recoveringUnavailableDraft) error('The earlier list is no longer available in this workspace. Its draft opened instead so you can copy or discard it before editing another list.');
 }
 async function enterTaskOptionField(field) {
   const target = taskOptionTarget();
@@ -1788,14 +1806,14 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
   let requested = location.hash.slice(1) || 'capture', parsedTaskOption = taskOptionRoute(requested);
   if (parsedTaskOption?.type === 'list') {
     const stored = currentDraft(state).defaults, records = projected(state);
-    if (stored?.type === 'list' && stored.id !== parsedTaskOption.id && records[`list:${stored.id}`] && !records[`list:${stored.id}`].deleted
-      && workspaceOf(records[`list:${stored.id}`], records) === selectedWorkspace) {
+    if (stored?.type === 'list' && stored.id !== parsedTaskOption.id && matchingTaskOptionDraft(stored, { accountId, type: 'list', id: stored.id, workspaceId: selectedWorkspace })) {
       requested = `${taskOptionBaseRoute(stored)}${stored.selectedField ? `/${taskOptionSlug(stored.selectedField)}` : ''}`;
       parsedTaskOption = taskOptionRoute(requested);
       history.replaceState(null, '', location.pathname + location.search + '#' + requested);
     }
     const record = records[`list:${parsedTaskOption.id}`];
-    if (!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) parsedTaskOption = null;
+    const recoverable = matchingTaskOptionDraft(stored, { accountId, type: 'list', id: parsedTaskOption.id, workspaceId: selectedWorkspace });
+    if ((!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) && !recoverable) parsedTaskOption = null;
   }
   destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || preferenceCategory(requested) || parsedTaskOption ? requested : requested.startsWith(clarifyPreferenceRoot + '/') ? clarifyPreferenceRoot : 'capture';
   if (destination === 'menu' && !menuEntry()) {
@@ -1968,12 +1986,12 @@ function taskOptionsFromDraft(draft) {
 function taskOptionLogical(message) {
   const failure = new Error(message); failure.taskOptionLogical = true; return failure;
 }
-function currentTaskOptionRecord(local, target) {
+function currentTaskOptionRecord(local, target, { checkVersion = true, checkAvailability = true } = {}) {
   const records = projected(local), current = records[`${target.type}:${target.id}`];
-  if (target.type === 'list' && (!current || current.deleted || workspaceOf(current, records) !== target.workspaceId)) {
+  if (checkAvailability && target.type === 'list' && (!current || current.deleted || workspaceOf(current, records) !== target.workspaceId)) {
     throw taskOptionLogical('This list is no longer available in this workspace. Restore or reopen the list to compare, copy, or discard this draft.');
   }
-  if ((current?.version || 0) !== target.version) throw taskOptionLogical('Defaults changed while editing. Copy your options and reopen the latest defaults to compare.');
+  if (checkVersion && (current?.version || 0) !== target.version) throw taskOptionLogical('Defaults changed while editing. Copy your options and reopen the latest defaults to compare.');
   return current;
 }
 $('taskOptionRows').addEventListener('click', event => {
@@ -1984,7 +2002,11 @@ $('taskOptionRows').addEventListener('click', event => {
 $('taskOptionsMasterBack').onclick = () => { void leaveTaskOptions(); };
 $('taskOptionEditorBack').onclick = () => { void leaveTaskOptions(); };
 $('taskOptionValue').addEventListener('input', () => {
-  snapshotTaskOptionValue(); $('defaultsError').hidden = true; statusText('taskOptionStatus', 'Draft saved on this device.'); void journalTaskOptions();
+  snapshotTaskOptionValue(); $('defaultsError').hidden = true; statusText('taskOptionStatus', 'Saving draft on this device…');
+  const pending = journalTaskOptions();
+  void pending.then(saved => {
+    if (pending === taskOptionJournalPromise && taskOptionRoute(destination)) statusText('taskOptionStatus', saved ? 'Draft saved on this device.' : 'Draft not saved on this device.');
+  });
 });
 $('resetDefaults').onclick = () => {
   if (!defaultsEditing) return;
@@ -2001,7 +2023,7 @@ $('discardDefaultsDraft').onclick = () => {
   saving = true; controls.forEach(control => { control.disabled = true; });
   void taskOptionJournalPromise.then(() => transact(owner, local => {
     try {
-      currentTaskOptionRecord(local, target);
+      currentTaskOptionRecord(local, target, { checkVersion: false, checkAvailability: false });
       if (target.type === 'settings') {
         const draft = local.preferenceDraft?.defaults;
         if (matchingTaskOptionDraft(draft, target)) local.preferenceDraft = { ...(local.preferenceDraft || {}), defaults: null };

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
-import { openAccountTaskOption, openClarificationPreferences, openPreference, openPreferences, showView } from './navigation-helper.mjs';
+import { openAccountTaskOption, openClarificationPreferences, openListTaskOption, openPreference, openPreferences, showView } from './navigation-helper.mjs';
 
 async function setup(t, user = 'alice') {
   documents.length = 0;
@@ -354,4 +354,113 @@ test('Task options use account draft storage while browser preferences stay brow
   assert.equal(await page.locator('[data-appearance]').inputValue(), 'light');
   assert.equal((await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('bob'))).queue.length, 0);
   await showView(page, 'capture');
+});
+
+test('Task option stale drafts can be discarded for the latest record', async t => {
+  const { page } = await setup(t);
+  await openAccountTaskOption(page, 'contexts');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return local.queue.length === 0 && local.records['settings:settings']?.version === 1;
+  });
+  await page.locator('#taskOptionValue').fill('@Stale proposal');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).preferenceDraft?.defaults?.values.contexts === '@Stale proposal');
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=15');
+    await transact('alice', local => {
+      const current = local.records['settings:settings'];
+      local.records['settings:settings'] = { ...current, version: current.version + 1, defaults: { ...current.defaults, contexts: ['@Newer'] } };
+    });
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#defaultsError').textContent.includes('Defaults changed while editing'));
+  assert.equal((await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'))).queue.length, 0);
+  await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).preferenceDraft?.defaults === null);
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Newer');
+  assert.equal(await page.locator('#defaultsError').isHidden(), true);
+  assert.equal(await page.locator('#taskOptionStatus').textContent(), 'Draft discarded. Latest saved options restored.');
+});
+
+test('Task option draft status waits for its IndexedDB commit', async t => {
+  const { page } = await setup(t);
+  await openAccountTaskOption(page, 'contexts');
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    let failNextAccountWrite = true;
+    IDBObjectStore.prototype.put = function () {
+      if (this.name === 'accounts' && failNextAccountWrite) {
+        failNextAccountWrite = false;
+        throw new DOMException('Full', 'QuotaExceededError');
+      }
+      return original.apply(this, arguments);
+    };
+  });
+  await page.locator('#taskOptionValue').fill('@Not saved');
+  await page.locator('#recovery').waitFor();
+  await page.waitForFunction(() => document.querySelector('#taskOptionStatus').textContent === 'Draft not saved on this device.');
+  assert.match(await page.locator('#recoveryText').inputValue(), /@Not saved/);
+  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
+  assert.notEqual(local.preferenceDraft?.defaults?.values?.contexts, '@Not saved');
+  assert.equal(local.queue.length, 0);
+});
+
+test('A moved list keeps its task-option draft recoverable without allowing a wrong-target save', async t => {
+  const { page } = await setup(t);
+  await showView(page, 'lists');
+  await page.getByRole('button', { name: 'New list', exact: true }).click();
+  await page.locator('#edit [name=title]').fill('Movable');
+  await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  await openListTaskOption(page, 'Movable', 'contexts');
+  await page.locator('#taskOptionValue').fill('@Keep me');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.defaults?.values.contexts === '@Keep me');
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=15');
+    await transact('alice', local => {
+      const list = Object.values(local.records).find(record => record.type === 'list' && record.title === 'Movable');
+      local.records[`list:${list.id}`] = { ...list, version: list.version + 1, workspaceId: 'another-workspace' };
+    });
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  });
+  await page.waitForFunction(() => document.querySelector('#taskOptionScope').textContent.includes('no longer available in this workspace'));
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Keep me');
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).isDisabled(), true);
+  const before = await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
+  assert.equal(before.queue.length, 0);
+  await page.locator('#taskOptionEditorBack').click(); await page.locator('#taskOptionsMasterBack').click();
+  await page.getByRole('button', { name: 'New list', exact: true }).click();
+  await page.locator('#edit [name=title]').fill('Other list');
+  await page.getByRole('button', { name: 'Save edit on device' }).click();
+  await page.locator('#editor').waitFor({ state: 'hidden' });
+  await page.locator('#view').selectOption({ label: 'Other list' });
+  await page.getByRole('button', { name: 'Task options: Other list', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('draft opened instead'));
+  assert.match(new URL(page.url()).hash, /^#lists\/[A-Za-z0-9_-]+\/task-options$/);
+  assert.match(await page.locator('#taskOptionsMasterHeading').textContent(), /Movable/);
+  await page.locator('#task-option-contexts').click();
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Keep me');
+  await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.defaults === null);
+  assert.equal(new URL(page.url()).hash, '#capture');
+  assert.equal((await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'))).queue.length, 0);
+});
+
+test('Task options do not overwrite defaults before built-in options are available', async t => {
+  const { page } = await setup(t);
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=15');
+    await transact('alice', local => { delete local.defaultSettings; });
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  });
+  await openPreferences(page);
+  await page.locator('#preference-task-options').click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Reconnect once to load the built-in options'));
+  assert.equal(new URL(page.url()).hash, '#preferences');
+  assert.equal(await page.locator('#taskOptionsView').isVisible(), false);
+  const local = await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
+  assert.equal(local.queue.length, 0);
+  assert.equal(local.preferenceDraft?.defaults, undefined);
 });
