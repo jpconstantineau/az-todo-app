@@ -4,7 +4,10 @@ export async function showView(page, view) {
   if (await page.locator('#appDevice:modal').count()) await page.locator('#closeAppDevice').click();
   while (new URL(page.url()).hash.startsWith('#preferences')) {
     const hash = new URL(page.url()).hash;
-    await page.locator(hash === '#preferences' ? '#preferencesBack' : '.preferences-detail:not([hidden]) .preference-back').click();
+    const back = hash === '#preferences' ? '#preferencesBack'
+      : hash.startsWith('#preferences/process/clarify-actions/edit/') || hash === '#preferences/process/clarify-actions/add' ? '#clarifyActionEditorBack'
+        : hash === '#preferences/process/clarify-actions' ? '#clarifyActionsBack' : '.preferences-detail:not([hidden]) .preference-back:visible';
+    await page.locator(back).click();
     await page.waitForFunction(previous => location.hash !== previous, hash);
   }
   if (new URL(page.url()).hash === '#menu') {
@@ -46,6 +49,13 @@ export async function openPreference(page, id) {
     await openPreferences(page);
     await page.locator(`[data-preference-id="${id}"]`).click();
     await page.waitForFunction(expected => location.hash === expected && document.activeElement?.closest('.preferences-detail')?.hidden === false, route);
+  }
+}
+export async function openClarificationPreferences(page) {
+  if (new URL(page.url()).hash !== '#preferences/process/clarify-actions') {
+    await openPreference(page, 'process');
+    await page.locator('#openClarifyActions').click();
+    await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions' && document.activeElement?.id === 'clarifyActionsHeading');
   }
 }
 export async function revealControl(control) {

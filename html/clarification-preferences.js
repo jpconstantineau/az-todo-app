@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'todo-clarification-actions';
+const DRAFT_PREFIX = 'todo-clarification-action-draft:';
 const VERSION = 1;
+const DRAFT_VERSION = 1;
 const MAX_ACTIONS = 32;
 
 export const clarificationBehaviors = {
@@ -66,78 +68,263 @@ export function writeClarificationActions(actions, storage) {
   return validated;
 }
 
+export function insertClarificationAction(actions, action, position) {
+  const without = actions.filter(entry => entry.id !== action.id);
+  const positions = without.map((entry, index) => entry.placement === action.placement ? index : -1).filter(index => index >= 0);
+  const offset = Math.max(0, Math.min(Number(position) - 1, positions.length));
+  const index = offset < positions.length ? positions[offset] : positions.length ? positions.at(-1) + 1 : without.length;
+  without.splice(index, 0, action);
+  return validateClarificationActions(without);
+}
+
+export function readClarificationDraft(key, storage) {
+  try {
+    const target = storage === undefined ? globalThis.sessionStorage : storage;
+    const saved = JSON.parse(target.getItem(DRAFT_PREFIX + key));
+    if (saved?.version !== DRAFT_VERSION || !saved.values || typeof saved.values !== 'object') return null;
+    return { ...saved.values };
+  } catch { return null; }
+}
+
+export function writeClarificationDraft(key, values, storage) {
+  const target = storage === undefined ? globalThis.sessionStorage : storage;
+  target.setItem(DRAFT_PREFIX + key, JSON.stringify({ version: DRAFT_VERSION, values }));
+}
+
+export function clearClarificationDraft(key, storage) {
+  const target = storage === undefined ? globalThis.sessionStorage : storage;
+  target.removeItem(DRAFT_PREFIX + key);
+}
+
 let current = readClarificationActions();
 export const currentClarificationActions = () => structuredClone(current);
 
-function save(actions, status) {
-  current = validateClarificationActions(actions);
-  try { writeClarificationActions(current); status.textContent = 'Clarify actions saved for this browser.'; }
-  catch { status.textContent = 'Clarify actions are updated for this tab, but this browser could not store them.'; }
-  document.dispatchEvent(new CustomEvent('clarification-actions-change'));
-}
+const actionSnapshot = (actions, id) => {
+  const action = actions.find(entry => entry.id === id);
+  if (!action) return null;
+  return { ...action, position: actions.filter(entry => entry.placement === action.placement).findIndex(entry => entry.id === id) + 1 };
+};
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
 export function setupClarificationPreferences() {
-  const list = document.getElementById('clarifyActionPreferences');
-  const add = document.getElementById('addClarifyAction');
-  const reset = document.getElementById('resetClarifyActions');
-  const status = document.getElementById('clarifyActionStatus');
-  if (!list || !add || !reset || !status) return;
+  const $ = id => document.getElementById(id);
+  const groups = $('clarifyActionGroups'), form = $('clarifyActionEditor'), status = $('clarifyActionStatus');
+  const editorStatus = $('clarifyActionEditorStatus'), error = $('clarifyActionError');
+  if (!groups || !form || !status || !editorStatus || !error) return { render() {}, focus() {} };
 
-  function render(focus = null) {
-    list.replaceChildren();
-    current.forEach((entry, index) => {
-      const row = document.createElement('li'); row.className = 'clarify-preference-row'; row.dataset.actionId = entry.id;
-      const label = document.createElement('label'); label.textContent = 'Label';
-      const input = document.createElement('input'); input.value = entry.label; input.maxLength = 64; input.dataset.field = 'label'; input.setAttribute('aria-label', `Label for ${entry.label}`); label.append(input);
-      const behaviorLabel = document.createElement('label'); behaviorLabel.textContent = 'Behavior';
-      const behavior = document.createElement('select'); behavior.dataset.field = 'behavior';
-      behavior.setAttribute('aria-label', `Behavior for ${entry.label}`); behavior.replaceChildren(...Object.entries(clarificationBehaviors).map(([value, text]) => new Option(text, value, false, value === entry.behavior))); behaviorLabel.append(behavior);
-      const placementLabel = document.createElement('label'); placementLabel.textContent = 'Section';
-      const placement = document.createElement('select'); placement.dataset.field = 'placement';
-      placement.setAttribute('aria-label', `Section for ${entry.label}`); placement.append(new Option('Primary', 'primary', false, entry.placement === 'primary'), new Option('More', 'more', false, entry.placement === 'more')); placementLabel.append(placement);
-      const controls = document.createElement('div'); controls.className = 'actions clarify-preference-controls';
-      for (const [action, text, disabled] of [['up', 'Move up', index === 0], ['down', 'Move down', index === current.length - 1], ['remove', 'Remove', false]]) {
-        const button = document.createElement('button'); button.type = 'button'; button.dataset.action = action; button.textContent = text; button.disabled = disabled;
-        button.setAttribute('aria-label', `${text} ${entry.label}`); controls.append(button);
-      }
-      row.append(label, behaviorLabel, placementLabel, controls); list.append(row);
-    });
-    if (focus) list.querySelector(`[data-action-id="${CSS.escape(focus.id)}"] [data-action="${focus.action}"]`)?.focus();
+  let route = 'preferences/process', activeEditorKey = null, baseline = null, conflict = false;
+  const routeFor = id => `preferences/process/clarify-actions/edit/${id}`;
+  const draftKey = id => id ? `edit:${id}` : 'add';
+  const parsedRoute = value => {
+    if (value === 'preferences/process/clarify-actions') return { view: 'list' };
+    if (value === 'preferences/process/clarify-actions/add') return { view: 'editor', id: null };
+    const match = value.match(/^preferences\/process\/clarify-actions\/edit\/([A-Za-z0-9_-]{1,128})$/);
+    return match ? { view: 'editor', id: match[1] } : null;
+  };
+  const announce = (message, failed = false) => {
+    status.textContent = failed ? '' : message;
+    error.textContent = failed ? message : '';
+    error.hidden = !failed;
+  };
+  const navigate = (next, replace = false, focus = true) => document.dispatchEvent(new CustomEvent('clarification-preference-navigate', { detail: { route: next, replace, focus } }));
+
+  function persist(actions, message) {
+    try {
+      const validated = writeClarificationActions(actions);
+      current = validated;
+      announce(message);
+      document.dispatchEvent(new CustomEvent('clarification-actions-change'));
+      return true;
+    } catch {
+      announce('Clarify actions could not be stored. Nothing changed for reload or other tabs.', true);
+      return false;
+    }
   }
 
-  list.addEventListener('change', event => {
-    const row = event.target.closest('[data-action-id]');
-    if (!row || !event.target.dataset.field) return;
-    const actions = currentClarificationActions(), entry = actions.find(candidate => candidate.id === row.dataset.actionId);
-    entry[event.target.dataset.field] = event.target.value;
-    try { save(actions, status); render(); }
-    catch (error) { status.textContent = error.message; render(); }
-  });
-  list.addEventListener('click', event => {
-    const button = event.target.closest('[data-action]'), row = button?.closest('[data-action-id]');
-    if (!button || !row) return;
-    const actions = currentClarificationActions(), index = actions.findIndex(entry => entry.id === row.dataset.actionId);
-    if (button.dataset.action === 'remove') {
-      actions.splice(index, 1); save(actions, status); render();
-      (list.children[Math.min(index, list.children.length - 1)]?.querySelector('input') || add.elements.label).focus(); return;
+  function actionRow(entry, placement, position, length) {
+    const row = document.createElement('li'); row.className = 'clarify-action-row'; row.dataset.actionId = entry.id;
+    const link = document.createElement('a'); link.id = `clarify-action-${entry.id}`; link.className = 'clarify-action-link'; link.href = '#' + routeFor(entry.id); link.dataset.clarifyRoute = routeFor(entry.id); link.dataset.focusKey = `clarify:${entry.id}:edit`;
+    if (parsedRoute(route)?.id === entry.id) link.setAttribute('aria-current', 'page');
+    const label = document.createElement('span'); label.textContent = entry.label;
+    link.append(label);
+    if (entry.label !== clarificationBehaviors[entry.behavior]) {
+      const behavior = document.createElement('span'); behavior.className = 'clarify-action-behavior'; behavior.textContent = clarificationBehaviors[entry.behavior]; link.append(behavior);
     }
-    const other = button.dataset.action === 'up' ? index - 1 : index + 1;
-    if (other < 0 || other >= actions.length) return;
+    if (readClarificationDraft(draftKey(entry.id))) {
+      const draft = document.createElement('span'); draft.className = 'clarify-action-draft'; draft.textContent = 'Draft'; link.append(draft);
+    }
+    const controls = document.createElement('div'); controls.className = 'clarify-action-order';
+    for (const [direction, disabled] of [['up', position === 0], ['down', position === length - 1]]) {
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.move = direction; button.disabled = disabled; button.textContent = direction === 'up' ? '↑' : '↓';
+      button.setAttribute('aria-label', `Move ${entry.label} ${direction} in ${placement === 'primary' ? 'Primary' : 'More'}`);
+      button.dataset.focusKey = `clarify:${entry.id}:${direction}`; controls.append(button);
+    }
+    row.append(link, controls); return row;
+  }
+
+  function renderMaster(focusKey = null) {
+    for (const placement of ['primary', 'more']) {
+      const list = $(`clarify${placement === 'primary' ? 'Primary' : 'More'}Actions`);
+      const actions = current.filter(entry => entry.placement === placement);
+      list.replaceChildren(...actions.map((entry, position) => actionRow(entry, placement, position, actions.length)));
+    }
+    $('clarifyActionCount').textContent = `${current.length} actions · Browser`;
+    $('clarifyAddDraft').hidden = !readClarificationDraft('add');
+    if (focusKey) {
+      const restore = () => {
+        const requested = groups.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
+        const target = requested?.disabled ? requested.closest('[data-action-id]')?.querySelector('.clarify-action-link') : requested;
+        target?.focus({ preventScroll: true });
+      };
+      restore(); queueMicrotask(restore); requestAnimationFrame(() => requestAnimationFrame(restore));
+    }
+  }
+
+  function values() {
+    return { label: form.elements.label.value, behavior: form.elements.behavior.value, placement: form.elements.placement.value, position: Number(form.elements.position.value) };
+  }
+
+  function fillPositions(selected) {
+    const placement = form.elements.placement.value;
+    const editingId = parsedRoute(route)?.id;
+    const count = current.filter(entry => entry.placement === placement && entry.id !== editingId).length + 1;
+    const value = Math.max(1, Math.min(Number(selected) || count, count));
+    form.elements.position.replaceChildren(...Array.from({ length: count }, (_, index) => new Option(String(index + 1), String(index + 1), false, index + 1 === value)));
+  }
+
+  function setEditorStatus(message = '') { editorStatus.textContent = message; }
+  function clearDraft(key) {
+    try { clearClarificationDraft(key); return true; }
+    catch { setEditorStatus('This draft could not be cleared from this tab.'); return false; }
+  }
+  function saveDraft() {
+    const parsed = parsedRoute(route); if (parsed?.view !== 'editor') return;
+    try {
+      writeClarificationDraft(draftKey(parsed.id), values());
+      setEditorStatus('Draft saved for this tab.'); renderMaster();
+    } catch { setEditorStatus('This unfinished edit cannot survive reload in this tab.'); }
+  }
+
+  function loadEditor(parsed, focus = false) {
+    const key = draftKey(parsed.id), latest = parsed.id ? actionSnapshot(current, parsed.id) : null;
+    if (parsed.id && !latest) { activeEditorKey = null; navigate('preferences/process/clarify-actions', true); return; }
+    const editorKey = parsed.id || 'add';
+    if (activeEditorKey !== editorKey) {
+      const editorDefaults = latest || { label: '', behavior: 'make-project', placement: 'primary', position: current.filter(entry => entry.placement === 'primary').length + 1 };
+      const draft = readClarificationDraft(key), saved = { ...editorDefaults, ...(draft || {}) };
+      form.elements.label.value = saved.label;
+      form.elements.behavior.value = saved.behavior;
+      form.elements.placement.value = saved.placement;
+      fillPositions(saved.position);
+      baseline = latest;
+      conflict = false;
+      activeEditorKey = editorKey;
+      setEditorStatus(draft ? 'Draft restored for this tab.' : '');
+    }
+    $('clarifyActionEditorHeading').textContent = parsed.id ? 'Edit Clarify action' : 'Add Clarify action';
+    $('removeClarifyAction').hidden = !parsed.id;
+    $('clarifyRemoveHelp').hidden = !parsed.id;
+    if (parsed.id) $('clarifyRemoveHelp').textContent = `Remove ${latest.label} from Clarify in this browser. This does not delete or change tasks${defaults.some(entry => entry.id === parsed.id) ? '; Restore defaults can add the built-in action again.' : '; Restore defaults will not recreate this custom action.'}`;
+    if (conflict) announce('This action changed in another tab. Review or discard this draft before saving.', true);
+    if (focus) requestAnimationFrame(() => $('clarifyActionEditorHeading').focus({ preventScroll: true }));
+  }
+
+  function render(nextRoute, { focus = false } = {}) {
+    route = nextRoute;
+    const parsed = parsedRoute(route);
+    renderMaster();
+    $('clarifyActionsHeading').hidden = parsed?.view === 'editor';
+    $('clarifyActionsMasterHeading').hidden = parsed?.view !== 'editor';
+    $('clarifyActionEditorPanel').hidden = parsed?.view !== 'editor';
+    if (parsed?.view === 'editor') loadEditor(parsed, focus);
+  }
+
+  groups.addEventListener('click', event => {
+    const routeLink = event.target.closest('[data-clarify-route]');
+    if (routeLink && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
+      event.preventDefault(); navigate(routeLink.dataset.clarifyRoute); return;
+    }
+    const button = event.target.closest('[data-move]'), row = button?.closest('[data-action-id]');
+    if (!button || !row) return;
+    const actions = currentClarificationActions(), index = actions.findIndex(entry => entry.id === row.dataset.actionId), placement = actions[index]?.placement;
+    const peers = actions.map((entry, peerIndex) => entry.placement === placement ? peerIndex : -1).filter(peerIndex => peerIndex >= 0);
+    const peer = peers.indexOf(index), other = peers[peer + (button.dataset.move === 'up' ? -1 : 1)];
+    if (other === undefined) return;
     [actions[index], actions[other]] = [actions[other], actions[index]];
-    save(actions, status); render({ id: row.dataset.actionId, action: button.dataset.action });
+    if (persist(actions, 'Clarify action order saved for this browser.')) {
+      const parsed = parsedRoute(route);
+      if (parsed?.id) {
+        if (readClarificationDraft(draftKey(parsed.id))) baseline = actionSnapshot(current, parsed.id);
+        else { activeEditorKey = null; loadEditor(parsed); }
+      }
+      renderMaster(`clarify:${row.dataset.actionId}:${button.dataset.move}`);
+    }
   });
-  add.addEventListener('submit', event => {
-    event.preventDefault();
-    const data = new FormData(add), actions = currentClarificationActions();
-    actions.push({ id: crypto.randomUUID(), label: data.get('label'), behavior: data.get('behavior'), placement: data.get('placement') });
-    try { save(actions, status); const id = actions.at(-1).id; add.reset(); render(); list.querySelector(`[data-action-id="${CSS.escape(id)}"] input`)?.focus(); }
-    catch (error) { status.textContent = error.message; add.elements.label.focus(); }
+
+  form.elements.placement.addEventListener('change', () => { fillPositions(); saveDraft(); });
+  form.addEventListener('input', event => { if (event.target !== form.elements.placement) saveDraft(); });
+  form.addEventListener('change', event => { if (event.target !== form.elements.placement) saveDraft(); });
+  form.addEventListener('submit', event => {
+    event.preventDefault(); announce('');
+    const parsed = parsedRoute(route); if (parsed?.view !== 'editor') return;
+    const latest = parsed.id ? actionSnapshot(current, parsed.id) : null;
+    if (parsed.id && !same(latest, baseline)) {
+      conflict = true; announce('This action changed or was removed in another tab. Review the latest settings or discard this draft.', true); $('discardClarifyActionDraft').focus(); return;
+    }
+    const id = parsed.id || crypto.randomUUID(), next = values();
+    try {
+      const actions = insertClarificationAction(currentClarificationActions(), { id, label: next.label, behavior: next.behavior, placement: next.placement }, next.position);
+      if (!persist(actions, `${parsed.id ? 'Clarify action' : 'New Clarify action'} saved for this browser.`)) { form.elements.label.focus(); return; }
+      clearDraft(draftKey(parsed.id)); activeEditorKey = null; renderMaster();
+      navigate(routeFor(id), true, true);
+    } catch (failure) {
+      announce(failure.message, true);
+      if (/label/i.test(failure.message)) form.elements.label.focus();
+      else if (/behavior/i.test(failure.message)) form.elements.behavior.focus();
+      else if (/Primary|More|placement/i.test(failure.message)) form.elements.placement.focus();
+      else form.elements.label.focus();
+    }
   });
-  reset.addEventListener('click', () => { save(clarificationActionDefaults(), status); render(); list.querySelector('input')?.focus(); });
-  add.elements.behavior.replaceChildren(...Object.entries(clarificationBehaviors).map(([value, text]) => new Option(text, value)));
-  render();
+
+  $('discardClarifyActionDraft').addEventListener('click', () => {
+    const parsed = parsedRoute(route); if (parsed?.view !== 'editor') return;
+    clearDraft(draftKey(parsed.id)); activeEditorKey = null; announce('Draft discarded. Saved settings are unchanged.'); loadEditor(parsed); form.elements.label.focus(); renderMaster();
+  });
+  $('removeClarifyAction').addEventListener('click', () => {
+    const parsed = parsedRoute(route); if (!parsed?.id) return;
+    const actions = currentClarificationActions(), index = actions.findIndex(entry => entry.id === parsed.id);
+    if (index < 0 || !persist(actions.filter(entry => entry.id !== parsed.id), 'Clarify action removed from this browser.')) return;
+    clearDraft(draftKey(parsed.id)); activeEditorKey = null;
+    const next = current[Math.min(index, current.length - 1)];
+    navigate(next ? routeFor(next.id) : 'preferences/process/clarify-actions', true, true);
+  });
+  $('resetClarifyActions').addEventListener('click', () => { $('restoreClarifyConfirmation').hidden = false; $('confirmResetClarifyActions').focus(); });
+  $('cancelResetClarifyActions').addEventListener('click', () => { $('restoreClarifyConfirmation').hidden = true; $('resetClarifyActions').focus(); });
+  $('confirmResetClarifyActions').addEventListener('click', () => {
+    if (!persist(clarificationActionDefaults(), 'Restored 12 default Clarify actions for this browser.')) return;
+    $('restoreClarifyConfirmation').hidden = true; activeEditorKey = null; renderMaster(); navigate(routeFor(current[0].id), false, true);
+  });
+
   addEventListener('storage', event => {
     if (event.key !== STORAGE_KEY && event.key !== null) return;
-    current = readClarificationActions(); render(); document.dispatchEvent(new CustomEvent('clarification-actions-change'));
+    current = readClarificationActions(); renderMaster();
+    const parsed = parsedRoute(route);
+    if (parsed?.view === 'editor') {
+      const dirty = !!readClarificationDraft(draftKey(parsed.id));
+      if (dirty && parsed.id && !same(actionSnapshot(current, parsed.id), baseline)) {
+        conflict = true; announce('This action changed in another tab. Review or discard this draft before saving.', true);
+      } else if (!dirty) { activeEditorKey = null; loadEditor(parsed); }
+    }
+    document.dispatchEvent(new CustomEvent('clarification-actions-change'));
   });
+  form.elements.behavior.replaceChildren(...Object.entries(clarificationBehaviors).map(([value, text]) => new Option(text, value)));
+  renderMaster();
+  return {
+    render,
+    focus() {
+      const parsed = parsedRoute(route);
+      (parsed?.view === 'editor' ? $('clarifyActionEditorHeading') : $('clarifyActionsHeading')).focus({ preventScroll: true });
+    },
+    parsedRoute
+  };
 }

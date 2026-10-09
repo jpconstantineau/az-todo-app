@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
-import { openPreference, openPreferences, showView } from './navigation-helper.mjs';
+import { openClarificationPreferences, openPreference, openPreferences, showView } from './navigation-helper.mjs';
 
 async function setup(t, user = 'alice') {
   documents.length = 0;
@@ -98,6 +98,167 @@ test('Preferences routes expose only live categories with route, focus, Back and
   await context.setOffline(false);
   await page.goto(server.url + '#preferences/capture'); await page.waitForFunction(() => location.hash === '#capture');
   assert.equal(await page.locator('#captureText').isVisible(), true);
+});
+
+test('Clarify action pages keep ordered browser settings, explicit drafts, focus and responsive routes', { timeout: 90000 }, async t => {
+  const { page, context, server } = await setup(t);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
+  const taskState = () => page.evaluate(async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return { records: local.records, queue: local.queue, preferenceDraft: local.preferenceDraft };
+  });
+  const before = await taskState();
+  await openClarificationPreferences(page);
+  assert.equal(await page.title(), 'Clarify actions · Personal');
+  assert.equal(await page.locator('h1:visible').count(), 1);
+  assert.deepEqual(await page.locator('#clarifyPrimaryActions .clarify-action-link > span:first-child').allTextContents(),
+    ['Make project', 'Make list', 'Make checklist', 'Action', 'Reference', 'Someday']);
+  assert.equal(await page.locator('.clarify-action-behavior').count(), 0);
+  const move = page.getByRole('button', { name: 'Move Make project down in Primary' });
+  await move.focus(); await move.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#clarifyPrimaryActions .clarify-action-link span').textContent === 'Make list');
+  assert.equal(await move.evaluate(element => element === document.activeElement), true);
+
+  await page.locator('#addClarifyAction').click();
+  await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions/add' && document.activeElement?.id === 'clarifyActionEditorHeading');
+  const form = page.locator('#clarifyActionEditor');
+  await form.locator('[name=label]').fill('Make shopping list');
+  await form.locator('[name=behavior]').selectOption('make-checklist');
+  await form.locator('[name=placement]').selectOption('more');
+  await form.locator('[name=position]').selectOption('2');
+  await page.waitForFunction(() => document.querySelector('#clarifyActionEditorStatus').textContent.includes('Draft saved'));
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await form.locator('[name=label]').inputValue(), 'Make shopping list');
+  assert.equal(await form.locator('[name=placement]').inputValue(), 'more');
+  assert.equal(await form.locator('[name=position]').inputValue(), '2');
+  assert.equal(await page.locator('#clarifyActionEditorStatus').textContent(), 'Draft restored for this tab.');
+
+  for (const [width, height] of [[320, 568], [390, 844], [600, 900], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
+    await page.setViewportSize({ width, height });
+    assert.equal(new URL(page.url()).hash, '#preferences/process/clarify-actions/add');
+    assert.equal(await form.locator('[name=label]').inputValue(), 'Make shopping list');
+    assert.equal(await page.locator('h1:visible').count(), 1);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px has no horizontal overflow`);
+    assert.equal(await page.locator('#clarifyActionMaster').isVisible(), width >= 1024);
+    assert.equal(await page.locator('#clarifyActionEditorPanel').isVisible(), true);
+    if (width >= 1024) assert.equal(Math.round((await page.locator('#clarifyActionMaster').boundingBox()).width), 320);
+  }
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.equal(await form.locator('[name=label]').inputValue(), 'Make shopping list');
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForFunction(() => location.hash.startsWith('#preferences/process/clarify-actions/edit/'));
+  const customRoute = new URL(page.url()).hash;
+  assert.equal(await page.title(), 'Edit Clarify action · Personal');
+  assert.equal(await form.locator('[name=label]').inputValue(), 'Make shopping list');
+  assert.equal(await page.locator('.clarify-action-link[aria-current=page]').count(), 1);
+  await page.locator('#clarifyActionEditorBack').click();
+  await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions');
+  assert.deepEqual((await page.locator('#clarifyMoreActions .clarify-action-link > span:first-child').allTextContents()).slice(0, 3),
+    ['Make area', 'Make shopping list', 'Make role']);
+  assert.equal(await page.locator('#clarifyMoreActions .clarify-action-behavior').filter({ hasText: 'Make checklist' }).count(), 1);
+  await page.goBack(); await page.waitForFunction(() => location.hash === '#preferences/process');
+  await page.goForward(); await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions');
+  await page.goto(server.url + customRoute); await page.locator('#clarifyActionEditorHeading').waitFor();
+  assert.equal(await page.locator('#clarifyActionEditorHeading').evaluate(element => element === document.activeElement), true);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const moveCustom = page.getByRole('button', { name: 'Move Make shopping list up in More' });
+  await moveCustom.focus(); await moveCustom.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#clarifyMoreActions .clarify-action-link span')?.textContent === 'Make shopping list');
+  await page.waitForFunction(() => document.activeElement?.dataset.focusKey?.endsWith(':edit'));
+  assert.equal(await page.locator('.clarify-action-link[aria-current=page]').evaluate(element => element === document.activeElement), true);
+  assert.equal(await form.locator('[name=position]').inputValue(), '1');
+  await page.emulateMedia({ forcedColors: 'active' });
+  assert.notEqual(await page.locator('.clarify-action-link[aria-current=page]').evaluate(element => getComputedStyle(element).outlineStyle), 'none');
+  await page.emulateMedia({ forcedColors: 'none' });
+
+  const storedBeforeFailure = await page.evaluate(() => localStorage.getItem('todo-clarification-actions'));
+  await page.evaluate(() => {
+    window.__clarifySetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (this === localStorage && key === 'todo-clarification-actions') throw new Error('full');
+      return window.__clarifySetItem.call(this, key, value);
+    };
+  });
+  await form.locator('[name=label]').fill('Unsaved shopping alias');
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  assert.match(await page.locator('#clarifyActionError').textContent(), /Nothing changed/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('todo-clarification-actions')), storedBeforeFailure);
+  await page.evaluate(() => { Storage.prototype.setItem = window.__clarifySetItem; });
+  await page.locator('#discardClarifyActionDraft').click();
+  assert.equal(await form.locator('[name=label]').inputValue(), 'Make shopping list');
+  assert.equal(await form.locator('[name=label]').evaluate(element => element === document.activeElement), true);
+
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.getByRole('button', { name: 'Move Make project down in Primary' }).focus();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => document.activeElement?.id === 'clarifyActionEditorHeading');
+  await context.setOffline(true); await page.reload(); await page.locator('#clarifyActionEditorHeading').waitFor();
+  assert.equal(new URL(page.url()).hash, customRoute);
+  assert.equal(await form.locator('[name=label]').inputValue(), 'Make shopping list');
+  await context.setOffline(false);
+
+  await page.locator('#removeClarifyAction').click();
+  await page.waitForFunction(route => location.hash !== route && document.activeElement?.id === 'clarifyActionEditorHeading', customRoute);
+  assert.equal(await page.getByText('Make shopping list', { exact: true }).count(), 0);
+  await page.goto(server.url + customRoute);
+  await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions' && document.activeElement?.id === 'clarifyActionsHeading');
+  await page.locator('#resetClarifyActions').click();
+  assert.equal(await page.locator('#restoreClarifyConfirmation').isVisible(), true);
+  await page.locator('#cancelResetClarifyActions').click();
+  assert.equal(await page.locator('#resetClarifyActions').evaluate(element => element === document.activeElement), true);
+  await page.locator('#resetClarifyActions').click(); await page.locator('#confirmResetClarifyActions').click();
+  await page.waitForFunction(() => location.hash.endsWith('/edit/project') && document.activeElement?.id === 'clarifyActionEditorHeading');
+  assert.equal(await form.locator('[name=label]').inputValue(), 'Make project');
+  assert.deepEqual(await taskState(), before);
+});
+
+test('Clarify action drafts isolate tabs and block overwriting a newer browser setting', { timeout: 90000 }, async t => {
+  const { page, context, server } = await setup(t);
+  const other = await context.newPage(); await other.goto(server.url); await other.locator('#workspace').waitFor();
+  const before = await page.evaluate(async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return { records: local.records, queue: local.queue, preferenceDraft: local.preferenceDraft };
+  });
+  await openClarificationPreferences(page); await openClarificationPreferences(other);
+  await page.locator('#clarify-action-project').click(); await other.locator('#clarify-action-project').click();
+  const editor = page.locator('#clarifyActionEditor'), otherEditor = other.locator('#clarifyActionEditor');
+  await editor.locator('[name=label]').fill('My unfinished project label');
+  await otherEditor.locator('[name=label]').fill('Project from another tab');
+  await otherEditor.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#clarifyActionError').textContent.includes('changed in another tab'));
+  assert.equal(await editor.locator('[name=label]').inputValue(), 'My unfinished project label');
+  await editor.getByRole('button', { name: 'Save', exact: true }).click();
+  assert.match(await page.locator('#clarifyActionError').textContent(), /changed or was removed/);
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('todo-clarification-actions'))).actions.find(entry => entry.id === 'project').label, 'Project from another tab');
+  await page.locator('#discardClarifyActionDraft').click();
+  assert.equal(await editor.locator('[name=label]').inputValue(), 'Project from another tab');
+  await otherEditor.locator('[name=label]').fill('Latest clean project label');
+  await otherEditor.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#clarifyActionEditor [name=label]').value === 'Latest clean project label');
+
+  await page.locator('#clarifyActionEditorBack').click(); await page.waitForFunction(() => location.hash === '#preferences/process/clarify-actions');
+  await page.locator('#addClarifyAction').click();
+  await page.evaluate(() => {
+    window.__clarifySessionSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (this === sessionStorage && key.startsWith('todo-clarification-action-draft:')) throw new Error('full');
+      return window.__clarifySessionSetItem.call(this, key, value);
+    };
+  });
+  await page.locator('#clarifyActionEditor [name=label]').fill('Live only');
+  assert.match(await page.locator('#clarifyActionEditorStatus').textContent(), /cannot survive reload/);
+  assert.equal(await page.locator('#clarifyActionEditor [name=label]').inputValue(), 'Live only');
+  await page.evaluate(() => { Storage.prototype.setItem = window.__clarifySessionSetItem; });
+  const after = await page.evaluate(async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return { records: local.records, queue: local.queue, preferenceDraft: local.preferenceDraft };
+  });
+  assert.deepEqual(after, before);
 });
 
 test('Appearance storage updates every tab and visible summary without native change echoes', { timeout: 90000 }, async t => {

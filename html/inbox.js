@@ -6,8 +6,8 @@ import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutation
 import { optionFields, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, defaultsFrom, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=4';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=18';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
-import { clarificationUI } from './clarification.js?v=10';
-import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=2';
+import { clarificationUI } from './clarification.js?v=11';
+import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
@@ -20,7 +20,7 @@ import { setupRecurrence } from './recurrence-ui.js?v=3';
 
 const $ = id => document.getElementById(id);
 setupAgentStatus();
-setupClarificationPreferences();
+const clarificationPreferences = setupClarificationPreferences();
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
@@ -43,6 +43,29 @@ const preferenceCategories = [
 ];
 const livePreferenceCategories = preferenceCategories.filter(category => category.section);
 const preferenceRoutes = new Map(livePreferenceCategories.map(category => [`preferences/${category.id}`, category]));
+const clarifyPreferenceRoot = 'preferences/process/clarify-actions';
+function clarifyPreferenceRoute(route) {
+  if (typeof route !== 'string') return null;
+  if (route === clarifyPreferenceRoot) return { view: 'list' };
+  if (route === `${clarifyPreferenceRoot}/add`) return { view: 'editor', id: null };
+  const match = route.match(/^preferences\/process\/clarify-actions\/edit\/([A-Za-z0-9_-]{1,128})$/);
+  return match ? { view: 'editor', id: match[1] } : null;
+}
+const preferenceCategory = route => preferenceRoutes.get(route) || (clarifyPreferenceRoute(route) ? preferenceRoutes.get('preferences/process') : null);
+const isPreferenceRoute = route => route === 'preferences' || !!preferenceCategory(route);
+function preferenceRouteTitle(route) {
+  const clarify = clarifyPreferenceRoute(route);
+  if (clarify?.view === 'list') return 'Clarify actions';
+  if (clarify?.view === 'editor') return clarify.id ? 'Edit Clarify action' : 'Add Clarify action';
+  return preferenceRoutes.get(route)?.label;
+}
+function preferenceRouteParent(route) {
+  const clarify = clarifyPreferenceRoute(route);
+  if (clarify?.view === 'list') return { parent: 'preferences/process', target: 'openClarifyActions' };
+  if (clarify?.view === 'editor') return { parent: clarifyPreferenceRoot, target: clarify.id ? `clarify-action-${clarify.id}` : 'addClarifyAction' };
+  const category = preferenceRoutes.get(route);
+  return category ? { parent: 'preferences', target: `preference-${category.id}` } : null;
+}
 const menuHistorySession = crypto.randomUUID();
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 const scopedRecords = () => workspaceRecords(projected(state), selectedWorkspace);
@@ -67,8 +90,8 @@ function renderWorkspaces() {
   if (!spaces.some(space => space.id === selectedWorkspace)) $('workspaceSelect').add(new Option('Unavailable workspace', selectedWorkspace));
   $('workspaceSelect').value = selectedWorkspace;
   const workspaceTitle = $('workspaceSelect').selectedOptions[0].textContent;
-  const preference = preferenceRoutes.get(destination);
-  document.title = (preference?.label || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
+  const preferenceTitle = preferenceRouteTitle(destination);
+  document.title = (preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
   statusText('menuWorkspaceValue', workspaceTitle);
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
@@ -1435,8 +1458,8 @@ setupPreferenceRows();
 document.addEventListener('clarification-actions-change', refreshPreferenceRows);
 addEventListener('todo-appearance-change', refreshPreferenceRows);
 function renderPreferences() {
-  const category = preferenceRoutes.get(destination), hub = destination === 'preferences';
-  $('preferencesView').dataset.route = hub ? 'hub' : 'detail';
+  const category = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), hub = destination === 'preferences';
+  $('preferencesView').dataset.route = hub ? 'hub' : clarify ? `clarify-${clarify.view}` : 'detail';
   $('preferencesHubBar').hidden = !hub;
   for (const entry of livePreferenceCategories) {
     const active = category?.id === entry.id;
@@ -1444,6 +1467,9 @@ function renderPreferences() {
     const row = $(`preference-${entry.id}`);
     if (active) row.setAttribute('aria-current', 'page'); else row.removeAttribute('aria-current');
   }
+  $('preferencesProcessPage').hidden = category?.id !== 'process' || !!clarify;
+  $('clarifyActionsPage').hidden = !clarify;
+  if (clarify) clarificationPreferences.render(destination);
   refreshPreferenceRows();
   if (category?.id === 'task-options' && !$('defaultsEditor').open) {
     const record = projected(state)['settings:settings'] || { type: 'settings', id: 'settings', version: 0 };
@@ -1457,9 +1483,10 @@ function focusDestination() {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  const preference = preferenceRoutes.get(destination);
+  const preference = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination);
   if (destination === 'menu') $('menuHeading').focus({ preventScroll: true });
   else if (destination === 'preferences') $('preferencesHeading').focus({ preventScroll: true });
+  else if (clarify) clarificationPreferences.focus();
   else if (preference) $(`${preference.section}Heading`).focus({ preventScroll: true });
   else (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'plan' ? $('planHeading') : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
 }
@@ -1480,8 +1507,8 @@ function showDialog(dialog) {
 }
 function menuEntry() {
   const entry = history.state?.todoMenu;
-  const returnable = [...workflowRoutes, 'preferences', ...preferenceRoutes.keys()];
-  return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && returnable.includes(entry.returnRoute) && entry.target === 'appMenu' ? entry : null;
+  const returnable = workflowRoutes.includes(entry?.returnRoute) || isPreferenceRoute(entry?.returnRoute);
+  return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && returnable && entry.target === 'appMenu' ? entry : null;
 }
 function workflowEntry(route = destination) {
   const entry = history.state?.todoWorkflow;
@@ -1496,11 +1523,17 @@ function utilityReturnEntry(route = destination) {
 }
 function preferenceEntry(route = destination) {
   const entry = history.state?.todoPreference;
-  const category = preferenceRoutes.get(route);
+  const descriptor = preferenceRouteParent(route);
   const validReturn = route === 'preferences'
     ? entry?.parent === 'menu' && entry.target === 'openPreferences'
-    : category && entry?.parent === 'preferences' && entry.target === `preference-${category.id}`;
+    : descriptor && entry?.parent === descriptor.parent && entry.target === descriptor.target;
   return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && entry.route === route && validReturn && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
+}
+function preferenceReturnEntry(route = destination) {
+  const entry = history.state?.todoPreferenceReturn;
+  const descriptor = preferenceRouteParent(entry?.child);
+  const validTarget = descriptor?.parent === route && descriptor.target === entry?.target;
+  return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && entry.route === route && validTarget && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
 }
 function restoreRoutePosition(entry) {
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -1550,20 +1583,42 @@ async function enterPreferenceCategory(category) {
   } else return;
   workspace(true, { save: false });
 }
+function markPreferenceReturn(child, target) {
+  const current = history.state && typeof history.state === 'object' ? history.state : {};
+  history.replaceState({ ...current, todoPreferenceReturn: { session: menuHistorySession, accountId, origin: location.origin, route: destination, child, target, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + destination);
+}
+function enterPreferenceRoute(route, { replace = false } = {}) {
+  const descriptor = preferenceRouteParent(route);
+  if (!accountId || !descriptor || !isPreferenceRoute(destination) || document.querySelector('dialog[open]')) return;
+  const switchingEditor = clarifyPreferenceRoute(destination)?.view === 'editor' && clarifyPreferenceRoute(route)?.view === 'editor';
+  if (replace || switchingEditor) {
+    const current = history.state && typeof history.state === 'object' ? { ...history.state } : {};
+    current.todoPreference = { session: menuHistorySession, accountId, origin: location.origin, route, parent: descriptor.parent, target: descriptor.target, scrollX: window.scrollX, scrollY: window.scrollY };
+    history.replaceState(current, '', '#' + route);
+  } else {
+    markPreferenceReturn(route, descriptor.target);
+    history.pushState({ todoPreference: { session: menuHistorySession, accountId, origin: location.origin, route, parent: descriptor.parent, target: descriptor.target, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
+  }
+  workspace(true, { save: false });
+}
 async function leavePreferences() {
   if (destination === 'preferences/task-options') await journal();
   if (preferenceEntry()) history.back();
-  else { history.replaceState(null, '', location.pathname + location.search + '#capture'); workspace(true, { save: false }); }
+  else {
+    const parent = clarifyPreferenceRoute(destination) ? preferenceRouteParent(destination)?.parent : null;
+    history.replaceState(null, '', location.pathname + location.search + '#' + (parent || 'capture'));
+    workspace(true, { save: false });
+  }
 }
 function workspace(focus = true, { save = true, historyNavigation = false } = {}) {
   if (!accountId || !state || $('workspace').hidden) return;
   const requested = location.hash.slice(1) || 'capture';
-  destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || preferenceRoutes.has(requested) ? requested : 'capture';
+  destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || preferenceCategory(requested) ? requested : requested.startsWith(clarifyPreferenceRoot + '/') ? clarifyPreferenceRoot : 'capture';
   if (destination === 'menu' && !menuEntry()) {
     destination = 'capture';
     history.replaceState(null, '', location.pathname + location.search + '#capture');
   } else if (requested !== destination) history.replaceState(null, '', location.pathname + location.search + '#capture');
-  const menu = destination === 'menu', preferences = destination === 'preferences' || preferenceRoutes.has(destination), utility = menu || preferences;
+  const menu = destination === 'menu', preferences = isPreferenceRoute(destination), utility = menu || preferences;
   const listMode = destination === 'lists';
   document.body.classList.toggle('menu-route', menu);
   document.body.classList.toggle('utility-route', utility);
@@ -1592,7 +1647,7 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
   if (utility) $('savedEdit').hidden = true;
   if (focus) {
     $('createdDestination').replaceChildren();
-    const returning = historyNavigation && (workflowEntry() || utilityReturnEntry());
+    const returning = historyNavigation && (workflowEntry() || utilityReturnEntry() || preferenceReturnEntry());
     if (returning) restoreRoutePosition(returning);
     else {
       if (utility) focusDestination(); else requestAnimationFrame(focusDestination);
@@ -1617,8 +1672,22 @@ $('preferencesCategories').addEventListener('click', event => {
   if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
   event.preventDefault(); void enterPreferenceCategory(livePreferenceCategories.find(category => category.id === link.dataset.preferenceId));
 });
+$('openClarifyActions').addEventListener('click', event => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault(); enterPreferenceRoute(clarifyPreferenceRoot);
+});
+$('addClarifyAction').addEventListener('click', event => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault(); enterPreferenceRoute(`${clarifyPreferenceRoot}/add`);
+});
+document.addEventListener('clarification-preference-navigate', event => enterPreferenceRoute(event.detail.route, { replace: event.detail.replace }));
 $('preferencesBack').onclick = () => { void leavePreferences(); };
 for (const control of document.querySelectorAll('.preference-back')) control.onclick = () => { void leavePreferences(); };
+$('clarifyActionsBack').onclick = () => { void leavePreferences(); };
+$('clarifyActionEditorBack').onclick = () => { void leavePreferences(); };
+matchMedia('(min-width: 1024px)').addEventListener('change', event => {
+  if (!event.matches && clarifyPreferenceRoute(destination)?.view === 'editor' && !$('clarifyActionEditorPanel').contains(document.activeElement)) clarificationPreferences.focus();
+});
 $('menuBack').onclick = () => {
   if (menuEntry()) history.back();
   else { history.replaceState(null, '', location.pathname + location.search + '#capture'); workspace(true, { save: false }); }
