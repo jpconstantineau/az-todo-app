@@ -1919,6 +1919,7 @@ async function leaveTaskOptions() {
 }
 function workspace(focus = true, { save = true, historyNavigation = false } = {}) {
   if (!accountId || !state || $('workspace').hidden) return;
+  const previousDestination = destination;
   let requested = location.hash.slice(1) || 'capture', parsedTaskOption = taskOptionRoute(requested);
   if (parsedTaskOption?.type === 'list') {
     const stored = currentDraft(state).defaults, records = projected(state);
@@ -1936,6 +1937,7 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
     destination = 'capture';
     history.replaceState(null, '', location.pathname + location.search + '#capture');
   } else if (requested !== destination) history.replaceState(null, '', location.pathname + location.search + '#capture');
+  if (previousDestination === 'capture' && destination !== 'capture') extraction.suspend();
   const taskOptions = !!taskOptionRoute(destination), menu = destination === 'menu', utilityPage = isUtilityPageRoute(destination), preferences = isPreferenceRoute(destination) && !taskOptions, utility = menu || utilityPage || preferences || taskOptions;
   const listMode = destination === 'lists';
   document.body.classList.toggle('menu-route', menu);

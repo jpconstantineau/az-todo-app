@@ -83,6 +83,14 @@ test('unsupported authenticated browsers explicitly review cloud capture and cla
   assert.equal(await page.locator('#extractionReview').isVisible(), false);
   assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam later');
 
+  await page.locator('#captureText').fill('Call Sam after navigating');
+  await page.getByRole('button', { name: 'Suggest tasks with cloud AI' }).click();
+  await page.locator('#extractCancel').waitFor();
+  await showView(page, 'work'); ai.release(); await page.waitForTimeout(100);
+  assert.equal(await page.locator('#extractionReview').isVisible(), false);
+  await showView(page, 'capture');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam after navigating');
+
   await page.locator('#captureText').fill('Call Sam for Alice');
   await page.getByRole('button', { name: 'Suggest tasks with cloud AI' }).click();
   await page.locator('#extractCancel').waitFor();
