@@ -39,9 +39,9 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /src="\/pwa.js\?v=33"/);
-  assert.match(html, /type="module" src="\/inbox.js\?v=35"/);
-  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=33"/);
+  assert.match(html, /src="\/pwa.js\?v=34"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=36"/);
+  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=34"/);
   assert.deepEqual(localDefaults, apiDefaults, 'device-local task options must match the session API defaults');
   assert.equal(html.includes('id="defaultsEditor"'), false, 'task options are routed pages, not a dialog');
   assert.doesNotMatch(html, /<dialog[^>]+id="(?:appDevice|dataRecovery|deletedRecords)"/, 'utility pages are routed sections, not dialogs');
@@ -56,7 +56,7 @@ test('canonical shell uses local assets, safe routing and no fragment runtime', 
   assert.ok(config.navigationFallback.exclude.includes('/.auth/*'));
   assert.deepEqual(config.routes, [{ route: '/api/*', allowedRoles: ['authenticated'] }]);
   assert.doesNotMatch(config.globalHeaders['content-security-policy'], /unsafe-inline|jsdelivr/);
-  assert.deepEqual([...routes.keys()].filter(key => key.startsWith('POST /api/v1/')), ['POST /api/v1/operations']);
+  assert.deepEqual([...routes.keys()].filter(key => key.startsWith('POST /api/v1/')), ['POST /api/v1/operations', 'POST /api/v1/ai/suggestions']);
 });
 
 test('current create contract requires canonical workspace, membership and project lifecycle fields', () => {

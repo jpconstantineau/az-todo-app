@@ -132,6 +132,8 @@ export async function rehearse({ origin, cookies, backendOrigin = null, report, 
         const other = accounts.find(value => value !== account);
         const session = expect(await call('v1/session', { account, headers: { 'x-ms-client-principal': principal(other.id) } }), 200);
         assert.equal(session.accountId, account.id);
+        const ai = expect(await call('v1/ai/status', { account }), 200);
+        assert.equal(typeof ai.configured, 'boolean');
       }
     });
     await check('valid origin, matching referer and referer-only writes commit for both accounts', async () => {
@@ -170,12 +172,13 @@ export async function rehearse({ origin, cookies, backendOrigin = null, report, 
         { origin: 'https://foreign.invalid', referer: origin + '/' },
         { origin, 'sec-fetch-site': 'cross-site' }, { origin, 'sec-fetch-site': 'same-site' },
         { 'HX-Request': 'true', 'x-forwarded-host': new URL(origin).host }];
-      for (const route of ['v1/operations', 'shared/operations']) {
+      for (const route of ['v1/operations', 'v1/ai/suggestions', 'shared/operations']) {
         for (const headers of invalid) {
           const body = operation(account, [mutation]);
           const shared = { accountId: account.id, listId: id, operationId: randomUUID(), expectedRevision: 0,
             action: 'add', fields: { id: randomUUID(), title: 'Rejected origin probe' } };
-          const reply = await call(route, { account, headers, body: route === 'v1/operations' ? body : route === 'shared/operations' ? shared : {} });
+          const ai = { kind: 'clarification', prompt: 'Suggest a next action.' };
+          const reply = await call(route, { account, headers, body: route === 'v1/operations' ? body : route === 'shared/operations' ? shared : ai });
           expect(reply, 403, 'untrusted_origin');
           if (route === 'v1/operations') expect(await call('v1/receipts?' + new URLSearchParams({ accountId: account.id, operationId: body.operationId }), { account }), 404, 'receipt_not_found');
         }

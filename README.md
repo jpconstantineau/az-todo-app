@@ -35,8 +35,8 @@ flowchart LR
 - [Waiting, deferred work, dates and undo](docs/workflow-states.md)
 - [Resumable daily and weekly reviews](docs/reviews.md)
 - [Progressive clarification, saved proposals and explicit decisions](docs/clarification.md)
-- [Optional local AI guidance and manual fallback](docs/local-guidance.md)
-- [Automatic local AI capture and editable batch review](docs/ai-capture.md)
+- [Local-first AI guidance with authenticated cloud fallback](docs/local-guidance.md)
+- [Local-first AI capture and editable batch review](docs/ai-capture.md)
 - [Editable briefs, revision decisions and selected-revision export](docs/briefs.md)
 - [Keyboard focus, announcements and accessibility verification](docs/accessibility.md)
 - [Multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
@@ -49,6 +49,12 @@ The canonical entry is `/`. Set the backend
 retain the existing Cosmos connection settings. Retired pre-v1 HTTP paths are not
 registered. Disabling v1 shows an unavailable error; it never falls back to another
 store.
+
+Optional cloud AI fallback requires all three server-side settings:
+`AI_API_URL` (an OpenAI-compatible chat-completions HTTPS URL), `AI_API_KEY`, and
+`AI_MODEL`. Partial or unsafe configuration leaves cloud AI disabled. The key and
+full provider URL are never returned to the browser. Local browser AI remains the
+preferred path, and signed-out device-only profiles never call the cloud AI API.
 
 From `api/`, run `npm ci`, install Playwright Chromium (`npx playwright install chromium`),
 and run `npm test` with Node 22.x. On Windows with Edge installed, set

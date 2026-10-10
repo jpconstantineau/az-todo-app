@@ -1,8 +1,8 @@
 import { archiveOnly, collectionKinds, collectionKind, isCollection, isEffectivelyArchived, memberships, ancestry, refKey } from './collection-model.js?v=5';
-import { localGuidance } from './local-guidance.js?v=1';
+import { localGuidance } from './local-guidance.js?v=2';
 import { newFlow, flowProposal, requireTitle, membershipChange, itemFields, beforeFields } from './clarification-flow.js?v=4';
 
-export function clarificationUI({ records, save, journal, showDialog, actions }) {
+export function clarificationUI({ records, save, journal, showDialog, actions, cloudEligible }) {
   const $ = id => document.getElementById(id);
   const dialog = $('clarifier'), form = $('clarifyForm');
   let active = null, busy = false;
@@ -26,6 +26,7 @@ export function clarificationUI({ records, save, journal, showDialog, actions })
       task: { title: active.item.title, description: active.item.description || '', originalText: active.item.originalText || active.item.title },
       acceptedAnswers: {}, proposedAnswer: values().title
     } : null,
+    cloudEligible,
     use(text) {
       active.proposal.title = text;
       const input = form.querySelector('[data-proposal=title]');
