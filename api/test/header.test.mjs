@@ -229,7 +229,12 @@ test('header follows workspace selection and save state, then clears identity on
   assert.equal(await page.locator('#captureHelp').textContent(), 'One item per line. For comma- or semicolon-separated items, choose Preview comma / semicolon split before saving. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint previewHelp');
   assert.equal(await page.locator('#previewSplit svg').getAttribute('aria-hidden'), 'true');
-  assert.deepEqual(await page.locator('#previewSplit path').evaluateAll(paths => paths.map(path => path.getAttribute('d'))), ['M8.7 8.7 21 21', 'm8.7 15.3 4.6-4.6', 'M12.3 12.3 21 3']);
+  assert.deepEqual(await page.locator('#previewSplit path').evaluateAll(paths => paths.map(path => ({ d: path.getAttribute('d'), dash: path.getAttribute('stroke-dasharray') }))), [
+    { d: 'M8.7 8.7 21 21', dash: null },
+    { d: 'm8.7 15.3 4.6-4.6', dash: null },
+    { d: 'M12.3 12.3 21 3', dash: null },
+    { d: 'M12 12H21', dash: '1 3' }
+  ]);
   assert.deepEqual(await page.locator('.capture-header button:visible').evaluateAll(buttons => buttons.map(button => button.innerText)), ['', '']);
   assert.equal(await page.locator('#extractCloudStart').isVisible(), false);
   assert.ok((await page.getByRole('button', { name: 'Save on device', exact: true }).boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
