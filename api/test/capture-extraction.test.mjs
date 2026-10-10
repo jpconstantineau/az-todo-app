@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 import { documents, faults, startServer } from './harness.mjs';
 import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
-import { captureClock, capturedTime, validateExtraction, extractionMutations } from '../../html/capture-extraction.js';
+import { captureClock, capturedTime, captureCompletionInsertion, validateExtraction, extractionMutations } from '../../html/capture-extraction.js';
 import { fieldsFor } from '../api/v1/contract.mjs';
 import { enqueue } from '../../html/inbox-store.js';
 
@@ -22,6 +22,25 @@ test('capture clock fixes relative-date context and rejects skipped/repeated wal
   assert.equal(capturedTime('2026-10-03T15:00', clock.timeZone), '2026-10-03T21:00:00.000Z');
   assert.equal(capturedTime('2026-10-03T15:00', 'Asia/Kathmandu'), '2026-10-03T09:15:00.000Z');
   for (const value of ['2026-03-08T02:30', '2026-11-01T01:30', '2026-02-30T12:30', '2026-10-03T24:00']) assert.throws(() => capturedTime(value, 'America/New_York'));
+});
+
+test('inline completions become bounded newline-delimited entries without changing source text', () => {
+  assert.deepEqual(captureCompletionInsertion('Call Sam', 8, ' about the quote '), {
+    entry: 'about the quote', inserted: '\nabout the quote\n', value: 'Call Sam\nabout the quote\n', caret: 25
+  });
+  assert.deepEqual(captureCompletionInsertion('Call Sam today', 8, '\r\nabout the quote\r'), {
+    entry: 'about the quote', inserted: '\nabout the quote\n', value: 'Call Sam\nabout the quote\n today', caret: 25
+  });
+  assert.deepEqual(captureCompletionInsertion('Call Sam', 0, 'Buy milk\rCall Pat'), {
+    entry: 'Buy milk\nCall Pat', inserted: 'Buy milk\nCall Pat\n', value: 'Buy milk\nCall Pat\nCall Sam', caret: 18
+  });
+  assert.deepEqual(captureCompletionInsertion('Call Sam\r\nToday', 8, 'Send quote'), {
+    entry: 'Send quote', inserted: '\nSend quote', value: 'Call Sam\nSend quote\r\nToday', caret: 21
+  });
+  assert.deepEqual(captureCompletionInsertion('Call Sam\nToday', 9, 'Send quote'), {
+    entry: 'Send quote', inserted: 'Send quote\n', value: 'Call Sam\nSend quote\nToday', caret: 20
+  });
+  assert.throws(() => captureCompletionInsertion('Call Sam', 8, 'x', 9), /Capture is full/);
 });
 
 test('untrusted extraction is bounded, grounded, and cannot introduce record commands', () => {
@@ -439,15 +458,16 @@ test('suggested review storage failures retain source and corrections without qu
 });
 
 
-test('inline text appears at the cursor, Tab inserts only the continuation and the ordinary draft survives offline', { timeout: 60000 }, async t => {
+test('inline entry appears exactly at the cursor, Tab adds a new line and the ordinary draft survives offline', { timeout: 60000 }, async t => {
   const { page, context } = await setup(t);
   await page.locator('#captureText').fill('Call Sam today');
   await page.locator('#captureText').evaluate(field => field.setSelectionRange(8, 8));
   await page.locator('#extractAuto').check();
   await page.locator('#captureGhost').waitFor();
   assert.equal(await page.locator('#captureBefore').textContent(), 'Call Sam');
-  assert.equal(await page.locator('#captureGhost').textContent(), ' about the quote');
+  assert.equal(await page.locator('#captureGhost').textContent(), '\nabout the quote\n');
   assert.equal(await page.locator('#captureAfter').textContent(), ' today');
+  assert.match(await page.locator('#captureCompletionHint').textContent(), /own line and moves the cursor to the next line/);
   assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam today');
   assert.equal((await local(page)).draft.capture.text, 'Call Sam today');
   assert.equal((await local(page)).draft.extraction.draft, null);
@@ -468,18 +488,19 @@ test('inline text appears at the cursor, Tab inserts only the continuation and t
     }
   }
   await page.locator('#captureText').press('Tab');
-  await page.waitForFunction(() => document.querySelector('#captureText').value === 'Call Sam about the quote today');
+  await page.waitForFunction(() => document.querySelector('#captureText').value === 'Call Sam\nabout the quote\n today');
   assert.equal(await page.locator('#captureText').evaluate(field => field === document.activeElement), true);
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Call Sam about the quote today');
+  assert.equal(await page.locator('#captureText').evaluate(field => field.selectionStart), 25);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Call Sam\nabout the quote\n today');
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(records().length, 0);
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
-  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam about the quote today');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam\nabout the quote\n today');
   assert.equal(await page.locator('#captureMirror').isHidden(), true);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0, 'reload never runs inference');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length === 1);
-  assert.equal((await local(page)).queue[0].operation.mutations[0].fields.title, 'Call Sam about the quote today');
+  assert.deepEqual((await local(page)).queue[0].operation.mutations.map(mutation => mutation.fields.title), ['Call Sam', 'about the quote', 'today']);
 });
 
 test('inline Escape, Shift+Tab, cursor moves and pointer insertion preserve ordinary editing', { timeout: 30000 }, async t => {
@@ -496,11 +517,54 @@ test('inline Escape, Shift+Tab, cursor moves and pointer insertion preserve ordi
   await page.locator('#captureText').fill('Call Sam again'); await page.locator('#captureGhost').waitFor();
   await page.keyboard.press('ArrowLeft'); await page.locator('#captureGhost').waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam again');
+  await page.locator('#captureText').fill('Call selected'); await page.locator('#captureGhost').waitFor();
+  await page.locator('#captureText').evaluate(field => field.setSelectionRange(0, 4)); await page.locator('#captureGhost').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call selected');
+  await page.locator('#captureText').fill('Call with IME'); await page.locator('#captureGhost').waitFor();
+  await page.locator('#captureText').dispatchEvent('compositionstart'); await page.locator('#captureGhost').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call with IME');
+  await page.locator('#captureText').dispatchEvent('compositionend');
   await page.locator('#captureText').fill('Call Sam once more'); await page.locator('#captureGhost').waitFor();
   await page.locator('#captureCompletionUse').click();
-  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam once more about the quote');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam once more\nabout the quote\n');
+  assert.equal(await page.locator('#captureText').evaluate(field => field.selectionStart), 'Call Sam once more\nabout the quote\n'.length);
   assert.equal(await page.locator('#captureText').evaluate(field => field === document.activeElement), true);
   assert.equal((await local(page)).queue.length, 0);
+});
+
+test('inline entry acceptance normalizes line endings, reuses boundaries and reserves newline capacity', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await page.evaluate(() => { aiMode.raw = JSON.stringify({ text: ' \r\nBuy milk\rCall Pat\r\n ' }); });
+  await page.locator('#captureText').fill('Call Sam');
+  await page.locator('#captureText').evaluate(field => field.setSelectionRange(0, 0));
+  await page.locator('#extractAuto').check();
+  await page.locator('#captureGhost').waitFor();
+  assert.equal(await page.locator('#captureGhost').textContent(), 'Buy milk\nCall Pat\n');
+  await page.locator('#captureCompletionUse').click();
+  assert.equal(await page.locator('#captureText').inputValue(), 'Buy milk\nCall Pat\nCall Sam');
+  assert.equal(await page.locator('#captureText').evaluate(field => field.selectionStart), 18);
+
+  await page.evaluate(() => { aiMode.raw = JSON.stringify({ text: ' Send quote ' }); });
+  await page.locator('#captureText').fill('Call Sam\nToday');
+  await page.locator('#captureText').evaluate(field => field.setSelectionRange(8, 8));
+  await page.waitForFunction(() => document.querySelector('#captureGhost').textContent === '\nSend quote');
+  await page.locator('#captureText').press('Tab');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam\nSend quote\nToday');
+  assert.equal(await page.locator('#captureText').evaluate(field => field.selectionStart), 'Call Sam\nSend quote\n'.length);
+
+  await page.evaluate(() => { aiMode.raw = JSON.stringify({ text: 'Z' }); });
+  await page.locator('#captureText').fill('x'.repeat(15998));
+  await page.locator('#captureText').evaluate(field => field.setSelectionRange(0, 0));
+  await page.waitForFunction(() => document.querySelector('#captureGhost').textContent === 'Z\n');
+  assert.equal((await page.evaluate(() => aiCalls.prompts.at(-1))).schema.properties.text.maxLength, 1);
+  await page.locator('#captureCompletionUse').click();
+  assert.equal((await page.locator('#captureText').inputValue()).length, 16000);
+
+  const calls = await page.evaluate(() => aiCalls.prompts.length);
+  await page.locator('#captureText').fill('x'.repeat(15999));
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.includes('Capture is full'));
+  assert.equal(await page.evaluate(() => aiCalls.prompts.length), calls, 'separator capacity is checked before inference');
+  assert.equal(await page.locator('#captureText').inputValue(), 'x'.repeat(15999));
 });
 
 test('list context is visible, changing it regenerates inline text and late results cannot cross accounts', { timeout: 30000 }, async t => {
@@ -528,7 +592,7 @@ test('list context is visible, changing it regenerates inline text and late resu
   assert.match(await page.evaluate(() => aiCalls.prompts[1].text), /Private list name/);
   await page.evaluate(() => finishAI(JSON.stringify({ text: ' with list context' })));
   await page.locator('#captureGhost').waitFor();
-  assert.equal(await page.locator('#captureGhost').textContent(), ' with list context');
+  assert.equal(await page.locator('#captureGhost').textContent(), '\nwith list context\n');
   await page.locator('#extractLists').uncheck();
   assert.match(await page.locator('#extractListsHelp').textContent(), /List names are excluded/);
   await page.waitForFunction(() => aiCalls.prompts.length === 3);
