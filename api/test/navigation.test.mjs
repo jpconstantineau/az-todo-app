@@ -768,9 +768,12 @@ test('navigation: failures stay reachable in every view, deleted selections clea
   assert.equal(await page.locator('#statusFilter').inputValue(), '');
   assert.equal(await page.locator('#failure').isVisible(), false);
   await showView(page, 'lists'); assert.equal(await page.locator('#view').inputValue(), '');
-  setUser(null); await clickControl(page.locator('#sync')); await page.locator('#workspace').waitFor({ state: 'hidden' });
+  setUser(null); await clickControl(page.locator('#sync'));
+  await page.waitForFunction(() => document.querySelector('#accountName').textContent === 'On this device' && !document.querySelector('#workspace').hidden);
   await page.evaluate(() => { location.hash = 'work'; });
-  assert.equal(await page.locator('.work-panel').isVisible(), false);
+  await page.waitForFunction(() => document.querySelector('#yourWork').getAttribute('aria-current') === 'page');
+  assert.equal(await page.locator('.work-panel').isVisible(), true);
+  assert.doesNotMatch(await page.locator('body').innerText(), /Private list|Private task|Rejected private task|Recover this draft/);
 });
 
 test('navigation: keyboard links, responsive layout and appearance across all six destinations', { timeout: 90000 }, async t => {

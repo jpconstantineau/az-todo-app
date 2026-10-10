@@ -2,9 +2,10 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
-import { transact, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=16';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=17';
+import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=18';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=19';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=11';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
@@ -546,7 +547,7 @@ $('confirmArchive').onclick = guard(async () => {
   const saved = await updateRecord(record, { archived: true });
   if (!saved) return;
   archiveReviewing = null; $('archiveReview').close(); navigation.lists.view = '@archived'; render(); void journal();
-  statusText('archiveStatus', 'Collection archived — saved on device, pending server confirmation.');
+  statusText('archiveStatus', localMode() ? 'Collection archived — saved on this device.' : 'Collection archived — saved on device, pending server confirmation.');
   $('archiveHeading').focus();
 });
 $('archiveReview').addEventListener('close', () => { archiveReviewing = null; });
@@ -584,7 +585,7 @@ function renderArchive(open, records) {
       if (record.archived) {
         const reactivate = button(`Reactivate ${record.title}`, async () => {
           await updateRecord(record, { archived: false });
-          statusText('archiveStatus', 'Collection reactivated — saved on device, pending server confirmation.');
+          statusText('archiveStatus', localMode() ? 'Collection reactivated — saved on this device.' : 'Collection reactivated — saved on device, pending server confirmation.');
           $('view').focus();
         }, `Reactivate ${record.title}`, `archive:${key(record)}:reactivate`);
         reactivate.disabled = workspaceReadOnly(); actions.append(reactivate);
@@ -605,6 +606,7 @@ function renderArchive(open, records) {
 }
 const channel = new BroadcastChannel('todo-inbox');
 const broadcast = () => channel.postMessage('changed');
+const localMode = () => accountId === LOCAL_PROFILE;
 function statusText(id, text) {
   // Replacing identical live-region text can announce it again on every keystroke/render.
   if ($(id).textContent !== text) $(id).textContent = text;
@@ -613,11 +615,12 @@ function connectionStatus() {
   if (!accountId || !state) return;
   const needsAttention = state.queue.some(entry => entry.failure) || state.workspaceMove?.failure || !$('error').hidden;
   const pending = state.queue.length || state.workspaceMove;
-  $('saveStatus').dataset.state = !navigator.onLine ? 'offline' : needsAttention ? 'error' : pending || syncing ? 'pending' : 'confirmed';
-  const label = !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.workspaceMove ? 'Collection move pending' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : state.workspaceErasureNotice ? 'Workspace permanently erased; local copies removed after sync' : 'Saved to cloud';
+  $('saveStatus').dataset.state = localMode() ? needsAttention ? 'error' : 'confirmed' : !navigator.onLine ? 'offline' : needsAttention ? 'error' : pending || syncing ? 'pending' : 'confirmed';
+  const label = localMode() ? needsAttention ? 'Device save needs attention' : 'Saved on this device'
+    : !navigator.onLine ? 'Working offline' : needsAttention ? 'Save needs attention' : state.workspaceMove ? 'Collection move pending' : state.queue.length ? `${state.queue.length} save(s) pending` : syncing ? 'Syncing with cloud' : state.workspaceErasureNotice ? 'Workspace permanently erased; local copies removed after sync' : 'Saved to cloud';
   $('saveStatus').title = label;
   statusText('connectionLabel', label);
-  statusText('menuSyncState', !navigator.onLine ? 'Offline' : needsAttention ? 'Needs attention' : pending || syncing ? 'Pending' : 'Saved');
+  statusText('menuSyncState', localMode() ? 'Sign in required' : !navigator.onLine ? 'Offline' : needsAttention ? 'Needs attention' : pending || syncing ? 'Pending' : 'Saved');
 }
 function error(message, kind = 'local') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
@@ -921,9 +924,25 @@ function render() {
     label.append(input, document.createTextNode(status === 'completed' ? 'Completed' : status));
     return label;
   }) : []));
-  statusText('syncStatus', state.workspaceMove
-    ? `Collection move ${state.workspaceMove.failure || state.queue.some(entry => entry.workspaceMoveId && entry.failure) ? 'paused — review and resume it.' : 'saved on device — pending server confirmation.'}`
-    : state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
+  statusText('syncStatus', localMode()
+    ? state.queue.some(entry => entry.failure) ? 'A device-only save needs attention.' : `${state.queue.length} device-only save${state.queue.length === 1 ? '' : 's'} kept on this device.`
+    : state.workspaceMove
+      ? `Collection move ${state.workspaceMove.failure || state.queue.some(entry => entry.workspaceMoveId && entry.failure) ? 'paused — review and resume it.' : 'saved on device — pending server confirmation.'}`
+      : state.queue.length ? `${state.queue.length} save(s) on device — ${state.queue.some(entry => entry.failure) ? 'failed / needs attention' : 'pending server confirmation'}.` : 'All saved work is server-confirmed.');
+  $('sync').hidden = localMode();
+  $('signInToSync').hidden = !localMode();
+  $('signOut').hidden = localMode();
+  $('accountExport').disabled = localMode() || !!exportController;
+  $('accountExportHelp').textContent = localMode()
+    ? 'Sign in to sync before exporting server history. Your device copy is available now.'
+    : 'Server copy: saved work across devices. Online only; excludes pending saves and drafts.';
+  $('sharedLists').setAttribute('aria-disabled', String(localMode()));
+  $('sharedLists').title = localMode() ? 'Sign in to use shared lists.' : '';
+  $('utility-restore-from-cloud').querySelector('span').textContent = localMode() ? 'Clear device data' : 'Restore from cloud';
+  $('deviceResetHeading').textContent = localMode() ? 'Clear device data' : 'Restore from cloud';
+  $('resetDeviceDataHelp').textContent = localMode()
+    ? 'Review device-only saves and drafts before clearing this browser’s To-Do database.'
+    : 'Review pending saves and unfinished drafts before deleting this browser’s To-Do database and reloading the current account’s cloud copy. Online sign-in is required.';
   connectionStatus();
   $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Task options', () => enterListTaskOptions(list), `Task options: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
   const view = $('view').value;
@@ -1140,12 +1159,12 @@ async function resolveOccurrence(record, outcome) {
   await saveRecurrence(resolveOccurrenceMutations(record, template, outcome), outcome === 'completed' ? 'Occurrence completed; the next date is scheduled.' : 'Occurrence skipped; the series continues from today.');
 }
 function renderDeleted() {
-  statusText('deletedStatus', state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
+  statusText('deletedStatus', localMode() ? 'Deleted records are saved on this device.' : state.queue.length ? 'Device changes are pending server confirmation. Check Sync status for failures.' : 'All saved work is server-confirmed.');
   const deleted = Object.values(scopedRecords()).filter(record => record.deleted && ['item', 'list', 'project'].includes(record.type));
   $('deletedItems').replaceChildren(...deleted.map(record => {
     const article = document.createElement('article'), title = document.createElement('h3'), status = document.createElement('p');
     title.textContent = `${record.type}: ${record.title}`;
-    status.textContent = record.localState || 'Deletion server-confirmed';
+    status.textContent = record.localState || (localMode() ? 'Saved on this device' : 'Deletion server-confirmed');
     const conversion = record.type === 'item' && Object.values(scopedRecords()).find(entry => entry.type === 'clarification' && entry.id === record.id && entry.step === 'complete' && entry.decision?.type === 'convert');
     article.append(title, status, conversion
       ? button('Undo conversion in Clarify', () => clarification.open(record), `Undo conversion of ${record.title}`, `${key(record)}:restore`)
@@ -1183,7 +1202,7 @@ async function changeDeletion(record, action, linkedSnapshot = []) {
   });
   if (owner !== accountId || generation !== accountGeneration) return;
   state = saved; clearError(); statusText('deletedError', ''); render();
-  statusText('deletedStatus', `${action === 'delete' ? 'Deletion' : 'Restore'} saved on device — pending server confirmation.`);
+  statusText('deletedStatus', localMode() ? `${action === 'delete' ? 'Deletion' : 'Restore'} saved on this device.` : `${action === 'delete' ? 'Deletion' : 'Restore'} saved on device — pending server confirmation.`);
   broadcast(); void sync();
 }
 function titleButton(record, label = `Edit ${record.title}`) {
@@ -1316,6 +1335,7 @@ async function updateRecord(record, fields, close = false) {
       const movingCollection = current && isCollection(current) && fields.workspaceId && fields.workspaceId !== current.workspaceId;
       if (movingCollection) {
         const records = projected(local), plan = collectionMovePlan(current, fields.workspaceId, records, fields);
+        if (plan && localMode()) throw new Error('Sign in to sync before moving a collection with retained contents. Nothing was changed.');
         if (plan) beginCollectionMove(local, owner, plan);
         else enqueue(local, owner, collectionMoveMutations(current, fields.workspaceId, records, fields));
       } else {
@@ -2010,7 +2030,7 @@ for (const link of document.querySelectorAll('.workspace-nav a')) {
 }
 document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
-  if (accountId) focusDestination(); else $('signIn').focus();
+  if (accountId) focusDestination(); else $('loginStatus').focus();
 };
 for (const dialog of [$('editor'), $('clarifier'), $('briefs'), $('projectPlanner'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
   dialog.addEventListener('close', () => {
@@ -2163,7 +2183,7 @@ $('defaultsForm').addEventListener('submit', event => {
   })).then(saved => {
     if (owner !== accountId || generation !== accountGeneration) return;
     state = saved; defaultsEditing = null; renderedTaskOptionField = null; clearError(); renderTaskOptions(); render();
-    statusText('taskOptionStatus', 'Saved on device; sync pending'); broadcast(); void sync();
+    statusText('taskOptionStatus', localMode() ? 'Saved on this device.' : 'Saved on device; sync pending'); broadcast(); void sync();
   }).catch(failure => {
     if (owner !== accountId || generation !== accountGeneration) return;
     if (failure.taskOptionLogical) error(failure.message); else storageFailure(failure);
@@ -2183,13 +2203,28 @@ $('export').onclick = guard(async () => {
   const value = deviceExport(owner, snapshot, currentDraft, source);
   downloadExport(value, readable, readable ? 'todo-tasks.txt' : 'todo-device-recovery.json');
 });
+$('signInToSync').onclick = guard(async event => {
+  if (!localMode()) return;
+  event.preventDefault();
+  if (!await journal()) throw new Error('The current draft could not be saved. Copy the recovery text before signing in.');
+  await transact(null, saved => { saved.adoptLocal = true; saved.activeProfile = LOCAL_PROFILE; });
+  location.href = $('signInToSync').href;
+});
+$('sharedLists').onclick = event => {
+  if (!localMode()) return;
+  event.preventDefault();
+  error('Sign in to sync before using shared lists. Device-only work is unchanged.');
+};
 function downloadExport(value, readable, filename) {
   const blob = new Blob([readable ? readableExport(value) : JSON.stringify(value, null, 2)], { type: readable ? 'text/plain;charset=utf-8' : 'application/json' });
   const url = URL.createObjectURL(blob), link = document.createElement('a');
   link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 $('accountExport').onclick = async () => {
-  if (!accountId || exportController) return;
+  if (!accountId || localMode() || exportController) {
+    if (localMode()) statusText('exportStatus', 'Sign in to sync before exporting server history.');
+    return;
+  }
   const owner = accountId, generation = accountGeneration, controller = new AbortController();
   const readable = $('exportFormat').value === 'text';
   exportController = controller;
@@ -2216,7 +2251,7 @@ $('accountExport').onclick = async () => {
   } finally {
     if (exportController === controller) {
       const restoreFocus = document.activeElement === $('cancelExport');
-      exportController = null; $('accountExport').disabled = false; $('cancelExport').hidden = true;
+      exportController = null; $('accountExport').disabled = localMode(); $('cancelExport').hidden = true;
       if (restoreFocus) $('accountExport').focus();
     }
   }
@@ -2240,6 +2275,11 @@ let profileRequest = 0;
 async function showAccountName(owner, generation, verified) {
   const requestId = ++profileRequest;
   const offline = navigator.onLine ? '' : ' · Offline';
+  if (owner === LOCAL_PROFILE) {
+    statusText('accountName', 'On this device');
+    statusText('sessionStatus', `On this device${offline}`);
+    return;
+  }
   let label = `Your device inbox${offline}`;
   statusText('accountName', state?.accountName || 'Your account');
   if (!verified) { statusText('sessionStatus', label); return; }
@@ -2315,59 +2355,84 @@ function hideAccount() {
   capture.reset(); edit.reset(); $('items').replaceChildren(); $('lists').replaceChildren();
   $('projectOutcome').textContent = ''; $('projectActions').replaceChildren(); $('day').value = $('planDay').value = '';
   $('createdDestination').replaceChildren(); $('addContextItem').hidden = true;
-  $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true; $('signIn').hidden = false;
+  $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true;
 }
 async function pauseSession(message) {
-  hideAccount();
-  try { await transact(null, session => { session.paused = true; }); }
+  try { await transact(null, session => { session.paused = true; session.activeProfile = LOCAL_PROFILE; }); }
   catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.'); }
+  await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
   broadcast(); $('sessionStatus').textContent = message;
 }
-async function session({ allowOffline = false } = {}) {
+async function openProfile(identity, verified, preloaded) {
   let generation = accountGeneration;
-  let identity, verified = false;
+  if (accountId !== identity.accountId) {
+    const sessionState = await transact(null);
+    hideAccount();
+    if (sessionState.activeProfile && sessionState.activeProfile !== identity.accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
+    generation = accountGeneration;
+    await transact(null, saved => {
+      saved.activeProfile = identity.accountId;
+      if (identity.accountId !== LOCAL_PROFILE) { saved.accountId = identity.accountId; saved.paused = false; }
+    });
+    const saved = preloaded || await transact(identity.accountId, local => {
+      if (identity.defaultSettings) local.defaultSettings = identity.defaultSettings;
+    });
+    if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
+    accountId = identity.accountId;
+    state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL;
+    render(); $('workspace').hidden = false; restoreDraft(); requestAnimationFrame(focusDestination); broadcast();
+  } else if (identity.defaultSettings && !state.defaultSettings) {
+    state = await transact(accountId, local => { local.defaultSettings = identity.defaultSettings; });
+  }
+  $('workspace').hidden = false; $('signOut').hidden = localMode();
+  $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
+  $('appHeader').hidden = false; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
+  void showAccountName(accountId, generation, verified);
+  return accountId;
+}
+async function session({ allowOffline = false } = {}) {
+  const generation = accountGeneration;
+  let identity, verified = false, preloaded;
   try {
     identity = await request('session');
     if (typeof identity.accountId !== 'string' || !identity.accountId) throw new Error('Missing account identity.');
     verified = true;
   } catch (failure) {
     if (failure.status === 401 || failure.status === 403) {
-      await pauseSession('Sign in to continue.');
-      throw failure;
+      identity = { accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings };
+      await transact(null, saved => { saved.paused = true; saved.activeProfile = LOCAL_PROFILE; });
+    } else {
+      if (!allowOffline || failure.status) throw failure;
+      const saved = await transact(null);
+      identity = saved.accountId && !saved.paused
+        ? { accountId: saved.accountId }
+        : { accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings };
     }
-    if (!allowOffline || failure.status) throw failure;
-    const saved = await transact(null);
-    if (!saved.accountId || saved.paused) throw new Error('Sign in online once before capturing on this device.');
-    identity = { accountId: saved.accountId }; // Last verified account, never a newly guessed identity.
   }
   if (generation !== accountGeneration) throw new Error('Account changed while checking the session. Retry after signing in.');
-  if (accountId !== identity.accountId) {
-    const previous = (await transact(null)).accountId;
-    hideAccount();
-    if (previous && previous !== identity.accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
-    generation = accountGeneration;
-    await transact(null, saved => { saved.accountId = identity.accountId; saved.paused = false; });
-    const saved = await transact(identity.accountId, local => {
-      if (identity.defaultSettings) local.defaultSettings = identity.defaultSettings;
-    });
-    if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
-    accountId = identity.accountId; state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL;
-    render(); $('workspace').hidden = false; restoreDraft(); requestAnimationFrame(focusDestination); broadcast();
+  if (verified) {
+    const savedSession = await transact(null);
+    if (savedSession.adoptLocal === true) {
+      try { preloaded = await adoptLocalProfile(identity.accountId); }
+      catch (failure) {
+        await transact(null, saved => { saved.adoptLocal = false; });
+        await openProfile(identity, verified);
+        error(`${failure.message} Device-only work remains available after signing out.`);
+        return identity.accountId;
+      }
+    }
   }
-  $('workspace').hidden = false; $('signOut').hidden = false; $('signIn').hidden = true;
-  $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
-  $('appHeader').hidden = false; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
-  void showAccountName(accountId, generation, verified);
-  return accountId;
+  return openProfile(identity, verified, preloaded);
 }
 
 async function sync() {
-  if (syncing || !navigator.onLine || document.hidden) return;
+  if (syncing || localMode() || !navigator.onLine || document.hidden) return;
   syncing = true; clearTimeout(retryTimer);
   connectionStatus();
   let continueSync = false;
   try {
     const owner = await session({ allowOffline: true });
+    if (owner === LOCAL_PROFILE) { retryDelay = 2000; clearError('sync'); return; }
     if (!navigator.locks) throw new Error('This browser cannot coordinate safe sync between tabs. Export your device copy and use a browser with Web Locks.');
     await navigator.locks.request(`todo-sync:${owner}`, async () => {
       // Bound foreground work, and atomically persist each page with its cursor.
@@ -2547,14 +2612,17 @@ function renderResetImpact(impact) {
   const records = projected(state), workspaceTitle = id => id === PERSONAL ? 'Personal' : records[`workspace:${id}`]?.title || 'Unavailable workspace';
   const operationLines = impact.operations.map(operation => `${operation.failed ? 'Failed' : 'Pending'} save: ${operation.records.map(record => `${record.type} “${record.title}”`).join(', ')}.`);
   const draftLines = impact.drafts.map(draft => `${draft.workspaceId ? workspaceTitle(draft.workspaceId) : 'Account'} · ${draft.label}.`);
-  const parts = [heading(`Current account pending saves (${impact.operations.length})`), operationLines.length ? list(operationLines) : document.createTextNode('No pending or failed saves.')];
-  parts.push(heading(`Current account local drafts (${impact.drafts.length})`), draftLines.length ? list(draftLines) : document.createTextNode('No unfinished local drafts.'));
-  parts.push(heading('Other current-account recovery'));
+  const profileLabel = localMode() ? 'On this device' : 'Current account';
+  const parts = [heading(`${profileLabel} pending saves (${impact.operations.length})`), operationLines.length ? list(operationLines) : document.createTextNode('No pending or failed saves.')];
+  parts.push(heading(`${profileLabel} local drafts (${impact.drafts.length})`), draftLines.length ? list(draftLines) : document.createTextNode('No unfinished local drafts.'));
+  parts.push(heading(`Other ${localMode() ? 'device-only' : 'current-account'} recovery`));
   const recovery = [];
   if (impact.collectionMove) recovery.push(`Collection move: ${impact.collectionMove.title}.`);
   if (impact.undoEdit) recovery.push(`Editor undo: ${impact.undoEdit.type} “${impact.undoEdit.title}”.`);
   parts.push(recovery.length ? list(recovery) : document.createTextNode('No collection move or editor undo recovery.'));
-  parts.push(heading('Inactive accounts'), document.createTextNode(`${impact.inactive.accounts} inactive account${impact.inactive.accounts === 1 ? '' : 's'}: ${impact.inactive.operations} pending or failed operation${impact.inactive.operations === 1 ? '' : 's'} and ${impact.inactive.drafts} local draft or recovery entr${impact.inactive.drafts === 1 ? 'y' : 'ies'}. Account identities and private text are hidden.`));
+  const inactiveProfiles = `${impact.inactive.accounts} inactive account${impact.inactive.accounts === 1 ? '' : 's'}` +
+    (impact.inactive.localProfiles ? ` and ${impact.inactive.localProfiles} device-local profile` : '');
+  parts.push(heading('Inactive profiles'), document.createTextNode(`${inactiveProfiles}: ${impact.inactive.operations} pending or failed operation${impact.inactive.operations === 1 ? '' : 's'} and ${impact.inactive.drafts} local draft or recovery entr${impact.inactive.drafts === 1 ? 'y' : 'ies'}. Account identities and private text are hidden.`));
   container.replaceChildren(...parts);
 }
 async function prepareResetReview() {
@@ -2598,12 +2666,14 @@ $('confirmResetDeviceData').onclick = async () => {
   if (!reviewed || control.getAttribute('aria-disabled') === 'true') return;
   control.setAttribute('aria-disabled', 'true');
   try {
-    status.textContent = 'Checking cloud sign-in and reviewed device data…';
-    if (!navigator.onLine || !accountId) throw new Error('Sign in online before restoring your cloud copy.');
+    status.textContent = localMode() ? 'Checking reviewed device data…' : 'Checking cloud sign-in and reviewed device data…';
+    if (!accountId || !localMode() && !navigator.onLine) throw new Error('Sign in online before restoring your cloud copy.');
     if (!navigator.locks) throw new Error('This browser cannot coordinate a safe device reset between tabs.');
     if (reviewed.owner !== accountId || reviewed.generation !== accountGeneration) throw new Error('The account changed. Reload before clearing this device.');
-    const identity = await request('session');
-    if (identity.accountId !== reviewed.owner) throw new Error('The signed-in account changed. Reload before clearing this device.');
+    if (!localMode()) {
+      const identity = await request('session');
+      if (identity.accountId !== reviewed.owner) throw new Error('The signed-in account changed. Reload before clearing this device.');
+    }
     await navigator.locks.request(`todo-sync:${reviewed.owner}`, async () => {
       if (reviewed.owner !== accountId || reviewed.generation !== accountGeneration) throw new Error('The account changed. Reload before clearing this device.');
       const fresh = await deviceResetImpact(reviewed.owner);
@@ -2625,15 +2695,16 @@ $('confirmResetDeviceData').onclick = async () => {
 };
 channel.onmessage = guard(async () => {
   const saved = await transact(null);
-  if (saved.paused || (accountId && saved.accountId !== accountId)) {
-    hideAccount(); $('sessionStatus').textContent = $('loginStatus').textContent = 'Account changed in another tab. Sign in or reload to continue.';
+  if (saved.activeProfile && saved.activeProfile !== accountId) {
+    if (saved.activeProfile === LOCAL_PROFILE) await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
+    else await session({ allowOffline: true });
   } else if (accountId) {
     const owner = accountId, savedState = await transact(owner);
     if (owner === accountId) { state = savedState; render(); }
   }
 });
 addEventListener('online', () => { void sync(); });
-addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = 'Offline — saves remain on this device until you reconnect.'; render(); });
+addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = localMode() ? 'On this device · Offline' : 'Offline — saves remain on this device until you reconnect.'; render(); });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { render(); void materializeRecurrence(); }
   if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
@@ -2645,4 +2716,4 @@ try {
 } catch (failure) { if (![401, 403].includes(failure.status)) error(failure.message); }
 syncing = false;
 connectionStatus();
-if (accountId) { void materializeRecurrence(); void sync(); }
+if (accountId) { void materializeRecurrence(); if (!localMode()) void sync(); }

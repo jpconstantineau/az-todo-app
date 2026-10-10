@@ -3,12 +3,29 @@
 `/` is the native v1 client. It uses native JavaScript, IndexedDB, Web Locks and a
 small service worker; it has no build step or new
 dependency. It requires HTTPS (or localhost), a supported modern browser and a
-successful first sign-in while online. See [PWA installation and updates](pwa-installation.md)
+successful first online visit. See [PWA installation and updates](pwa-installation.md)
 for installation help and safe shell updates. Physical-device certification remains
 #14/#17 work.
 
 Capture, Process and Organize use [native destination links](navigation.md).
 They share the account journal and outbox; changing views never submits a save.
+
+## Using To-Do without an account
+
+The root app opens a dedicated **On this device** profile without requiring sign
+in. Its records, drafts and exact pending operations use the same durable local
+model as an account, but live under a separate IndexedDB key and never call the
+changes, operations, records or server-export APIs. Local task defaults are
+bundled with the shell, and cloud-only controls explain that sign-in is required.
+
+Choosing **Sign in to sync** first journals the current draft and then persists an
+adoption intent before the authentication redirect. After the provider verifies
+the account, one IndexedDB transaction moves the local profile into that account,
+changing only queued operation ownership. Operation IDs, payloads and order stay
+exact, and existing server-confirmed records, cursor and defaults in the account
+remain intact. Existing destination pending work or meaningful recovery state
+blocks adoption rather than merging ambiguous drafts. Ordinary provider sessions,
+account discovery in another tab, expiry and sign-out never adopt local work.
 
 ## Using the same account on phone and laptop
 
@@ -187,18 +204,20 @@ outcomes never offer a discard button.
 
 ## Account and offline boundaries
 
-The initial online session is verified before displaying a cache. Every queued
-operation permanently carries its original account ID, and every server data
-read supplies that ID. A different signed-in account opens its own cache/draft;
-the old queue remains untouched. Expiry, account mismatch and sign-out hide the
-workspace and pause offline reopening until a successful sign-in. Reconnect as
-the original account to recover and synchronize its pending work.
+The device-local profile can be displayed without authentication. Every account
+operation permanently carries its verified account ID, and every server data read
+supplies that ID. A different signed-in account opens its own cache/draft; the old
+queue remains untouched. Expiry, account mismatch and sign-out pause that account
+and return to the separate local profile. Reconnect as the original account to
+recover and synchronize its pending work.
 
-Offline launch can only know the last verified active account. It never infers a
-new account or adopts a queue into one. An account change in another inbox tab
-hides the old workspace through BroadcastChannel; foreground activity rechecks
-the server. Local copies are not encrypted or a security boundary against another
-person using the same browser profile or devtools. Use separate profiles on shared
+Offline launch reopens the selected, unpaused account profile when one was
+previously verified; otherwise it opens the local profile. It never infers a new
+account or adopts local work without the persisted sign-in intent. An account
+change in another inbox tab switches the visible profile through BroadcastChannel;
+foreground activity rechecks the server. Local copies are not encrypted or a
+security boundary against another person using the same browser profile or
+devtools. Use separate profiles on shared
 devices. Explicit site-storage clearing, browser eviction or device loss can
 destroy unsynced work; the UI explains this and offers an export.
 

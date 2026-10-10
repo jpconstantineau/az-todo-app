@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>Sign in</title>
+  <title>To-Do</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=32" defer></script>
+  <script src="/pwa.js?v=33" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=34"></script>
+  <script type="module" src="/inbox.js?v=35"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -21,7 +21,7 @@
     <span id="agentLabel" class="sr-only" role="status"></span>
     <a id="appMenu" class="button menu-trigger" href="#menu" aria-label="Menu" title="Menu">☰ Menu</a>
   </header>
-  <section id="signedOut" aria-label="Sign in"><h1>Welcome</h1><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
+  <section id="signedOut" aria-label="Loading"><h1>Welcome</h1><p id="loginStatus" role="status">Opening your workspace…</p></section>
   <p id="appUpdateStatus" role="status" hidden></p>
   <p id="error" role="alert" hidden></p>
   <noscript>Enable JavaScript to continue.</noscript>
@@ -33,7 +33,7 @@
         <section class="menu-group" aria-labelledby="menuWorkspaceHeading"><h2 id="menuWorkspaceHeading">Workspace</h2>
           <nav aria-label="Workspace utilities"><ul>
             <li><button id="manageWorkspaces" class="menu-row" type="button" aria-label="Workspaces" aria-describedby="menuWorkspaceValue"><span>Workspaces</span><span class="menu-row-end"><span id="menuWorkspaceValue"></span><span aria-hidden="true">›</span></span></button></li>
-            <li><a class="menu-row" href="/shared.html" target="_blank" rel="noopener"><span>Shared lists</span><span class="menu-row-end"><span aria-hidden="true">↗</span><span class="sr-only">opens in a new tab</span></span></a></li>
+            <li><a id="sharedLists" class="menu-row" href="/shared.html" target="_blank" rel="noopener"><span>Shared lists</span><span class="menu-row-end"><span aria-hidden="true">↗</span><span class="sr-only">opens in a new tab</span></span></a></li>
           </ul></nav>
         </section>
         <section class="menu-group" aria-labelledby="menuSettingsHeading"><h2 id="menuSettingsHeading">Settings</h2>
@@ -49,6 +49,7 @@
         <section class="menu-group" aria-labelledby="menuAccountHeading"><h2 id="menuAccountHeading">Account</h2>
           <nav aria-label="Account"><ul>
             <li><button id="sync" class="menu-row" type="button" aria-label="Sync now" aria-describedby="menuSyncState"><span>Sync now</span><span id="menuSyncState" class="menu-row-value"></span></button></li>
+            <li><a id="signInToSync" class="menu-row" href="/.auth/login/github?post_login_redirect_uri=/"><span>Sign in to sync</span><span aria-hidden="true">›</span></a></li>
             <li><button id="signOut" class="menu-row" type="button" aria-label="Sign out" hidden><span>Sign out</span></button></li>
           </ul></nav>
         </section>
@@ -72,9 +73,9 @@
         </section>
         <div class="utility-pages-details">
           <section id="appDeviceInstall" class="utility-page" aria-labelledby="installHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="installHeading" tabindex="-1">Install To-Do</h1></div>
-            <div class="utility-page-content"><button id="installApp" type="button" hidden>Install app</button><p id="installStatus" role="status"></p><details id="installHelp"><summary>Installation help</summary><p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p><p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p></details></div>
+            <div class="utility-page-content"><button id="installApp" type="button" hidden>Install app</button><p id="installStatus" role="status"></p><details id="installHelp"><summary>Installation help</summary><p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p><p>Wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up device-only work.</p></details></div>
           </section>
-          <section id="appDeviceOffline" class="utility-page" aria-labelledby="offlineHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="offlineHeading" tabindex="-1">Offline readiness</h1></div><div class="utility-page-content"><p id="offlineBadge" role="status"></p><p id="offlineStatus" role="status"></p><p>Sign in online once and wait until this page confirms offline reopening is ready before disconnecting.</p></div></section>
+          <section id="appDeviceOffline" class="utility-page" aria-labelledby="offlineHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="offlineHeading" tabindex="-1">Offline readiness</h1></div><div class="utility-page-content"><p id="offlineBadge" role="status"></p><p id="offlineStatus" role="status"></p><p>Wait until this page confirms offline reopening is ready before disconnecting.</p></div></section>
           <section id="appDeviceUpdates" class="utility-page" aria-labelledby="updatesHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="updatesHeading" tabindex="-1">App updates</h1></div><div class="utility-page-content"><button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button><p id="checkAppUpdateStatus" role="status"></p><p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p></div></section>
           <section id="appDeviceConnection" class="utility-page" aria-labelledby="connectionHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="connectionHeading" tabindex="-1">Account &amp; device status</h1></div><div class="utility-page-content"><p id="sessionStatus" role="status"></p><p id="syncStatus" role="status"></p><p class="muted">Sync now remains in Menu. Return there to retry pending work.</p></div></section>
           <section id="dataRecoveryExport" class="utility-page" aria-labelledby="exportHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="exportHeading" tabindex="-1">Export</h1></div><div id="exportTools" class="utility-page-content"><div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div><p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p><p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p><p id="exportStatus" role="status" class="muted"></p></div></section>
@@ -196,7 +197,7 @@
         </details>
       </fieldset></form>
       <details id="captureAI" data-unavailable><summary>Local AI suggestions</summary>
-        <p>Enable suggested text at the cursor after you pause typing. Tab inserts suggested text; Escape dismisses it. Suggest tasks now proposes a batch to review. AI is English only, on this device; the browser may download a model. Saved tasks still sync to your cloud account. Review suggestions before saving.</p>
+        <p>Enable suggested text at the cursor after you pause typing. Tab inserts suggested text; Escape dismisses it. Suggest tasks now proposes a batch to review. AI is English only, on this device; the browser may download a model. Saved tasks stay on this device and sync after you sign in. Review suggestions before saving.</p>
         <label><input id="extractAuto" type="checkbox" disabled> Automatically suggest with local AI</label>
         <label><input id="extractLists" type="checkbox" disabled aria-describedby="extractListsHelp"> Include my existing list names in local AI suggestions</label>
         <p id="extractListsHelp" class="muted" role="status"></p>
@@ -521,7 +522,7 @@
       <p><a href="/help.html#clarification" target="_blank" rel="noopener">Clarification help (new tab)</a></p>
       <details id="localGuidance" hidden>
         <summary>Optional local guidance</summary>
-        <p>English suggestions run on this device. The browser may download a model. Saved work still syncs to your cloud account.</p>
+        <p>English suggestions run on this device. The browser may download a model. Saved work stays on this device and syncs after you sign in.</p>
         <p id="guidanceStatus" role="status"></p>
         <div class="actions"><button id="guidanceStart" type="button" disabled>Suggest with local AI</button><button id="guidanceCancel" type="button" hidden>Cancel suggestion</button></div>
         <pre id="guidancePreview" hidden></pre>
