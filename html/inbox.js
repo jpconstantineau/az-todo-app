@@ -20,6 +20,7 @@ import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
 import { setupRecurrence } from './recurrence-ui.js?v=3';
 
 const $ = id => document.getElementById(id);
+const ADOPTION_INTENT = 'todo-adopt-local';
 setupAgentStatus();
 const clarificationPreferences = setupClarificationPreferences();
 const capture = $('capture'), edit = $('edit');
@@ -940,9 +941,15 @@ function render() {
   $('sharedLists').title = localMode() ? 'Sign in to use shared lists.' : '';
   $('utility-restore-from-cloud').querySelector('span').textContent = localMode() ? 'Clear device data' : 'Restore from cloud';
   $('deviceResetHeading').textContent = localMode() ? 'Clear device data' : 'Restore from cloud';
+  $('connectionHelp').textContent = localMode()
+    ? 'Sign in to sync device-only work. Until then, saves stay in this browser.'
+    : 'Sync now remains in Menu. Return there to retry pending work.';
   $('resetDeviceDataHelp').textContent = localMode()
     ? 'Review device-only saves and drafts before clearing this browser’s To-Do database.'
     : 'Review pending saves and unfinished drafts before deleting this browser’s To-Do database and reloading the current account’s cloud copy. Online sign-in is required.';
+  $('resetReviewOutcome').textContent = localMode()
+    ? 'Reloading starts a new empty device-only profile. Inactive accounts must sign in again, and their local-only work is also lost.'
+    : 'The current account reloads its server copy. Inactive accounts must sign in again, and their local-only work is also lost.';
   connectionStatus();
   $('lists').replaceChildren(...lists.filter(list => listMode && list.id === filters.view).flatMap(list => [titleButton(list, `Edit list: ${list.title}`), button('Task options', () => enterListTaskOptions(list), `Task options: ${list.title}`, `${key(list)}:defaults`), deleteButton(list)]));
   const view = $('view').value;
@@ -1488,7 +1495,7 @@ $('undoEdit').onclick = guard(async () => {
   });
   if (owner !== accountId || generation !== accountGeneration) return;
   state = saved; clearError(); render(); broadcast(); void sync();
-  statusText('undoEditStatus', 'Undo saved on device. Sync to confirm it on the server.');
+  statusText('undoEditStatus', localMode() ? 'Undo saved on this device.' : 'Undo saved on device. Sync to confirm it on the server.');
 });
 $('editor').addEventListener('close', () => {
   if ($('editor').open) return;
@@ -2207,7 +2214,10 @@ $('signInToSync').onclick = guard(async event => {
   if (!localMode()) return;
   event.preventDefault();
   if (!await journal()) throw new Error('The current draft could not be saved. Copy the recovery text before signing in.');
-  await transact(null, saved => { saved.adoptLocal = true; saved.activeProfile = LOCAL_PROFILE; });
+  const intent = crypto.randomUUID();
+  sessionStorage.setItem(ADOPTION_INTENT, intent);
+  try { await transact(null, saved => { saved.adoptLocal = intent; saved.activeProfile = LOCAL_PROFILE; }); }
+  catch (failure) { sessionStorage.removeItem(ADOPTION_INTENT); throw failure; }
   location.href = $('signInToSync').href;
 });
 $('sharedLists').onclick = event => {
@@ -2363,7 +2373,7 @@ async function pauseSession(message) {
   await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
   broadcast(); $('sessionStatus').textContent = message;
 }
-async function openProfile(identity, verified, preloaded) {
+async function openProfile(identity, verified) {
   let generation = accountGeneration;
   if (accountId !== identity.accountId) {
     const sessionState = await transact(null);
@@ -2374,7 +2384,7 @@ async function openProfile(identity, verified, preloaded) {
       saved.activeProfile = identity.accountId;
       if (identity.accountId !== LOCAL_PROFILE) { saved.accountId = identity.accountId; saved.paused = false; }
     });
-    const saved = preloaded || await transact(identity.accountId, local => {
+    const saved = await transact(identity.accountId, local => {
       if (identity.defaultSettings) local.defaultSettings = identity.defaultSettings;
     });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
@@ -2392,7 +2402,8 @@ async function openProfile(identity, verified, preloaded) {
 }
 async function session({ allowOffline = false } = {}) {
   const generation = accountGeneration;
-  let identity, verified = false, preloaded;
+  const adoptionIntent = sessionStorage.getItem(ADOPTION_INTENT);
+  let identity, verified = false;
   try {
     identity = await request('session');
     if (typeof identity.accountId !== 'string' || !identity.accountId) throw new Error('Missing account identity.');
@@ -2400,7 +2411,11 @@ async function session({ allowOffline = false } = {}) {
   } catch (failure) {
     if (failure.status === 401 || failure.status === 403) {
       identity = { accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings };
-      await transact(null, saved => { saved.paused = true; saved.activeProfile = LOCAL_PROFILE; });
+      await transact(null, saved => {
+        if (adoptionIntent && saved.adoptLocal === adoptionIntent) delete saved.adoptLocal;
+        saved.paused = true; saved.activeProfile = LOCAL_PROFILE;
+      });
+      sessionStorage.removeItem(ADOPTION_INTENT);
     } else {
       if (!allowOffline || failure.status) throw failure;
       const saved = await transact(null);
@@ -2412,17 +2427,21 @@ async function session({ allowOffline = false } = {}) {
   if (generation !== accountGeneration) throw new Error('Account changed while checking the session. Retry after signing in.');
   if (verified) {
     const savedSession = await transact(null);
-    if (savedSession.adoptLocal === true) {
-      try { preloaded = await adoptLocalProfile(identity.accountId); }
+    if (adoptionIntent && savedSession.adoptLocal === adoptionIntent) {
+      try {
+        await adoptLocalProfile(identity.accountId, adoptionIntent);
+        sessionStorage.removeItem(ADOPTION_INTENT);
+      }
       catch (failure) {
-        await transact(null, saved => { saved.adoptLocal = false; });
+        await transact(null, saved => { if (saved.adoptLocal === adoptionIntent) delete saved.adoptLocal; });
+        sessionStorage.removeItem(ADOPTION_INTENT);
         await openProfile(identity, verified);
         error(`${failure.message} Device-only work remains available after signing out.`);
         return identity.accountId;
       }
     }
   }
-  return openProfile(identity, verified, preloaded);
+  return openProfile(identity, verified);
 }
 
 async function sync() {
@@ -2707,7 +2726,7 @@ addEventListener('online', () => { void sync(); });
 addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = localMode() ? 'On this device · Offline' : 'Offline — saves remain on this device until you reconnect.'; render(); });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { render(); void materializeRecurrence(); }
-  if (!document.hidden && navigator.onLine) { $('workspace').hidden = true; void sync(); }
+  if (!document.hidden && navigator.onLine && !localMode()) { $('workspace').hidden = true; void sync(); }
 });
 addEventListener('focus', () => { render(); void materializeRecurrence(); if (navigator.onLine) void sync(); });
 

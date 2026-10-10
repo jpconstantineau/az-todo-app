@@ -10,9 +10,11 @@ state changes require an explicit schema/version decision, not fallback readers.
 
 - `session` initializes with `activeProfile: "device-local"`. Once verified it can
   also contain `accountId` and boolean `paused`. `activeProfile` chooses the
-  visible local or account profile, while `adoptLocal` records only the user's
-  explicit **Sign in to sync** intent. Sign-out pauses the account and returns to
-  the local profile without deleting either profile's data.
+  visible local or account profile, while `adoptLocal` records the nonce for the
+  user's explicit **Sign in to sync** redirect. The initiating tab keeps the
+  matching nonce in session storage, so another tab or an abandoned intent cannot
+  adopt local work. Sign-out pauses the account and returns to the local profile
+  without deleting either profile's data.
 - `local-profile` has the same records, queue, cursor, drafts and defaults shape
   as an account document, but lives outside the `account:<accountId>` namespace.
   Its operations use the reserved local owner `device-local` and never go to the
@@ -68,7 +70,7 @@ older format. Development data from unsupported generations can be cleared after
 exporting anything needed. The app never automatically deletes it or its queue.
 
 After **Sign in to sync**, the verified account adopts local work only when the
-persisted `adoptLocal` intent is present. One IndexedDB transaction copies the
+persisted `adoptLocal` nonce matches the initiating tab's redirect intent. One IndexedDB transaction copies the
 local profile into the destination account and rewrites only each queued
 operation's owner; operation IDs, payloads and order remain exact. Existing
 destination server records, cursor, defaults and metadata are preserved. A

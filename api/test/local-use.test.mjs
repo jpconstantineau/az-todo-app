@@ -42,6 +42,14 @@ test('anonymous workspace saves, reloads and reopens from the cached shell witho
   assert.equal(await page.locator('#syncStatus').textContent(), '1 device-only save kept on this device.');
   assert.deepEqual(accountRequests, []);
 
+  const other = await context.newPage();
+  await other.goto('about:blank');
+  await other.bringToFront();
+  await page.bringToFront();
+  await page.waitForFunction(() => document.visibilityState === 'visible');
+  assert.equal(await page.locator('#workspace').isVisible(), true, 'returning to an online local tab keeps its workspace visible');
+  await other.close();
+
   await page.reload();
   await page.getByRole('button', { name: 'Edit Anonymous task', includeHidden: true }).waitFor({ state: 'attached' });
   assert.deepEqual((await storeState(page)).queue, before.queue);
@@ -89,6 +97,28 @@ test('explicit sign in adopts device-only operations once after pulling existing
   assert.equal(receipts[0].requestHash, digest({ ...original, accountId: 'alice' }));
 });
 
+test('explicit sign in adopts into an empty account and applies verified task defaults', async t => {
+  documents.length = 0;
+  let user = null;
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await capture(page, 'First synced task');
+  await page.route('**/.auth/login/github?**', async route => {
+    user = 'alice';
+    await route.fulfill({ status: 302, headers: { location: '/' }, body: '' });
+  });
+  await page.locator('#appMenu').click();
+  await page.getByRole('link', { name: 'Sign in to sync' }).click();
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+
+  const account = await storeState(page, 'alice');
+  assert.equal(account.records[Object.keys(account.records).find(key => key.startsWith('item:'))].title, 'First synced task');
+  assert.ok(account.defaultSettings.contexts.includes('@Home'));
+  assert.deepEqual((await storeState(page)).queue, []);
+});
+
 test('atomic adoption preserves the source on destination recovery and retries without duplication', async t => {
   documents.length = 0;
   const server = await startServer(); t.after(server.close);
@@ -110,29 +140,51 @@ test('atomic adoption preserves the source on destination recovery and retries w
       account.after = 7;
       account.draft = { capture: { text: 'Resolve account draft first' } };
     });
-    await store.transact(null, session => { session.adoptLocal = true; });
+    await store.transact(null, session => { session.adoptLocal = 'adopt-exact'; });
     let blocked;
-    try { await store.adoptLocalProfile('alice'); } catch (failure) { blocked = failure.message; }
+    try { await store.adoptLocalProfile('alice', 'adopt-exact'); } catch (failure) { blocked = failure.message; }
     const sourceAfterBlock = await store.transact(store.LOCAL_PROFILE);
     const destinationAfterBlock = await store.transact('alice');
     const intentAfterBlock = (await store.transact(null)).adoptLocal;
     await store.transact('alice', account => { account.draft = {}; });
-    const adopted = await store.adoptLocalProfile('alice');
+    const originalPut = IDBObjectStore.prototype.put;
+    let abortAdoption = true;
+    IDBObjectStore.prototype.put = function (...args) {
+      const request = originalPut.apply(this, args);
+      if (abortAdoption && args[1] === 'account:alice') {
+        abortAdoption = false;
+        request.addEventListener('success', () => this.transaction.abort());
+      }
+      return request;
+    };
+    let interrupted;
+    try { await store.adoptLocalProfile('alice', 'adopt-exact'); } catch (failure) { interrupted = failure.message; }
+    IDBObjectStore.prototype.put = originalPut;
+    const sourceAfterInterruption = await store.transact(store.LOCAL_PROFILE);
+    const destinationAfterInterruption = await store.transact('alice');
+    const intentAfterInterruption = (await store.transact(null)).adoptLocal;
+    const adopted = await store.adoptLocalProfile('alice', 'adopt-exact');
     const sourceAfterRetry = await store.transact(store.LOCAL_PROFILE);
     const intentAfterRetry = (await store.transact(null)).adoptLocal;
     await store.transact(store.LOCAL_PROFILE, local => { local.defaultSettings = { statuses: ['inbox'] }; });
-    await store.transact(null, session => { session.adoptLocal = true; });
-    const emptySourceAdoption = await store.adoptLocalProfile('alice');
+    await store.transact(null, session => { session.adoptLocal = 'adopt-empty'; });
+    const emptySourceAdoption = await store.adoptLocalProfile('alice', 'adopt-empty');
     return {
-      blocked, sourceAfterBlock, destinationAfterBlock, intentAfterBlock, adopted,
+      blocked, sourceAfterBlock, destinationAfterBlock, intentAfterBlock, interrupted,
+      sourceAfterInterruption, destinationAfterInterruption, intentAfterInterruption, adopted,
       sourceAfterRetry, intentAfterRetry, emptySourceAdoption,
       sourceAfterEmptyAdoption: await store.transact(store.LOCAL_PROFILE)
     };
   });
   assert.match(result.blocked, /unfinished device recovery/);
-  assert.equal(result.intentAfterBlock, true);
+  assert.equal(result.intentAfterBlock, 'adopt-exact');
   assert.equal(result.sourceAfterBlock.queue[0].operation.operationId, 'fixed-operation');
   assert.equal(result.destinationAfterBlock.draft.capture.text, 'Resolve account draft first');
+  assert.match(result.interrupted, /abort|failed/i);
+  assert.equal(result.sourceAfterInterruption.queue[0].operation.operationId, 'fixed-operation');
+  assert.equal(result.destinationAfterInterruption.records['item:server'].title, 'Confirmed');
+  assert.equal(result.destinationAfterInterruption.queue.length, 0);
+  assert.equal(result.intentAfterInterruption, 'adopt-exact');
   assert.equal(result.adopted.after, 7);
   assert.equal(result.adopted.records['item:server'].title, 'Confirmed');
   assert.equal(result.adopted.queue.length, 1);
@@ -143,4 +195,31 @@ test('atomic adoption preserves the source on destination recovery and retries w
   assert.equal(result.intentAfterRetry, false);
   assert.equal(result.emptySourceAdoption.queue[0].operation.operationId, 'fixed-operation', 'an empty local profile does not block existing account recovery');
   assert.equal(result.sourceAfterEmptyAdoption.defaultSettings, undefined);
+});
+
+test('a verified session without the initiating tab intent does not adopt device-only work', async t => {
+  documents.length = 0;
+  let user = null;
+  const server = await startServer({ browserUser: () => user }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await capture(page, 'Keep device-only');
+  const source = await storeState(page);
+  await page.evaluate(async () => {
+    const store = await import('/inbox-store.js?v=17');
+    await store.transact(null, session => { session.adoptLocal = 'abandoned-intent'; });
+  });
+
+  user = 'alice';
+  await page.reload();
+  await waitForBrowser(page, async () => {
+    const store = await import('/inbox-store.js?v=17'), session = await store.transact(null);
+    return session.activeProfile === 'alice' && !document.querySelector('#workspace').hidden;
+  });
+  assert.equal(await page.locator('#accountName').textContent(), 'Your account');
+  assert.deepEqual((await storeState(page)).queue, source.queue);
+  assert.equal((await storeState(page, 'alice')).queue.length, 0);
+  assert.doesNotMatch(await page.locator('body').innerText(), /Keep device-only/);
+  assert.equal(documents.some(document => document.kind === 'receipt'), false);
 });

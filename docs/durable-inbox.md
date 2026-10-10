@@ -18,8 +18,8 @@ model as an account, but live under a separate IndexedDB key and never call the
 changes, operations, records or server-export APIs. Local task defaults are
 bundled with the shell, and cloud-only controls explain that sign-in is required.
 
-Choosing **Sign in to sync** first journals the current draft and then persists an
-adoption intent before the authentication redirect. After the provider verifies
+Choosing **Sign in to sync** first journals the current draft and then persists a
+nonce matched to that tab's authentication redirect. After the provider verifies
 the account, one IndexedDB transaction moves the local profile into that account,
 changing only queued operation ownership. Operation IDs, payloads and order stay
 exact, and existing server-confirmed records, cursor and defaults in the account

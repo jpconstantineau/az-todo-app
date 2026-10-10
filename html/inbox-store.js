@@ -156,8 +156,9 @@ const hasLocalWork = state => hasRecovery(state) || Object.keys(state?.records |
 // Adopt only after an explicit sign-in intent. The source deletion, destination
 // write and intent clear share one transaction, so interruption cannot duplicate
 // or orphan the device-local queue.
-export async function adoptLocalProfile(accountId) {
+export async function adoptLocalProfile(accountId, intent) {
   if (!accountId || accountId === LOCAL_PROFILE) throw new Error('A verified account is required to sync device-only work.');
+  if (typeof intent !== 'string' || !intent) throw new Error('Choose Sign in to sync before moving device-only work.');
   const db = await database();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('accounts', 'readwrite', { durability: 'strict' });
@@ -170,7 +171,7 @@ export async function adoptLocalProfile(accountId) {
       if (![sourceRequest, destinationRequest, sessionRequest].every(request => request.readyState === 'done')) return;
       try {
         const session = sessionRequest.result || {};
-        if (session.adoptLocal !== true) throw new Error('Choose Sign in to sync before moving device-only work.');
+        if (session.adoptLocal !== intent) throw new Error('Choose Sign in to sync before moving device-only work.');
         const source = sourceRequest.result;
         const destination = destinationRequest.result || empty();
         if (source && hasLocalWork(source) && hasRecovery(destination)) {
