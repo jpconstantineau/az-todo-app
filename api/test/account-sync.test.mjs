@@ -113,9 +113,10 @@ test('account label: delayed previous-account responses and expiry cannot restor
   await label(page, 'Device inbox for bob-handle');
   assert.equal(await page.locator('#accountName').textContent(), 'bob-handle');
   setUser(null); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
-  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.startsWith('On this device'));
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /bob-handle|late-alice/);
-  assert.equal(await page.locator('#accountName').textContent(), 'Welcome');
+  assert.equal(await page.locator('#accountName').textContent(), 'On this device');
+  assert.equal(await page.locator('#items article').count(), 0);
 });
 
 test('account label: timed-out profile keeps the neutral label and durable capture', { timeout: 30000 }, async t => {
@@ -135,9 +136,10 @@ test('account label: explicit sign-out clears the label and pauses the original 
   await open(page, url); await label(page, 'Device inbox for alice-handle');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Keep this draft');
   await clickControl(page.locator('#signOut'));
-  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.includes('Signed out locally'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).paused);
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /alice-handle/);
+  assert.equal(await page.locator('#accountName').textContent(), 'On this device');
   assert.equal((await local(page)).draft.capture.text, 'Keep this draft');
 });
 

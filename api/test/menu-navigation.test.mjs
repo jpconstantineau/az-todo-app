@@ -54,7 +54,7 @@ test('routed Menu preserves work, history, focus and responsive row behavior', {
     await page.setViewportSize({ width, height });
     assert.equal(new URL(page.url()).hash, '#menu');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width} px has no horizontal overflow`);
-    const rows = await page.locator('#menuView .menu-row').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+    const rows = await page.locator('#menuView .menu-row:visible').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
     assert.ok(rows.every(rowHeight => rowHeight >= 48), `${width} px rows remain 48 px targets`);
     const menuWidth = (await page.locator('.menu-master').boundingBox()).width;
     if (width >= 1024) assert.ok(menuWidth >= 280 && menuWidth <= 320, `${width} px uses the focused desktop column`);

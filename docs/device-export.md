@@ -1,9 +1,14 @@
 # Portable device and server exports (issue #13)
 
 Choose **Portable JSON** or **Readable text** beside **Export device copy**.
-Export includes all records cached for the current account, regardless of the
+Export includes all records cached for the current profile, regardless of the
 selected list, project, day or status filter. It works offline after the updated
 shell has installed. It never submits pending saves or modifies records.
+
+For **On this device**, the export identifies the profile as device-local and
+labels records and pending saves as not server-confirmed. The local profile has
+no authenticated account identity and is not proof of a server backup. **Export server copy**
+is disabled until sign-in; its account/history semantics below are unchanged.
 
 This is a **device copy**, not a complete server backup. Choose **Sync now** first
 when online, and resolve failed saves if you want a confirmed snapshot. Even then,

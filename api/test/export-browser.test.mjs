@@ -201,6 +201,7 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' && !document.querySelector('#appHeader').hidden);
   user = null;
   await clickControl(page.locator('#accountExport'));
-  await page.waitForFunction(() => document.querySelector('#workspace').hidden);
+  await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.includes('server copy'));
+  assert.equal(await page.locator('#accountName').textContent(), 'On this device');
   assert.equal(downloads.length, 0);
 });

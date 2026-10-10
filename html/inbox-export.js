@@ -286,10 +286,13 @@ export function readableExport(value) {
   const lines = server ? ['To-Do server account copy', `Exported: ${value.exportedAt}`, `Account: ${value.accountId}`,
     `Server history cutoff: ${value.state.after}`,
     'All committed v1 records through this cutoff, including tombstones. Later changes and device drafts/pending saves are excluded.',
-    'This file does not restore or submit work.'] : ['To-Do device copy', `Exported: ${value.exportedAt}`, `Account: ${value.accountId}`,
+    'This file does not restore or submit work.'] : ['To-Do device copy', `Exported: ${value.exportedAt}`,
+    value.accountId === 'device-local' ? 'Profile: On this device (not signed in)' : `Account: ${value.accountId}`,
     `Last pulled change cursor: ${value.state.after}`, `Source: ${value.source}`,
     'Only data available on this device is included. Other devices or newer server changes may be missing.',
-    'Pending saves and drafts below are NOT server-confirmed. This file does not restore or submit work.'];
+    value.accountId === 'device-local'
+      ? 'Device-only saves and drafts below have no cloud owner. This file does not restore or submit work.'
+      : 'Pending saves and drafts below are NOT server-confirmed. This file does not restore or submit work.'];
   for (const [deleted, heading] of [[false, 'SERVER-CONFIRMED RECORD SNAPSHOTS'], [true, 'DELETED RECORD SNAPSHOTS (not active tasks)']]) {
     lines.push('', heading);
     const records = Object.values(value.state.records).filter(record => record.deleted === deleted);
@@ -302,7 +305,7 @@ export function readableExport(value) {
   const occurrences = Object.values(value.state.records).filter(record => record.type === 'item' && record.recurrenceTemplateId).sort((a, b) => a.recurrenceTemplateId.localeCompare(b.recurrenceTemplateId) || b.recurrenceNumber - a.recurrenceNumber);
   lines.push('', 'OCCURRENCE HISTORY', ...(occurrences.length ? occurrences.flatMap(record => ['', `${record.title} · intended ${record.intendedDate} · ${record.occurrenceState}`, fields(record)]) : ['(none)']));
   if (server) return lines.join('\n') + '\n';
-  lines.push('', 'PENDING SAVES (not server-confirmed)');
+  lines.push('', value.accountId === 'device-local' ? 'DEVICE-ONLY SAVES' : 'PENDING SAVES (not server-confirmed)');
   if (!value.state.queue.length) lines.push('(none)');
   for (const entry of value.state.queue) {
     lines.push('', `Operation: ${entry.operation.operationId}`, `State: ${entry.failure || 'Pending acknowledgement'}`);

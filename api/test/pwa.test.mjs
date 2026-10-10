@@ -128,7 +128,8 @@ test('PWA: manifest is parsed, public assets work anonymously, and offline navig
   await context.setOffline(true);
   for (const path of ['/?launch=home', '/index.html?launch=home']) {
     await page.goto(server.url + path); await ready(page);
-    await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Sign in online'));
+    await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.startsWith('On this device'));
+    assert.equal(await page.locator('#workspace').isVisible(), true);
   }
   const keys = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async name => (await (await caches.open(name)).keys()).map(r => new URL(r.url).pathname)))).flat());
   assert.ok(keys.includes('/manifest.json'));
@@ -142,7 +143,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   let version = 'current';
   const { page, context, server } = await setup(t, {}, { rejectOperations: () => true, assetContents: path => {
     if (path !== '/inbox-sw.js' || version === 'current') return;
-    const next = worker.replaceAll('shell-v36', 'shell-next');
+    const next = worker.replaceAll('shell-v37', 'shell-next');
     return version === 'failure' ? next.replace('const ASSETS = [', "const ASSETS = ['/missing-update-asset', ") : next;
   } });
   await page.goto(server.url); await ready(page); await page.locator('#workspace').waitFor();
@@ -175,7 +176,7 @@ test('PWA: failed asset download retains the active shell; successful update wai
   assert.ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()).waiting));
   assert.deepEqual((await local()).queue, before.queue);
   assert.deepEqual((await local()).draft, before.draft);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v36')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v37')));
 });
 
 test('PWA: update checks report current/offline, prevent duplicate checks, and recover from failure and timeout', async t => {

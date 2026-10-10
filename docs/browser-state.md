@@ -8,9 +8,17 @@ state changes require an explicit schema/version decision, not fallback readers.
 
 ## Session and account documents
 
-- `session` starts as `{}` before authentication. Once verified it contains
-  `accountId` and boolean `paused`. Offline reopening uses only this verified
-  identity when not paused; sign-out pauses access without deleting account data.
+- `session` initializes with `activeProfile: "device-local"`. Once verified it can
+  also contain `accountId` and boolean `paused`. `activeProfile` chooses the
+  visible local or account profile, while `adoptLocal` records the nonce for the
+  user's explicit **Sign in to sync** redirect. The initiating tab keeps the
+  matching nonce in session storage, so another tab or an abandoned intent cannot
+  adopt local work. Sign-out pauses the account and returns to the local profile
+  without deleting either profile's data.
+- `local-profile` has the same records, queue, cursor, drafts and defaults shape
+  as an account document, but lives outside the `account:<accountId>` namespace.
+  Its operations use the reserved local owner `device-local` and never go to the
+  API. Built-in defaults are available locally without an account.
 - `account:<accountId>` starts as `{ records: {}, queue: [], after: 0, draft: {} }`.
   `records` contains confirmed canonical records keyed by `type:id`; `after` is
   the last applied change cursor. Optimistic records are projected from the queue.
@@ -61,14 +69,24 @@ Missing optional containers initialize an unused workflow; they do not select an
 older format. Development data from unsupported generations can be cleared after
 exporting anything needed. The app never automatically deletes it or its queue.
 
-**Menu → Data & recovery → Restore from cloud** uses a routed review before it
-deletes `todo-inbox-v1`. The inventory names the active account's pending/failed
-operations and meaningful workflow drafts, lists collection-move and editor-undo
-recovery separately, and shows only aggregate counts for inactive accounts. It
-does not treat navigation or filters as drafts. Confirmation rechecks online
-identity, the account generation and a fresh inventory fingerprint under the sync
-lock; any change refreshes the review instead of clearing data. Clearing resets all
-account documents on that browser, while the installed shell and downloaded
+After **Sign in to sync**, the verified account adopts local work only when the
+persisted `adoptLocal` nonce matches the initiating tab's redirect intent. One IndexedDB transaction copies the
+local profile into the destination account and rewrites only each queued
+operation's owner; operation IDs, payloads and order remain exact. Existing
+destination server records, cursor, defaults and metadata are preserved. A
+destination queue, meaningful draft or recovery workflow blocks adoption and
+leaves both profiles unchanged for explicit recovery.
+
+**Menu → Data & recovery → Restore from cloud** (or **Clear device data** in the
+local profile) uses a routed review before it deletes `todo-inbox-v1`. The
+inventory names the active profile's pending/failed operations and meaningful
+workflow drafts, lists collection-move and editor-undo
+recovery separately, and shows only aggregate counts for inactive accounts and
+the local profile. It does not treat navigation or filters as drafts. Confirmation
+rechecks the online identity for an account, the profile generation and a fresh
+inventory fingerprint under the sync lock; any change refreshes the review instead
+of clearing data. Clearing resets all profile documents on that browser, while the
+installed shell and downloaded
 exports remain outside the database.
 
 ## Recovery and verification

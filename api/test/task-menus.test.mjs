@@ -106,7 +106,8 @@ test('task rows keep actions visible at every width and retain keyboard focus, r
   await page.getByRole('button', { name: `Complete ${longTitle}`, exact: true }).click();
   await page.locator('#undoTaskChange').waitFor();
   user = null; await context.setOffline(false); // Reconnection automatically checks the session.
-  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('#accountName').textContent === 'On this device');
+  assert.equal(await page.locator('#workspace').isVisible(), true, 'expired sessions return to the device-local workspace');
   assert.equal(await page.locator('#recentTaskChangeStatus').textContent(), '', 'expired sessions clear private undo text');
   assert.deepEqual(errors, []);
 });

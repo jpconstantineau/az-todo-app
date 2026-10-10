@@ -47,53 +47,61 @@ async function shot(page, name) {
   await page.screenshot({ path: `${process.env.HEADER_SCREENSHOTS}/${name}.png` });
 }
 
-async function signedOut(page) {
-  await page.waitForFunction(() => document.title === 'Sign in');
-  assert.equal(await page.title(), 'Sign in');
-  assert.equal(await page.locator('#signIn').isVisible(), true);
+async function loadingShell(page) {
+  await page.waitForFunction(() => document.title === 'To-Do');
+  assert.equal(await page.title(), 'To-Do');
   assert.equal(await page.locator('#signedOut h1').innerText(), 'Welcome');
+  assert.equal(await page.locator('#loginStatus').textContent(), 'Opening your workspace…');
   for (const selector of ['#appHeader', '#accountName', '#workspaceSelect', '#saveStatus', '#agentStatus', '#agentLabel', '#appMenu', '#workspaceSkip', '#workspace', '#appUpdateStatus', '#preferencesView', '#utilityView']) {
     assert.equal(await page.locator(selector).isVisible(), false, selector);
   }
-  assert.doesNotMatch(await page.locator('body').innerText(), /Personal|Family|alice-handle|AI agent|workspace|Menu|Preferences|saved|pending/i);
 }
 
-test('login hides application chrome before the session check and after a late agent check', async t => {
+async function deviceLocal(page) {
+  await page.waitForFunction(() => !document.querySelector('#workspace').hidden && document.querySelector('#accountName').textContent === 'On this device');
+  await page.waitForFunction(() => document.title.endsWith(' · Personal'));
+  assert.equal(await page.locator('#signedOut').isVisible(), false);
+  assert.equal(await page.locator('#workspace').isVisible(), true);
+  assert.equal(await page.locator('#appHeader').isVisible(), true);
+  assert.equal(await page.locator('#signInToSync').getAttribute('hidden'), null);
+  assert.equal(await page.locator('#signOut').isVisible(), false);
+  assert.match(await page.title(), / · Personal$/);
+}
+
+test('loading hides application chrome before the session check and then opens device-local use', async t => {
   const { page, url } = await setup(t, null, { state: 'available', holdCheck: true });
   let holdSession;
   const session = new Promise(resolve => { holdSession = resolve; });
   await page.route('**/api/v1/session', route => holdSession(route));
   await page.goto(url);
   const pending = await session;
-  await signedOut(page);
-  assert.equal(await page.locator('#loginStatus').textContent(), 'Checking account…');
+  await loadingShell(page);
   await pending.continue();
-  await page.waitForFunction(() => document.querySelector('#loginStatus').textContent === 'Sign in to continue.');
+  await deviceLocal(page);
   await page.waitForFunction(() => !!window.finishCheck);
   await page.evaluate(() => finishCheck('available')); await agentStatus(page, 'available');
-  // Worker notifications can also arrive while signed out.
+  // Worker notifications can also arrive while using the local profile.
   await page.evaluate(() => document.querySelector('#appUpdateStatus').textContent = 'An app update is ready. Open Menu → Preferences for details.');
-  await signedOut(page);
+  await deviceLocal(page);
 });
 
-test('login markup hides application chrome when the application module cannot load', async t => {
+test('loading markup hides application chrome when the application module cannot load', async t => {
   const { page, url } = await setup(t, null);
   await page.route('**/inbox.js?*', route => route.abort());
   await page.goto(url);
-  await signedOut(page);
+  await loadingShell(page);
 });
 
-test('fresh signed-out screen offers sign-in without an error or a saved-work claim', async t => {
+test('fresh signed-out session opens the device-local workspace without an error', async t => {
   const { page, url } = await setup(t, null);
   await page.goto(url);
-  await page.waitForFunction(() => document.querySelector('#loginStatus').textContent === 'Sign in to continue.');
-  await signedOut(page);
+  await deviceLocal(page);
   assert.equal(await page.locator('#error').isVisible(), false);
-  assert.equal(await page.locator('#workspace').isVisible(), false);
-  assert.equal(await page.locator('#workspaceSelect').isVisible(), false);
-  assert.equal(await page.locator('#saveStatus').isVisible(), false);
-  assert.doesNotMatch(await page.locator('body').innerText(), /401|saved|pending|To-Do/i);
-  await shot(page, 'signed-out');
+  assert.equal(await page.locator('#workspaceSelect').isVisible(), true);
+  assert.equal(await page.locator('#saveStatus').isVisible(), true);
+  assert.match(await page.locator('#connectionLabel').textContent(), /Saved on this device/);
+  assert.doesNotMatch(await page.locator('body').innerText(), /401/);
+  await shot(page, 'device-local');
 });
 
 for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'unavailable' }, 'unavailable'], [{ checkFail: true }, 'error'], [{ state: 'downloadable' }, 'downloadable'], [{ state: 'downloading' }, 'busy'], [{ state: 'available' }, 'available']]) {
@@ -262,7 +270,7 @@ test('header follows workspace selection and save state, then clears identity on
   await pending.continue(); await status(page, 'confirmed');
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(documents.filter(doc => doc.kind === 'record' && doc.record.title === 'Family offline task').length, 1);
-  // Expiry hides the previous identity and preserves its unsent work.
+  // Expiry hides the previous identity, opens the local profile and preserves its unsent work.
   await context.setOffline(true);
   await page.locator('#captureText').fill('Keep pending task');
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
@@ -270,14 +278,13 @@ test('header follows workspace selection and save state, then clears identity on
   const queued = (await local(page)).queue;
   assert.equal(queued.length, 1);
   setUser(null); await context.setOffline(false);
-  await page.locator('#workspace').waitFor({ state: 'hidden' });
+  await deviceLocal(page);
   assert.equal(await page.locator('#error').isVisible(), false);
-  assert.equal(await page.locator('#saveStatus').isVisible(), false);
-  await signedOut(page);
+  assert.equal(await page.locator('#saveStatus').isVisible(), true);
   assert.deepEqual((await local(page)).queue, queued);
 });
 
-test('sign-out in another tab clears a utility route and hides account chrome, then login restores it', async t => {
+test('sign-out in another tab clears a utility route and opens the local profile, then login restores it', async t => {
   const { page, context, url, setUser } = await setup(t, 'alice');
   await page.route('**/.auth/logout?**', route => route.fulfill({ status: 204 }));
   await page.goto(url); await status(page, 'confirmed');
@@ -287,9 +294,7 @@ test('sign-out in another tab clears a utility route and hides account chrome, t
   await second.locator('#exportHeading').waitFor();
   setUser(null);
   await clickControl(page.locator('#signOut'));
-  await page.locator('#workspace').waitFor({ state: 'hidden' });
-  await second.locator('#workspace').waitFor({ state: 'hidden' });
-  await signedOut(page); await signedOut(second);
+  await deviceLocal(page); await deviceLocal(second);
   // A previously opened utility route must also be cleared when the session ends.
   assert.equal(new URL(second.url()).hash, '#capture');
   assert.equal(await second.locator('#menuView').isVisible(), false);

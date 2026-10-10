@@ -3,7 +3,7 @@
 The canonical native client at `/` links the manifest and touch icon. Installation
 controls live on **Menu → App & device → Install To-Do**, using a normal routed
 page, native controls and DESIGN.md styles. Capture and synchronization continue
-using the existing account-bound IndexedDB/outbox.
+using the existing profile-bound IndexedDB/outbox.
 
 ## Install and reopen
 
@@ -16,11 +16,11 @@ using the existing account-bound IndexedDB/outbox.
 - iPhone/iPad help explains Safari → Share → Add to Home Screen, enabling
   **Open as Web App** if offered. Android and desktop get their own menu
   instructions. Unsupported browsers can keep using the web client.
-- Sign in online once and wait for **Ready to reopen this inbox offline**.
-  Installation alone does not initialize an account or back up pending work.
-  A first-ever offline visit cannot download the app; help explains this before
-  disconnection. A cached public shell without a verified device account asks
-  the user to sign in online.
+- Visit online once and wait for **Ready to reopen this inbox offline**.
+  Installation alone does not back up pending work. A first-ever offline visit
+  cannot download the app; help explains this before disconnection. Once cached,
+  the public shell opens the dedicated **On this device** profile without a
+  verified account. Sign in is needed only to sync or use cloud-only actions.
 - Capture/edit, then reconnect and bring the app to the foreground or choose
   **Sync now**. There is no background-sync, extension or local-AI requirement.
 
@@ -80,7 +80,8 @@ navigation URLs. Root/index navigation query parameters map to the public shell
 offline without storing query-bearing copies.
 
 The PWA script registers independently of account initialization, so a signed-out
-visitor can prepare the public shell. Account verification still gates task data.
+visitor can prepare the public shell and use device-local task data. Account
+verification still gates API synchronization, sharing and server exports.
 The first-release cache and module graph use the `v1` baseline. The cache name,
 HTML entry URLs, module import URLs and worker handshake advance together for each
 future shell so a controlling baseline worker does not substitute older modules.
@@ -115,8 +116,8 @@ Coverage includes:
   failure, blocked preferences and simulated iPhone/standalone behavior.
 - Routed App & device controls at 320/390/768/1440px in light/dark themes without
   horizontal overflow; keyboard focus stays with the active operation or its heading.
-- Root/query offline reopen, auth/API exclusion from Cache Storage and
-  offline sign-in guidance for an uninitialized account.
+- Root/query offline reopen into the anonymous local workspace, with auth/API
+  responses excluded from Cache Storage.
 - Failed asset download, atomic empty failed cache, preserved working shell,
   waiting-worker notice and unchanged draft/outbox.
 - A baseline-to-next-shell upgrade without mixed modules or changed queued intent; existing

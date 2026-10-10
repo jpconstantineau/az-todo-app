@@ -6,6 +6,7 @@ import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnaps
 import { validateProjectPlanOperation } from './project-planning-model.js?v=1';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
+export const LOCAL_PROFILE = 'device-local';
 export const key = record => `${record.type}:${record.id}`;
 const size = value => new TextEncoder().encode(JSON.stringify(value)).length;
 const MAX_OPERATION_MUTATIONS = 20, MAX_OPERATION_BYTES = 65536;
@@ -93,7 +94,7 @@ const resetLossState = state => ({
 
 async function lossFingerprint(documents) {
   const serialized = JSON.stringify(documents
-    .filter(document => String(document.storageKey).startsWith('account:'))
+    .filter(document => String(document.storageKey).startsWith('account:') || document.storageKey === 'local-profile')
     .sort((left, right) => String(left.storageKey).localeCompare(String(right.storageKey)))
     .map(document => [document.storageKey, resetLossState(document.state)]));
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
@@ -110,7 +111,7 @@ export async function deviceResetImpact(accountId) {
     transaction.oncomplete = () => resolve(keys.result.map((storageKey, index) => ({ storageKey, state: values.result[index] })));
     transaction.onerror = () => reject(transaction.error);
   });
-  const current = documents.find(document => document.storageKey === `account:${accountId}`)?.state
+  const current = documents.find(document => document.storageKey === profileStorageKey(accountId))?.state
     || await transact(accountId);
   const records = projected(current);
   const operations = (current.queue || []).map(entry => ({
@@ -122,10 +123,11 @@ export async function deviceResetImpact(accountId) {
     }))
   }));
   const drafts = draftEntries(current);
-  let inactiveAccounts = 0, inactiveOperations = 0, inactiveDrafts = 0;
+  let inactiveAccounts = 0, inactiveLocalProfiles = 0, inactiveOperations = 0, inactiveDrafts = 0;
   for (const { storageKey, state: document } of documents) {
-    if (!String(storageKey).startsWith('account:') || storageKey === `account:${accountId}`) continue;
-    inactiveAccounts++;
+    if ((!String(storageKey).startsWith('account:') && storageKey !== 'local-profile') || storageKey === profileStorageKey(accountId)) continue;
+    if (storageKey === 'local-profile') inactiveLocalProfiles++;
+    else inactiveAccounts++;
     inactiveOperations += document.queue?.length || 0;
     inactiveDrafts += draftEntries(document).length + (document.workspaceMove ? 1 : 0) + (document.undoEdit ? 1 : 0);
   }
@@ -134,13 +136,72 @@ export async function deviceResetImpact(accountId) {
     drafts,
     collectionMove: current.workspaceMove ? { title: current.workspaceMove.root?.title || current.workspaceMove.root?.id || 'Collection move' } : null,
     undoEdit: current.undoEdit ? { type: current.undoEdit.type, title: current.undoEdit.title || current.undoEdit.id } : null,
-    inactive: { accounts: inactiveAccounts, operations: inactiveOperations, drafts: inactiveDrafts }
+    inactive: { accounts: inactiveAccounts, localProfiles: inactiveLocalProfiles, operations: inactiveOperations, drafts: inactiveDrafts }
   };
-  const fingerprintDocuments = documents.some(document => document.storageKey === `account:${accountId}`)
+  const fingerprintDocuments = documents.some(document => document.storageKey === profileStorageKey(accountId))
     ? documents
-    : [...documents, { storageKey: `account:${accountId}`, state: current }];
+    : [...documents, { storageKey: profileStorageKey(accountId), state: current }];
   impact.fingerprint = await lossFingerprint(fingerprintDocuments);
   return impact;
+}
+
+const profileStorageKey = accountId => accountId === LOCAL_PROFILE ? 'local-profile' : `account:${accountId}`;
+
+function hasRecovery(state = {}) {
+  return !!(state.queue?.length || draftEntries(state).length || state.workspaceMove || state.undoEdit ||
+    Object.keys(state.sharedLists?.drafts || {}).length);
+}
+const hasLocalWork = state => hasRecovery(state) || Object.keys(state?.records || {}).length > 0;
+
+// Adopt only after an explicit sign-in intent. The source deletion, destination
+// write and intent clear share one transaction, so interruption cannot duplicate
+// or orphan the device-local queue.
+export async function adoptLocalProfile(accountId, intent) {
+  if (!accountId || accountId === LOCAL_PROFILE) throw new Error('A verified account is required to sync device-only work.');
+  if (typeof intent !== 'string' || !intent) throw new Error('Choose Sign in to sync before moving device-only work.');
+  const db = await database();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('accounts', 'readwrite', { durability: 'strict' });
+    const store = transaction.objectStore('accounts');
+    const sourceRequest = store.get('local-profile');
+    const destinationRequest = store.get(profileStorageKey(accountId));
+    const sessionRequest = store.get('session');
+    let adopted, failure;
+    const prepare = () => {
+      if (![sourceRequest, destinationRequest, sessionRequest].every(request => request.readyState === 'done')) return;
+      try {
+        const session = sessionRequest.result || {};
+        if (session.adoptLocal !== intent) throw new Error('Choose Sign in to sync before moving device-only work.');
+        const source = sourceRequest.result;
+        const destination = destinationRequest.result || empty();
+        if (source && hasLocalWork(source) && hasRecovery(destination)) {
+          throw new Error('This account already has unfinished device recovery. Resolve or export it before syncing device-only work.');
+        }
+        if (source && hasLocalWork(source)) {
+          adopted = structuredClone(source);
+          adopted.queue = (source.queue || []).map(entry => ({ ...entry,
+            operation: { ...entry.operation, accountId } }));
+          for (const name of ['records', 'after', 'defaultSettings', 'accountName', 'sharedLists', 'workspaceErasureNotice']) {
+            if (destination[name] !== undefined) adopted[name] = structuredClone(destination[name]);
+            else if (['records', 'after'].includes(name)) adopted[name] = name === 'records' ? {} : 0;
+            else delete adopted[name];
+          }
+          store.put(adopted, profileStorageKey(accountId));
+          store.delete('local-profile');
+        } else {
+          adopted = destination;
+          if (source) store.delete('local-profile');
+        }
+        store.put({ ...session, accountId, paused: false, adoptLocal: false }, 'session');
+      } catch (error) {
+        failure = error;
+        transaction.abort();
+      }
+    };
+    sourceRequest.onsuccess = destinationRequest.onsuccess = sessionRequest.onsuccess = prepare;
+    transaction.oncomplete = () => resolve(adopted);
+    transaction.onabort = transaction.onerror = () => reject(failure ?? transaction.error ?? new Error('Local adoption failed.'));
+  });
 }
 
 // One transaction journals the intent and draft together. Resolve only on commit,
@@ -150,7 +211,7 @@ export async function transact(accountId, update) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('accounts', update ? 'readwrite' : 'readonly', { durability: 'strict' });
     const store = transaction.objectStore('accounts');
-    const storageKey = accountId === null ? 'session' : `account:${accountId}`;
+    const storageKey = accountId === null ? 'session' : profileStorageKey(accountId);
     const request = store.get(storageKey);
     let state, failure;
     request.onsuccess = () => {
@@ -180,7 +241,8 @@ export function projected(state) {
           ? { statusBeforeCompletion: previous?.status || 'inbox' } : {}),
         version: mutation.expectedVersion + 1, deleted: mutation.action === 'delete',
         ...(mutation.action === 'restore' ? { deletedUtc: null } : {}),
-        localState: entry.failure || previous?.localState === 'Failed — needs attention' ? 'Failed — needs attention' : 'Saved on device — pending' };
+        localState: entry.failure || previous?.localState === 'Failed — needs attention' ? 'Failed — needs attention'
+          : entry.operation.accountId === LOCAL_PROFILE ? 'Saved on this device' : 'Saved on device — pending' };
       if (mutation.type === 'item') {
         normalizeMembership(records[id], previous, mutation.fields);
         records[id].nextAction = records[id].status === 'next';
