@@ -1,6 +1,6 @@
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
-import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=2';
-import { beginModelWork, modelReadiness } from './local-agent.js?v=1';
+import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=3';
+import { beginModelWork, modelReadiness } from './local-agent.js?v=2';
 import { cloudStatus, cloudSuggestion } from './cloud-ai.js?v=1';
 
 const text = (value, max, name) => {
@@ -121,10 +121,12 @@ export function extractionMutations(draft, records, workspaceId = 'personal') {
 export function setupCaptureExtraction({ current, journal, save, showDialog, recovery, cloudEligible = () => false }) {
   const $ = id => document.getElementById(id);
   const field = $('captureText'), mirror = $('captureMirror');
-  let completion = null, pendingCursor = null, composing = false, listSource = '';
-  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, cloudCheck, model, finish, busy = false, timer, enabled = false, includeLists = false, cloudReady = false, cloudLabel = '';
+  let completion = null, pendingCursor = null, composing = false, listSource = '', startControl;
+  let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, cloudCheck, model, finish, busy = false, timer, enabled = false, includeLists = false, cloudReady = false, cloudLabel = '', cloudPhase = 'unavailable', cloudBusy = false;
   const unavailableMessage = 'AI suggestions are unavailable here. Use one item per line and Save on device.';
-  const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; $('extractionStatus').hidden = !message || modelReadiness() === 'unavailable' && !cloudReady; };
+  const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; $('extractionStatus').hidden = !message || modelReadiness() === 'unavailable' && !cloudEligible(); };
+  const cloudState = () => ({ active: modelReadiness() === 'unavailable' && cloudEligible(), phase: cloudBusy ? 'busy' : cloudPhase, ready: cloudReady, label: cloudLabel });
+  const announceCloud = () => document.dispatchEvent(new CustomEvent('capturecloudstatechange', { detail: cloudState() }));
   function openReview() { showDialog($('extractionReview')); $('extractionHeading').focus(); }
   function finishInteraction(focused, open = false) {
     // A disabled initiating button may leave focus on body. A later control or
@@ -190,35 +192,54 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
   field.addEventListener('compositionstart', () => { composing = true; cancel(); });
   field.addEventListener('compositionend', () => { composing = false; changed(); });
   function updateControls() {
-    const localUnavailable = modelReadiness() === 'unavailable', unavailable = localUnavailable && !cloudReady;
-    $('captureAI').toggleAttribute('data-unavailable', unavailable);
-    $('extractionStatus').hidden = !$('extractionStatus').textContent || localUnavailable && !cloudReady;
+    const localUnavailable = modelReadiness() === 'unavailable', cloudVisible = localUnavailable && cloudEligible();
+    $('captureAI').toggleAttribute('data-unavailable', localUnavailable && !cloudVisible);
+    $('extractionStatus').hidden = !$('extractionStatus').textContent || localUnavailable && !cloudEligible();
     $('extractAuto').disabled = localUnavailable;
-    $('extractLists').disabled = unavailable;
-    $('extractStart').disabled = busy || unavailable;
-    $('extractStart').textContent = localUnavailable && cloudReady ? 'Suggest tasks with cloud AI' : 'Suggest tasks now';
+    $('extractLists').disabled = localUnavailable && !cloudVisible;
+    $('extractStart').disabled = busy || localUnavailable;
+    const cloud = $('extractCloudStart');
+    cloud.hidden = !cloudVisible || cloudBusy;
+    cloud.disabled = busy || !cloudReady;
+    cloud.dataset.state = cloudBusy ? 'busy' : cloudPhase;
+    const cloudMessage = cloudPhase === 'checking' ? 'Checking cloud AI for Capture' : cloudReady ? 'Suggest tasks with cloud AI'
+      : !navigator.onLine ? 'Cloud AI for Capture is unavailable while offline' : 'Cloud AI for Capture is unavailable; press the header AI status to retry';
+    cloud.setAttribute('aria-label', cloudMessage); cloud.title = cloudMessage;
+    announceCloud();
   }
   async function checkCloud() {
     const currentGeneration = generation;
     cloudCheck?.abort(); const abort = new AbortController(); cloudCheck = abort;
-    cloudReady = false; cloudLabel = ''; updateControls();
-    if (modelReadiness() !== 'unavailable' || !cloudEligible() || !navigator.onLine) { cloudCheck = null; return; }
+    cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; updateControls();
+    if (modelReadiness() !== 'unavailable' || !cloudEligible()) { cloudCheck = null; return; }
+    if (!navigator.onLine) { cloudCheck = null; status('Cloud AI for Capture is unavailable offline. Your capture is kept; save manually or retry online.'); updateControls(); return; }
+    cloudPhase = 'checking'; status('Checking whether cloud AI is ready for Capture…'); updateControls();
     try {
       const result = await cloudStatus(abort.signal);
       if (abort.signal.aborted || currentGeneration !== generation || !cloudEligible() || modelReadiness() !== 'unavailable') return;
-      cloudReady = result.available; cloudLabel = result.label;
+      cloudReady = result.available; cloudLabel = result.label; cloudPhase = cloudReady ? 'ready' : 'unavailable';
       status(cloudReady ? `Local AI is unavailable. Cloud suggestions use ${cloudLabel}; your capture${includeLists ? ' and opted-in list names' : ''} leaves this device only when you press the button.` : unavailableMessage);
-    } catch { if (cloudCheck === abort && currentGeneration === generation) status(unavailableMessage); }
+    } catch { if (cloudCheck === abort && currentGeneration === generation) { cloudPhase = 'unavailable'; status(unavailableMessage); } }
     finally { if (cloudCheck === abort) { cloudCheck = null; updateControls(); } }
   }
   document.addEventListener('agentstatuschange', () => {
+    if (modelReadiness() !== 'unavailable' && cloudBusy) cancel();
     updateControls();
     if (modelReadiness() === 'unavailable') { status(unavailableMessage); void checkCloud(); }
-    else if ($('extractionStatus').textContent === unavailableMessage) status('');
+    else if ($('extractionStatus').textContent === unavailableMessage || $('extractionStatus').textContent.startsWith('Local AI is unavailable.')) status('');
+  });
+  document.addEventListener('capturecloudpreferencechange', () => {
+    if (!cloudEligible()) {
+      if (cloudBusy || cloudCheck) cancel();
+      cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; updateControls();
+      return;
+    }
+    void checkCloud();
   });
   updateControls();
   addEventListener('online', () => { if (modelReadiness() === 'unavailable') void checkCloud(); });
-  function cancel() { pendingCursor = null; clearCompletion(); clearTimeout(timer); generation++; controller?.abort(); controller = null; cloudCheck?.abort(); cloudCheck = null; finish?.(model ? 'available' : undefined); finish = null; destroyModel(model); model = null; busy = false; $('extractCancel').hidden = true; updateControls(); }
+  addEventListener('offline', () => { if (modelReadiness() === 'unavailable' && cloudEligible()) { cancel(); cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; status('Cloud AI for Capture is unavailable offline. Your capture is kept; save manually or retry online.'); updateControls(); } });
+  function cancel() { pendingCursor = null; clearCompletion(); clearTimeout(timer); generation++; controller?.abort(); controller = null; cloudCheck?.abort(); cloudCheck = null; finish?.(model ? 'available' : undefined); finish = null; destroyModel(model); model = null; busy = false; cloudBusy = false; $('extractCancel').hidden = true; updateControls(); }
   function changed() {
     if (composing) return;
     refreshLists();
@@ -289,21 +310,23 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     draft.items.push({ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID() }); render();
     $('extractionItems').lastElementChild.querySelector('input').focus(); void journal();
   };
-  $('extractCancel').onclick = () => { cancel(); status('Cancelled. Your capture and any reviewed suggestions are kept.'); $('extractStart').focus(); };
+  $('extractCancel').onclick = () => { const focus = startControl; cancel(); status('Cancelled. Your capture and any reviewed suggestions are kept.'); (focus?.getClientRects().length ? focus : field).focus(); };
   $('extractAuto').onchange = () => {
     enabled = $('extractAuto').checked;
     if (enabled) { changed(); void run(true, true); }
     else { cancel(); status('Automatic suggestions disabled. Your text and saved review are kept.'); }
     void journal();
   };
-  $('extractStart').onclick = () => { void run(true); };
+  const start = event => { startControl = event.currentTarget; void run(true, false, event.currentTarget === $('extractCloudStart')); };
+  $('extractStart').onclick = start;
+  $('extractCloudStart').onclick = start;
   $('extractLists').onchange = () => {
     cancel(); includeLists = $('extractLists').checked; refreshLists();
     status(draft ? 'Your saved review is kept. The list-name choice applies to your next suggestion.' : 'List context updated.');
     void journal();
     if (enabled && !draft && current()?.text.trim()) timer = setTimeout(() => { void run(false, true); }, 1200);
   };
-  async function run(interactive, inline = false) {
+  async function run(interactive, inline = false, forceCloud = false) {
     if (inline && (composing || field.selectionStart !== field.selectionEnd)) return;
     const input = current();
     if (busy || !input?.text.trim()) { status('Enter a capture first.'); return; }
@@ -313,23 +336,25 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     changed(); cancel(); const run = generation; busy = true;
     controller = new AbortController(); const signal = controller.signal;
     updateControls(); $('extractCancel').hidden = false;
-    status('Saving your capture before checking local AI…');
+    status(forceCloud ? 'Saving your capture before contacting cloud AI…' : 'Saving your capture before checking local AI…');
     const owner = input.accountId, source = inline ? input.text : input.original ?? input.text, cursor = field.selectionStart;
     if (inline) pendingCursor = cursor;
     const stale = () => run !== generation || current()?.accountId !== owner || JSON.stringify(captureInput(current())) !== JSON.stringify(captureInput(input)) ||
       (includeLists && JSON.stringify(current()?.lists) !== JSON.stringify(input.lists)) ||
+      (forceCloud && !cloudEligible()) ||
       (inline && (composing || field.selectionStart !== cursor || field.selectionEnd !== cursor));
     let session, timeout, done;
     try {
       const api = globalThis.LanguageModel;
       const readiness = modelReadiness();
-      const useCloud = readiness === 'unavailable' && cloudReady && interactive && !inline;
+      const useCloud = forceCloud && readiness === 'unavailable' && cloudReady && cloudEligible() && interactive && !inline;
       if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before requesting suggestions. AI capture uses existing lists only.');
       if (!useCloud && (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness))) throw new Error('AI suggestions are unavailable. Use one item per line and Save on device; comma / semicolon preview is also available.');
       if (!interactive && readiness !== 'available') throw new Error('Choose Suggest tasks now to start or continue the browser model download. Manual capture is available.');
       let saved;
       if (useCloud) {
-        timeout = setTimeout(() => { if (!stale()) { cancel(); status('Cloud AI timed out. Your text is kept; retry or save manually.'); } }, 20000);
+        cloudBusy = true; updateControls();
+        timeout = setTimeout(() => { if (!stale()) { cancel(); cloudReady = false; cloudPhase = 'unavailable'; status('Cloud AI timed out. Your text is kept; retry or save manually.'); updateControls(); } }, 20000);
         saved = await journal();
       } else {
         done = beginModelWork(); finish = done;
@@ -379,12 +404,12 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
       status('Suggestions saved on device, not committed. Review every task and deadline.');
       ready = true;
       done?.('available');
-    } catch (error) { if (!stale()) { done?.('error'); status(signal.aborted ? 'AI suggestion cancelled or timed out. Your text is kept; retry or save manually.' : error.message); } }
+    } catch (error) { if (!stale()) { done?.('error'); if (forceCloud) { cloudReady = false; cloudPhase = 'unavailable'; } status(signal.aborted ? 'AI suggestion cancelled or timed out. Your text is kept; retry or save manually.' : error.message); } }
     finally {
       done?.(); if (finish === done) finish = null;
       clearTimeout(timeout); destroyModel(session);
       if (run === generation) {
-        pendingCursor = null; model = null; controller = null; busy = false; updateControls(); $('extractCancel').hidden = true;
+        pendingCursor = null; model = null; controller = null; busy = false; cloudBusy = false; updateControls(); $('extractCancel').hidden = true;
         if (interactive && !inline) finishInteraction(focused, ready);
       }
     }
@@ -410,7 +435,9 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     suspend() { cancel(); $('extractionReview').close(); },
     snapshot: () => ({ draft: structuredClone(draft), clock, sourceText, enabled, includeLists }),
     restore(value) { cancel(); draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); void checkCloud(); },
-    reset(keepEnabled = false) { cancel(); cloudReady = false; cloudLabel = ''; draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : ''); updateControls(); },
-    close() { $('extractionReview').close(); }
+    reset(keepEnabled = false) { cancel(); cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : ''); updateControls(); },
+    close() { $('extractionReview').close(); },
+    cloudState,
+    retryCloud: checkCloud
   };
 }

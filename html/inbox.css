@@ -135,13 +135,20 @@
 .agent-status[data-state="available"] { color: var(--success); }
 .agent-status[data-state="busy"] { color: var(--warning); }
 .agent-icon { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.agent-cloud-agent { display: none; }
+.agent-status[data-provider="cloud"] .agent-robot { display: none; }
+.agent-status[data-provider="cloud"] .agent-cloud-agent { display: inline; }
 .agent-unavailable { display: none; }
 .agent-status[data-state="unavailable"] .agent-unavailable { display: inline; }
 .capture-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
-.capture-header h2 { margin: 0; }
+.capture-header h2 { min-width: 0; margin: 0; }
 .capture-actions { display: flex; gap: var(--space-2); }
 .capture-header .icon-button { display: flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; padding: var(--space-2); }
-.split-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.split-icon, .cloud-agent-icon, .cancel-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cloud-capture-button[data-state="ready"] { color: var(--success); }
+.cloud-capture-button[data-state="checking"], .cloud-capture-button[data-state="busy"] { color: var(--warning); }
+.cloud-capture-button[data-state="unavailable"] { color: var(--error); }
+@media (max-width: 390px) { .capture-actions { gap: var(--space-1); } }
 #draftStatus:empty { display: none; }
 #appMenu { grid-column: 4; min-width: 44px; min-height: 44px; padding-inline: var(--space-3); }
 #appMenu[aria-current="page"] { border-color: var(--link); background: var(--selected); box-shadow: inset 0 -3px var(--link); }
@@ -194,6 +201,8 @@
 .preferences-content { min-width: 0; padding-top: var(--space-4); overflow-wrap: anywhere; }
 .appearance-preference label { width: 100%; }
 .appearance-preference select { min-height: 48px; }
+.capture-preference label { display: flex; align-items: flex-start; gap: var(--space-2); min-height: 48px; }
+.capture-preference input { flex: 0 0 auto; }
 .preference-scope { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
 .task-options-shell { width: min(100%, 1440px); margin-inline: auto; }
 .task-options-layout, .task-options-master, .task-option-editor, #defaultsForm { min-width: 0; }
@@ -253,6 +262,7 @@
 @media (forced-colors: active) {
   #appMenu[aria-current="page"], .menu-row[aria-current="page"], .clarify-action-link[aria-current="page"] { outline: 2px solid Highlight; }
   .menu-group ul, .menu-group li, .menu-page-bar, .preferences-master ul, .preferences-master li, .task-options-master ul, .task-options-master li, .utility-pages-master ul, .utility-pages-master li { border-color: CanvasText; }
+  .cloud-capture-button { border-color: ButtonText; }
 }
 #appUpdateStatus:empty { display: none; }
 .editable-title { background: transparent; border-color: transparent; color: var(--ink); padding: var(--space-2); font: inherit; font-weight: var(--weight-title); text-align: left; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }

@@ -6,6 +6,7 @@ import { documents, faults, startServer } from './harness.mjs';
 import { clickControl, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { captureClock, capturedTime, captureCompletionInsertion, validateExtraction, extractionMutations } from '../../html/capture-extraction.js';
+import { parseCaptureCloudPreference } from '../../html/capture-cloud-preference.js';
 import { fieldsFor } from '../api/v1/contract.mjs';
 import { enqueue } from '../../html/inbox-store.js';
 
@@ -16,6 +17,13 @@ const output = (items = [suggestion()]) => JSON.stringify({ items, notes: 'Check
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+
+test('Capture cloud AI consent defaults and fails closed', () => {
+  assert.equal(parseCaptureCloudPreference(null), false);
+  assert.equal(parseCaptureCloudPreference('false'), false);
+  assert.equal(parseCaptureCloudPreference('true'), true);
+  for (const value of ['', '1', '"true"', '{}', 'null']) assert.throws(() => parseCaptureCloudPreference(value));
+});
 
 test('capture clock fixes relative-date context and rejects skipped/repeated wall times', () => {
   assert.equal(clock.today, '2026-10-02');
@@ -178,7 +186,7 @@ test('capture follows agent availability across reload without losing AI prefere
     const saved = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.extraction;
     return saved.enabled && saved.includeLists;
   });
-  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=1')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'unavailable'; await (await import('/local-agent.js?v=2')).checkModel(); });
   await page.waitForFunction(() => document.querySelector('#agentStatus').dataset.state === 'unavailable');
   assert.equal(await page.locator('#captureAI').isVisible(), false);
   assert.equal(await page.locator('#extractionStatus').isVisible(), false);
@@ -199,7 +207,7 @@ test('capture follows agent availability across reload without losing AI prefere
   await page.waitForFunction(() => document.querySelector('#captureText').value === ''); await confirmed(page);
   assert.equal(await page.locator('#extractStart').isDisabled(), true);
   assert.equal(await page.evaluate(() => aiCalls.creates), 0);
-  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=1')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'downloadable'; await (await import('/local-agent.js?v=2')).checkModel(); });
   await page.locator('#captureAI').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#extractionStatus').isVisible(), false);
   for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isEnabled(), true);

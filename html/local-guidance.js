@@ -1,5 +1,5 @@
 // Optional inference has no record/outbox access. Only reviewed text leaves this panel.
-import { modelOptions, destroyModel, checkModel, beginModelWork } from './local-agent.js?v=1';
+import { modelOptions, destroyModel, checkModel, beginModelWork } from './local-agent.js?v=2';
 import { cloudStatus, cloudSuggestion } from './cloud-ai.js?v=1';
 export { modelOptions, destroyModel };
 const options = modelOptions;
