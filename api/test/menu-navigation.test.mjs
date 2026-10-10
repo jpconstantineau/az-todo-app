@@ -47,7 +47,7 @@ test('routed Menu preserves work, history, focus and responsive row behavior', {
   await page.locator('#appDeviceInstall .utility-back').click();
   await page.waitForFunction(() => location.hash === '#app-device' && document.activeElement.id === 'utility-install');
   await page.locator('#utilityHubBack').click();
-  await page.waitForFunction(() => location.hash === '#menu');
+  await page.waitForFunction(() => location.hash === '#menu' && document.activeElement.id === 'openAppDevice');
   assert.equal(await page.locator('#openAppDevice').evaluate(element => element === document.activeElement), true);
 
   for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
