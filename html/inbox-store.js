@@ -64,7 +64,7 @@ const meaningfulDraft = value => {
   return Object.entries(value).some(([name, entry]) => !['workspaceId', 'navigation', 'day', 'editOpen', 'defaultsOpen', 'open'].includes(name) && meaningfulDraft(entry));
 };
 
-function draftInventory(state) {
+function draftEntries(state, includeValues = false) {
   const drafts = [];
   const add = (workspaceId, draft = {}) => {
     const labels = {
@@ -75,13 +75,29 @@ function draftInventory(state) {
       const value = draft[name], meaningful = name === 'extraction'
         ? meaningfulDraft(value?.draft)
         : meaningfulDraft(value);
-      if (meaningful) drafts.push({ workspaceId, workflow: name, label });
+      if (meaningful) drafts.push({ workspaceId, workflow: name, label, ...(includeValues ? { value } : {}) });
     }
   };
   add('personal', state.draft);
   for (const [workspaceId, draft] of Object.entries(state.workspaceDrafts || {})) add(workspaceId, draft);
-  if (meaningfulDraft(state.preferenceDraft?.defaults)) drafts.push({ workspaceId: null, workflow: 'defaults', label: 'Account task options' });
+  if (meaningfulDraft(state.preferenceDraft?.defaults)) drafts.push({ workspaceId: null, workflow: 'defaults', label: 'Account task options', ...(includeValues ? { value: state.preferenceDraft.defaults } : {}) });
   return drafts;
+}
+
+const resetLossState = state => ({
+  queue: state.queue || [],
+  drafts: draftEntries(state, true),
+  workspaceMove: state.workspaceMove || null,
+  undoEdit: state.undoEdit || null
+});
+
+async function lossFingerprint(documents) {
+  const serialized = JSON.stringify(documents
+    .filter(document => String(document.storageKey).startsWith('account:'))
+    .sort((left, right) => String(left.storageKey).localeCompare(String(right.storageKey)))
+    .map(document => [document.storageKey, resetLossState(document.state)]));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 // Read-only reset inventory for the routed destructive review. Inactive accounts
@@ -105,13 +121,13 @@ export async function deviceResetImpact(accountId) {
       title: mutation.fields?.title || records[key(mutation)]?.title || mutation.id
     }))
   }));
-  const drafts = draftInventory(current);
+  const drafts = draftEntries(current);
   let inactiveAccounts = 0, inactiveOperations = 0, inactiveDrafts = 0;
   for (const { storageKey, state: document } of documents) {
     if (!String(storageKey).startsWith('account:') || storageKey === `account:${accountId}`) continue;
     inactiveAccounts++;
     inactiveOperations += document.queue?.length || 0;
-    inactiveDrafts += draftInventory(document).length + (document.workspaceMove ? 1 : 0) + (document.undoEdit ? 1 : 0);
+    inactiveDrafts += draftEntries(document).length + (document.workspaceMove ? 1 : 0) + (document.undoEdit ? 1 : 0);
   }
   const impact = {
     operations,
@@ -120,7 +136,10 @@ export async function deviceResetImpact(accountId) {
     undoEdit: current.undoEdit ? { type: current.undoEdit.type, title: current.undoEdit.title || current.undoEdit.id } : null,
     inactive: { accounts: inactiveAccounts, operations: inactiveOperations, drafts: inactiveDrafts }
   };
-  impact.fingerprint = JSON.stringify(impact);
+  const fingerprintDocuments = documents.some(document => document.storageKey === `account:${accountId}`)
+    ? documents
+    : [...documents, { storageKey: `account:${accountId}`, state: current }];
+  impact.fingerprint = await lossFingerprint(fingerprintDocuments);
   return impact;
 }
 

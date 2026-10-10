@@ -28,6 +28,13 @@ test('utility pages route directly, preserve sibling history and reflow from com
   await context.setOffline(true); await page.reload();
   await page.waitForFunction(() => location.hash === '#app-device/install' && document.activeElement?.id === 'installHeading');
   await context.setOffline(false);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('#utility-updates').click();
+  await page.waitForFunction(() => location.hash === '#app-device/updates' && document.activeElement?.id === 'updatesHeading');
+  await page.goBack();
+  await page.waitForFunction(() => location.hash === '#app-device' && document.activeElement?.id === 'utility-updates');
+  await page.goForward();
+  await page.waitForFunction(() => location.hash === '#app-device/updates' && document.activeElement?.id === 'updatesHeading');
 
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await openMenu(page); await page.locator('#openAppDevice').click();
@@ -88,6 +95,14 @@ test('clear-device review inventories every account privately and refreshes stal
   assert.match(impact, /Current account local drafts \(1\).*Personal · Capture/s);
   assert.match(impact, /1 inactive account: 1 pending or failed operation and 1 local draft or recovery entry/);
   assert.doesNotMatch(impact, /bob-secret|Inactive secret/);
+
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=16');
+    await transact('alice', local => { local.draft.capture.text = 'Changed after review with the same draft count'; });
+  });
+  await page.locator('#confirmResetDeviceData').click();
+  await page.waitForFunction(() => document.querySelector('#resetReviewStatus').textContent.includes('Device data changed after this review'));
+  assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=16')).transact('alice')))).draft.capture.text, 'Changed after review with the same draft count');
 
   await page.evaluate(async () => {
     const { transact, enqueue } = await import('/inbox-store.js?v=16');

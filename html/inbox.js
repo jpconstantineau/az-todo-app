@@ -1765,8 +1765,15 @@ async function enterUtilityPage(route) {
     history.pushState({ todoUtilityPage: { session: menuHistorySession, accountId, origin: location.origin, route, parent: descriptor.parent, target: descriptor.target, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
   } else if (utilityPages.get(destination)?.group === page.group && !page.parent) {
     const current = history.state && typeof history.state === 'object' ? { ...history.state } : {};
-    current.todoUtilityPage = { session: menuHistorySession, accountId, origin: location.origin, route, parent: page.group, target: page.row, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY };
-    history.replaceState(current, '', '#' + route);
+    const returning = utilityPageEntry();
+    if (returning) {
+      current.todoUtilityPage = { ...returning, route, target: page.row, scrollX: window.scrollX, scrollY: window.scrollY };
+      history.replaceState(current, '', '#' + route);
+    } else {
+      delete current.todoUtilityPage;
+      history.replaceState({ ...current, todoUtilityPageReturn: { session: menuHistorySession, accountId, origin: location.origin, route: page.group, child: route, target: page.row, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + page.group);
+      history.pushState({ todoUtilityPage: { session: menuHistorySession, accountId, origin: location.origin, route, parent: page.group, target: page.row, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
+    }
   } else {
     history.pushState(null, '', '#' + route);
   }
