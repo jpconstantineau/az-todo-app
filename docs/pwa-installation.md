@@ -1,8 +1,8 @@
 # PWA installation and updates (issue #14)
 
 The canonical native client at `/` links the manifest and touch icon. Installation
-controls live in **Preferences → Install To-Do**, using the existing dialog,
-disclosure, buttons and DESIGN.md styles. Capture and synchronization continue
+controls live on **Menu → App & device → Install To-Do**, using a normal routed
+page, native controls and DESIGN.md styles. Capture and synchronization continue
 using the existing account-bound IndexedDB/outbox.
 
 ## Install and reopen
@@ -51,8 +51,8 @@ hosting or prove deployed headers.
 
 ### Check or retry without closing your work
 
-In **Preferences → App updates**, choose **Check for updates** while online.
-The result appears in Preferences: checking, downloading, up to date, ready to
+In **Menu → App & device → App updates**, choose **Check for updates** while online.
+The result stays on that route: checking, downloading, up to date, ready to
 apply, or unable to finish. Offline checks explain how to retry after reconnecting;
 browsers without service-worker support show a limitation instead of the button.
 A failed initial registration can also be retried here without reloading.
@@ -60,7 +60,7 @@ A failed initial registration can also be retried here without reloading.
 The check does not reload the page or apply an update while app windows are open.
 When an update is ready, wait for the draft's **saved on device** confirmation,
 then close every app tab/window and reopen. The same instruction remains visible
-outside Preferences. Repeated checks cannot force activation or clear drafts,
+outside the route. Repeated checks cannot force activation or clear drafts,
 pending operations, or caches. If the check fails or exceeds 30 seconds, it
 reenables retry; the browser may still finish a download and announce readiness.
 Keyboard focus stays on the button during a check, and other controls remain usable.
@@ -113,8 +113,8 @@ Coverage includes:
   anonymous access and SWA fallback exclusions.
 - User-triggered install, dismissal/reload, accepted/installed states, prompt
   failure, blocked preferences and simulated iPhone/standalone behavior.
-- Existing controls at 320/390/768/1440px in light/dark themes without horizontal
-  overflow; keyboard focus returns to installation help or Close.
+- Routed App & device controls at 320/390/768/1440px in light/dark themes without
+  horizontal overflow; keyboard focus stays with the active operation or its heading.
 - Root/query offline reopen, auth/API exclusion from Cache Storage and
   offline sign-in guidance for an uninitialized account.
 - Failed asset download, atomic empty failed cache, preserved working shell,

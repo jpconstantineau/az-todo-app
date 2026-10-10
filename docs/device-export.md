@@ -209,7 +209,7 @@ Choose **Delete** in an item's actions or beside the selected list/project.
 Deleting a list also marks its linked items deleted; when uncompleted items
 remain, a confirmation shows their count so you can cancel and review them.
 Projects must be empty before deletion. Deletion is journaled on device, works offline, and
-survives reload. **Menu → Deleted records** shows deleted items, lists and projects
+survives reload. **Menu → Data & recovery → Deleted records** shows deleted items, lists and projects
 and offers **Restore**, including while a deletion is still queued offline.
 Restore a deleted parent list/project before restoring its items. Record identity,
 original text, links, attributes and relationships stay intact.

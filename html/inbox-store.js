@@ -57,6 +57,92 @@ export async function clearDeviceDatabase(onBlocked) {
   }
 }
 
+const meaningfulDraft = value => {
+  if (value == null || value === false || value === '') return false;
+  if (Array.isArray(value)) return value.some(meaningfulDraft);
+  if (typeof value !== 'object') return true;
+  return Object.entries(value).some(([name, entry]) => !['workspaceId', 'navigation', 'day', 'editOpen', 'defaultsOpen', 'open'].includes(name) && meaningfulDraft(entry));
+};
+
+function draftEntries(state, includeValues = false) {
+  const drafts = [];
+  const add = (workspaceId, draft = {}) => {
+    const labels = {
+      capture: 'Capture', edit: 'Editor', defaults: 'Task options', clarification: 'Clarification', brief: 'Brief',
+      projectPlanning: 'Project planning', review: 'Review', extraction: 'Capture review', recurrence: 'Recurring task'
+    };
+    for (const [name, label] of Object.entries(labels)) {
+      const value = draft[name], meaningful = name === 'extraction'
+        ? meaningfulDraft(value?.draft)
+        : meaningfulDraft(value);
+      if (meaningful) drafts.push({ workspaceId, workflow: name, label, ...(includeValues ? { value } : {}) });
+    }
+  };
+  add('personal', state.draft);
+  for (const [workspaceId, draft] of Object.entries(state.workspaceDrafts || {})) add(workspaceId, draft);
+  if (meaningfulDraft(state.preferenceDraft?.defaults)) drafts.push({ workspaceId: null, workflow: 'defaults', label: 'Account task options', ...(includeValues ? { value: state.preferenceDraft.defaults } : {}) });
+  return drafts;
+}
+
+const resetLossState = state => ({
+  queue: state.queue || [],
+  drafts: draftEntries(state, true),
+  workspaceMove: state.workspaceMove || null,
+  undoEdit: state.undoEdit || null
+});
+
+async function lossFingerprint(documents) {
+  const serialized = JSON.stringify(documents
+    .filter(document => String(document.storageKey).startsWith('account:'))
+    .sort((left, right) => String(left.storageKey).localeCompare(String(right.storageKey)))
+    .map(document => [document.storageKey, resetLossState(document.state)]));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// Read-only reset inventory for the routed destructive review. Inactive accounts
+// are aggregated so their identities and private text never enter the active UI.
+export async function deviceResetImpact(accountId) {
+  const db = await database();
+  const documents = await new Promise((resolve, reject) => {
+    const transaction = db.transaction('accounts', 'readonly');
+    const store = transaction.objectStore('accounts'), values = store.getAll(), keys = store.getAllKeys();
+    transaction.oncomplete = () => resolve(keys.result.map((storageKey, index) => ({ storageKey, state: values.result[index] })));
+    transaction.onerror = () => reject(transaction.error);
+  });
+  const current = documents.find(document => document.storageKey === `account:${accountId}`)?.state
+    || await transact(accountId);
+  const records = projected(current);
+  const operations = (current.queue || []).map(entry => ({
+    operationId: entry.operation.operationId,
+    failed: !!entry.failure,
+    records: entry.operation.mutations.map(mutation => ({
+      type: mutation.type,
+      title: mutation.fields?.title || records[key(mutation)]?.title || mutation.id
+    }))
+  }));
+  const drafts = draftEntries(current);
+  let inactiveAccounts = 0, inactiveOperations = 0, inactiveDrafts = 0;
+  for (const { storageKey, state: document } of documents) {
+    if (!String(storageKey).startsWith('account:') || storageKey === `account:${accountId}`) continue;
+    inactiveAccounts++;
+    inactiveOperations += document.queue?.length || 0;
+    inactiveDrafts += draftEntries(document).length + (document.workspaceMove ? 1 : 0) + (document.undoEdit ? 1 : 0);
+  }
+  const impact = {
+    operations,
+    drafts,
+    collectionMove: current.workspaceMove ? { title: current.workspaceMove.root?.title || current.workspaceMove.root?.id || 'Collection move' } : null,
+    undoEdit: current.undoEdit ? { type: current.undoEdit.type, title: current.undoEdit.title || current.undoEdit.id } : null,
+    inactive: { accounts: inactiveAccounts, operations: inactiveOperations, drafts: inactiveDrafts }
+  };
+  const fingerprintDocuments = documents.some(document => document.storageKey === `account:${accountId}`)
+    ? documents
+    : [...documents, { storageKey: `account:${accountId}`, state: current }];
+  impact.fingerprint = await lossFingerprint(fingerprintDocuments);
+  return impact;
+}
+
 // One transaction journals the intent and draft together. Resolve only on commit,
 // never on the individual put's success (quota/abort can still follow it).
 export async function transact(accountId, update) {

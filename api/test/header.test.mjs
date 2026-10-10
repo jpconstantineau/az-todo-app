@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
-import { clickControl, openPreference } from './navigation-helper.mjs';
+import { clickControl, openUtility } from './navigation-helper.mjs';
 
 async function setup(t, user, mode) {
   documents.length = 0;
@@ -52,7 +52,7 @@ async function signedOut(page) {
   assert.equal(await page.title(), 'Sign in');
   assert.equal(await page.locator('#signIn').isVisible(), true);
   assert.equal(await page.locator('#signedOut h1').innerText(), 'Welcome');
-  for (const selector of ['#appHeader', '#accountName', '#workspaceSelect', '#saveStatus', '#agentStatus', '#agentLabel', '#appMenu', '#workspaceSkip', '#workspace', '#appUpdateStatus', '#preferencesView', '#appDevice']) {
+  for (const selector of ['#appHeader', '#accountName', '#workspaceSelect', '#saveStatus', '#agentStatus', '#agentLabel', '#appMenu', '#workspaceSkip', '#workspace', '#appUpdateStatus', '#preferencesView', '#utilityView']) {
     assert.equal(await page.locator(selector).isVisible(), false, selector);
   }
   assert.doesNotMatch(await page.locator('body').innerText(), /Personal|Family|alice-handle|AI agent|workspace|Menu|Preferences|saved|pending/i);
@@ -277,14 +277,14 @@ test('header follows workspace selection and save state, then clears identity on
   assert.deepEqual((await local(page)).queue, queued);
 });
 
-test('sign-out in another tab clears a preference route and hides account chrome, then login restores it', async t => {
+test('sign-out in another tab clears a utility route and hides account chrome, then login restores it', async t => {
   const { page, context, url, setUser } = await setup(t, 'alice');
   await page.route('**/.auth/logout?**', route => route.fulfill({ status: 204 }));
   await page.goto(url); await status(page, 'confirmed');
   const second = await context.newPage();
   await second.goto(url); await status(second, 'confirmed');
-  await openPreference(second, 'task-options');
-  await second.locator('#taskOptionsMasterHeading').waitFor();
+  await openUtility(second, 'data-recovery/export');
+  await second.locator('#exportHeading').waitFor();
   setUser(null);
   await clickControl(page.locator('#signOut'));
   await page.locator('#workspace').waitFor({ state: 'hidden' });

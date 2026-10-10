@@ -736,10 +736,9 @@ test('navigation: failures stay reachable in every view, deleted selections clea
     assert.ok(await page.locator('#sync').isVisible());
     assert.equal(await page.locator('#failure').isVisible(), false, 'workflow recovery stays outside Menu');
     await page.locator('#openDataRecovery').click();
-    if (!await page.locator('#exportTools').evaluate(el => el.open)) await page.locator('#exportTools > summary').click();
+    await page.locator('#utility-export').click();
     assert.ok(await page.locator('#export').isVisible());
-    await page.locator('#closeDataRecovery').click();
-    await page.locator('#menuBack').click();
+    await showView(page, 'capture');
     await page.locator('#failure').waitFor();
     assert.match(await page.locator('#comparison').textContent(), /Rejected private task/);
   }

@@ -37,10 +37,11 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /src="\/pwa.js\?v=31"/);
-  assert.match(html, /type="module" src="\/inbox.js\?v=33"/);
-  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=31"/);
+  assert.match(html, /src="\/pwa.js\?v=32"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=34"/);
+  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=32"/);
   assert.equal(html.includes('id="defaultsEditor"'), false, 'task options are routed pages, not a dialog');
+  assert.doesNotMatch(html, /<dialog[^>]+id="(?:appDevice|dataRecovery|deletedRecords)"/, 'utility pages are routed sections, not dialogs');
   assert.equal(new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1])).size, [...html.matchAll(/\bid="([^"]+)"/g)].length);
   await assert.rejects(readFile(new URL('inbox.html', root), 'utf8'), { code: 'ENOENT' });
   for (const path of await readdir(root)) {

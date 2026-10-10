@@ -61,6 +61,16 @@ Missing optional containers initialize an unused workflow; they do not select an
 older format. Development data from unsupported generations can be cleared after
 exporting anything needed. The app never automatically deletes it or its queue.
 
+**Menu → Data & recovery → Restore from cloud** uses a routed review before it
+deletes `todo-inbox-v1`. The inventory names the active account's pending/failed
+operations and meaningful workflow drafts, lists collection-move and editor-undo
+recovery separately, and shows only aggregate counts for inactive accounts. It
+does not treat navigation or filters as drafts. Confirmation rechecks online
+identity, the account generation and a fresh inventory fingerprint under the sync
+lock; any change refreshes the review instead of clearing data. Clearing resets all
+account documents on that browser, while the installed shell and downloaded
+exports remain outside the database.
+
 ## Recovery and verification
 
 Device JSON and readable exports preserve confirmed records, exact queue entries,

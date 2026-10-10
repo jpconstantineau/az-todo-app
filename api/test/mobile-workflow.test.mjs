@@ -18,7 +18,7 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
   assert.notEqual(new URL(page.url()).hash, '#menu');
-  assert.equal(await page.locator('#connection').evaluate(el => el.open), false);
+  assert.equal(await page.locator('#appDeviceConnection').isVisible(), false);
   assert.equal(await page.locator('#export').isVisible(), false);
   assert.equal(await page.locator('#capture button:visible').count(), 2, 'capture exposes Split and Save initially');
   assert.deepEqual(await page.locator('#workspace button:visible').evaluateAll(controls => controls.map(control => control.getAttribute('aria-label') || control.textContent)), ['Preview comma / semicolon split', 'Save on device']);
@@ -41,7 +41,6 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   await page.locator('#appMenu').focus();
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => location.hash === '#menu' && document.activeElement.id === 'menuHeading');
-  assert.equal(await page.locator('#exportTools > summary').isVisible(), false);
   assert.equal(await page.locator('#export').isVisible(), false);
   await page.locator('#sync').focus(); await page.keyboard.press('Escape');
   assert.equal(new URL(page.url()).hash, '#menu', 'Escape does not close a routed page');
