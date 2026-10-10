@@ -1,4 +1,13 @@
-# Automatic local AI capture (#24)
+# Local-first AI capture (#24 and #229)
+
+Local browser AI remains preferred. If it is unavailable, a verified signed-in
+account may use **Suggest tasks with cloud AI** when the server is fully configured.
+This explicit action sends the current capture and, only when opted in, existing
+list names to the configured provider. The resulting batch uses the same durable
+review, editing, acceptance, provenance and outbox path described below. It cannot
+create tasks before **Accept all tasks on device**. Signed-out device-only profiles
+never check cloud status or send inference requests. Automatic pause completion
+remains local-only and never silently falls back to cloud inference.
 
 In Capture, open **Free-form task review and local AI** and enable **Automatically suggest with local AI**. A ready local model
 proposes text at the cursor after a 1.2-second typing pause. **Tab** or
@@ -36,8 +45,10 @@ reconnect do not themselves run inference; the next edit triggers it when enable
 Account changes cancel generation and hide its content. Suggestions are English
 only, using matching language/modality options and session cleanup shared with
 clarification guidance. See the [Chrome Prompt API](https://developer.chrome.com/docs/ai/prompt-api).
-No external inference service, API key or task-text logging is introduced. The
-prompt contains this capture, its notes and the captured clock. Existing list
+The local prompt contains this capture, its notes and the captured clock. Cloud
+fallback sends the same bounded prompt only after the explicit cloud button. The
+provider key and full URL remain server-side, and prompts are not logged or stored
+by this application. Existing list
 names/IDs are included only after enabling **Include my existing list names in
 local AI suggestions**. This preference persists per workspace and account on this device.
 The option shows the included names (or that none exist in this workspace);

@@ -7,13 +7,13 @@ import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=19';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
-import { clarificationUI } from './clarification.js?v=11';
+import { clarificationUI } from './clarification.js?v=12';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=2';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=3';
 import { setupAgentStatus } from './local-agent.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=5';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
@@ -262,6 +262,7 @@ async function materializeRecurrence() {
   finally { materializingRecurrence = false; }
 }
 const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
+  cloudEligible: () => !!accountId && accountId !== LOCAL_PROFILE,
   current: () => {
     if (!accountId || workspaceReadOnly()) return null;
     const records = scopedRecords();
@@ -322,7 +323,8 @@ const projectPlanning = setupProjectPlanning({ records: () => accountId ? scoped
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the plan remains with its original account.');
   state = saved; clearError(); render(); broadcast(); void sync();
 } });
-const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog, actions: currentClarificationActions });
+const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog, actions: currentClarificationActions,
+  cloudEligible: () => !!accountId && accountId !== LOCAL_PROFILE });
 async function saveClarification(mutations, next) {
   const owner = accountId;
   if (!owner) return false;

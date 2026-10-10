@@ -26,6 +26,7 @@ function seed() {
 }
 const mutationCases = {
   "v1/operations": capture,
+  "v1/ai/suggestions": { kind: "clarification", prompt: "Suggest a next action." },
   "shared/operations": { accountId: 'alice', listId: 'shared-fixture', operationId: 'create-shared', expectedRevision: 0, action: 'create', fields: { title: 'Shared groceries' } }
 };
 function assertHeaders(response) {
@@ -81,10 +82,10 @@ test("every mutation rejects untrusted browser origins without writing and accep
     }
     for (const headers of [{}, { referer: f.url + "/page?view=tasks", "sec-fetch-site": "same-origin" }]) {
       seed();
-      assert.equal((await f.request(path, { data, headers })).status, 200, path);
+      assert.equal((await f.request(path, { data, headers })).status, path === 'v1/ai/suggestions' ? 503 : 200, path);
     }
     seed();
-    assert.equal((await f.request(path, { data, origin: null, headers: { referer: f.url + "/page" } })).status, 200, `${path}: Referer fallback`);
+    assert.equal((await f.request(path, { data, origin: null, headers: { referer: f.url + "/page" } })).status, path === 'v1/ai/suggestions' ? 503 : 200, `${path}: Referer fallback`);
   }
 });
 
@@ -134,7 +135,7 @@ test("all read routes isolate accounts and never initialize data", async t => {
   const reads = {
     "v1/session": "v1/session", "v1/records": "v1/records?accountId=alice&type=item&id=alice-item",
     "v1/receipts": "v1/receipts?accountId=alice&operationId=seed", "v1/changes": "v1/changes?accountId=alice",
-    "v1/export": "v1/export?accountId=alice", health: "health", "shared/lists": "shared/lists"
+    "v1/export": "v1/export?accountId=alice", "v1/ai/status": "v1/ai/status", health: "health", "shared/lists": "shared/lists"
   };
   const before = structuredClone(documents);
   for (const route of routes.keys()) {

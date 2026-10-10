@@ -1,4 +1,11 @@
-# Optional local guidance (#11)
+# Optional local-first guidance (#11 and #229)
+
+Local browser AI remains preferred. When it is unavailable, a verified signed-in
+account may explicitly choose **Suggest with cloud AI** if the server is configured.
+Pressing it sends only the current task facts, clarification answers and proposed
+answer to the configured provider. The preview remains separate until **Use as
+proposed answer**, after which the ordinary draft/save path applies. Signed-out
+device-only profiles never check cloud status or request cloud inference.
 
 In Clarify, expand **Optional local guidance** for the next-action question.
 Availability is checked without creating a model
@@ -28,9 +35,10 @@ languages. Phones and unsupported desktops keep the same questions, validation,
 capture, editing and review workflows. Existing deterministic behavior needs no AI.
 
 Only the current task's title, notes, original input, clarification answers and
-current proposal enter the local prompt. No account ID, other records, secrets or
-remote source content are supplied. There is no external AI service, cloud
-inference, API key, polyfill or model execution in a service worker. Browser model
+current proposal enter either prompt. No account ID, other records, secrets or
+remote source content are supplied. Cloud provider credentials and its full URL
+remain server-side; prompts are not logged or stored by this application, and no
+model executes in a service worker. Browser model
 downloads may require network access and storage. After download, offline
 inference depends on the browser retaining and supporting the model. Task storage
 is separate: saved/accepted work continues to sync to the existing cloud account.

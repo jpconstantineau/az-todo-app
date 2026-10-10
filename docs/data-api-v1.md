@@ -8,6 +8,25 @@ and receipts remain compatible; no partition or database version changes are mad
 The current v1 format is the only supported server format; retired migration
 tooling and archived-settings fallbacks are not part of the runtime or recovery path.
 
+## Authenticated AI fallback (#229)
+
+`GET /api/v1/ai/status` reports only whether all cloud AI settings are usable and,
+when enabled, a safe provider hostname and model label. `POST
+/api/v1/ai/suggestions` accepts a bounded `capture-extraction` or `clarification`
+prompt and makes one time-bounded OpenAI-compatible chat-completions request with
+a server-owned JSON schema. Both routes use the ordinary authenticated/no-store
+boundary; the POST also uses the same strict origin policy as every mutation.
+They do not access Cosmos DB.
+
+Set `AI_API_URL`, `AI_API_KEY`, and `AI_MODEL` together on the server. The URL must
+use HTTPS (HTTP is accepted only for loopback tests) and cannot contain credentials
+or a fragment. Partial or invalid configuration disables the feature. Provider
+credentials, the full URL, prompts and provider response details are never returned
+in status/errors or written to application logs/storage. Provider responses are
+size- and shape-validated; timeouts, throttling and upstream failures are not
+retried. The browser retains the original draft and requires its existing review
+and save actions before any suggestion changes a task.
+
 ## Recoverable deletion (#13)
 
 An operation mutation may use `action: "restore"` for an `item`, `list` or

@@ -55,6 +55,7 @@ for (const mode of [{ absent: true }, { state: 'unavailable' }, { checkFail: tru
 
 test('local suggestion stays separate until chosen and journals the v3 action draft offline', { timeout: 60000 }, async t => {
   const { page, context } = await setup(t);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await page.locator('[data-proposal=title]').fill('My existing draft');
   await page.locator('#guidanceStart').click(); await page.locator('#guidanceUse').waitFor();
