@@ -9,9 +9,9 @@ create tasks before **Accept all tasks on device**. Signed-out device-only profi
 never check cloud status or send inference requests. Automatic pause completion
 remains local-only and never silently falls back to cloud inference.
 
-In Capture, open **Free-form task review and local AI** and enable **Automatically suggest with local AI**. A ready local model
-proposes text at the cursor after a 1.2-second typing pause. **Tab** or
-**Use suggested text** inserts it into Capture; **Escape** or **Dismiss suggestion**
+In Capture, open **AI suggestions** and enable **Automatically suggest with local AI**. A ready local model
+proposes a new entry at the cursor after a 1.2-second typing pause. **Tab** or
+**Use suggested text** adds it on its own line and leaves the cursor on the following line; **Escape** or **Dismiss suggestion**
 keeps your text. Shift+Tab still moves focus backwards. Moving the cursor or
 editing invalidates a suggestion. Suggested text is transient; accepted text is
 journalled as an ordinary capture draft. It creates no tasks until you save.
