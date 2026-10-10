@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
-import { clickControl, showView, openMenu } from './navigation-helper.mjs';
+import { clickControl, showView, openMenu, openUtility } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { key, projected, enqueue, applyReceipt, rememberEdit, canUndoEdit, undoEdit } from '../../html/inbox-store.js';
 import { deviceExport, validateDeviceExport, readableExport } from '../../html/inbox-export.js';
@@ -185,7 +185,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
   // can reject that still-running request and hide the controls for Alice's sync.
   await (await bobPull).finished();
   await page.locator('#appHeader').waitFor(); await openMenu(page);
-  await page.locator('#openDataRecovery').click();
+  await page.locator('#openDataRecovery').click(); await page.locator('#utility-undo').click();
   assert.equal(await page.locator('#undoEdit').isDisabled(), true);
   assert.doesNotMatch(await page.locator('#undoEditStatus').textContent(), /Original/);
   setUser('alice'); await clickControl(page.locator('#sync')); await confirmed(page);
@@ -196,10 +196,7 @@ test('browser undo stays account-bound, survives server confirmation and recheck
     for (const theme of ['light', 'dark']) for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
-      await openMenu(page);
-      if (!await page.locator('#dataRecovery').evaluate(element => element.open)) await page.locator('#openDataRecovery').click();
-      const recovery = page.locator('#undoEdit').locator('xpath=ancestor::details[1]');
-      if (!await recovery.evaluate(element => element.open)) await recovery.locator(':scope > summary').click();
+      await openUtility(page, 'data-recovery/undo');
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.screenshot({ path: `${process.env.UNDO_SCREENSHOTS}/edit-undo-${theme}-${width}.png`, fullPage: true });
     }

@@ -153,8 +153,10 @@
 #connection { margin-block: var(--space-2); font-size: var(--text-sm); }
 #connection summary { width: fit-content; min-height: 44px; }
 #offlineBadge { color: var(--warning); }
-.utility-route .workspace-nav, .utility-route #savedEdit, .utility-route .inbox-grid, .utility-route #workspaceStatus,
+.utility-route .workspace-nav, .utility-route #savedEdit, .utility-route #workspaceStatus,
 .menu-route > #error, .menu-route > #recovery { display: none !important; }
+.utility-route .inbox-grid { display: block; margin-block: var(--space-6); }
+.utility-route .inbox-grid > :not(#failure) { display: none !important; }
 .utility-route .workspace-identity { display: none; }
 .utility-route #saveStatus { grid-column: 2; }
 .utility-shell { width: min(100%, 720px); margin-inline: auto; }
@@ -171,6 +173,16 @@
 .menu-row[aria-current="page"] { background: var(--selected); box-shadow: inset 3px 0 var(--link); font-weight: var(--weight-emphasis); }
 .menu-row-end { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: var(--space-2); color: var(--muted); }
 .menu-row-value, #menuWorkspaceValue { min-width: 0; color: var(--muted); font-size: var(--text-sm); text-align: right; overflow-wrap: anywhere; }
+.utility-pages-shell { width: min(100%, 1440px); margin-inline: auto; }
+.utility-pages-layout, .utility-pages-master, .utility-pages-details, .utility-page { min-width: 0; }
+.utility-pages-master { width: min(100%, 720px); margin-inline: auto; }
+.utility-pages-master ul { margin: var(--space-6) 0 0; padding: 0; list-style: none; border-top: var(--border-width) solid var(--border); }
+.utility-pages-master li { margin: 0; border-bottom: var(--border-width) solid var(--border); }
+.utility-page { width: min(100%, 720px); margin-inline: auto; }
+.utility-page-content { min-width: 0; padding-top: var(--space-4); overflow-wrap: anywhere; }
+.utility-page-content .toolbar > * { max-width: 100%; }
+#resetImpact h2 { margin: var(--space-6) 0 var(--space-2); font-size: var(--text-lg); }
+#resetImpact ul { padding-left: var(--space-6); }
 .preferences-shell { width: min(100%, 1440px); margin-inline: auto; }
 .preferences-layout { min-width: 0; }
 .preferences-master { width: min(100%, 720px); margin-inline: auto; }
@@ -214,6 +226,12 @@
   .task-options-shell[data-route="editor"] .task-options-master .menu-page-bar { display: none; }
   .task-options-shell[data-route="editor"] .task-options-master ul { margin-top: 0; }
   .task-options-shell[data-route="editor"] .task-option-editor { width: 100%; margin: 0; }
+  .utility-pages-shell[data-route="detail"] { width: min(100%, 1064px); }
+  .utility-pages-shell[data-route="detail"] .utility-pages-layout { display: grid; grid-template-columns: 280px minmax(640px, 760px); gap: var(--space-6); align-items: start; }
+  .utility-pages-shell[data-route="detail"] .utility-pages-master { width: 280px; margin: 0; padding-right: var(--space-6); border-right: var(--border-width) solid var(--border); }
+  .utility-pages-shell[data-route="detail"] .utility-pages-master ul { margin-top: 0; }
+  .utility-pages-shell[data-route="detail"] .utility-page { width: 100%; max-width: 760px; margin: 0; }
+  .utility-pages-shell[data-route="detail"] .utility-page > .menu-page-bar .utility-back { display: none; }
 }
 @media (max-width: 1023px) {
   .preferences-shell[data-route="detail"] #preferencesNav { display: none; }
@@ -221,6 +239,7 @@
   .preferences-shell[data-route="clarify-editor"] .clarify-action-master { display: none; }
   .clarify-action-master, .clarify-action-editor { width: min(100%, 720px); margin-inline: auto; }
   .task-options-shell[data-route="editor"] .task-options-master { display: none; }
+  .utility-pages-shell[data-route="detail"] .utility-pages-master { display: none; }
 }
 @media (min-width: 600px) {
   .appearance-preference { max-width: 24rem; }
@@ -233,7 +252,7 @@
 }
 @media (forced-colors: active) {
   #appMenu[aria-current="page"], .menu-row[aria-current="page"], .clarify-action-link[aria-current="page"] { outline: 2px solid Highlight; }
-  .menu-group ul, .menu-group li, .menu-page-bar, .preferences-master ul, .preferences-master li, .task-options-master ul, .task-options-master li { border-color: CanvasText; }
+  .menu-group ul, .menu-group li, .menu-page-bar, .preferences-master ul, .preferences-master li, .task-options-master ul, .task-options-master li, .utility-pages-master ul, .utility-pages-master li { border-color: CanvasText; }
 }
 #appUpdateStatus:empty { display: none; }
 .editable-title { background: transparent; border-color: transparent; color: var(--ink); padding: var(--space-2); font: inherit; font-weight: var(--weight-title); text-align: left; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }

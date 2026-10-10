@@ -133,7 +133,7 @@ test('server download includes unsynced remote records, excludes local drafts, a
     await clickControl(page.locator('#exportFormat'));
     await page.locator('#exportFormat').selectOption(format);
     const pending = page.waitForEvent('download');
-    await page.locator('#accountExport').click();
+    await clickControl(page.locator('#accountExport'));
     const file = await pending, text = await readFile(await file.path(), 'utf8');
     assert.equal(file.suggestedFilename(), format === 'json' ? 'todo-account.json' : 'todo-account.txt');
     assert.match(text, /Only on the server <script>/); assert.doesNotMatch(text, /Unsubmitted local draft/);
@@ -142,7 +142,7 @@ test('server download includes unsynced remote records, excludes local drafts, a
   assert.deepEqual(await local(), before); assert.deepEqual(documents, serverBefore);
   assert.equal(await page.locator('#captureText').inputValue(), 'Unsubmitted local draft');
   for (const width of [320, 390, 1440]) {
-    await page.setViewportSize({ width, height: 900 }); await openMenu(page);
+    await page.setViewportSize({ width, height: 900 }); await clickControl(page.locator('#exportFormat'));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     if (process.env.EXPORT_SCREENSHOTS) {
       await mkdir(process.env.EXPORT_SCREENSHOTS, { recursive: true });
@@ -150,7 +150,7 @@ test('server download includes unsynced remote records, excludes local drafts, a
     }
   }
   await context.setOffline(true);
-  await page.locator('#accountExport').click();
+  await clickControl(page.locator('#accountExport'));
   await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('Export failed'));
   assert.equal(JSON.parse(await download(page)).draft.capture.text, 'Unsubmitted local draft');
 });
@@ -174,12 +174,10 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   await held.abort(); await page.unroute(pattern);
   for (const status of [200, 503]) {
     await page.route(pattern, route => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ apiVersion: 1, message: 'Try again' }) }));
-    await page.locator('#accountExport').click();
+    await clickControl(page.locator('#accountExport'));
     await page.waitForFunction(() => document.querySelector('#exportStatus').textContent.includes('Export failed'));
-    await page.locator('#closeDataRecovery').click();
-    await page.locator('#menuBack').click();
+    await showView(page, 'capture');
     assert.equal(await page.locator('#error').isVisible(), true, 'export failures remain visible after returning to work');
-    await openMenu(page); await page.locator('#openDataRecovery').click();
     await page.unroute(pattern);
   }
   let release;
@@ -188,7 +186,7 @@ test('server export cancels promptly, rejects malformed/error pages and discards
     const response = await route.fetch();
     held = { route, response }; release();
   });
-  await page.locator('#accountExport').click(); await intercepted;
+  await clickControl(page.locator('#accountExport')); await intercepted;
   user = 'bob';
   const bobChanges = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/changes' && response.ok());
   await clickControl(page.locator('#sync'));

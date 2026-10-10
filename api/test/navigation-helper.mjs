@@ -1,7 +1,11 @@
 export async function showView(page, view) {
   await page.locator('#workspace').waitFor({ state: 'visible' });
-  if (await page.locator('#dataRecovery:modal').count()) await page.locator('#closeDataRecovery').click();
-  if (await page.locator('#appDevice:modal').count()) await page.locator('#closeAppDevice').click();
+  while (/^#(?:app-device|data-recovery)/.test(new URL(page.url()).hash)) {
+    const hash = new URL(page.url()).hash;
+    const back = hash === '#app-device' || hash === '#data-recovery' ? '#utilityHubBack' : '#utilityMasterBack:visible, .utility-page:not([hidden]) .utility-back:visible';
+    await page.locator(back).click();
+    await page.waitForFunction(previous => location.hash !== previous, hash);
+  }
   while (new URL(page.url()).hash.startsWith('#preferences') || /^#lists\/[A-Za-z0-9_-]+\/task-options/.test(new URL(page.url()).hash)) {
     const hash = new URL(page.url()).hash;
     const back = /^#lists\/[A-Za-z0-9_-]+\/task-options\//.test(hash) ? '#taskOptionEditorBack'
@@ -19,6 +23,7 @@ export async function showView(page, view) {
     if (new URL(page.url()).hash === '#menu') {
       await page.locator('#menuBack').click();
       await page.waitForFunction(() => location.hash !== '#menu');
+      return showView(page, view);
     }
   }
   const link = page.locator('.workspace-nav a[href="#' + view + '"]');
@@ -47,6 +52,18 @@ export async function openPreferences(page) {
     await page.locator('#openPreferences').click();
     await page.waitForFunction(() => location.hash === '#preferences' && document.activeElement?.id === 'preferencesHeading');
   } else await page.locator('#preferencesView').waitFor();
+}
+export async function openUtility(page, route) {
+  const group = route.split('/')[0], expected = '#' + route;
+  if (new URL(page.url()).hash === expected) return;
+  await showView(page, 'capture');
+  await openMenu(page);
+  await page.locator(group === 'app-device' ? '#openAppDevice' : '#openDataRecovery').click();
+  await page.waitForFunction(expectedGroup => location.hash === expectedGroup, '#' + group);
+  if (route !== group) {
+    await page.locator(`#utilityRows a[href="${expected}"]`).click();
+    await page.waitForFunction(expectedRoute => location.hash === expectedRoute, expected);
+  }
 }
 export async function openPreference(page, id) {
   const route = `#preferences/${id}`;
@@ -88,6 +105,13 @@ export async function revealControl(control) {
   const inMenu = await control.evaluate(element => !!element.closest('#menuView'));
   if (inMenu && await page.locator('dialog:modal').count()) await page.keyboard.press('Escape');
   if (inMenu && !await control.isVisible()) await openMenu(page);
+  const utilityRoutes = {
+    appDeviceInstall: 'app-device/install', appDeviceOffline: 'app-device/offline', appDeviceUpdates: 'app-device/updates', appDeviceConnection: 'app-device/connection',
+    dataRecoveryExport: 'data-recovery/export', deletedRecords: 'data-recovery/deleted', dataRecoveryUndo: 'data-recovery/undo', dataRecoveryRestore: 'data-recovery/restore-from-cloud'
+  };
+  const utilityPage = control.locator('xpath=ancestor::section[contains(concat(" ", normalize-space(@class), " "), " utility-page ")][1]');
+  if (await utilityPage.count() && !await utilityPage.isVisible()) await openUtility(page, utilityRoutes[await utilityPage.getAttribute('id')]);
+  if (await control.getAttribute('id') === 'openDeleted' && !await control.isVisible()) await openUtility(page, 'data-recovery');
   const preference = control.locator('xpath=ancestor::section[contains(@class,"preferences-detail")][1]');
   if (await preference.count() && !await preference.isVisible()) {
     await openPreferences(page);

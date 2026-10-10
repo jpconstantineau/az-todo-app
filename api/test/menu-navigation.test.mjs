@@ -41,8 +41,13 @@ test('routed Menu preserves work, history, focus and responsive row behavior', {
     assert.equal(await page.locator('#captureText').inputValue(), 'Draft kept through Menu');
   }
   await page.locator('#openAppDevice').click();
-  await page.waitForFunction(() => document.querySelector('#appDevice').open && document.activeElement.id === 'appDeviceHeading');
-  await page.getByRole('button', { name: 'Close App & device', exact: true }).click();
+  await page.waitForFunction(() => location.hash === '#app-device' && document.activeElement.id === 'utilityHubHeading');
+  await page.locator('#utility-install').click();
+  await page.waitForFunction(() => location.hash === '#app-device/install' && document.activeElement.id === 'installHeading');
+  await page.locator('#appDeviceInstall .utility-back').click();
+  await page.waitForFunction(() => location.hash === '#app-device' && document.activeElement.id === 'utility-install');
+  await page.locator('#utilityHubBack').click();
+  await page.waitForFunction(() => location.hash === '#menu');
   assert.equal(await page.locator('#openAppDevice').evaluate(element => element === document.activeElement), true);
 
   for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [1024, 768], [1366, 768], [1920, 1080], [2560, 1440], [3840, 2160]]) {
@@ -69,7 +74,7 @@ test('routed Menu preserves work, history, focus and responsive row behavior', {
   assert.equal(await page.evaluate(() => scrollY), 600);
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft kept through Menu');
   await page.goForward();
-  await page.waitForFunction(() => location.hash === '#menu' && document.activeElement.id === 'menuHeading');
+  await page.waitForFunction(() => location.hash === '#menu' && document.activeElement.id === 'openAppDevice');
   await page.locator('#menuBack').click();
   await page.waitForFunction(() => location.hash === '#work' && document.activeElement.id === 'appMenu');
   assert.equal(await page.evaluate(() => scrollY), 600);

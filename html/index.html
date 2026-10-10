@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=31" defer></script>
+  <script src="/pwa.js?v=32" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=33"></script>
+  <script type="module" src="/inbox.js?v=34"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -21,44 +21,6 @@
     <span id="agentLabel" class="sr-only" role="status"></span>
     <a id="appMenu" class="button menu-trigger" href="#menu" aria-label="Menu" title="Menu">☰ Menu</a>
   </header>
-  <dialog id="appDevice" class="side-panel" aria-labelledby="appDeviceHeading"><p class="eyebrow">On this device</p><h2 id="appDeviceHeading" tabindex="-1">App &amp; device</h2>
-    <section aria-labelledby="installHeading"><h3 id="installHeading">Install To-Do</h3>
-      <details id="connection"><summary>Account &amp; device status<span id="offlineBadge" role="status"></span></summary>
-        <p id="sessionStatus" role="status"></p><p id="offlineStatus" role="status"></p><p id="syncStatus" role="status"></p>
-      </details>
-      <button id="installApp" type="button" hidden>Install app</button>
-      <p id="installStatus" role="status"></p>
-      <details id="installHelp"><summary>Installation help</summary>
-        <p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p>
-        <p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p>
-      </details>
-    </section>
-    <section aria-labelledby="updatesHeading"><p class="eyebrow">App updates</p><h2 id="updatesHeading">Keep To-Do ready</h2>
-      <button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button>
-      <p id="checkAppUpdateStatus" role="status"></p>
-      <p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p>
-    </section>
-    <button id="closeAppDevice" type="button">Close App &amp; device</button></dialog>
-  <dialog id="dataRecovery" class="side-panel" aria-labelledby="dataRecoveryHeading"><p class="eyebrow">Data &amp; recovery</p><h2 id="dataRecoveryHeading" tabindex="-1">Keep control of your data</h2>
-    <details id="exportTools"><summary>Export</summary>
-      <div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div>
-      <p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p>
-      <p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p>
-      <p id="exportStatus" role="status" class="muted"></p>
-    </details>
-    <details><summary>Edit recovery</summary>
-      <button id="undoEdit" type="button" disabled aria-describedby="undoEditHelp undoEditStatus">Undo last edit</button>
-      <p id="undoEditStatus" role="status" class="muted"></p>
-      <p id="undoEditHelp" class="muted">Undo the latest item, list or project editor save on this device for seven days, until another editor save or change to that record. Works after reload and offline. Recovery stays with this browser and account; sync sends the undo as a new save and checks for newer edits or deletions.</p>
-    </details>
-    <button id="openDeleted" type="button">Deleted records</button>
-    <section aria-labelledby="deviceResetHeading"><p class="eyebrow">Device recovery</p><h2 id="deviceResetHeading">Restore from cloud</h2>
-      <button id="resetDeviceData" type="button" aria-describedby="resetDeviceDataHelp">Clear device database</button>
-      <p id="resetDeviceDataStatus" role="status"></p>
-      <p id="resetDeviceDataHelp" class="muted">Delete this browser's To-Do database and reload your cloud copy. Pending saves and unfinished drafts stored only on this device will be lost. Export anything you need first. Online sign-in is required.</p>
-    </section>
-    <button id="closeDataRecovery" type="button">Close data &amp; recovery</button>
-  </dialog>
   <section id="signedOut" aria-label="Sign in"><h1>Welcome</h1><p id="loginStatus" role="status">Checking account…</p><a id="signIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/">Sign in</a></section>
   <p id="appUpdateStatus" role="status" hidden></p>
   <p id="error" role="alert" hidden></p>
@@ -77,8 +39,8 @@
         <section class="menu-group" aria-labelledby="menuSettingsHeading"><h2 id="menuSettingsHeading">Settings</h2>
           <nav aria-label="Settings"><ul>
             <li><a id="openPreferences" class="menu-row" href="#preferences" aria-label="Preferences"><span>Preferences</span><span aria-hidden="true">›</span></a></li>
-            <li><button id="openDataRecovery" class="menu-row" type="button" aria-label="Data &amp; recovery" aria-controls="dataRecovery"><span>Data &amp; recovery</span><span aria-hidden="true">›</span></button></li>
-            <li><button id="openAppDevice" class="menu-row" type="button" aria-label="App &amp; device" aria-controls="appDevice"><span>App &amp; device</span><span aria-hidden="true">›</span></button></li>
+            <li><a id="openDataRecovery" class="menu-row" href="#data-recovery" aria-label="Data &amp; recovery"><span>Data &amp; recovery</span><span aria-hidden="true">›</span></a></li>
+            <li><a id="openAppDevice" class="menu-row" href="#app-device" aria-label="App &amp; device"><span>App &amp; device</span><span aria-hidden="true">›</span></a></li>
           </ul></nav>
         </section>
         <section class="menu-group" aria-labelledby="menuSupportHeading"><h2 id="menuSupportHeading">Support</h2>
@@ -90,6 +52,37 @@
             <li><button id="signOut" class="menu-row" type="button" aria-label="Sign out" hidden><span>Sign out</span></button></li>
           </ul></nav>
         </section>
+      </div>
+    </section>
+    <section id="utilityView" class="utility-pages-shell" aria-label="Utility pages" hidden>
+      <div class="utility-pages-layout">
+        <section id="utilityMaster" class="utility-pages-master">
+          <div id="utilityHubBar" class="menu-page-bar"><button id="utilityHubBack" type="button">← Back</button><h1 id="utilityHubHeading" tabindex="-1">App &amp; device</h1></div>
+          <div id="utilityMasterBar" class="menu-page-bar" hidden><button id="utilityMasterBack" type="button">← Back</button><h2 id="utilityMasterHeading">App &amp; device</h2></div>
+          <nav aria-label="Utility operations"><ul id="utilityRows">
+            <li data-utility-group="app-device"><a id="utility-install" class="menu-row" href="#app-device/install"><span>Install To-Do</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="app-device"><a id="utility-offline" class="menu-row" href="#app-device/offline"><span>Offline readiness</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="app-device"><a id="utility-updates" class="menu-row" href="#app-device/updates"><span>App updates</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="app-device"><a id="utility-connection" class="menu-row" href="#app-device/connection"><span>Account &amp; device status</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="data-recovery"><a id="utility-export" class="menu-row" href="#data-recovery/export"><span>Export</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="data-recovery"><a id="openDeleted" class="menu-row" href="#data-recovery/deleted"><span>Deleted records</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="data-recovery"><a id="utility-undo" class="menu-row" href="#data-recovery/undo"><span>Undo last editor save</span><span aria-hidden="true">›</span></a></li>
+            <li data-utility-group="data-recovery"><a id="utility-restore-from-cloud" class="menu-row" href="#data-recovery/restore-from-cloud"><span>Restore from cloud</span><span aria-hidden="true">›</span></a></li>
+          </ul></nav>
+        </section>
+        <div class="utility-pages-details">
+          <section id="appDeviceInstall" class="utility-page" aria-labelledby="installHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="installHeading" tabindex="-1">Install To-Do</h1></div>
+            <div class="utility-page-content"><button id="installApp" type="button" hidden>Install app</button><p id="installStatus" role="status"></p><details id="installHelp"><summary>Installation help</summary><p id="installInstructions">Use your browser menu to install this site as an app, if available. You can also keep using it in this browser.</p><p>Sign in online once and wait for “Ready to reopen this inbox offline” before going offline. A first visit without internet cannot load the app. Installation does not back up unsynced work.</p></details></div>
+          </section>
+          <section id="appDeviceOffline" class="utility-page" aria-labelledby="offlineHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="offlineHeading" tabindex="-1">Offline readiness</h1></div><div class="utility-page-content"><p id="offlineBadge" role="status"></p><p id="offlineStatus" role="status"></p><p>Sign in online once and wait until this page confirms offline reopening is ready before disconnecting.</p></div></section>
+          <section id="appDeviceUpdates" class="utility-page" aria-labelledby="updatesHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="updatesHeading" tabindex="-1">App updates</h1></div><div class="utility-page-content"><button id="checkAppUpdate" type="button" disabled aria-describedby="checkAppUpdateHelp">Check for updates</button><p id="checkAppUpdateStatus" role="status"></p><p id="checkAppUpdateHelp" class="muted">Check online or retry a failed update without closing your work. Updates wait until all app tabs and windows close. Your saved drafts and pending saves stay on this device.</p></div></section>
+          <section id="appDeviceConnection" class="utility-page" aria-labelledby="connectionHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="connectionHeading" tabindex="-1">Account &amp; device status</h1></div><div class="utility-page-content"><p id="sessionStatus" role="status"></p><p id="syncStatus" role="status"></p><p class="muted">Sync now remains in Menu. Return there to retry pending work.</p></div></section>
+          <section id="dataRecoveryExport" class="utility-page" aria-labelledby="exportHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="exportHeading" tabindex="-1">Export</h1></div><div id="exportTools" class="utility-page-content"><div class="toolbar"><label>Export format <select id="exportFormat"><option value="json">Portable JSON</option><option value="text">Readable text</option></select></label><button id="export" aria-describedby="exportHelp">Export device copy</button><button id="accountExport" aria-describedby="accountExportHelp">Export server copy</button><button id="cancelExport" hidden>Cancel export</button></div><p id="exportHelp" class="muted">Device copy includes this device’s pending saves and drafts.</p><p id="accountExportHelp" class="muted">Server copy: saved work across devices. Online only; excludes pending saves and drafts.</p><p id="exportStatus" role="status" class="muted"></p></div></section>
+          <section id="deletedRecords" class="utility-page" aria-labelledby="deletedHeading" hidden><div class="menu-page-bar"><button id="closeDeleted" class="utility-back" type="button">← Back</button><h1 id="deletedHeading" tabindex="-1">Deleted records</h1></div><div class="utility-page-content"><p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p><p>Deleting a list also marks its linked items deleted; projects must be empty before deletion. Restore a deleted list or project before its items. Related clarification, review and brief history stays stored.</p><p id="deletedError" role="alert"></p><p id="deletedStatus" role="status"></p><div id="deletedItems"></div></div></section>
+          <section id="dataRecoveryUndo" class="utility-page" aria-labelledby="undoHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="undoHeading" tabindex="-1">Undo last editor save</h1></div><div class="utility-page-content"><button id="undoEdit" type="button" disabled aria-describedby="undoEditHelp undoEditStatus">Undo last edit</button><p id="undoEditStatus" role="status" class="muted"></p><p id="undoEditHelp" class="muted">Undo the latest item, list or project editor save on this device for seven days, until another editor save or change to that record. Works after reload and offline. Recovery stays with this browser and account; sync sends the undo as a new save and checks for newer edits or deletions.</p></div></section>
+          <section id="dataRecoveryRestore" class="utility-page" aria-labelledby="deviceResetHeading" hidden><div class="menu-page-bar"><button class="utility-back" type="button">← Back</button><h1 id="deviceResetHeading" tabindex="-1">Restore from cloud</h1></div><div class="utility-page-content"><button id="resetDeviceData" type="button" aria-describedby="resetDeviceDataHelp">Review device data to clear</button><p id="resetDeviceDataStatus" role="status"></p><p id="resetDeviceDataHelp" class="muted">Review pending saves and unfinished drafts before deleting this browser’s To-Do database and reloading the current account’s cloud copy. Online sign-in is required.</p></div></section>
+          <section id="dataRecoveryResetReview" class="utility-page" aria-labelledby="resetReviewHeading" hidden><div class="menu-page-bar"><button id="cancelResetReviewTop" class="utility-back" type="button">← Back</button><h1 id="resetReviewHeading" tabindex="-1">Review device data to clear</h1></div><div class="utility-page-content"><p>Clearing the device database permanently removes local-only work for every account that has used this browser.</p><div id="resetImpact"></div><p>Cached confirmed records and device-only navigation and filter preferences will reset. The installed app shell and files you already downloaded are not deleted.</p><p>The current account reloads its server copy. Inactive accounts must sign in again, and their local-only work is also lost.</p><div class="actions"><button id="confirmResetDeviceData" class="danger-button" type="button">Clear device database and reload</button><button id="cancelResetReview" type="button">Cancel</button></div><p id="resetReviewStatus" role="status"></p></div></section>
+        </div>
       </div>
     </section>
     <section id="preferencesView" class="preferences-shell" aria-label="Preferences" hidden>
@@ -455,13 +448,6 @@
         <div class="actions"><button id="extractAdd" type="button">Add task</button><button id="extractAccept" type="submit">Accept all tasks on device</button></div>
       </form>
       <div class="actions"><button id="extractClose" type="button">Stop and keep review</button><button id="extractOriginal" type="button">Discard suggestions and return to capture</button></div>
-    </dialog>
-    <dialog class="side-panel" id="deletedRecords" aria-labelledby="deletedHeading">
-      <p class="eyebrow">Recovery</p><h2 id="deletedHeading">Deleted records</h2>
-      <p>Deleted items, lists and projects stay stored and can be restored here. There is no automatic purge or recovery deadline. This does not erase their text, history, exports or backups.</p>
-      <p>Deleting a list also marks its linked items deleted; projects must be empty before deletion. Restore a deleted list or project before its items. Related clarification, review and brief history stays stored.</p>
-      <p id="deletedError" role="alert"></p><p id="deletedStatus" role="status"></p>
-      <div id="deletedItems"></div><button id="closeDeleted" type="button">Close deleted records</button>
     </dialog>
     <dialog class="side-panel" id="savedViewEditor" aria-labelledby="savedViewHeading">
       <p class="eyebrow">Find</p><h2 id="savedViewHeading" tabindex="-1">Save view</h2>

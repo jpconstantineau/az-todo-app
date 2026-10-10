@@ -2,7 +2,7 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
-import { transact, clearDeviceDatabase, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=15';
+import { transact, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=16';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=18';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
@@ -28,11 +28,26 @@ let defaultsEditing = null, recentTaskChange = null;
 let renderedTaskOptionField = null;
 let taskOptionJournalPromise = Promise.resolve(true);
 let exportController;
+let resetImpact, resetReviewLoading = false;
 let splitFeedbackTimer;
 let materializingRecurrence = false;
 let savedViewEditing = null;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
 const workflowRoutes = ['capture', 'work', 'lists', 'plan', 'execute', 'reviews'];
+const utilityPages = new Map([
+  ['app-device/install', { group: 'app-device', section: 'appDeviceInstall', heading: 'installHeading', title: 'Install To-Do', row: 'utility-install' }],
+  ['app-device/offline', { group: 'app-device', section: 'appDeviceOffline', heading: 'offlineHeading', title: 'Offline readiness', row: 'utility-offline' }],
+  ['app-device/updates', { group: 'app-device', section: 'appDeviceUpdates', heading: 'updatesHeading', title: 'App updates', row: 'utility-updates' }],
+  ['app-device/connection', { group: 'app-device', section: 'appDeviceConnection', heading: 'connectionHeading', title: 'Account & device status', row: 'utility-connection' }],
+  ['data-recovery/export', { group: 'data-recovery', section: 'dataRecoveryExport', heading: 'exportHeading', title: 'Export', row: 'utility-export' }],
+  ['data-recovery/deleted', { group: 'data-recovery', section: 'deletedRecords', heading: 'deletedHeading', title: 'Deleted records', row: 'openDeleted' }],
+  ['data-recovery/undo', { group: 'data-recovery', section: 'dataRecoveryUndo', heading: 'undoHeading', title: 'Undo last editor save', row: 'utility-undo' }],
+  ['data-recovery/restore-from-cloud', { group: 'data-recovery', section: 'dataRecoveryRestore', heading: 'deviceResetHeading', title: 'Restore from cloud', row: 'utility-restore-from-cloud' }],
+  ['data-recovery/restore-from-cloud/review', { group: 'data-recovery', section: 'dataRecoveryResetReview', heading: 'resetReviewHeading', title: 'Review device data to clear', row: 'utility-restore-from-cloud', parent: 'data-recovery/restore-from-cloud' }]
+]);
+const utilityGroup = route => ['app-device', 'data-recovery'].includes(route) ? route : utilityPages.get(route)?.group;
+const isUtilityPageRoute = route => !!utilityGroup(route);
+const utilityGroupTitle = group => group === 'app-device' ? 'App & device' : 'Data & recovery';
 const preferenceCategories = [
   { id: 'appearance', label: 'Appearance', scope: 'Browser', section: 'preferencesAppearance' },
   { id: 'capture', label: 'Capture' },
@@ -108,7 +123,8 @@ function renderWorkspaces() {
   const workspaceTitle = $('workspaceSelect').selectedOptions[0].textContent;
   const taskOption = taskOptionTarget(destination);
   const preferenceTitle = preferenceRouteTitle(destination) || (taskOption ? `${taskOption.type === 'settings' ? 'Account' : `List “${taskOption.title}”`} ${taskOption.field ? `· ${optionFields[taskOption.field]}` : 'task options'}` : null);
-  document.title = (preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
+  const utilityTitle = utilityPages.get(destination)?.title || (isUtilityPageRoute(destination) ? utilityGroupTitle(utilityGroup(destination)) : null);
+  document.title = (utilityTitle || preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
   statusText('menuWorkspaceValue', workspaceTitle);
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
@@ -166,7 +182,7 @@ async function switchWorkspace(id) {
     if (owner !== accountId) return;
     editing = defaultsEditing = null;
     $('createdDestination').replaceChildren();
-    $('editor').close(); $('savedViewEditor').close(); $('deletedRecords').close();
+    $('editor').close(); $('savedViewEditor').close();
     extraction.reset(); clarification.hide(); reviews.reset(); briefs.reset(); projectPlanning.reset();
     state = saved; selectedWorkspace = id;
     render(); restoreDraft();
@@ -177,10 +193,6 @@ async function switchWorkspace(id) {
 $('workspaceSelect').onchange = guard(() => switchWorkspace($('workspaceSelect').value));
 $('manageWorkspaces').onclick = () => { renderWorkspaces(); showDialog($('workspaceManager')); };
 $('closeWorkspaces').onclick = () => $('workspaceManager').close();
-$('openDataRecovery').onclick = () => { showDialog($('dataRecovery')); $('dataRecoveryHeading').focus(); };
-$('closeDataRecovery').onclick = () => $('dataRecovery').close();
-$('openAppDevice').onclick = () => { showDialog($('appDevice')); $('appDeviceHeading').focus(); };
-$('closeAppDevice').onclick = () => $('appDevice').close();
 $('createWorkspace').onsubmit = event => {
   event.preventDefault();
   const form = event.currentTarget, control = form.querySelector('button');
@@ -386,8 +398,10 @@ const planner = setupPlan({ records: scopedRecords, workspaceId: () => selectedW
   savePlan: saveDailyPlan,
   edit: record => openEditor(record),
   inspectDeleted: record => {
-    renderDeleted(); showDialog($('deletedRecords'));
-    $('deletedRecords').querySelector(`[data-focus-key="${CSS.escape(`${key(record)}:restore`)}"]`)?.focus();
+    void enterUtilityPage('data-recovery/deleted').then(() => {
+      renderDeleted();
+      $('deletedRecords').querySelector(`[data-focus-key="${CSS.escape(`${key(record)}:restore`)}"]`)?.focus();
+    });
   },
   openCollection: record => {
     navigation.lists.view = record ? viewKey(record) : '';
@@ -609,7 +623,7 @@ function error(message, kind = 'local') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
   if ($('editor').open) { $('editError').hidden = false; statusText('editError', message); }
   if (taskOptionRoute(destination)) { $('defaultsError').hidden = false; statusText('defaultsError', message); }
-  if ($('deletedRecords').open) statusText('deletedError', message);
+  if (destination === 'data-recovery/deleted') statusText('deletedError', message);
   connectionStatus();
 }
 function clearError(kind) {
@@ -1172,8 +1186,6 @@ async function changeDeletion(record, action, linkedSnapshot = []) {
   statusText('deletedStatus', `${action === 'delete' ? 'Deletion' : 'Restore'} saved on device — pending server confirmation.`);
   broadcast(); void sync();
 }
-$('openDeleted').onclick = () => { statusText('deletedError', ''); statusText('deletedStatus', ''); renderDeleted(); showDialog($('deletedRecords')); };
-$('closeDeleted').onclick = () => $('deletedRecords').close();
 function titleButton(record, label = `Edit ${record.title}`) {
   const control = button(record.title, () => openEditor(record), label, `${key(record)}:edit`);
   control.className = 'editable-title'; control.title = 'Edit title and details'; return control;
@@ -1592,6 +1604,21 @@ function renderPreferences() {
   if (clarify) clarificationPreferences.render(destination);
   refreshPreferenceRows();
 }
+function renderUtilityPages() {
+  const group = utilityGroup(destination), page = utilityPages.get(destination), hub = destination === group;
+  $('utilityView').dataset.route = hub ? 'hub' : 'detail';
+  $('utilityView').dataset.group = group;
+  $('utilityHubBar').hidden = !hub;
+  $('utilityMasterBar').hidden = hub;
+  $('utilityHubHeading').textContent = $('utilityMasterHeading').textContent = utilityGroupTitle(group);
+  for (const item of document.querySelectorAll('#utilityRows [data-utility-group]')) item.hidden = item.dataset.utilityGroup !== group;
+  for (const row of document.querySelectorAll('#utilityRows [aria-current]')) row.removeAttribute('aria-current');
+  for (const entry of utilityPages.values()) {
+    $(entry.section).hidden = entry !== page;
+  }
+  if (page) $(page.row).setAttribute('aria-current', 'page');
+  if (destination === 'data-recovery/deleted') renderDeleted();
+}
 function focusDestination() {
   if (!accountId || $('workspace').hidden) return;
   const modal = [...document.querySelectorAll('dialog[open]')].at(-1);
@@ -1599,8 +1626,9 @@ function focusDestination() {
     if (!modal.contains(document.activeElement)) modal.querySelector('input, textarea, select, button')?.focus();
     return;
   }
-  const preference = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), taskOption = taskOptionRoute(destination);
+  const utilityPage = utilityPages.get(destination), preference = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), taskOption = taskOptionRoute(destination);
   if (destination === 'menu') $('menuHeading').focus({ preventScroll: true });
+  else if (isUtilityPageRoute(destination)) $(utilityPage?.heading || 'utilityHubHeading').focus({ preventScroll: true });
   else if (destination === 'preferences') $('preferencesHeading').focus({ preventScroll: true });
   else if (taskOption) $(taskOption.field ? 'taskOptionHeading' : 'taskOptionsMasterHeading').focus({ preventScroll: true });
   else if (clarify) clarificationPreferences.focus();
@@ -1624,7 +1652,7 @@ function showDialog(dialog) {
 }
 function menuEntry() {
   const entry = history.state?.todoMenu;
-  const returnable = workflowRoutes.includes(entry?.returnRoute) || isPreferenceRoute(entry?.returnRoute);
+  const returnable = workflowRoutes.includes(entry?.returnRoute) || isPreferenceRoute(entry?.returnRoute) || isUtilityPageRoute(entry?.returnRoute);
   return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && returnable && entry.target === 'appMenu' ? entry : null;
 }
 function workflowEntry(route = destination) {
@@ -1635,8 +1663,26 @@ function utilityReturnEntry(route = destination) {
   const entry = history.state?.todoUtilityReturn;
   const validTarget = route === 'menu'
     ? entry?.child === 'preferences' && entry.target === 'openPreferences'
+      || ['app-device', 'data-recovery'].includes(entry?.child) && entry.target === (entry.child === 'app-device' ? 'openAppDevice' : 'openDataRecovery')
     : route === 'preferences' && preferenceRoutes.has(entry?.child) && entry.target === `preference-${preferenceRoutes.get(entry.child).id}`;
   return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && entry.route === route && validTarget && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
+}
+function utilityPageParent(route) {
+  if (['app-device', 'data-recovery'].includes(route)) return { parent: 'menu', target: route === 'app-device' ? 'openAppDevice' : 'openDataRecovery' };
+  const page = utilityPages.get(route);
+  return page ? { parent: page.parent || page.group, target: page.row } : null;
+}
+function utilityPageEntry(route = destination) {
+  const entry = history.state?.todoUtilityPage, descriptor = utilityPageParent(route);
+  return descriptor && entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin
+    && entry.route === route && entry.parent === descriptor.parent && entry.target === descriptor.target && entry.workspaceId === selectedWorkspace
+    && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
+}
+function utilityPageReturnEntry(route = destination) {
+  const entry = history.state?.todoUtilityPageReturn, descriptor = utilityPageParent(entry?.child);
+  return descriptor?.parent === route && descriptor.target === entry.target && entry?.session === menuHistorySession
+    && entry.accountId === accountId && entry.origin === location.origin && entry.route === route && entry.workspaceId === selectedWorkspace
+    && Number.isFinite(entry.scrollX) && Number.isFinite(entry.scrollY) ? entry : null;
 }
 function preferenceEntry(route = destination) {
   const entry = history.state?.todoPreference;
@@ -1699,6 +1745,40 @@ async function enterPreferences() {
   markUtilityReturn('preferences', 'openPreferences');
   history.pushState({ todoPreference: { session: menuHistorySession, accountId, origin: location.origin, route: 'preferences', parent: 'menu', target: 'openPreferences', scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#preferences');
   workspace(true, { save: false });
+}
+async function enterUtilityGroup(group) {
+  if (!accountId || !['app-device', 'data-recovery'].includes(group) || document.querySelector('dialog[open]')) return;
+  if (destination === group) { focusDestination(); return; }
+  if (destination !== 'menu' || !menuEntry()) return;
+  const target = group === 'app-device' ? 'openAppDevice' : 'openDataRecovery';
+  markUtilityReturn(group, target);
+  history.pushState({ todoUtilityPage: { session: menuHistorySession, accountId, origin: location.origin, route: group, parent: 'menu', target, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + group);
+  workspace(true, { save: false });
+}
+async function enterUtilityPage(route) {
+  const descriptor = utilityPageParent(route), page = utilityPages.get(route);
+  if (!accountId || !page || document.querySelector('dialog[open]')) return;
+  if (destination === route) { focusDestination(); return; }
+  if (destination === page.group || destination === page.parent) {
+    const current = history.state && typeof history.state === 'object' ? history.state : {};
+    history.replaceState({ ...current, todoUtilityPageReturn: { session: menuHistorySession, accountId, origin: location.origin, route: destination, child: route, target: descriptor.target, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + destination);
+    history.pushState({ todoUtilityPage: { session: menuHistorySession, accountId, origin: location.origin, route, parent: descriptor.parent, target: descriptor.target, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY } }, '', '#' + route);
+  } else if (utilityPages.get(destination)?.group === page.group && !page.parent) {
+    const current = history.state && typeof history.state === 'object' ? { ...history.state } : {};
+    current.todoUtilityPage = { session: menuHistorySession, accountId, origin: location.origin, route, parent: page.group, target: page.row, workspaceId: selectedWorkspace, scrollX: window.scrollX, scrollY: window.scrollY };
+    history.replaceState(current, '', '#' + route);
+  } else {
+    history.pushState(null, '', '#' + route);
+  }
+  workspace(true, { save: false });
+}
+function leaveUtilityPage() {
+  const descriptor = utilityPageParent(destination);
+  if (utilityPageEntry()) history.back();
+  else {
+    history.replaceState(null, '', location.pathname + location.search + '#' + (descriptor?.parent || 'capture'));
+    workspace(true, { save: false });
+  }
 }
 async function enterPreferenceCategory(category) {
   if (!accountId || !category?.section || document.querySelector('dialog[open]')) return;
@@ -1815,20 +1895,21 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
     const recoverable = matchingTaskOptionDraft(stored, { accountId, type: 'list', id: parsedTaskOption.id, workspaceId: selectedWorkspace });
     if ((!record || record.deleted || workspaceOf(record, records) !== selectedWorkspace) && !recoverable) parsedTaskOption = null;
   }
-  destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || preferenceCategory(requested) || parsedTaskOption ? requested : requested.startsWith(clarifyPreferenceRoot + '/') ? clarifyPreferenceRoot : 'capture';
+  destination = [...workflowRoutes, 'menu', 'preferences'].includes(requested) || isUtilityPageRoute(requested) || preferenceCategory(requested) || parsedTaskOption ? requested : requested.startsWith(clarifyPreferenceRoot + '/') ? clarifyPreferenceRoot : 'capture';
   if (destination === 'menu' && !menuEntry()) {
     destination = 'capture';
     history.replaceState(null, '', location.pathname + location.search + '#capture');
   } else if (requested !== destination) history.replaceState(null, '', location.pathname + location.search + '#capture');
-  const taskOptions = !!taskOptionRoute(destination), menu = destination === 'menu', preferences = isPreferenceRoute(destination) && !taskOptions, utility = menu || preferences || taskOptions;
+  const taskOptions = !!taskOptionRoute(destination), menu = destination === 'menu', utilityPage = isUtilityPageRoute(destination), preferences = isPreferenceRoute(destination) && !taskOptions, utility = menu || utilityPage || preferences || taskOptions;
   const listMode = destination === 'lists';
   document.body.classList.toggle('menu-route', menu);
   document.body.classList.toggle('utility-route', utility);
   $('menuView').hidden = !menu;
+  $('utilityView').hidden = !utilityPage;
   $('preferencesView').hidden = !preferences;
   $('taskOptionsView').hidden = !taskOptions;
   document.querySelector('.workspace-nav').hidden = utility;
-  document.querySelector('.inbox-grid').hidden = utility;
+  document.querySelector('.inbox-grid').hidden = utility && !utilityPage;
   $('workspaceStatus').hidden = utility;
   if (menu) $('appMenu').setAttribute('aria-current', 'page'); else $('appMenu').removeAttribute('aria-current');
   document.querySelector('.capture-panel').hidden = destination !== 'capture';
@@ -1846,18 +1927,20 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
     else link.removeAttribute('aria-current');
   }
   if (preferences) renderPreferences();
+  if (utilityPage) renderUtilityPages();
   if (taskOptions) renderTaskOptions();
   render();
   if (utility) $('savedEdit').hidden = true;
   if (focus) {
     $('createdDestination').replaceChildren();
-    const returning = historyNavigation && (workflowEntry() || utilityReturnEntry() || preferenceReturnEntry() || taskOptionReturnEntry());
+    const returning = historyNavigation && (workflowEntry() || utilityReturnEntry() || utilityPageReturnEntry() || preferenceReturnEntry() || taskOptionReturnEntry());
     if (returning) restoreRoutePosition(returning);
     else {
       if (utility) focusDestination(); else requestAnimationFrame(focusDestination);
       if (save && !utility) void journal();
     }
   }
+  if (destination === 'data-recovery/restore-from-cloud/review' && !resetImpact) void prepareResetReview();
 }
 $('closeReviews').onclick = () => {
   history.replaceState(null, '', '#capture'); workspace(false); $('openReviews').focus(); void journal();
@@ -1873,6 +1956,15 @@ $('appMenu').addEventListener('click', event => {
 $('openPreferences').addEventListener('click', event => {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
   event.preventDefault(); void enterPreferences();
+});
+for (const [id, group] of [['openAppDevice', 'app-device'], ['openDataRecovery', 'data-recovery']]) $(id).addEventListener('click', event => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault(); void enterUtilityGroup(group);
+});
+$('utilityRows').addEventListener('click', event => {
+  const link = event.target.closest('a[href]');
+  if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault(); void enterUtilityPage(link.hash.slice(1));
 });
 $('preferencesCategories').addEventListener('click', event => {
   const link = event.target.closest('[data-preference-id]');
@@ -1892,9 +1984,13 @@ $('preferencesBack').onclick = () => { void leavePreferences(); };
 for (const control of document.querySelectorAll('.preference-back')) control.onclick = () => { void leavePreferences(); };
 $('clarifyActionsBack').onclick = () => { void leavePreferences(); };
 $('clarifyActionEditorBack').onclick = () => { void leavePreferences(); };
+$('utilityHubBack').onclick = leaveUtilityPage;
+$('utilityMasterBack').onclick = leaveUtilityPage;
+for (const control of document.querySelectorAll('.utility-back')) control.onclick = leaveUtilityPage;
 matchMedia('(min-width: 1024px)').addEventListener('change', event => {
   if (!event.matches && clarifyPreferenceRoute(destination)?.view === 'editor' && !$('clarifyActionEditorPanel').contains(document.activeElement)) clarificationPreferences.focus();
   if (!event.matches && taskOptionRoute(destination)?.field && !$('taskOptionEditor').contains(document.activeElement)) $('taskOptionHeading').focus();
+  if (!event.matches && utilityPages.has(destination) && !document.querySelector('#utilityView .utility-page:not([hidden])').contains(document.activeElement)) focusDestination();
 });
 $('menuBack').onclick = () => {
   if (menuEntry()) history.back();
@@ -1909,7 +2005,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('signIn').focus();
 };
-for (const dialog of [$('editor'), $('appDevice'), $('dataRecovery'), $('clarifier'), $('briefs'), $('projectPlanner'), $('deletedRecords'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
+for (const dialog of [$('editor'), $('clarifier'), $('briefs'), $('projectPlanner'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -2162,18 +2258,18 @@ async function showAccountName(owner, generation, verified) {
 }
 function hideAccount() {
   $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
-  if (accountId && (location.hash === '#menu' || location.hash === '#preferences' || location.hash.startsWith('#preferences/'))) history.replaceState(null, '', location.pathname + location.search + '#capture');
-  document.body.classList.remove('menu-route', 'utility-route'); $('menuView').hidden = true; $('preferencesView').hidden = true; $('appMenu').removeAttribute('aria-current');
+  if (accountId && (location.hash === '#menu' || location.hash === '#preferences' || location.hash.startsWith('#preferences/') || location.hash.startsWith('#app-device') || location.hash.startsWith('#data-recovery'))) history.replaceState(null, '', location.pathname + location.search + '#capture');
+  document.body.classList.remove('menu-route', 'utility-route'); $('menuView').hidden = true; $('utilityView').hidden = true; $('preferencesView').hidden = true; $('appMenu').removeAttribute('aria-current');
   document.querySelectorAll('#preferencesCategories [aria-current]').forEach(link => link.removeAttribute('aria-current'));
   document.querySelectorAll('.workspace-nav [aria-current]').forEach(link => link.removeAttribute('aria-current'));
-  $('appDevice').close(); $('dataRecovery').close();
   $('collectionOutline').replaceChildren(); $('collectionBreadcrumbs').textContent = ''; $('collectionChildren').replaceChildren(); $('readyToRevisitCollections').replaceChildren(); edit.elements.parentRef.replaceChildren(); editOrganizer.replaceChildren();
   $('archiveReview').close(); archiveReviewing = null; $('archiveSearch').value = ''; $('archiveResults').replaceChildren(); $('archiveStatus').textContent = '';
   $('savedViewEditor').close(); savedViewEditing = null; savedViewForm.reset(); $('savedViewEntries').replaceChildren(); $('searchResults').replaceChildren(); $('searchStatus').textContent = '';
   extraction.reset();
-  $('deletedRecords').close(); $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
+  $('deletedItems').replaceChildren(); $('deletedError').textContent = ''; $('deletedStatus').textContent = '';
   exportController?.abort();
   $('exportStatus').textContent = '';
+  resetImpact = null; $('resetImpact').replaceChildren(); $('resetReviewStatus').textContent = ''; $('resetDeviceDataStatus').textContent = '';
   reviews.reset();
   briefs.reset(); projectPlanning.reset();
   if (accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
@@ -2438,26 +2534,86 @@ $('signOut').onclick = guard(async () => {
   location.href = '/.auth/logout?post_logout_redirect_uri=/';
 });
 const resetDevice = $('resetDeviceData'), resetStatus = $('resetDeviceDataStatus');
-resetDevice.onclick = async () => {
-  if (resetDevice.getAttribute('aria-disabled') === 'true') return;
+function renderResetImpact(impact) {
+  const container = $('resetImpact'), heading = text => { const value = document.createElement('h2'); value.textContent = text; return value; };
+  const list = entries => { const value = document.createElement('ul'); value.append(...entries.map(text => { const item = document.createElement('li'); item.textContent = text; return item; })); return value; };
+  const records = projected(state), workspaceTitle = id => id === PERSONAL ? 'Personal' : records[`workspace:${id}`]?.title || 'Unavailable workspace';
+  const operationLines = impact.operations.map(operation => `${operation.failed ? 'Failed' : 'Pending'} save: ${operation.records.map(record => `${record.type} “${record.title}”`).join(', ')}.`);
+  const draftLines = impact.drafts.map(draft => `${draft.workspaceId ? workspaceTitle(draft.workspaceId) : 'Account'} · ${draft.label}.`);
+  const parts = [heading(`Current account pending saves (${impact.operations.length})`), operationLines.length ? list(operationLines) : document.createTextNode('No pending or failed saves.')];
+  parts.push(heading(`Current account local drafts (${impact.drafts.length})`), draftLines.length ? list(draftLines) : document.createTextNode('No unfinished local drafts.'));
+  parts.push(heading('Other current-account recovery'));
+  const recovery = [];
+  if (impact.collectionMove) recovery.push(`Collection move: ${impact.collectionMove.title}.`);
+  if (impact.undoEdit) recovery.push(`Editor undo: ${impact.undoEdit.type} “${impact.undoEdit.title}”.`);
+  parts.push(recovery.length ? list(recovery) : document.createTextNode('No collection move or editor undo recovery.'));
+  parts.push(heading('Inactive accounts'), document.createTextNode(`${impact.inactive.accounts} inactive account${impact.inactive.accounts === 1 ? '' : 's'}: ${impact.inactive.operations} pending or failed operation${impact.inactive.operations === 1 ? '' : 's'} and ${impact.inactive.drafts} local draft or recovery entr${impact.inactive.drafts === 1 ? 'y' : 'ies'}. Account identities and private text are hidden.`));
+  container.replaceChildren(...parts);
+}
+async function prepareResetReview() {
+  if (resetReviewLoading) return;
+  resetReviewLoading = true;
   resetDevice.setAttribute('aria-disabled', 'true');
+  $('confirmResetDeviceData').setAttribute('aria-disabled', 'true');
+  if (destination === 'data-recovery/restore-from-cloud/review') $('resetReviewStatus').textContent = 'Preparing the device data review…';
   try {
-    resetStatus.textContent = 'Checking cloud sign-in…';
-    if (!accountId || !navigator.onLine) throw new Error('Sign in online before restoring your cloud copy.');
+    resetStatus.textContent = 'Saving the current draft on this device…';
+    if (!await journal()) throw new Error('The current draft could not be saved. Copy the recovery text before clearing this device.');
+    resetStatus.textContent = 'Reviewing device data…';
+    const owner = accountId, generation = accountGeneration;
+    if (!owner) throw new Error('Sign in before reviewing this device.');
+    const impact = await deviceResetImpact(owner);
+    if (owner !== accountId || generation !== accountGeneration) throw new Error('The account changed. Reload before clearing this device.');
+    resetImpact = { owner, generation, ...impact };
+    renderResetImpact(resetImpact); resetStatus.textContent = ''; $('resetReviewStatus').textContent = '';
+    await enterUtilityPage('data-recovery/restore-from-cloud/review');
+  } catch (failure) {
+    if (destination === 'data-recovery/restore-from-cloud/review' && !resetImpact) {
+      history.replaceState(null, '', location.pathname + location.search + '#data-recovery/restore-from-cloud');
+      workspace(true, { save: false });
+    }
+    resetStatus.textContent = `Device database was not cleared: ${failure.message}`;
+    resetDevice.focus();
+  } finally {
+    resetReviewLoading = false;
+    resetDevice.removeAttribute('aria-disabled');
+    $('confirmResetDeviceData').removeAttribute('aria-disabled');
+  }
+}
+resetDevice.onclick = prepareResetReview;
+function cancelResetReview() {
+  resetImpact = null; $('resetReviewStatus').textContent = ''; leaveUtilityPage();
+}
+$('cancelResetReview').onclick = cancelResetReview;
+$('cancelResetReviewTop').onclick = cancelResetReview;
+$('confirmResetDeviceData').onclick = async () => {
+  const control = $('confirmResetDeviceData'), status = $('resetReviewStatus'), reviewed = resetImpact;
+  if (!reviewed || control.getAttribute('aria-disabled') === 'true') return;
+  control.setAttribute('aria-disabled', 'true');
+  try {
+    status.textContent = 'Checking cloud sign-in and reviewed device data…';
+    if (!navigator.onLine || !accountId) throw new Error('Sign in online before restoring your cloud copy.');
     if (!navigator.locks) throw new Error('This browser cannot coordinate a safe device reset between tabs.');
-    const owner = accountId, identity = await request('session');
-    if (identity.accountId !== owner) throw new Error('The signed-in account changed. Reload before clearing this device.');
-    if (!confirm('Delete this browser’s To-Do database and reload from the cloud? Pending saves and unfinished drafts stored only on this device will be permanently lost. Export them first if needed.')) { resetStatus.textContent = ''; return; }
-    resetStatus.textContent = 'Clearing the device database…';
-    await navigator.locks.request(`todo-sync:${owner}`, async () => {
-      if (owner !== accountId) throw new Error('The account changed. Reload before clearing this device.');
-      await clearDeviceDatabase(() => { resetStatus.textContent = 'Close other To-Do tabs and app windows to finish clearing this device.'; });
+    if (reviewed.owner !== accountId || reviewed.generation !== accountGeneration) throw new Error('The account changed. Reload before clearing this device.');
+    const identity = await request('session');
+    if (identity.accountId !== reviewed.owner) throw new Error('The signed-in account changed. Reload before clearing this device.');
+    await navigator.locks.request(`todo-sync:${reviewed.owner}`, async () => {
+      if (reviewed.owner !== accountId || reviewed.generation !== accountGeneration) throw new Error('The account changed. Reload before clearing this device.');
+      const fresh = await deviceResetImpact(reviewed.owner);
+      if (fresh.fingerprint !== reviewed.fingerprint) {
+        resetImpact = { owner: reviewed.owner, generation: reviewed.generation, ...fresh };
+        renderResetImpact(resetImpact);
+        throw new Error('Device data changed after this review. Review the refreshed inventory, then confirm again.');
+      }
+      status.textContent = 'Clearing the device database…';
+      await clearDeviceDatabase(() => { status.textContent = 'Close other To-Do tabs and app windows to finish clearing this device.'; });
     });
     location.reload();
   } catch (failure) {
-    resetStatus.textContent = `Device database was not cleared: ${failure.message}`;
+    status.textContent = `Device database was not cleared: ${failure.message}`;
+    control.focus();
   } finally {
-    resetDevice.removeAttribute('aria-disabled');
+    control.removeAttribute('aria-disabled');
   }
 };
 channel.onmessage = guard(async () => {

@@ -311,27 +311,16 @@ test('accessibility: contextual dialogs and routed preferences return to their o
   await keyboardActivate(page, '#taskOptionsMasterBack'); await expectFocus(page, '#preference-task-options');
   await keyboardActivate(page, '#preferencesBack'); await expectFocus(page, '#openPreferences');
   await page.locator('#openAppDevice').focus(); await page.keyboard.press('Enter');
-  await expectFocus(page, '#appDeviceHeading');
-  await page.keyboard.press('Escape'); await expectFocus(page, '#openAppDevice');
+  await expectFocus(page, '#utilityHubHeading');
+  await keyboardActivate(page, '#utilityHubBack'); await expectFocus(page, '#openAppDevice');
   await keyboardActivate(page, '#menuBack'); await expectFocus(page, '#appMenu');
   await page.locator('#openReviews').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#reviewsHeading');
   assert.equal(await page.locator('dialog:modal').count(), 0);
   await keyboardActivate(page, '#closeReviews'); await expectFocus(page, '#openReviews');
   await page.locator('#appMenu').focus(); await page.keyboard.press('Enter'); await expectFocus(page, '#menuHeading');
-  // Force native closes into one task so the earlier close events arrive
-  // after focus has moved on. It must not steal the later dialog's return focus.
-  await page.evaluate(async () => {
-    const appDevice = document.querySelector('#appDevice'), recovery = document.querySelector('#dataRecovery');
-    const closed = [appDevice, recovery].map(dialog => new Promise(resolve => dialog.addEventListener('close', resolve, { once: true })));
-    const appDeviceButton = document.querySelector('#openAppDevice'), recoveryButton = document.querySelector('#openDataRecovery');
-    appDeviceButton.focus(); appDeviceButton.click(); appDevice.close();
-    recoveryButton.focus(); recoveryButton.click(); recovery.close();
-    await Promise.all(closed);
-  });
-  await expectFocus(page, '#openDataRecovery');
-  await page.locator('#openDataRecovery').click(); await expectFocus(page, '#dataRecoveryHeading');
-  await page.locator('#exportTools > summary').focus(); await page.keyboard.press('Enter');
+  await page.locator('#openDataRecovery').click(); await expectFocus(page, '#utilityHubHeading');
+  await page.locator('#utility-export').focus(); await page.keyboard.press('Enter'); await expectFocus(page, '#exportHeading');
   await page.locator('#export').focus();
   const download = page.waitForEvent('download'); await page.keyboard.press('Enter');
   assert.equal((await download).suggestedFilename(), 'todo-device-recovery.json');

@@ -33,6 +33,7 @@
   button.addEventListener('click', async () => {
     const offered = promptEvent;
     if (!offered || installed) return;
+    const restoreInstallFocus = document.activeElement === button;
     promptEvent = null;
     button.disabled = true;
     try {
@@ -50,9 +51,9 @@
     } finally {
       button.disabled = false;
       render();
-      if (document.getElementById('appDevice').open) {
-        document.querySelector(installed ? '#closeAppDevice' : '#installHelp summary').focus();
-      }
+      const page = document.getElementById('appDeviceInstall');
+      if (restoreInstallFocus && !page.hidden && [button, document.body].includes(document.activeElement))
+        document.querySelector(installed ? '#installHeading' : '#installHelp summary').focus();
     }
   });
   render();
@@ -111,7 +112,7 @@
       const timeout = setTimeout(() => { reply.port1.close(); reject(new Error('Old shell is still active')); }, 2000);
       reply.port1.onmessage = event => {
         clearTimeout(timeout); reply.port1.close();
-        if (event.data === 'todo-inbox-shell-v35') resolve(); else reject(new Error('Old shell is still active'));
+        if (event.data === 'todo-inbox-shell-v36') resolve(); else reject(new Error('Old shell is still active'));
       };
       (navigator.serviceWorker.controller || registration.active).postMessage('shell-version', [reply.port2]);
     });
