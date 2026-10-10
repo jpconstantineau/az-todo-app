@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
-import { clickControl, showView } from './navigation-helper.mjs';
+import { clickControl, openPreference, showView } from './navigation-helper.mjs';
 
 async function provider(t) {
   const calls = [], pending = [], state = { delay: false };
@@ -37,6 +37,7 @@ test('unsupported authenticated browsers explicitly review cloud capture and cla
   let user = 'alice';
   const app = await startServer({ browserUser: () => user }); t.after(app.close);
   const { page } = await browser(t, app, () => Object.defineProperty(globalThis, 'LanguageModel', { configurable: true, value: undefined }));
+  const aiRequests = []; page.on('request', request => { if (request.url().includes('/api/v1/ai/')) aiRequests.push(request.url()); });
   await page.evaluate(async () => {
     await (await import('/inbox-store.js?v=9')).transact('alice', local => {
       local.records['list:private'] = { type: 'list', id: 'private', title: 'Private list name', workspaceId: 'personal', version: 1, accountId: 'alice', deleted: false };
@@ -45,13 +46,24 @@ test('unsupported authenticated browsers explicitly review cloud capture and cla
   });
   await page.waitForFunction(() => [...document.querySelector('#capture [name=listId]').options].some(option => option.value === 'private'));
   await page.locator('#captureText').fill('Call Sam');
-  await page.waitForFunction(() => document.querySelector('#extractStart').textContent === 'Suggest tasks with cloud AI');
+  await page.waitForTimeout(100);
+  assert.deepEqual(aiRequests, [], 'default Off makes no Capture cloud requests');
+  assert.equal(await page.locator('#extractCloudStart').isVisible(), false);
+  await openPreference(page, 'capture');
+  assert.equal(await page.locator('#preference-capture-summary').textContent(), 'Off · Browser');
+  await page.locator('#captureCloudAI').check();
+  assert.equal(await page.evaluate(() => localStorage.getItem('todo-capture-cloud-ai')), 'true');
+  await showView(page, 'capture');
+  await page.getByRole('button', { name: 'Suggest tasks with cloud AI', exact: true }).waitFor();
+  assert.equal(await page.locator('#agentStatus').getAttribute('data-provider'), 'cloud');
+  assert.match(await page.locator('#agentStatus').getAttribute('aria-label'), /Cloud AI is ready for Capture/);
   await page.locator('#captureAI summary').click();
   assert.equal(await page.locator('#extractAuto').isDisabled(), true, 'pause autocomplete remains local-only');
   assert.equal(await page.locator('#extractLists').isDisabled(), false);
   await page.locator('#extractLists').check();
   await page.getByRole('button', { name: 'Suggest tasks with cloud AI' }).click();
   await page.locator('#extractionReview').waitFor();
+  assert.equal(await page.locator('#extractionHeading').evaluate(element => element === document.activeElement), true);
   assert.equal((await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length)), 0);
   assert.equal(await page.locator('#extractionItems [name=title]').inputValue(), 'Call Sam');
   await page.locator('#extractAccept').click();
@@ -91,6 +103,19 @@ test('unsupported authenticated browsers explicitly review cloud capture and cla
   await showView(page, 'capture');
   assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam after navigating');
 
+  const other = await page.context().newPage();
+  await other.goto(app.url); await other.locator('#workspace').waitFor();
+  await page.locator('#captureText').fill('Call Sam after preference change');
+  await page.getByRole('button', { name: 'Suggest tasks with cloud AI' }).click();
+  await page.locator('#extractCancel').waitFor();
+  await openPreference(other, 'capture'); await other.locator('#captureCloudAI').uncheck();
+  ai.release();
+  await page.waitForFunction(() => document.querySelector('#extractCloudStart').hidden);
+  assert.equal(await page.locator('#extractionReview').isVisible(), false);
+  assert.equal(await page.locator('#captureText').inputValue(), 'Call Sam after preference change');
+  await other.locator('#captureCloudAI').check(); await showView(other, 'capture');
+  await page.getByRole('button', { name: 'Suggest tasks with cloud AI', exact: true }).waitFor();
+
   await page.locator('#captureText').fill('Call Sam for Alice');
   await page.getByRole('button', { name: 'Suggest tasks with cloud AI' }).click();
   await page.locator('#extractCancel').waitFor();
@@ -109,16 +134,21 @@ test('a supported browser stays local and a signed-out local profile never reque
   Object.assign(process.env, { AI_API_URL: ai.url, AI_API_KEY: 'browser-secret', AI_MODEL: 'test/model' });
   t.after(() => ["AI_API_URL", "AI_API_KEY", "AI_MODEL"].forEach((name, index) => previous[index] === undefined ? delete process.env[name] : process.env[name] = previous[index]));
   const app = await startServer({ browserUser: () => 'alice' }); t.after(app.close);
-  const { page } = await browser(t, app, () => Object.defineProperty(globalThis, 'LanguageModel', { configurable: true, value: {
-    availability: async () => 'available', create: async () => ({ destroy() {}, prompt: async () => JSON.stringify({ items: [{ title: 'Local task', description: '', listId: '', priority: '', context: '', dueDate: '', dueTime: '', evidence: 'Local task', uncertainty: '' }], notes: '' }) })
-  } }));
+  const { page } = await browser(t, app, () => {
+    localStorage.setItem('todo-capture-cloud-ai', 'true');
+    Object.defineProperty(globalThis, 'LanguageModel', { configurable: true, value: {
+      availability: async () => 'available', create: async () => ({ destroy() {}, prompt: async () => JSON.stringify({ items: [{ title: 'Local task', description: '', listId: '', priority: '', context: '', dueDate: '', dueTime: '', evidence: 'Local task', uncertainty: '' }], notes: '' }) })
+    } });
+  });
   const aiRequests = []; page.on('request', request => { if (request.url().includes('/api/v1/ai/')) aiRequests.push(request.url()); });
   await page.locator('#captureText').fill('Local task'); await page.locator('#captureAI summary').click(); await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
   assert.equal(ai.calls.length, 0); assert.deepEqual(aiRequests, []);
 
   const signedOut = await startServer({ browserUser: () => null }); t.after(signedOut.close);
   const instance = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => instance.close());
-  const localPage = await instance.newPage(); const localRequests = [];
+  const localContext = await instance.newContext();
+  await localContext.addInitScript(() => localStorage.setItem('todo-capture-cloud-ai', 'true'));
+  const localPage = await localContext.newPage(); const localRequests = [];
   localPage.on('request', request => { if (request.url().includes('/api/v1/ai/')) localRequests.push(request.url()); });
   await localPage.goto(signedOut.url); await localPage.locator('#workspace').waitFor();
   await localPage.locator('#captureText').fill('Device-only task');

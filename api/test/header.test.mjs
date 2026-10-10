@@ -165,7 +165,7 @@ test('unavailable agent has stroke-wide circle clearance and keeps its size when
     return { gap: circle.r.baseVal.value - stroke / 2 - radius, stroke };
   });
   assert.ok(clearance.gap >= clearance.stroke, JSON.stringify(clearance));
-  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=1')).checkModel(); });
+  await page.evaluate(async () => { aiMode.state = 'available'; await (await import('/local-agent.js?v=2')).checkModel(); });
   await agentStatus(page, 'available');
   assert.deepEqual(await robot.boundingBox(), unavailableBounds);
   assert.equal(await page.locator('.agent-unavailable').isVisible(), false);
@@ -176,7 +176,7 @@ test('header prepares the model from a keyboard gesture, ignores duplicate click
   await page.goto(url); await status(page, 'confirmed'); await agentStatus(page, 'downloadable');
   await page.evaluate(() => {
     aiMode.holdCheck = true;
-    void import('/local-agent.js?v=1').then(agent => agent.checkModel());
+    void import('/local-agent.js?v=2').then(agent => agent.checkModel());
   });
   await page.waitForFunction(() => !!window.finishCheck);
   await page.locator('#agentStatus').focus(); await page.keyboard.press('Enter'); await agentStatus(page, 'busy');
@@ -230,7 +230,8 @@ test('header follows workspace selection and save state, then clears identity on
   assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint previewHelp');
   assert.equal(await page.locator('#previewSplit svg').getAttribute('aria-hidden'), 'true');
   assert.deepEqual(await page.locator('#previewSplit path').evaluateAll(paths => paths.map(path => path.getAttribute('d'))), ['M8.7 8.7 21 21', 'm8.7 15.3 4.6-4.6', 'M12.3 12.3 21 3']);
-  assert.deepEqual(await page.locator('.capture-header button').evaluateAll(buttons => buttons.map(button => button.innerText)), ['', '']);
+  assert.deepEqual(await page.locator('.capture-header button:visible').evaluateAll(buttons => buttons.map(button => button.innerText)), ['', '']);
+  assert.equal(await page.locator('#extractCloudStart').isVisible(), false);
   assert.ok((await page.getByRole('button', { name: 'Save on device', exact: true }).boundingBox()).y < (await page.locator('#captureText').boundingBox()).y);
   await clickControl(page.locator('#manageWorkspaces'));
   await page.locator('#createWorkspace input').fill('Family');

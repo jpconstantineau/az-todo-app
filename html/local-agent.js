@@ -32,25 +32,40 @@ export function beginModelWork() {
   };
 }
 
-export function setupAgentStatus() {
+export function setupAgentStatus(cloud) {
   const button = document.getElementById('agentStatus'), label = document.getElementById('agentLabel');
   let controller, finish;
-  render = () => {
-    const state = work.size || checking ? 'busy' : failed ? 'error' : readiness === 'downloading' ? 'busy' : readiness;
-    const message = {
+  render = (announce = true) => {
+    let state = work.size || checking ? 'busy' : failed ? 'error' : readiness === 'downloading' ? 'busy' : readiness;
+    let message = {
       available: 'AI agent is ready on this device.',
       busy: checking ? 'Checking AI agent availability.' : work.size ? 'AI agent is busy preparing the model or generating suggestions.' : 'AI agent model is downloading. Press to continue preparing it.',
       error: 'AI agent encountered an error. Press to retry preparing the model.',
       downloadable: 'AI agent needs a model download. Press to download and prepare it.',
       unavailable: 'AI agent is unavailable on this device or browser.'
     }[state];
+    const captureCloud = cloud?.state();
+    const cloudActive = readiness === 'unavailable' && captureCloud?.active;
+    if (cloudActive) {
+      state = ['checking', 'busy'].includes(captureCloud.phase) ? 'busy' : captureCloud.ready ? 'available' : 'unavailable';
+      message = captureCloud.phase === 'busy' ? 'Cloud AI is generating suggestions for Capture.'
+        : captureCloud.phase === 'checking' ? 'Checking Cloud AI availability for Capture.'
+        : captureCloud.ready ? `Cloud AI is ready for Capture${captureCloud.label ? ` using ${captureCloud.label}` : ''}.`
+        : navigator.onLine ? 'Cloud AI is unavailable for Capture. Press to retry its status check.' : 'Cloud AI is unavailable for Capture while offline.';
+    }
+    button.dataset.provider = cloudActive ? 'cloud' : 'local';
     button.dataset.state = state; button.title = message; button.setAttribute('aria-label', message);
-    button.setAttribute('aria-disabled', String(!!work.size || checking || state === 'unavailable'));
+    button.setAttribute('aria-disabled', String(cloudActive ? ['checking', 'busy'].includes(captureCloud.phase) || captureCloud.ready || !navigator.onLine : !!work.size || checking || state === 'unavailable'));
     label.textContent = message;
-    document.dispatchEvent(new Event('agentstatuschange'));
+    if (announce) document.dispatchEvent(new Event('agentstatuschange'));
   };
   render();
   button.onclick = async () => {
+    const captureCloud = cloud?.state();
+    if (readiness === 'unavailable' && captureCloud?.active) {
+      if (button.getAttribute('aria-disabled') !== 'true') await cloud.retry();
+      return;
+    }
     if (button.getAttribute('aria-disabled') === 'true' || readiness === 'available' && !failed) return;
     controller = new AbortController(); const signal = controller.signal;
     const done = beginModelWork(); finish = done;
@@ -63,6 +78,7 @@ export function setupAgentStatus() {
     finally { destroyModel(model); done(); if (finish === done) { finish = null; controller = null; } }
   };
   addEventListener('pagehide', () => { controller?.abort(); finish?.(); });
+  document.addEventListener('capturecloudstatechange', () => render(false));
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !work.size) void checkModel().catch(() => {}); });
   void checkModel().catch(() => {});
 }

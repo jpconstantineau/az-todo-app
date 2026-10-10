@@ -29,7 +29,7 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
     const optionsSummary = await page.locator('#captureOptions > summary').boundingBox();
     assert.ok(captureText.height >= viewportHeight / 2, `capture fills half the ${width}px mobile viewport`);
     assert.ok(optionsSummary.y + optionsSummary.height <= viewportHeight, `closed options fit in the ${width}px mobile viewport`);
-    const headerActions = await page.locator('.capture-actions button').evaluateAll(buttons => buttons.map(button => ({ width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height })));
+    const headerActions = await page.locator('.capture-actions button:visible').evaluateAll(buttons => buttons.map(button => ({ width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height })));
     assert.ok(headerActions.every(({ width: controlWidth, height }) => controlWidth >= 44 && height >= 44), `capture header actions are touch targets at ${width}px`);
     await page.locator('#captureOptions > summary').click();
     assert.ok(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), `open options scroll normally at ${width}px`);

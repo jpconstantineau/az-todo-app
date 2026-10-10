@@ -32,10 +32,10 @@ test('Preferences routes expose only live categories with route, focus, Back and
   const before = await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
   await openPreferences(page);
   assert.equal(await page.title(), 'Preferences · Personal');
-  assert.deepEqual(await page.locator('#preferencesCategories > li > a > span:first-child').allTextContents(), ['Appearance', 'Process', 'Task options']);
-  assert.equal(await page.locator('#preferencesView').getByText(/Capture|Organize|Plan|Do|Review/, { exact: true }).count(), 0);
+  assert.deepEqual(await page.locator('#preferencesCategories > li > a > span:first-child').allTextContents(), ['Appearance', 'Capture', 'Process', 'Task options']);
+  assert.equal(await page.locator('#preferencesView').getByText(/Organize|Plan|Do|Review/, { exact: true }).count(), 0);
   assert.equal(await page.locator('#preferencesView').getByText(/Install|update|reset/i).count(), 0);
-  assert.deepEqual(await page.locator('#preferencesCategories .menu-row-value').allTextContents(), ['Dark · Browser', '12 actions · Browser', 'Account']);
+  assert.deepEqual(await page.locator('#preferencesCategories .menu-row-value').allTextContents(), ['Dark · Browser', 'Off · Browser', '12 actions · Browser', 'Account']);
 
   await openPreference(page, 'appearance');
   assert.equal(new URL(page.url()).hash, '#preferences/appearance');
@@ -96,8 +96,11 @@ test('Preferences routes expose only live categories with route, focus, Back and
   await page.goto(server.url + '#preferences'); await page.locator('#preferencesHeading').waitFor();
   assert.equal(new URL(page.url()).hash, '#preferences');
   await context.setOffline(false);
-  await page.goto(server.url + '#preferences/capture'); await page.waitForFunction(() => location.hash === '#capture');
-  assert.equal(await page.locator('#captureText').isVisible(), true);
+  await page.goto(server.url + '#preferences/capture'); await page.waitForFunction(() => location.hash === '#preferences/capture' && document.activeElement?.id === 'preferencesCaptureHeading');
+  assert.equal(await page.locator('#captureCloudAI').isVisible(), true);
+  assert.equal(await page.locator('#captureCloudAI').isChecked(), false);
+  assert.match(await page.locator('#captureCloudAIHelp').textContent(), /signed in and online.*sends nothing.*Only pressing.*list names/s);
+  assert.equal(await page.locator('#preferencesCapture .preference-scope').textContent(), 'Browser');
 });
 
 test('Clarify action pages keep ordered browser settings, explicit drafts, focus and responsive routes', { timeout: 90000 }, async t => {

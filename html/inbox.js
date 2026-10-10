@@ -7,22 +7,23 @@ import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=19';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
-import { clarificationUI } from './clarification.js?v=12';
+import { clarificationUI } from './clarification.js?v=13';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=4';
-import { setupAgentStatus } from './local-agent.js?v=1';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=5';
+import { setupAgentStatus } from './local-agent.js?v=2';
+import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=5';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
 import { setupRecurrence } from './recurrence-ui.js?v=3';
 
 const $ = id => document.getElementById(id);
 const ADOPTION_INTENT = 'todo-adopt-local';
-setupAgentStatus();
 const clarificationPreferences = setupClarificationPreferences();
+const captureCloudPreference = setupCaptureCloudPreference();
 const capture = $('capture'), edit = $('edit');
 let accountId = null, state, editing = null, originalInput;
 let saving = false, syncing = true, retryTimer, retryDelay = 2000, accountGeneration = 0;
@@ -52,7 +53,7 @@ const isUtilityPageRoute = route => !!utilityGroup(route);
 const utilityGroupTitle = group => group === 'app-device' ? 'App & device' : 'Data & recovery';
 const preferenceCategories = [
   { id: 'appearance', label: 'Appearance', scope: 'Browser', section: 'preferencesAppearance' },
-  { id: 'capture', label: 'Capture' },
+  { id: 'capture', label: 'Capture', scope: 'Browser', section: 'preferencesCapture' },
   { id: 'process', label: 'Process', scope: 'Browser', section: 'preferencesProcess' },
   { id: 'organize', label: 'Organize' },
   { id: 'plan', label: 'Plan' },
@@ -262,7 +263,7 @@ async function materializeRecurrence() {
   finally { materializingRecurrence = false; }
 }
 const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
-  cloudEligible: () => !!accountId && accountId !== LOCAL_PROFILE,
+  cloudEligible: () => captureCloudPreference.enabled && !!accountId && accountId !== LOCAL_PROFILE,
   current: () => {
     if (!accountId || workspaceReadOnly()) return null;
     const records = scopedRecords();
@@ -287,6 +288,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
     clearError(); render(); broadcast(); void sync();
   }
 });
+setupAgentStatus({ state: extraction.cloudState, retry: extraction.retryCloud });
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape' || document.querySelector('dialog[open]')) return;
   const menu = document.activeElement.closest('details');
@@ -1510,6 +1512,7 @@ function preferenceSummary(category) {
     const value = document.documentElement.dataset.theme || 'dark';
     return `${value[0].toUpperCase()}${value.slice(1)} · ${category.scope}`;
   }
+  if (category.id === 'capture') return `${captureCloudPreference.enabled ? 'On' : 'Off'} · ${category.scope}`;
   if (category.id === 'process') return `${currentClarificationActions().length} actions · ${category.scope}`;
   return category.scope;
 }
@@ -1528,6 +1531,7 @@ function setupPreferenceRows() {
 setupPreferenceRows();
 document.addEventListener('clarification-actions-change', refreshPreferenceRows);
 addEventListener('todo-appearance-change', refreshPreferenceRows);
+document.addEventListener('capturecloudpreferencechange', refreshPreferenceRows);
 function taskOptionTarget(route = destination) {
   const parsed = taskOptionRoute(route);
   if (!parsed || !accountId || !state?.defaultSettings) return null;
