@@ -20,7 +20,10 @@ const local = page => page.evaluate(async () => { const store = await import('/i
 test('recurring template UI creates one offline-safe occurrence, exposes history and retains it after stop', { timeout: 60000 }, async t => {
   const { page, context } = await setup(t);
   await showView(page, 'lists');
-  await page.getByRole('button', { name: 'New recurring template' }).click();
+  assert.equal(await page.locator('#view').inputValue(), '');
+  assert.equal(await page.locator('#recurringSection').isVisible(), true, 'workspace recurrence is available without selecting a collection');
+  assert.equal(await page.locator('#recurringSection').evaluate(details => details.open), false);
+  await clickControl(page.locator('#newRecurring'));
   const dialog = page.locator('#recurringEditor');
   await dialog.getByLabel('Title').fill('Water plants');
   await dialog.getByLabel('First date').fill('2020-01-31');
@@ -54,7 +57,7 @@ test('recurring template UI creates one offline-safe occurrence, exposes history
     return state.queue.length > 0 && occurrence?.occurrenceState === 'completed' && occurrence.status === 'completed';
   });
   await page.reload(); await page.locator('#workspace').waitFor(); await showView(page, 'lists');
-  await page.locator('#recurringTemplates').getByRole('button', { name: 'Open template and history' }).click();
+  await clickControl(page.locator('#recurringTemplates button'));
   await dialog.getByText('Occurrence history', { exact: true }).click();
   await dialog.getByText(/completed/).waitFor();
   const opener = dialog.getByRole('button', { name: 'Close' });
@@ -83,6 +86,9 @@ test('recurring template UI creates one offline-safe occurrence, exposes history
 
 test('recurring template sheet remains keyboard reachable and does not overflow narrow screens', async t => {
   const { page } = await setup(t); await page.setViewportSize({ width: 320, height: 720 }); await showView(page, 'lists');
+  await page.locator('#executionFilters > summary').focus(); await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#recurringHeading').evaluate(element => document.activeElement === element), true);
+  await page.keyboard.press('Enter');
   const open = page.getByRole('button', { name: 'New recurring template' }); await open.focus(); await page.keyboard.press('Enter');
   await page.locator('#recurringEditor').waitFor();
   assert.equal(await page.evaluate(() => document.querySelector('#recurringEditor').scrollWidth <= document.querySelector('#recurringEditor').clientWidth), true);
@@ -129,7 +135,7 @@ test('stopping a template lets its destination be deleted without erasing occurr
     return !!records['recurrenceTemplate:list-series']?.openOccurrenceId;
   });
   await showView(page, 'lists'); await page.locator('#view').selectOption('recurring-list');
-  await page.locator('#recurringTemplates').getByRole('button', { name: 'Open template and history' }).click();
+  await clickControl(page.locator('#recurringTemplates button'));
   page.once('dialog', prompt => prompt.accept());
   await page.locator('#recurringEditor').getByRole('button', { name: 'Delete template' }).click();
   await waitForBrowser(page, async () => {

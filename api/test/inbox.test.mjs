@@ -199,7 +199,7 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v48')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v49')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
@@ -488,20 +488,19 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v47 to v48 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v48 to v49 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v48', 'shell-v47')
-      .replace('/pwa.js?v=44', '/pwa.js?v=43').replace('/shared.js?v=44', '/shared.js?v=43').replace('/inbox.js?v=45', '/inbox.js?v=44').replace('/plan.js?v=6', '/plan.js?v=5'),
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v49', 'shell-v48'),
   ])));
   previousAssets.set('/', previousAssets.get('/index.html'));
   const currentWorker = await readFile(new URL('inbox-sw.js', root), 'utf8');
   // Keep the current/prior asset pairs intact in the synthetic old worker. Rewriting
   // its current query to the already-retained prior query would make cache.addAll
   // reject duplicate requests before the upgrade scenario can begin.
-  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v48', 'shell-v47'));
+  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v49', 'shell-v48'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => {
     if (!nextShell) return previousAssets.get(path);
@@ -515,7 +514,7 @@ test('shell upgrade from v47 to v48 preserves drafts and an exact queued operati
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v47')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v48')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
@@ -544,7 +543,7 @@ test('shell upgrade from v47 to v48 preserves drafts and an exact queued operati
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v48')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v49')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.equal(await page.evaluate(async operation => (await fetch('/api/v1/operations', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation)

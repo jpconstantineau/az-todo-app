@@ -72,17 +72,49 @@ test('collections browser: direct settings preserve contents and surface due col
     create('list', 'groceries', { title: 'Groceries', parentRef: ref('list', 'home'), revisitDate: '2000-01-01', defaults }),
     create('item', 'buy-milk', { title: 'Buy milk', status: 'next', listId: 'groceries', collectionRefs: [ref('list', 'groceries')], areas: ['Household'] })
   ]);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await showView(page, 'lists');
   assert.equal(await page.locator('#itemsHeading').textContent(), 'Organize');
   assert.equal(await page.title(), 'Organize · Personal');
   assert.equal(await page.locator('#viewLabel').textContent(), 'Choose collection');
   assert.equal(await page.locator('#viewLabel').getAttribute('class'), 'sr-only');
   assert.equal(await page.locator('#view').evaluate(el => getComputedStyle(el).fontSize), await page.locator('#itemsHeading').evaluate(el => getComputedStyle(el).fontSize));
+  assert.equal(await page.locator('#collectionSettings').isVisible(), false, 'settings require a selected collection');
+  assert.equal(await page.locator('#recurringSection').isVisible(), true, 'recurrence remains available for the workspace');
+  assert.equal(await page.locator('#recurringSection').evaluate(details => details.open), false);
   await page.getByRole('button', { name: /Open Groceries, ready to revisit since 2000-01-01/ }).click();
   const settings = page.locator('#collectionSettingsForm');
+  assert.equal(await page.locator('.work-panel').evaluate(() => {
+    const nodes = ['view', 'collectionBrowser', 'readyToRevisit', 'statusFilter', 'executionFilters', 'items', 'lists', 'collectionSettings', 'recurringSection'].map(id => document.getElementById(id));
+    return nodes.slice(1).every((node, index) => nodes[index].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }), true, 'work and its filters precede management disclosures in reading order');
+  assert.ok(await page.locator('#statusFilter').evaluate(el => el.getBoundingClientRect().top < innerHeight));
+  const desktopPlacement = await page.locator('#items article').evaluate(el => ({ itemsTop: el.getBoundingClientRect().top, height: innerHeight }));
+  assert.ok(desktopPlacement.itemsTop < desktopPlacement.height, `the selected collection work starts in the desktop viewport: ${JSON.stringify(desktopPlacement)}`);
+  assert.equal(await page.locator('#collectionSettings').evaluate(details => details.open), false);
+  await page.locator('#items button').last().focus(); await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#lists button').first().evaluate(el => el === document.activeElement), true, 'task controls precede collection management in tab order');
+  await page.locator('#lists button').last().focus(); await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#collectionSettingsHeading').evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#collectionSettings').evaluate(details => details.open), true);
+  await page.locator('#view').selectOption('home');
+  assert.equal(await page.locator('#collectionSettings').evaluate(details => details.open), true, 'ordinary collection renders retain disclosure state');
+  await page.locator('#view').selectOption('groceries');
+  await page.evaluate(() => {
+    window.oldOrganizeItem = document.querySelector('#items article');
+    document.querySelector('#collectionSettingsHeading').focus();
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  });
+  await page.waitForFunction(() => !window.oldOrganizeItem.isConnected);
+  assert.equal(await page.locator('#collectionSettingsHeading').evaluate(el => el === document.activeElement), true, 'background renders preserve disclosure focus');
   const type = settings.getByRole('combobox', { name: 'Collection type', exact: true });
   assert.equal(await type.inputValue(), 'list');
   assert.equal(await type.locator('option[value="project"]').evaluate(option => option.disabled), true);
+  await page.locator('#archiveCollection').focus(); await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#recurringHeading').evaluate(el => el === document.activeElement), true);
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#recurringSection').evaluate(details => details.open), true);
   await context.setOffline(true); await page.waitForFunction(() => navigator.onLine === false);
   await type.selectOption('checklist');
   await settings.getByLabel('Revisit on (optional)').fill('2027-01-02');
@@ -92,7 +124,12 @@ test('collections browser: direct settings preserve contents and surface due col
     return (await import('/inbox-store.js?v=10')).projected(local)['list:groceries']?.kind === 'checklist' &&
       local.queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === 'groceries' && mutation.fields?.revisitDate === '2027-01-02'));
   });
+  assert.equal(await page.locator('#collectionSettings').evaluate(details => details.open), true);
+  assert.equal(await page.locator('#recurringSection').evaluate(details => details.open), true);
   await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#collectionSettings').evaluate(details => details.open), false, 'disclosure state is not persisted');
+  assert.equal(await page.locator('#recurringSection').evaluate(details => details.open), false, 'recurrence disclosure state is not persisted');
+  await page.locator('#collectionSettingsHeading').click();
   assert.equal(await settings.getByLabel('Revisit on (optional)').inputValue(), '2027-01-02');
   const projectedRecords = await page.evaluate(async () => { const store = await import('/inbox-store.js?v=10'); return store.projected(await store.transact('alice')); });
   assert.deepEqual(projectedRecords['list:groceries'].parentRef, ref('list', 'home'));
@@ -103,6 +140,10 @@ test('collections browser: direct settings preserve contents and surface due col
   assert.deepEqual(projectedRecords['item:buy-milk'].areas, ['Household']);
   assert.equal(await page.locator('#readyToRevisit').isVisible(), false);
   assert.equal(await page.locator('#collectionUtilities').count(), 0);
+  await page.setViewportSize({ width: 320, height: 720 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.ok(await page.locator('#items article').evaluate(el => el.getBoundingClientRect().top < document.querySelector('#collectionSettingsHeading').getBoundingClientRect().top));
+  assert.ok(await page.locator('#collectionSettingsHeading, #recurringHeading').evaluateAll(summaries => summaries.every(summary => summary.getBoundingClientRect().height >= 44)));
   await page.locator('#view').selectOption('home');
   assert.equal(await settings.locator('[name=parentRef] option[value="list:groceries"]').count(), 0, 'a descendant cannot become its ancestor\'s parent');
   await page.locator('#view').selectOption('groceries');
@@ -124,6 +165,7 @@ test('collections browser: direct settings preserve contents and surface due col
 test('collections browser: project settings keep project identity and reusable-reference guidance is explicit', async t => {
   const { page } = await setup(t);
   await showView(page, 'lists'); await page.locator('#view').selectOption('project:kitchen');
+  await page.locator('#collectionSettingsHeading').click();
   const settings = page.locator('#collectionSettingsForm');
   const type = settings.getByRole('combobox', { name: 'Collection type', exact: true });
   assert.equal(await type.inputValue(), 'project'); assert.equal(await type.isDisabled(), true);
@@ -173,6 +215,7 @@ test('collections browser: offline archive hides archive-only work, keeps mixed 
     create('item', 'completed-history', { title: 'Completed history', status: 'completed', collectionRefs: [ref('project', 'kitchen'), ref('list', 'role')], projectId: 'kitchen', listId: 'role' })
   ]);
   await showView(page, 'lists'); await page.locator('#view').selectOption('home');
+  await page.locator('#collectionSettingsHeading').click();
   await context.setOffline(true); await page.waitForFunction(() => navigator.onLine === false);
   await page.getByRole('button', { name: 'Archive collection…', exact: true }).click();
   assert.match(await page.locator('#archiveReviewCounts').textContent(), /2 descendant collections/);
@@ -184,6 +227,7 @@ test('collections browser: offline archive hides archive-only work, keeps mixed 
     return store.projected(state)['list:home']?.archived === true && state.draft.navigation?.lists?.view === '@archived';
   });
   await page.reload(); await page.locator('#workspace').waitFor(); await page.locator('#archiveBrowser').waitFor();
+  assert.equal(await page.locator('#recurringSection').isVisible(), false, 'archive mode hides workspace recurrence management');
   assert.match(await page.locator('#archiveResults').textContent(), /Home/);
   assert.match(await page.locator('#archiveResults').textContent(), /Only in renovation.*Archived with Home/s);
   assert.match(await page.locator('#archiveResults').textContent(), /Mixed errand.*Still active in Parent.*Also archived with Home/s);

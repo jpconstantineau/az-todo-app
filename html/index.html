@@ -224,8 +224,9 @@
     <section class="card work-panel" aria-labelledby="itemsHeading" hidden>
       <h2 id="itemsHeading" tabindex="-1">Process</h2>
       <div class="actions"><button id="clarifyInbox" type="button">Clarify inbox</button><button id="addContextItem" type="button" hidden>Add item</button></div>
-      <div id="collectionBrowser" hidden><details class="collection-outline"><summary>Browse collections and their children</summary><nav id="collectionOutline" aria-label="Collection outline"></nav></details><p id="collectionBreadcrumbs" class="muted"></p><div id="collectionChildren" class="actions"></div><label class="collection-check"><input id="includeNested" type="checkbox"> Include nested items</label></div>
+      <div id="listTools" hidden><button id="newList">New list</button></div>
       <label><span id="viewLabel" class="sr-only">View</span><select id="view"><option value="inbox">Inbox (unprocessed)</option><option value="all">All items</option><option value="unfiled">No list</option></select></label>
+      <div id="collectionBrowser" hidden><details class="collection-outline"><summary>Browse collections and their children</summary><nav id="collectionOutline" aria-label="Collection outline"></nav></details><p id="collectionBreadcrumbs" class="muted"></p><div id="collectionChildren" class="actions"></div><label class="collection-check"><input id="includeNested" type="checkbox"> Include nested items</label></div>
       <section id="searchWorkspace" class="collection-settings search-workspace" aria-labelledby="searchHeading" hidden>
         <p class="eyebrow">Find</p><h3 id="searchHeading" tabindex="-1" data-focus-key="search:heading">Search workspace</h3>
         <p id="searchScope" class="muted">Results come from this device: last synchronized workspace records plus pending device saves. Offline, newer server or other-device changes may be missing.</p>
@@ -239,25 +240,12 @@
         <p id="searchStatus" role="status" aria-live="polite"></p><div id="searchResults" class="search-results"></div>
       </section>
       <section id="readyToRevisit" class="collection-revisit" aria-labelledby="readyToRevisitHeading" hidden><h3 id="readyToRevisitHeading">Ready to revisit</h3><p class="muted">Collections scheduled for today or earlier stay here until you clear or reschedule them.</p><div id="readyToRevisitCollections" class="actions"></div></section>
-      <section id="collectionSettings" class="collection-settings" aria-labelledby="collectionSettingsHeading" hidden><h3 id="collectionSettingsHeading">Collection settings</h3>
-        <form id="collectionSettingsForm" class="form-grid">
-          <label>Collection type<select name="kind" aria-describedby="collectionSettingsHelp"></select></label>
-          <label>Parent collection<select name="parentRef"></select></label>
-          <label>Revisit on (optional)<input name="revisitDate" type="date" min="0001-01-01" max="9999-12-31"></label>
-          <p id="collectionSettingsHelp" class="muted"></p><div class="actions"><button type="submit">Save collection settings on device</button><button id="archiveCollection" type="button">Archive collection…</button></div><p id="collectionSettingsStatus" role="status" aria-live="polite"></p>
-        </form>
-      </section>
       <section id="archiveBrowser" class="collection-settings archive-browser" aria-labelledby="archiveHeading" hidden>
         <p class="eyebrow">History</p><h3 id="archiveHeading" tabindex="-1">Archived collections</h3>
         <p class="muted">Current workspace · this device’s synchronized copy. Search includes retained collection paths, notes, outcomes, actions, original captures and recurring templates. While offline, newer records from the server or another device may be missing.</p>
         <label>Search archived history<input id="archiveSearch" type="search" maxlength="200" aria-describedby="archiveScope"></label>
         <p id="archiveScope" class="muted">Completed and unfinished history is included. Records with another active membership remain available in active views.</p>
         <p id="archiveStatus" role="status" aria-live="polite"></p><div id="archiveResults" class="archive-results"></div>
-      </section>
-      <section id="recurringSection" class="collection-settings" aria-labelledby="recurringHeading" hidden>
-        <p class="eyebrow">Scheduled work</p><h3 id="recurringHeading" tabindex="-1">Recurring templates</h3>
-        <p class="muted">Only one open occurrence is created. Missed calendar slots are not backfilled.</p>
-        <button id="newRecurring" type="button">New recurring template</button><p id="recurringStatus" role="status" aria-live="polite"></p><div id="recurringTemplates"></div>
       </section>
       <label id="dayLabel" hidden>Planned day <input id="day" type="date"></label>
       <label>Status <select id="statusFilter"><option value="">Incomplete items</option></select></label>
@@ -278,7 +266,22 @@
       </details>
       <div id="createdDestination" class="actions" role="status"></div>
       <p id="projectOutcome" hidden></p><div id="projectActions" class="actions"></div>
-      <div id="listTools" hidden><button id="newList">New list</button><div id="lists"></div></div><div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div>
+      <div id="recentTaskChange" hidden><p id="recentTaskChangeStatus" role="status"></p><button id="undoTaskChange" type="button" aria-describedby="recentTaskChangeStatus">Undo last task change</button></div><div id="items"></div><div id="lists"></div>
+      <details id="collectionSettings" class="collection-settings" hidden>
+        <summary id="collectionSettingsHeading">Collection settings</summary>
+        <form id="collectionSettingsForm" class="form-grid">
+          <label>Collection type<select name="kind" aria-describedby="collectionSettingsHelp"></select></label>
+          <label>Parent collection<select name="parentRef"></select></label>
+          <label>Revisit on (optional)<input name="revisitDate" type="date" min="0001-01-01" max="9999-12-31"></label>
+          <p id="collectionSettingsHelp" class="muted"></p><div class="actions"><button type="submit">Save collection settings on device</button><button id="archiveCollection" type="button">Archive collection…</button></div><p id="collectionSettingsStatus" role="status" aria-live="polite"></p>
+        </form>
+      </details>
+      <details id="recurringSection" class="collection-settings" hidden>
+        <summary id="recurringHeading">Recurring templates</summary>
+        <div><p class="eyebrow">Scheduled work</p><p class="muted">Only one open occurrence is created. Missed calendar slots are not backfilled.</p>
+          <button id="newRecurring" type="button">New recurring template</button><p id="recurringStatus" role="status" aria-live="polite"></p><div id="recurringTemplates"></div>
+        </div>
+      </details>
     </section>
     <dialog id="archiveReview" class="side-panel" aria-labelledby="archiveReviewHeading">
       <p class="eyebrow">Organize</p><h2 id="archiveReviewHeading" tabindex="-1">Archive collection</h2>
