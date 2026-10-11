@@ -9,7 +9,7 @@ import { deviceExport, accountExport, readableExport } from './inbox-export.js?v
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=12';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=13';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
