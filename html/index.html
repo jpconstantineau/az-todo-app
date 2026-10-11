@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=43" defer></script>
+  <script src="/pwa.js?v=44" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=44"></script>
+  <script type="module" src="/inbox.js?v=45"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -288,7 +288,7 @@
     </dialog>
     <section class="card plan-panel" id="plan" aria-labelledby="planHeading" hidden>
       <p class="eyebrow">Align</p><h2 id="planHeading" tabindex="-1">Plan</h2>
-      <p>Start at the right level, choose the Next actions that matter this week, then inspect the day already planned.</p>
+      <details id="planHelp" class="plan-help"><summary>How Plan works</summary><p>Choose a planning focus, select the Next actions that matter this week, then order the actions for a day.</p></details>
       <p id="planStatus" class="muted" role="status" aria-live="polite">Loading plan…</p>
       <section class="plan-section" aria-labelledby="planRolesHeading">
         <h3 id="planRolesHeading">Roles &amp; goals</h3>
@@ -311,11 +311,11 @@
       <section class="plan-section" aria-labelledby="planDayHeading">
         <p class="eyebrow">Commit</p><h3 id="planDayHeading" tabindex="-1" data-focus-key="plan:day:heading">Day</h3>
         <div class="day-header actions" role="group" aria-label="Choose planning day">
-          <button id="planPreviousDay" type="button" aria-label="Previous planning day">Previous date</button>
+          <button id="planPreviousDay" type="button" aria-label="Previous planning day">Previous</button>
           <label>Planning day <input id="planDay" type="date" min="0001-01-01" max="9999-12-31"></label>
-          <button id="planNextDay" type="button" aria-label="Next planning day">Next date</button>
-          <button id="planCurrentDay" type="button">Current date</button>
-          <button id="planOpenDay" type="button">Open day in Process</button>
+          <button id="planNextDay" type="button" aria-label="Next planning day">Next</button>
+          <button id="planCurrentDay" type="button" aria-label="Current planning day">Today</button>
+          <button id="planOpenDay" type="button" aria-label="Open planning day in Process">Open in Process</button>
         </div>
         <p id="planDayAnnouncement" class="sr-only" role="status" aria-live="polite"></p>
         <details id="planCarryover" class="day-carryover" hidden>
@@ -323,6 +323,18 @@
           <p class="muted">Choose deliberately. Closing this section leaves every unresolved action on its prior date.</p>
           <div id="planCarryoverActions"></div>
         </details>
+        <div class="day-workspace">
+          <section aria-labelledby="planOrderedHeading">
+            <h4 id="planOrderedHeading">Ordered daily plan</h4>
+            <ol id="planDayActions" class="plan-actions day-plan-list"></ol>
+            <p id="planDayEmpty">Nothing is planned for this day.</p>
+          </section>
+          <section class="day-add" aria-labelledby="planAddHeading">
+            <h4 id="planAddHeading" tabindex="-1" data-focus-key="plan:add:heading">Add actions</h4>
+            <form id="planQuickAdd"><label>Action title <input name="title" maxlength="200" required></label><button type="submit">Add to this day</button></form>
+            <details id="planExistingPicker"><summary>Add an existing action</summary><div id="planEligibleActions" class="plan-actions"></div></details>
+          </section>
+        </div>
         <div class="day-load">
           <label>Load assessment
             <select id="planLoadAssessment">
@@ -341,17 +353,6 @@
             </select>
           </label>
           <p id="planLoadSummary" class="day-summary"></p>
-        </div>
-        <div class="day-workspace">
-          <section aria-labelledby="planOrderedHeading">
-            <h4 id="planOrderedHeading">Ordered daily plan</h4>
-            <ol id="planDayActions" class="plan-actions day-plan-list"></ol>
-          </section>
-          <section class="day-add" aria-labelledby="planAddHeading">
-            <h4 id="planAddHeading" tabindex="-1" data-focus-key="plan:add:heading">Add actions</h4>
-            <form id="planQuickAdd"><label>Action title <input name="title" maxlength="200" required></label><button type="submit">Add to this day</button></form>
-            <details id="planExistingPicker"><summary>Add an existing action</summary><div id="planEligibleActions" class="plan-actions"></div></details>
-          </section>
         </div>
         <details id="planHistory"><summary>Plan history</summary><ol id="planHistoryEntries"></ol></details>
       </section>

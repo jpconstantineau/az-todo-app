@@ -70,16 +70,16 @@ function collectionTree(collections, records, focus, choose) {
 }
 
 function renderBreadcrumbs(focus, records, choose) {
+  $('planBreadcrumbs').hidden = !focus;
+  if (!focus) { $('planBreadcrumbs').replaceChildren(); return; }
   const list = document.createElement('ol'), workspace = document.createElement('li');
   workspace.append(control('Workspace', () => choose(''), 'Plan the whole workspace', 'plan:breadcrumb:workspace')); list.append(workspace);
-  if (focus) {
-    const chain = ancestry(records[focus], records).reverse();
-    for (const ref of chain) {
-      const item = document.createElement('li'), record = records[refKey(ref)];
-      if (record && !record.deleted) item.append(control(record.title, () => choose(refKey(record)), `Plan ${record.title}`, `plan:breadcrumb:${refKey(record)}`));
-      else item.textContent = `Unavailable parent (${refKey(ref)})`;
-      list.append(item);
-    }
+  const chain = ancestry(records[focus]?.parentRef, records).reverse();
+  for (const ref of chain) {
+    const item = document.createElement('li'), record = records[refKey(ref)];
+    if (record && !record.deleted) item.append(control(record.title, () => choose(refKey(record)), `Plan ${record.title}`, `plan:breadcrumb:${refKey(record)}`));
+    else item.textContent = `Unavailable parent (${refKey(ref)})`;
+    list.append(item);
   }
   $('planBreadcrumbs').replaceChildren(list);
 }
@@ -136,12 +136,13 @@ export function estimateSummary(items, method) {
     if (item.effortEstimate.scale !== method) { previous++; return []; }
     return [item.effortEstimate.value];
   });
-  if (method === 'fibonacci') return `${current.reduce((sum, value) => sum + value, 0)} points · ${unknown} unestimated · ${previous} previous-scale`;
-  const counts = ['XL', 'L', 'M', 'S', 'XS'].flatMap(value => {
+  const facts = method === 'fibonacci' ? [current.reduce((sum, value) => sum + value, 0)].filter(Boolean).map(total => `${total} points`) : ['XL', 'L', 'M', 'S', 'XS'].flatMap(value => {
     const count = current.filter(entry => entry === value).length;
     return count ? [`${count} ${value}`] : [];
   });
-  return `${counts.join(' · ') || 'No current-scale estimates'} · ${unknown} unestimated · ${previous} previous-scale`;
+  if (unknown) facts.push(`${unknown} unestimated`);
+  if (previous) facts.push(`${previous} previous-scale`);
+  return facts.join(' · ');
 }
 
 const planSnapshot = plan => ({ actionIds: [...(plan?.actionIds || [])], loadAssessment: plan?.loadAssessment || 'needs_assessment' });
@@ -253,12 +254,16 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     const projectsWithNext = activeProjects.filter(project => next.some(item => inPlanningFocus(item, refKey(project), recordMap))).length;
     $('planFocusTitle').textContent = focusRecord?.title || 'Whole workspace';
     $('planFocusKind').textContent = focusRecord ? collectionKinds[collectionKind(focusRecord)] : 'Workspace';
-    $('planFocusDescription').textContent = focusRecord ? focusRecord.outcome || focusRecord.description || 'No outcome or notes yet.' :
-      collections.length ? 'Choose a role, area, initiative, project or list to narrow the plan.' : 'Start with what matters. Add a collection, or plan unfiled Next actions here.';
-    const coverage = focusRecord?.type === 'project'
-      ? `${next.length} Next ${next.length === 1 ? 'action' : 'actions'}`
-      : `${projectsWithNext} of ${activeProjects.length} active ${activeProjects.length === 1 ? 'project has' : 'projects have'} a Next action`;
-    $('planFocusCounts').textContent = `${directChildren.length} direct ${directChildren.length === 1 ? 'child' : 'children'} · ${activeProjects.length} active ${activeProjects.length === 1 ? 'project' : 'projects'} · ${coverage}`;
+    const description = focusRecord?.outcome || focusRecord?.description || '';
+    $('planFocusDescription').textContent = description;
+    $('planFocusDescription').hidden = !description;
+    const focusFacts = [];
+    if (directChildren.length) focusFacts.push(`${directChildren.length} direct ${directChildren.length === 1 ? 'child' : 'children'}`);
+    if (activeProjects.length) focusFacts.push(`${activeProjects.length} active ${activeProjects.length === 1 ? 'project' : 'projects'}`);
+    if (focusRecord?.type === 'project' && next.length) focusFacts.push(`${next.length} Next ${next.length === 1 ? 'action' : 'actions'}`);
+    else if (projectsWithNext) focusFacts.push(`${projectsWithNext} ${projectsWithNext === 1 ? 'project has' : 'projects have'} a Next action`);
+    $('planFocusCounts').textContent = focusFacts.join(' · ');
+    $('planFocusCounts').hidden = !focusFacts.length;
     const summaryActions = [];
     if (focusRecord) {
       summaryActions.push(control('Open in Organize', () => openCollection(focusRecord), `Open ${focusRecord.title} in Organize`, `plan:collection:${plan.focus}:open`));
@@ -274,7 +279,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     const selected = all.filter(record => record.type === 'item' && record.plannedWeek === plan.week && inPlanningFocus(record, plan.focus, recordMap));
     const attention = selected.filter(record => record.deleted || archiveOnly(record, recordMap) || record.status !== 'next');
     $('planWeekActions').replaceChildren(...[...eligible.values()].map(item => itemRow(item, plan.week, recordMap, item.plannedWeek === plan.week, readOnly(), save, edit)));
-    if (!$('planWeekActions').childElementCount) $('planWeekActions').textContent = next.length ? 'No actions are available for this week.' : 'No Next actions in this planning focus. Process the inbox or choose another focus.';
+    if (!$('planWeekActions').childElementCount) $('planWeekActions').textContent = next.length ? 'No actions are available for this week.' : 'No Next actions.';
     $('planAttention').hidden = !attention.length;
     $('planAttentionActions').replaceChildren(...attention.map(item => itemRow(item, plan.week, recordMap, true, readOnly(), save, item.deleted ? inspectDeleted : edit)));
     const plannedReady = selected.filter(item => !item.deleted && !archiveOnly(item, recordMap) && item.status === 'next');
@@ -283,7 +288,10 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     const direct = plannedReady.filter(item => focusRecord
       ? memberships(item).some(ref => refKey(ref) === plan.focus)
       : !memberships(item).length).length;
-    $('planBalance').textContent = `${plannedReady.length} unique ${plannedReady.length === 1 ? 'action' : 'actions'} planned${branches.length ? ` · ${branches.map(([title, count]) => `${title}: ${count}`).join(' · ')} (branches may overlap)` : ''}${direct ? ` · ${focusRecord ? 'Direct' : 'Unfiled'}: ${direct}` : ''}.`;
+    $('planBalance').hidden = !plannedReady.length;
+    $('planBalance').textContent = plannedReady.length
+      ? `${plannedReady.length} unique ${plannedReady.length === 1 ? 'action' : 'actions'} planned${branches.length ? ` · ${branches.map(([title, count]) => `${title}: ${count}`).join(' · ')} (branches may overlap)` : ''}${direct ? ` · ${focusRecord ? 'Direct' : 'Unfiled'}: ${direct}` : ''}.`
+      : '';
 
     const day = $('planDay').value, owner = workspaceId();
     const dayPlan = recordMap[planKey(owner, day)], dayItems = orderedDayItems(recordMap, owner, day);
@@ -294,8 +302,8 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
     $('planLoadAssessment').value = assessment;
     $('planLoadAssessment').disabled = readOnly(); $('planEstimationMethod').disabled = readOnly();
     const summary = estimateSummary(dayItems, method);
-    $('planLoadSummary').textContent = `${assessmentLabels[assessment]}${summary ? ` · ${summary}` : ''}`;
-    $('planLoadSummary').dataset.assessment = assessment;
+    $('planLoadSummary').textContent = summary;
+    $('planLoadSummary').hidden = !summary;
     $('planExistingPicker').open = navigation().addOpen === true;
 
     const reorder = async (item, position) => {
@@ -348,9 +356,8 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
       remove.disabled = readOnly(); controls.append(remove); row.append(content, controls); return row;
     });
     $('planDayActions').replaceChildren(...rows);
-    if (!rows.length) {
-      const empty = document.createElement('li'); empty.textContent = day ? 'Nothing is planned for this day.' : 'Choose a day to build its plan.'; $('planDayActions').append(empty);
-    }
+    $('planDayActions').hidden = !rows.length;
+    $('planDayEmpty').hidden = !!rows.length;
 
     const excluded = new Set(['completed', 'dropped', 'reference']);
     const dayEligible = all.filter(item => item.type === 'item' && !item.deleted && !archiveOnly(item, recordMap) && item.workspaceId === owner && item.plannedDay !== day && !excluded.has(item.status));
@@ -401,10 +408,12 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
       item.textContent = `${revision.sequence}. ${revision.operationKind.replaceAll('_', ' ')}: ${revision.before.actionIds.length} → ${revision.after.actionIds.length} actions; ${assessmentLabels[revision.before.loadAssessment]} → ${assessmentLabels[revision.after.loadAssessment]}`;
       return item;
     }));
-    if (!history.length) $('planHistoryEntries').textContent = 'No explicit planning changes yet. Legacy Planned day actions remain available above.';
-    const announcement = `${day}: ${dayItems.length} planned ${dayItems.length === 1 ? 'action' : 'actions'}. ${$('planLoadSummary').textContent}`;
+    $('planHistory').hidden = !history.length;
+    const announcement = `${day}: ${dayItems.length} planned ${dayItems.length === 1 ? 'action' : 'actions'}.`;
     if (announcement !== lastDayAnnouncement) { $('planDayAnnouncement').textContent = announcement; lastDayAnnouncement = announcement; }
-    $('planStatus').textContent = readOnly() ? 'This workspace is read-only. You can inspect its plan and history, but changes are disabled.' : navigator.onLine ? '' : 'Working offline. Plan changes stay on this device until you reconnect.';
+    const status = readOnly() ? 'This workspace is read-only. You can inspect its plan and history, but changes are disabled.' : navigator.onLine ? '' : 'Working offline. Plan changes stay on this device until you reconnect.';
+    $('planStatus').textContent = status;
+    $('planStatus').hidden = !status;
   }
 
   return { render };

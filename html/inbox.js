@@ -16,7 +16,7 @@ import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=5';
 import { setupAgentStatus } from './local-agent.js?v=2';
 import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
-import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=5';
+import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=6';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
 import { setupRecurrence } from './recurrence-ui.js?v=3';
 

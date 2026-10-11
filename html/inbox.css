@@ -291,6 +291,7 @@
 .execute-check input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; }
 .execute-item .editable-title { flex: 1; min-width: 0; justify-content: flex-start; }
 .plan-panel { display: grid; gap: var(--space-4); }
+.plan-help > p, #planDayEmpty { margin-bottom: 0; }
 .review-setup, .review-decision-help, .review-reflection { border-block: var(--border-width) solid var(--border); padding-block: var(--space-2) var(--space-4); margin-block: var(--space-4); }
 .project-plan-section { margin-block: var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface-raised); }
 .project-plan-section > h3 { margin-bottom: var(--space-2); }
@@ -352,12 +353,17 @@
   #captureText { min-height: 50dvh; }
   #editor { height: 92dvh; }
   .workspace-nav > * { padding-inline: var(--space-1); }
+  .plan-panel { gap: var(--space-3); }
+  .plan-section { padding-top: var(--space-3); }
+  .plan-section > h3 { margin-bottom: var(--space-2); }
   .plan-browser { grid-template-columns: minmax(0, 1fr); }
   .plan-hierarchy { display: none; }
   .plan-focus-picker { display: block; }
   .inbox-page .plan-action, .inbox-page .plan-day-action { align-items: stretch; flex-direction: column; }
   .plan-action > button { align-self: flex-start; }
   .plan-day-action > span { text-align: left; }
+  .day-header { gap: var(--space-1); }
+  .day-header label { margin-block: 0; }
   .day-load, .day-workspace { grid-template-columns: minmax(0, 1fr); }
   .day-add { width: 100%; }
   .inbox-page .day-plan-row { grid-template-columns: minmax(0, 1fr); }
