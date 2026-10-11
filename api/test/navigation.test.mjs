@@ -129,10 +129,15 @@ test('navigation: process selector defaults to Inbox, preserves a chosen list of
 
 test('navigation: Execute selects a list, opens details and completes exact items offline through reload and sync', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t, '#execute');
-  assert.equal(await page.title(), 'Execute · Personal');
+  assert.equal(await page.title(), 'Do · Personal');
+  assert.equal(await page.locator('#executeHeading').textContent(), 'Do');
+  assert.equal(new URL(page.url()).hash, '#execute');
   assert.equal(await page.locator('#doWork').getAttribute('aria-current'), 'page');
   assert.equal(await page.locator('.inbox-grid > #execute').isVisible(), true);
   assert.match(await page.locator('#executeItems').innerText(), /No lists yet/);
+  assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
+  assert.equal(await page.locator('#executeHelp').getAttribute('open'), null);
+  assert.equal(await page.locator('#inspectExecute').isVisible(), true);
   await capture(page, 'Milk\nBread', 'Groceries'); await confirmed(page);
   await capture(page, 'Laundry', 'Chores'); await confirmed(page);
   await capture(page, 'Unfiled'); await confirmed(page);
@@ -143,6 +148,8 @@ test('navigation: Execute selects a list, opens details and completes exact item
   assert.equal(await page.locator('#executeItems article').count(), 0, 'choosing a list is required');
   await page.locator('#executeList').selectOption(groceries.id);
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Milk', 'Bread']);
+  const firstResult = await page.locator('#executeItems article').first().boundingBox();
+  assert.ok(firstResult && firstResult.y < 844, 'the first Do result is inside the initial phone viewport');
   await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).focus();
   await page.keyboard.press('Tab');
   await page.waitForFunction(() => document.activeElement.getAttribute('aria-label') === 'Edit Milk');
@@ -204,22 +211,31 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a list', 'Errands']);
   await page.locator('#executeList').selectOption('regular');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk', 'Buy furniture']);
-  await page.locator('#executeFilters > summary').click();
+  assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
+  await page.locator('#executeFilters > summary').focus(); await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#executeFilters').getAttribute('open'), '');
+  await page.keyboard.press('Tab');
+  assert.ok(await page.locator('#executeContextFilter').evaluate(element => element === document.activeElement));
+  assert.equal(await page.locator('#executeFilterHelp').getAttribute('class'), 'sr-only');
   await page.locator('#executeContextFilter').selectOption('context:Store');
   await page.locator('#executeTimeFilter').selectOption('30');
   await page.locator('#executeEnergyFilter').selectOption('low');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
+  assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), null);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.execute.energy === 'low');
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), 'regular');
   assert.equal(await page.locator('#executeTimeFilter').inputValue(), '30');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
+  assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), null);
   await page.locator('[data-execute-kind="project"]').click();
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a project', 'Trip']);
   await page.locator('#executeList').selectOption('project:project');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [], 'Execute filters continue across collection types');
+  assert.equal(await page.locator('#inspectExecute').isVisible(), true);
   await page.locator('#executeFilters > summary').click();
   await page.locator('#resetExecuteFilters').click();
+  assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
   assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Book tickets']);
   await page.locator('[data-execute-kind="checklist"]').click();
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a checklist', 'Packing']);
@@ -299,6 +315,7 @@ test('navigation: Execute offers only ready work in every collection and opens e
     assert.equal(await page.locator('#executeItems input[type=checkbox]').count(), 2);
     await page.locator('#inspectExecute').click();
     await page.waitForFunction(value => document.querySelector('#listWorkspace').getAttribute('aria-current') === 'page' && document.querySelector('#view').value === value, id);
+    await page.waitForFunction(() => document.activeElement.id === 'itemsHeading');
     assert.equal(await page.locator('#view').inputValue(), id);
     assert.equal(await page.locator('#statusFilter').inputValue(), '@all');
     assert.equal(await page.locator('#items article').count(), states.length);
@@ -310,6 +327,9 @@ test('navigation: Execute offers only ready work in every collection and opens e
   await page.locator('[data-execute-kind="list"]').click();
   await page.locator('#executeList').selectOption('holding');
   assert.match(await page.locator('#executeItems').innerText(), /No ready items in this list/);
+  const emptyState = await page.locator('#executeItems').boundingBox();
+  assert.ok(emptyState && emptyState.y < 844, 'the Do empty state is inside the initial phone viewport');
+  assert.equal(await page.locator('#inspectExecute').isVisible(), true);
   await page.locator('#inspectExecute').click();
   await page.waitForFunction(() => document.querySelector('#view').value === 'holding');
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Holding waiting']);

@@ -13,7 +13,7 @@ sans typography stays at 16px body, 14px supporting text, 22px section headings,
 and 28px page titles. Spacing follows 4/8/12/16/24/32px. There are no added fonts,
 dependencies, marketing layouts, logos or product-color branding.
 
-- Capture uses a large full-width input. Capture, Process, Execute and Lists
+- Capture uses a large full-width input. Capture, Process, Do and Organize
   share the same durable records, account/workspace drafts and recovery tools.
 - Editing and preferences use native modal dialogs: a 560px side panel on desktop
   and a bottom sheet below 768px. Native modality isolates background controls.
