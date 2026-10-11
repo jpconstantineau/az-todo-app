@@ -7,7 +7,7 @@ import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=19';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
-import { clarificationUI } from './clarification.js?v=13';
+import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=11';
 import { setupBriefs } from './briefs.js?v=6';
@@ -621,7 +621,8 @@ function statusText(id, text) {
 }
 function connectionStatus() {
   if (!accountId || !state) return;
-  const needsAttention = state.queue.some(entry => entry.failure) || state.workspaceMove?.failure || !$('error').hidden;
+  const alertNeedsAttention = !$('error').hidden && ['storage', 'sync'].includes($('error').dataset.kind);
+  const needsAttention = state.queue.some(entry => entry.failure) || state.workspaceMove?.failure || alertNeedsAttention;
   const pending = state.queue.length || state.workspaceMove;
   $('saveStatus').dataset.state = localMode() ? needsAttention ? 'error' : 'confirmed' : !navigator.onLine ? 'offline' : needsAttention ? 'error' : pending || syncing ? 'pending' : 'confirmed';
   const label = localMode() ? needsAttention ? 'Device save needs attention' : 'Saved on this device'
@@ -630,7 +631,7 @@ function connectionStatus() {
   statusText('connectionLabel', label);
   statusText('menuSyncState', localMode() ? 'Sign in required' : !navigator.onLine ? 'Offline' : needsAttention ? 'Needs attention' : pending || syncing ? 'Pending' : 'Saved');
 }
-function error(message, kind = 'local') {
+function error(message, kind = 'message') {
   $('error').hidden = false; statusText('error', message); $('error').dataset.kind = kind;
   if ($('editor').open) { $('editError').hidden = false; statusText('editError', message); }
   if (taskOptionRoute(destination)) { $('defaultsError').hidden = false; statusText('defaultsError', message); }
@@ -668,7 +669,7 @@ function preferenceDraft() {
     : state.preferenceDraft;
 }
 function storageFailure(failure) {
-  error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`);
+  error(`Could not save on this device: ${failure.message}. Your text has been kept. Copy or export it before leaving.`, 'storage');
   statusText('draftStatus', 'Not saved on device');
   $('recovery').hidden = false;
   $('recoveryText').value = JSON.stringify({ accountId, draft: draft(), preferenceDraft: preferenceDraft(), localCopy: state }, null, 2);
@@ -965,7 +966,8 @@ function render() {
   const searchMode = !listMode && view === '@search';
   $('listTools').hidden = !listMode || archiveMode;
   $('recurringSection').hidden = !listMode || archiveMode;
-  $('clarifyInbox').hidden = listMode || searchMode;
+  const hasInboxItems = clarification.hasInboxItems();
+  $('clarifyInbox').hidden = listMode || searchMode || !hasInboxItems;
   $('statusFilter').closest('label').hidden = archiveMode || searchMode;
   $('statusSelection').hidden = archiveMode || searchMode || $('statusSelection').hidden;
   $('executionFilters').hidden = !listMode || archiveMode;
@@ -1019,8 +1021,9 @@ function render() {
       if (record[name]) metadata.append(` · ${label}: ${name.endsWith('Utc') ? new Date(record[name]).toLocaleString() : record[name]}`);
     }
     if (reviewReady(record)) metadata.append(' · Ready for review — choose Next or set a new date');
-    const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!record.localState);
-    status.textContent = [record.status, record.localState].filter(Boolean).join(' · ');
+    const rowPersistence = record.localState === 'Saved on this device' ? null : record.localState;
+    const status = document.createElement('p'); status.className = 'record-state'; status.dataset.pending = String(!!rowPersistence);
+    status.textContent = [record.status, rowPersistence].filter(Boolean).join(' · ');
     const content = document.createElement('div'); content.className = 'task-content'; content.append(title, notes, metadata, status);
     const actions = document.createElement('div'); actions.className = 'task-actions'; actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', `Actions for ${record.title}`);
     const action = record.status === 'completed' ? 'Reopen' : 'Complete';
@@ -1042,7 +1045,9 @@ function render() {
     $('items').textContent = listMode && !view
       ? (lists.length ? 'Choose a collection to see its items and manage its details.' : 'No collections yet. Create one with New list, or use Capture without one.')
       : executionCount ? 'No items match this view. Reset context, time & energy to broaden your choices, or change View or Status.'
-      : view === 'inbox' ? 'No unprocessed captures match this view. Check Status for additional filters, or use Capture to add work.'
+      : view === 'inbox' ? hasInboxItems
+        ? 'No Inbox items match the current Status filter. Reset Status, or choose another View.'
+        : 'Inbox is empty. Use Capture to add work, or choose another View to see saved work.'
       : context ? `No items match this view. Choose Completed or All statuses to see finished work, or use ${project ? 'Add next action' : 'Add item'} to add work here.`
       : 'No items match this view. Choose Completed or All statuses to see finished work, or use Capture to add work.';
     if (archivedCount && !archiveMode) $('items').append(' ', archivedLink());
@@ -2381,7 +2386,7 @@ function hideAccount() {
 }
 async function pauseSession(message) {
   try { await transact(null, session => { session.paused = true; session.activeProfile = LOCAL_PROFILE; }); }
-  catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.'); }
+  catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.', 'storage'); }
   await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
   broadcast(); $('sessionStatus').textContent = message;
 }
