@@ -12,6 +12,16 @@ const records = () => documents.filter(doc => doc.kind === 'record').map(doc => 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const op = mutations => ({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations });
 const create = currentCreate;
+async function refreshReviews(page) {
+  await page.evaluate(() => {
+    window.reviewRenderCount = 0;
+    window.reviewRenderObserver?.disconnect();
+    window.reviewRenderObserver = new MutationObserver(() => window.reviewRenderCount++);
+    window.reviewRenderObserver.observe(document.querySelector('#reviewSessions'), { childList: true });
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  });
+  await page.waitForFunction(() => window.reviewRenderCount > 0);
+}
 
 test('reviews resume offline and across devices, allow retained unknowns and undo, and hide switched accounts', { timeout: 90000 }, async t => {
   documents.length = 0; let user = 'alice';
@@ -23,11 +33,38 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.locator('#captureText').fill('Milk\nInsurance'); await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll('#items article').length === 2); await confirmed(page);
-  await clickControl(page.locator('#openReviews')); await page.locator('#startDaily').click();
+  await clickControl(page.locator('#openReviews'));
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), true);
+  assert.equal(await page.locator('#reviewBody').isHidden(), true);
+  const orderedReviewIds = ['reviewRecord', 'reviewDetails', 'reviewOriginalDetails', 'reviewRetain', 'reviewComplete', 'reviewNext', 'reviewDrop',
+    'reviewDefer', 'reviewDeferSave', 'reviewUnavailable', 'reviewUndo', 'reviewDecisionHelp', 'reviewDecisionHistory', 'reviewReflection', 'reviewSetup'];
+  assert.deepEqual(await page.evaluate(ids => [...document.querySelectorAll(ids.map(id => `#${id}`).join(','))].map(element => element.id), orderedReviewIds), orderedReviewIds);
+  await page.locator('#reviewSetup > summary').click();
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), false);
+  await refreshReviews(page);
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), false);
+  await page.locator('#reviewSetup > summary').click();
+  await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), false);
+  assert.equal(await page.locator('#reviewBody').isVisible(), true);
+  assert.match(await page.locator('#reviewDecisionHelp').textContent(), /Retain keeps the current state.*Defer sets a review start date.*Undo is available/s);
+  await page.locator('#reviewSetup > summary').click();
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), true);
+  await refreshReviews(page);
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), true);
   assert.match(await page.locator('#reviewDetails').textContent(), /empty/); await confirmed(page);
   await context.setOffline(true);
   await page.locator('#startWeekly').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2'));
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), true);
+  const activeViewport = await page.evaluate(() => {
+    const firstDecision = ['reviewRetain', 'reviewComplete', 'reviewNext', 'reviewDrop', 'reviewDeferSave', 'reviewUnavailable']
+      .map(id => document.getElementById(id)).find(control => !control.disabled && !control.hidden);
+    const rectangle = element => { const { top, bottom } = element.getBoundingClientRect(); return { top, bottom }; };
+    return { innerHeight, title: rectangle(document.querySelector('#reviewTitle')), decision: rectangle(firstDecision) };
+  });
+  assert.ok(activeViewport.title.top >= 0 && activeViewport.title.bottom <= activeViewport.innerHeight, `active review title is outside ${activeViewport.innerHeight}px viewport: ${JSON.stringify(activeViewport.title)}`);
+  assert.ok(activeViewport.decision.top >= 0 && activeViewport.decision.bottom <= activeViewport.innerHeight, `first enabled decision is outside ${activeViewport.innerHeight}px viewport: ${JSON.stringify(activeViewport.decision)}`);
   await page.locator('#reviewRetain').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
   assert.match(await page.locator('#reviewProgress').textContent(), /pending/);
   await page.locator('#reviewDefer').fill('2026-10-08');
@@ -91,6 +128,7 @@ test('review cues include projects and waiting work; competing devices and delet
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2')); await confirmed(page);
   let session = records().find(r => r.type === 'review');
   assert.deepEqual(session.included.map(r => r.id).sort(), ['next', 'waiting']);
+  await page.locator('#reviewSetup > summary').click();
   await page.locator('#startWeekly').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 5')); await confirmed(page);
   session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
   const index = id => String(session.included.findIndex(r => r.id === id));

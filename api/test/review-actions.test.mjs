@@ -135,7 +135,7 @@ test('review actions edit, clarify and add project actions in place with offline
   assert.equal(records().find(record => record.id === 'shelf').description, 'Top shelf first');
   assert.equal(records().find(record => record.id === 'someday').dueDate, '2027-01-01');
   assert.equal(records().filter(record => record.title === 'Sweep garage').length, 1);
-  await clickControl(page.locator('#openReviews')); await page.locator('#startDaily').click();
+  await clickControl(page.locator('#openReviews')); await page.locator('#reviewSetup > summary').click(); await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('daily review: 0 of 2'));
   await page.locator('#reviewComplete').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('daily review: 1 of 2')); await confirmed(page);

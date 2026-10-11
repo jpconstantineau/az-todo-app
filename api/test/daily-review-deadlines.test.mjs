@@ -74,6 +74,7 @@ for (const [timezoneId, instant] of [
     await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
     await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
     await clickControl(page.locator('#openReviews'));
+    await page.locator('#reviewSetup > summary').click();
     await page.locator('#reviewSessions').selectOption(session.id);
     assert.equal(await page.locator('#reviewRecord option').count(), session.included.length, 'the frozen review can resume offline');
   });

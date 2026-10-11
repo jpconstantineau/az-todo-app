@@ -54,10 +54,16 @@ export function reviewHistory(session, records) {
 }
 
 export function setupReviews({ current, save, journal, edit, clarify, addAction, openPlan, workspaceId, records: scopedRecords }) {
-  let active = null, selected = null, displayed, busy = false;
+  let active = null, selected = null, displayed, busy = false, renderedSessionState = null;
   let reflectionDraft = null;
   const draft = () => ({ active, selected, deferUntil: $('reviewDefer').value, reflection: reflectionDraft ? structuredClone(reflectionDraft) : null });
   const message = value => { $('reviewError').textContent = value; };
+  function showSession(session) {
+    const sessionState = !!session;
+    if (renderedSessionState === null || renderedSessionState !== sessionState) $('reviewSetup').open = !sessionState;
+    renderedSessionState = sessionState;
+    $('reviewBody').hidden = !session;
+  }
   function candidates(records, reviewKind, day, previous) {
     const seen = new Set(), visited = new Set();
     for (let session = previous; session && !visited.has(session.id); session = records[`review:${session.previousReviewId}`]) {
@@ -83,7 +89,7 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     select.replaceChildren(new Option('Choose a saved review', ''), ...sessions.map(session => new Option(`${session.reviewKind} · ${session.reviewDay} · ${session.included.filter((_, i) => done(session, i)).length}/${session.included.length}`, session.id)));
     select.value = active || '';
     const session = sessions.find(session => session.id === active);
-    $('reviewBody').hidden = !session;
+    showSession(session);
     if (!session) { displayed = null; return; }
     const root = rootReview(session, records), reflections = reviewReflections(root.id, records), accepted = reflections.at(-1);
     if (reflectionDraft?.rootReviewId !== root.id) reflectionDraft = accepted ? cloneReflection(accepted) : {
@@ -289,7 +295,12 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
   $('startWeekly').onclick = () => void perform(() => start('weekly'));
   $('startSomeday').onclick = () => void perform(() => start('someday'));
   $('reviewNextBatch').onclick = () => void perform(() => start(displayed.session.reviewKind, displayed.session));
-  $('reviewSessions').onchange = () => { active = $('reviewSessions').value; selected = null; message(''); render(); void journal(); };
+  $('reviewSessions').onchange = () => {
+    active = $('reviewSessions').value; selected = null; message('');
+    render();
+    if (active) $('reviewTitle').focus();
+    void journal();
+  };
   $('reviewRecord').onchange = () => { selected = Number($('reviewRecord').value); message(''); render(); void journal(); };
   $('reviewDefer').oninput = () => void journal();
   for (const section of document.querySelectorAll('[data-reflection-prompt]')) {
@@ -312,6 +323,6 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
   for (const [id, choice] of [['reviewRetain', 'retain'], ['reviewDrop', 'drop'], ['reviewComplete', 'complete'], ['reviewNext', 'next'], ['reviewDeferSave', 'defer'], ['reviewUnavailable', 'unavailable'], ['reviewUndo', 'undo']]) $(id).onclick = () => void perform(() => decide(choice));
   return { render, draft, get busy() { return busy; },
     restore(saved = {}) { active = saved.active || null; selected = saved.selected ?? null; reflectionDraft = saved.reflection || null; $('reviewDefer').value = saved.deferUntil || ''; render(); },
-    reset() { active = selected = displayed = reflectionDraft = null; $('reviews').hidden = true; $('reviewSessions').replaceChildren(); $('reviewBody').hidden = true; for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions', 'reviewReflectionStatus', 'reviewRoleSummary', 'reviewPlanSummary', 'reviewReflectionHistory', 'reviewFollowUps']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
+    reset() { active = selected = displayed = reflectionDraft = null; renderedSessionState = null; $('reviews').hidden = true; $('reviewSessions').replaceChildren(); showSession(null); for (const id of ['reviewDetails', 'reviewTitle', 'reviewOriginal', 'reviewHistory', 'reviewProgress', 'reviewCapacity', 'reviewError', 'reviewProjectSummary', 'reviewProjectActions', 'reviewReflectionStatus', 'reviewRoleSummary', 'reviewPlanSummary', 'reviewReflectionHistory', 'reviewFollowUps']) $(id).textContent = ''; $('reviewRecord').replaceChildren(); $('reviewDefer').value = ''; }
   };
 }

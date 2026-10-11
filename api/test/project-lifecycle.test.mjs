@@ -83,6 +83,7 @@ test('project lifecycle stays recoverable offline and separates active and somed
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 3')); await confirmed(page);
   const weekly = structuredClone(records().find(record => record.reviewKind === 'weekly'));
   assert.deepEqual(weekly.included.map(ref => ref.id).sort(), ['draft-review', 'legacy', 'unfinished']);
+  await page.locator('#reviewSetup > summary').click();
   await page.locator('#startSomeday').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('someday review: 0 of 1')); await confirmed(page);
   assert.deepEqual(records().find(record => record.reviewKind === 'someday').included, [{ type: 'project', id: 'incubated' }]);
@@ -119,7 +120,7 @@ test('project lifecycle stays recoverable offline and separates active and somed
   assert.equal(get('legacy').status, 'completed');
   assert.deepEqual(records().filter(record => record.type === 'item'), actions);
   assert.deepEqual(records().filter(record => ['review', 'reviewDecision'].includes(record.type)), history);
-  await clickControl(page.locator('#openReviews')); await page.locator('#startWeekly').click();
+  await clickControl(page.locator('#openReviews')); await page.locator('#reviewSetup > summary').click(); await page.locator('#startWeekly').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('weekly review: 0 of 3')); await confirmed(page);
   assert.deepEqual(records().filter(record => record.reviewKind === 'weekly').at(-1).included.map(ref => ref.id).sort(), ['draft-review', 'incubated', 'unfinished']);
 
