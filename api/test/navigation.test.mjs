@@ -530,7 +530,7 @@ test('navigation: unprocessed inbox spans lists while No list preserves filing a
   await page.waitForFunction(() => document.querySelector('#clarifyQuestion').textContent === 'Session summary');
   await page.locator('#clarifyStop').click();
   assert.deepEqual(await rows(), []);
-  assert.match(await page.locator('#items').innerText(), /No unprocessed captures/);
+  assert.equal(await page.locator('#items').innerText(), 'Inbox is empty. Use Capture to add work, or choose another View to see saved work.');
   await page.locator('#view').selectOption('unfiled');
   assert.ok((await rows()).includes('filed'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.work.view === 'unfiled');

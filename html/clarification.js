@@ -320,6 +320,7 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
   }
   return {
     snapshot,
+    hasInboxItems() { return inboxItems().length > 0; },
     open(item) {
       const saved = records()[`clarification:${item.id}`];
       if (item.deleted && saved?.step === 'complete' && saved.decision?.type === 'convert') {

@@ -42,7 +42,7 @@ test('context add: offline list/project additions keep Capture and editor drafts
   const { page, context } = await setup(t, [currentCreate('project', 'garage', { title: 'Garage', outcome: 'A usable garage' })]);
   await showView(page, 'work');
   assert.equal(await page.locator('#newProject').count(), 0);
-  assert.equal(await page.locator('#clarifyInbox').isVisible(), true);
+  assert.equal(await page.locator('#clarifyInbox').isVisible(), false);
   assert.equal(await page.locator('#addContextItem').isVisible(), false);
   await showView(page, 'capture');
   await page.locator('#captureText').fill('Unfinished global capture');
