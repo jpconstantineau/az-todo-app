@@ -32,6 +32,70 @@ test('plan helpers use local Mondays, every membership path and a live-parent fa
   assert.equal(estimateSummary(ordered, 'tshirt'), '1 M · 1 unestimated · 1 previous-scale');
   assert.equal(estimateSummary(ordered, 'fibonacci'), '8 points · 1 unestimated · 1 previous-scale');
   assert.equal(estimateSummary(ordered, 'none'), '');
+  assert.equal(estimateSummary([], 'tshirt'), '');
+  assert.equal(estimateSummary([{ effortEstimate: { scale: 'tshirt', value: 'M' } }], 'fibonacci'), '1 previous-scale');
+});
+
+test('Plan keeps the recurring-use empty state compact and preserves native disclosure and removal focus', { timeout: 90000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
+  await page.goto(server.url + '/#plan'); await page.locator('#workspace').waitFor(); await confirmed(page);
+
+  const help = page.locator('#planHelp');
+  assert.equal(await help.evaluate(element => element.open), false);
+  assert.equal(await help.locator('p').textContent(), 'Choose a planning focus, select the Next actions that matter this week, then order the actions for a day.');
+  const helpSummary = help.locator('summary');
+  await helpSummary.focus(); await helpSummary.press('Enter');
+  assert.equal(await help.evaluate(element => element.open), true);
+  assert.ok(await helpSummary.evaluate(element => element === document.activeElement));
+  await helpSummary.press('Enter');
+  assert.equal(await help.evaluate(element => element.open), false);
+  assert.ok(await helpSummary.evaluate(element => element === document.activeElement));
+
+  assert.equal(await page.locator('#planBreadcrumbs').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planFocusDescription').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planFocusCounts').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planBalance').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planWeekActions').innerText(), 'No Next actions.');
+  assert.equal(await page.locator('#planDayActions').locator(':scope > li').count(), 0);
+  assert.equal(await page.locator('#planDayActions').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planDayEmpty').innerText(), 'Nothing is planned for this day.');
+  assert.equal(await page.locator('#planDayEmpty').evaluate(element => element.hidden), false);
+  assert.equal(await page.locator('#planHistory').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planLoadAssessment').inputValue(), 'needs_assessment');
+  assert.equal(await page.locator('#planLoadSummary').evaluate(element => element.hidden), true);
+  const positions = await page.locator('#plan').evaluate(element => ({
+    day: element.querySelector('#planDayHeading').getBoundingClientRect().top,
+    ordered: element.querySelector('#planOrderedHeading').getBoundingClientRect().top,
+    dayHeader: [...element.querySelector('.day-header').children].map(child => ({ text: child.textContent.trim(), top: child.getBoundingClientRect().top, bottom: child.getBoundingClientRect().bottom })),
+  }));
+  assert.ok(positions.day < 844, JSON.stringify(positions));
+  assert.ok(positions.ordered < 844, JSON.stringify(positions));
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+
+  await page.locator('#planQuickAdd input[name="title"]').fill('Only action');
+  await page.locator('#planQuickAdd').getByRole('button', { name: 'Add to this day' }).click();
+  await waitForBrowser(page, async () => {
+    const { projected, transact } = await import('/inbox-store.js?v=9');
+    return Object.values(projected(await transact('alice'))).some(record => record.type === 'item' && record.title === 'Only action' && record.plannedDay);
+  });
+  await confirmed(page);
+  assert.equal(await page.locator('#planDayActions > li[data-id]').count(), 1);
+  assert.equal(await page.locator('#planDayEmpty').evaluate(element => element.hidden), true);
+  assert.equal(await page.locator('#planHistory').evaluate(element => element.hidden), false);
+  await page.getByRole('button', { name: 'Remove Only action from daily plan; keep its workflow state', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const { projected, transact } = await import('/inbox-store.js?v=9');
+    return Object.values(projected(await transact('alice'))).some(record => record.type === 'item' && record.title === 'Only action' && record.plannedDay === null);
+  });
+  await page.waitForFunction(() => document.querySelector('#planDayActions').childElementCount === 0 && document.activeElement?.id === 'planDayHeading');
+  await confirmed(page);
+  assert.equal(await page.locator('#planDayEmpty').evaluate(element => element.hidden), false);
+  assert.match(await page.locator('#planDayAnnouncement').textContent(), /0 planned actions/);
 });
 
 test('Plan routes through hierarchy, weekly offline intent and the existing day view without cloning actions', { timeout: 90000 }, async t => {
@@ -72,13 +136,13 @@ test('Plan routes through hierarchy, weekly offline intent and the existing day 
 
   await page.locator('#planFocusPicker > summary').click();
   await page.locator('#planFocus').selectOption('list:role');
-  assert.match(await page.locator('#planFocusCounts').textContent(), /1 of 1 active project has a Next action/);
+  assert.equal(await page.locator('#planFocusCounts').textContent(), '2 direct children · 1 active project · 1 project has a Next action');
   assert.match(await page.locator('#planBalance').textContent(), /Direct: 1/);
   await page.locator('#planFocus').selectOption('project:project');
-  assert.deepEqual(await page.locator('#planBreadcrumbs button').allTextContents(), ['Workspace', 'Parent', 'Initiative', 'Project']);
+  assert.deepEqual(await page.locator('#planBreadcrumbs button').allTextContents(), ['Workspace', 'Parent', 'Initiative']);
   assert.equal(await page.locator('#planFocusKind').textContent(), 'Project');
   assert.equal(await page.locator('#planFocusDescription').textContent(), 'A finished result');
-  assert.match(await page.locator('#planFocusCounts').textContent(), /2 Next actions/);
+  assert.equal(await page.locator('#planFocusCounts').textContent(), '1 active project · 2 Next actions');
   assert.equal(await page.locator('#planHierarchy button[aria-label="Plan Project"]').getAttribute('aria-pressed'), 'true');
   await page.getByRole('button', { name: 'Edit Project', exact: true }).click();
   await page.getByRole('button', { name: 'Close editor', exact: true }).click();
@@ -226,7 +290,7 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
     await page.waitForFunction(expected => document.querySelector('#planLoadSummary').textContent === expected, summary);
     await confirmed(page);
   };
-  await selectEstimationMethod('tshirt', 'Needs assessment · No current-scale estimates · 2 unestimated · 0 previous-scale');
+  await selectEstimationMethod('tshirt', '2 unestimated');
   await page.getByLabel('Estimate First day action using T-shirt').selectOption('L');
   await waitForBrowser(page, async () => {
     const { projected, transact } = await import('/inbox-store.js?v=9');
@@ -234,7 +298,7 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
     return records.find(record => record.title === 'First day action')?.effortEstimate?.value === 'L';
   });
   await confirmed(page);
-  assert.match(await page.locator('#planLoadSummary').textContent(), /1 L · 1 unestimated · 0 previous-scale/);
+  assert.equal(await page.locator('#planLoadSummary').textContent(), '1 L · 1 unestimated');
   await page.locator('#planLoadAssessment').selectOption('full');
   await waitForBrowser(page, async () => {
     const { projected, transact } = await import('/inbox-store.js?v=9');
@@ -252,10 +316,10 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   assert.equal(await page.locator('#planLoadAssessment').inputValue(), 'needs_reassessment');
   await page.locator('#planHistory').getByText('Plan history').click();
   assert.match(await page.locator('#planHistoryEntries').innerText(), /Full → Needs reassessment/);
-  await selectEstimationMethod('fibonacci', 'Needs reassessment · 0 points · 0 unestimated · 2 previous-scale');
-  assert.match(await page.locator('#planLoadSummary').textContent(), /0 points · 0 unestimated · 2 previous-scale/);
-  await selectEstimationMethod('none', 'Needs reassessment');
-  assert.equal(await page.locator('#planLoadSummary').textContent(), 'Needs reassessment');
+  await selectEstimationMethod('fibonacci', '2 previous-scale');
+  assert.equal(await page.locator('#planLoadSummary').textContent(), '2 previous-scale');
+  await selectEstimationMethod('none', '');
+  assert.equal(await page.locator('#planLoadSummary').evaluate(element => element.hidden), true);
   assert.match(await page.locator('#planDayActions').innerText(), /L \(tshirt, previous scale\)/);
   assert.match(await page.locator('#planDayActions').innerText(), /M \(tshirt, previous scale\)/);
 
