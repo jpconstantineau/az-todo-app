@@ -60,7 +60,7 @@ send a notification, change an item date or make reference material actionable.
   explicitly clears incompatible memberships.
 
 Drafts, undo, comparison/recovery, device exports, server-history exports,
-project reviews, project brief templates and Execute read the new membership
+project reviews, project brief templates and Do read the new membership
 data. Existing saved review inventories and brief revisions remain immutable.
 Old clarification requests without collection refs retain their original
 meaning; new organization answers include the exact selected refs in their

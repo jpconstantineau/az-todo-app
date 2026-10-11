@@ -132,7 +132,7 @@ function renderWorkspaces() {
   const preferenceTitle = preferenceRouteTitle(destination) || (taskOption ? `${taskOption.type === 'settings' ? 'Account' : `List “${taskOption.title}”`} ${taskOption.field ? `· ${optionFields[taskOption.field]}` : 'task options'}` : null);
   const utilityPage = utilityPages.get(destination);
   const utilityTitle = typeof utilityPage?.title === 'function' ? utilityPage.title() : utilityPage?.title || (isUtilityPageRoute(destination) ? utilityGroupTitle(utilityGroup(destination)) : null);
-  document.title = (utilityTitle || preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
+  document.title = (utilityTitle || preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Do' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
   statusText('menuWorkspaceValue', workspaceTitle);
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Workspaces to unarchive or restore it. Drafts are kept.' : '');
   const records = Object.values(projected(state)).filter(record => record.type === 'workspace');
@@ -1137,6 +1137,7 @@ function render() {
   }
   const executeFilterCount = [execute.context, execute.minutes, execute.energy].filter(Boolean).length;
   $('executeFilterSummary').textContent = `Context, time & energy${executeFilterCount ? ` (${executeFilterCount} active)` : ''}`;
+  $('resetExecuteFilters').hidden = !executeFilterCount;
   const executeCollection = executeCollections.find(record => viewKey(record) === execute.view);
   const executeItems = records.filter(record => executeCollection && record.type === 'item' && !archiveOnly(record, recordMap) && belongsTo(record, executeCollection));
   const readyItems = executeItems.filter(readyToExecute);
@@ -1154,7 +1155,7 @@ function render() {
     checkLabel.append(checkbox); article.append(checkLabel, title); return article;
   }));
   if (!$('executeItems').childElementCount) $('executeItems').textContent = execute.view
-    ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Inspect saved work in Organize, or choose another ${execute.kind}.`
+    ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Choose another ${execute.kind}.`
     : executeCollections.length ? `Choose a ${execute.kind} to start working through its items.` : `No ${execute.kind}s yet. Create one in Organize.`;
   if (!$('executeItems').querySelector('article') && archivedCount) $('executeItems').append(' ', archivedLink());
   $('capture').hidden = !!projected(state)['workspace:' + selectedWorkspace]?.deleted;
