@@ -18,8 +18,9 @@ Use a Brief when the work is ambiguous, has several constraints, needs project
 planning or review, or needs a clear handoff. Skip it when the action is already
 obvious: **Buy milk** usually needs no additional description. Choose the
 briefcase beside a task, or select a project and choose **Brief**. The template
-uses current saved facts and presents unknowns for review; it never invents dates
-or assignees.
+uses current saved source details and accepted clarification or planning context
+when available. Treat **Unknown** as a prompt to decide or investigate, not an
+assertion. The template never invents dates or assignees.
 
 The editor keeps these seven fields in this order:
 
@@ -38,33 +39,34 @@ The editor keeps these seven fields in this order:
 
 For example, a community workshop Brief could say:
 
-- **Desired outcome:** Residents leave a practical recycling workshop knowing
-  what their local program accepts.
-- **Context and supplied sources:** The neighbourhood association requested the
-  session; use the city recycling guide and the library meeting room.
-- **Scope:** Prepare one 60-minute workshop, examples and a take-home resource.
-- **Exclusions:** Catering, a recurring workshop series and changes to city
-  policy.
-- **Proposed next action:** Ask the library which workshop dates and room setups
-  are available.
-- **Acceptance checks:** The room and presenter are confirmed, materials cite
-  the current city guide, and registration can open.
-- **Missing information (or explicitly None known):** Expected attendance,
-  accessibility needs and printing budget.
+- **Desired outcome:** Twenty residents leave with a one-page
+  emergency-preparedness checklist they can use at home.
+- **Context and supplied sources:** Preserve the neighbourhood association's
+  request, the venue guide and feedback from the previous workshop.
+- **Scope:** Prepare one 90-minute workshop, a take-home checklist and time for
+  questions.
+- **Exclusions:** Individual emergency plans and a remote broadcast.
+- **Proposed next action:** Confirm the venue's available dates and capacity.
+- **Acceptance checks:** The venue, agenda and handout are ready, registrations
+  are open and a feedback method is prepared.
+- **Missing information (or explicitly None known):** Budget, accessibility
+  needs, interpreter demand and speaker availability.
 
 Briefs can complement several personal-productivity approaches without being a
 requirement of any of them:
 
-- In GTD, the outcome, next action and unknowns can support clarification and
-  the [Natural Planning Model](https://gettingthingsdone.com/2024/11/the-natural-planning-model/),
-  alongside the broader [GTD workflow map](https://gettingthingsdone.com/wp-content/uploads/2024/05/GTD_workflow_map.pdf).
+- In GTD, a Brief can be project support material during clarification, the
+  [Natural Planning Model](https://gettingthingsdone.com/2024/11/the-natural-planning-model/)
+  or review. Its proposed next action is not an action-list entry. See also the
+  broader [GTD workflow map](https://gettingthingsdone.com/wp-content/uploads/2024/05/GTD_workflow_map.pdf).
 - In 7 Habits, outcome and acceptance wording can support
   [Habit 2: Begin With the End in Mind](https://www.franklincovey.com/courses/the-7-habits/habit-2/).
-  Priority choices and scheduling remain separate, consistent with
+  A Brief may inform priority choices, but it does not prioritize work or
+  reserve time, consistent with
   [Habit 3: Put First Things First](https://www.franklincovey.com/courses/the-7-habits/habit-3/).
-- In PARA, context and sources can make project material easier to use while
-  leaving the user's Projects, Areas, Resources and Archives organization
-  unchanged. See Tiago Forte's
+- In PARA, context and sources can support an active Project. The app does not
+  automatically file or archive a Brief or turn it into a Resource. See Tiago
+  Forte's
   [PARA overview and examples](https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/).
 
 ## Generate, review and decide
