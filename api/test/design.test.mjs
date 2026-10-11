@@ -39,7 +39,14 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     assert.equal(await page.locator('#quickFocus').getAttribute('aria-current'), 'page');
     assert.ok((await page.locator('#captureText').boundingBox()).height >= 120);
   }
-  await showView(page, 'capture'); await page.locator('#captureText').fill('Plan a walk by the river\nBook the bike tune-up\nPick up groceries for dinner');
+  await showView(page, 'capture'); await page.locator('#captureText').fill('Plan a walk by the river, Book the bike tune-up; Pick up groceries for dinner');
+  if (!baseline) for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.locator('#previewSplit .split-label').isVisible(), true);
+    await fits();
+  }
+  await page.getByRole('button', { name: 'Preview comma / semicolon split', exact: true }).click();
+  if (!baseline) assert.equal(await page.locator('#previewSplit .split-label').isHidden(), true);
   await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#captureText').value === '' && document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   for (const width of (baseline ? [320, 390, 768, 1440] : [320, 390, 393, 768, 1366, 1440, 2560])) {

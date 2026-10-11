@@ -22,6 +22,8 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   assert.equal(await page.locator('#export').isVisible(), false);
   assert.equal(await page.locator('#capture button:visible').count(), 2, 'capture exposes Split and Save initially');
   assert.deepEqual(await page.locator('#workspace button:visible').evaluateAll(controls => controls.map(control => control.getAttribute('aria-label') || control.textContent)), ['Preview comma / semicolon split', 'Save on device']);
+  assert.equal(await page.locator('#previewSplit .split-label').isHidden(), true);
+  await page.locator('#captureText').fill('Buy milk, call Sam; book dentist');
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const viewportHeight = await page.evaluate(() => innerHeight);
@@ -31,12 +33,15 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
     assert.ok(optionsSummary.y + optionsSummary.height <= viewportHeight, `closed options fit in the ${width}px mobile viewport`);
     const headerActions = await page.locator('.capture-actions button:visible').evaluateAll(buttons => buttons.map(button => ({ width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height })));
     assert.ok(headerActions.every(({ width: controlWidth, height }) => controlWidth >= 44 && height >= 44), `capture header actions are touch targets at ${width}px`);
+    assert.equal(await page.locator('#previewSplit .split-label').isVisible(), true);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `labeled split action fits at ${width}px`);
     await page.locator('#captureOptions > summary').click();
     assert.ok(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), `open options scroll normally at ${width}px`);
     const openOptions = await page.locator('#captureOptions').boundingBox();
     assert.ok(openOptions.y + openOptions.height > viewportHeight, `open options extend below the ${width}px viewport`);
     await page.locator('#captureOptions > summary').click();
   }
+  await page.locator('#captureText').fill('');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#appMenu').focus();
   await page.keyboard.press('Enter');
