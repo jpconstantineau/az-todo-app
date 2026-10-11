@@ -6,6 +6,67 @@ The native side panel uses the existing design tokens and becomes a scrollable
 sheet on phones. All actions remain keyboard accessible; closing returns focus
 to the originating task/project button.
 
+## Purpose, field guide and example
+
+A Brief is an optional working description that prepares a task or project for
+action, review or handoff. It brings the desired result, relevant context, scope
+boundaries, a proposed next action, acceptance checks and unanswered questions
+into one reviewable place. It does not perform the work, create an action from
+the proposal, prioritize or schedule anything, or send or share content.
+
+Use a Brief when the work is ambiguous, has several constraints, needs project
+planning or review, or needs a clear handoff. Skip it when the action is already
+obvious: **Buy milk** usually needs no additional description. Choose the
+briefcase beside a task, or select a project and choose **Brief**. The template
+uses current saved facts and presents unknowns for review; it never invents dates
+or assignees.
+
+The editor keeps these seven fields in this order:
+
+- **Desired outcome:** what should be true when the work is successfully
+  finished.
+- **Context and supplied sources:** the available background, constraints and
+  source material.
+- **Scope:** what this piece of work includes.
+- **Exclusions:** what is deliberately outside this piece of work.
+- **Proposed next action:** one concrete, visible step that could move the work
+  forward. It remains wording in the Brief rather than a newly created task.
+- **Acceptance checks:** observable checks that show the desired result has
+  been reached.
+- **Missing information (or explicitly None known):** questions or facts still
+  needed. Enter **None known** only after reviewing them.
+
+For example, a community workshop Brief could say:
+
+- **Desired outcome:** Residents leave a practical recycling workshop knowing
+  what their local program accepts.
+- **Context and supplied sources:** The neighbourhood association requested the
+  session; use the city recycling guide and the library meeting room.
+- **Scope:** Prepare one 60-minute workshop, examples and a take-home resource.
+- **Exclusions:** Catering, a recurring workshop series and changes to city
+  policy.
+- **Proposed next action:** Ask the library which workshop dates and room setups
+  are available.
+- **Acceptance checks:** The room and presenter are confirmed, materials cite
+  the current city guide, and registration can open.
+- **Missing information (or explicitly None known):** Expected attendance,
+  accessibility needs and printing budget.
+
+Briefs can complement several personal-productivity approaches without being a
+requirement of any of them:
+
+- In GTD, the outcome, next action and unknowns can support clarification and
+  the [Natural Planning Model](https://gettingthingsdone.com/2024/11/the-natural-planning-model/),
+  alongside the broader [GTD workflow map](https://gettingthingsdone.com/wp-content/uploads/2024/05/GTD_workflow_map.pdf).
+- In 7 Habits, outcome and acceptance wording can support
+  [Habit 2: Begin With the End in Mind](https://www.franklincovey.com/courses/the-7-habits/habit-2/).
+  Priority choices and scheduling remain separate, consistent with
+  [Habit 3: Put First Things First](https://www.franklincovey.com/courses/the-7-habits/habit-3/).
+- In PARA, context and sources can make project material easier to use while
+  leaving the user's Projects, Areas, Resources and Archives organization
+  unchanged. See Tiago Forte's
+  [PARA overview and examples](https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/).
+
 ## Generate, review and decide
 
 The template copies the current task title, notes and supplied source links.
@@ -21,6 +82,10 @@ retains that text. **Save new draft revision** queues an immutable content revis
 with a new ID. **Accept this revision** and **Reject this revision** record an
 explicit decision about that exact saved content. A decision is final for its
 revision; edit the content and save another draft if you change your mind.
+
+Acceptance approves the wording of that revision only. It does not complete or
+change the source task or project, enqueue the proposed next action, prioritize
+or schedule work, or send or share the Brief.
 
 Editing any saved revision disables acceptance and export until the changed
 content is saved as a new draft. Earlier accepted revisions remain selectable,
