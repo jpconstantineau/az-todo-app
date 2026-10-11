@@ -40,6 +40,7 @@ function refreshSplitAction() {
   $('previewSplit').toggleAttribute('data-has-separators', /[,;]/.test(capture.elements.text.value));
 }
 const workflowRoutes = ['capture', 'work', 'lists', 'plan', 'execute', 'reviews'];
+const deviceResetLabel = () => accountId === LOCAL_PROFILE ? 'Clear device data' : 'Clear device data & reload cloud copy';
 const utilityPages = new Map([
   ['app-device/install', { group: 'app-device', section: 'appDeviceInstall', heading: 'installHeading', title: 'Install To-Do', row: 'utility-install' }],
   ['app-device/offline', { group: 'app-device', section: 'appDeviceOffline', heading: 'offlineHeading', title: 'Offline readiness', row: 'utility-offline' }],
@@ -48,7 +49,7 @@ const utilityPages = new Map([
   ['data-recovery/export', { group: 'data-recovery', section: 'dataRecoveryExport', heading: 'exportHeading', title: 'Export', row: 'utility-export' }],
   ['data-recovery/deleted', { group: 'data-recovery', section: 'deletedRecords', heading: 'deletedHeading', title: 'Deleted records', row: 'openDeleted' }],
   ['data-recovery/undo', { group: 'data-recovery', section: 'dataRecoveryUndo', heading: 'undoHeading', title: 'Undo last editor save', row: 'utility-undo' }],
-  ['data-recovery/restore-from-cloud', { group: 'data-recovery', section: 'dataRecoveryRestore', heading: 'deviceResetHeading', title: 'Restore from cloud', row: 'utility-restore-from-cloud' }],
+  ['data-recovery/restore-from-cloud', { group: 'data-recovery', section: 'dataRecoveryRestore', heading: 'deviceResetHeading', title: deviceResetLabel, row: 'utility-restore-from-cloud' }],
   ['data-recovery/restore-from-cloud/review', { group: 'data-recovery', section: 'dataRecoveryResetReview', heading: 'resetReviewHeading', title: 'Review device data to clear', row: 'utility-restore-from-cloud', parent: 'data-recovery/restore-from-cloud' }]
 ]);
 const utilityGroup = route => ['app-device', 'data-recovery'].includes(route) ? route : utilityPages.get(route)?.group;
@@ -129,7 +130,8 @@ function renderWorkspaces() {
   const workspaceTitle = $('workspaceSelect').selectedOptions[0].textContent;
   const taskOption = taskOptionTarget(destination);
   const preferenceTitle = preferenceRouteTitle(destination) || (taskOption ? `${taskOption.type === 'settings' ? 'Account' : `List “${taskOption.title}”`} ${taskOption.field ? `· ${optionFields[taskOption.field]}` : 'task options'}` : null);
-  const utilityTitle = utilityPages.get(destination)?.title || (isUtilityPageRoute(destination) ? utilityGroupTitle(utilityGroup(destination)) : null);
+  const utilityPage = utilityPages.get(destination);
+  const utilityTitle = typeof utilityPage?.title === 'function' ? utilityPage.title() : utilityPage?.title || (isUtilityPageRoute(destination) ? utilityGroupTitle(utilityGroup(destination)) : null);
   document.title = (utilityTitle || preferenceTitle || (destination === 'preferences' ? 'Preferences' : destination === 'capture' ? 'Capture' : destination === 'lists' ? 'Organize' : destination === 'plan' ? 'Plan' : destination === 'execute' ? 'Execute' : destination === 'reviews' ? 'Review' : destination === 'menu' ? 'Menu' : 'Process')) + ' · ' + workspaceTitle;
   statusText('menuWorkspaceValue', workspaceTitle);
   statusText('workspaceStatus', workspaceReadOnly() ? 'This workspace is read-only or deleted. Open Menu → Workspaces to unarchive or restore it. Drafts are kept.' : '');
@@ -948,8 +950,8 @@ function render() {
     : 'Server copy: saved work across devices. Online only; excludes pending saves and drafts.';
   $('sharedLists').setAttribute('aria-disabled', String(localMode()));
   $('sharedLists').title = localMode() ? 'Sign in to use shared lists.' : '';
-  $('utility-restore-from-cloud').querySelector('span').textContent = localMode() ? 'Clear device data' : 'Restore from cloud';
-  $('deviceResetHeading').textContent = localMode() ? 'Clear device data' : 'Restore from cloud';
+  $('utility-restore-from-cloud').querySelector('span').textContent = deviceResetLabel();
+  $('deviceResetHeading').textContent = deviceResetLabel();
   $('connectionHelp').textContent = localMode()
     ? 'Sign in to sync device-only work. Until then, saves stay in this browser.'
     : 'Sync now remains in Menu. Return there to retry pending work.';
@@ -2703,7 +2705,7 @@ $('confirmResetDeviceData').onclick = async () => {
   control.setAttribute('aria-disabled', 'true');
   try {
     status.textContent = localMode() ? 'Checking reviewed device data…' : 'Checking cloud sign-in and reviewed device data…';
-    if (!accountId || !localMode() && !navigator.onLine) throw new Error('Sign in online before restoring your cloud copy.');
+    if (!accountId || !localMode() && !navigator.onLine) throw new Error('Sign in online before clearing device data and reloading the cloud copy.');
     if (!navigator.locks) throw new Error('This browser cannot coordinate a safe device reset between tabs.');
     if (reviewed.owner !== accountId || reviewed.generation !== accountGeneration) throw new Error('The account changed. Reload before clearing this device.');
     if (!localMode()) {
