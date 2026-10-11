@@ -83,6 +83,7 @@ test('accessibility: review decisions and brief revisions keep a keyboard path t
   await keyboardActivate(page, '#startDaily');
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
   await expectFocus(page, '#reviewTitle');
+  await keyboardActivate(page, '#reviewSetup > summary');
   await keyboardActivate(page, '#startWeekly');
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2'));
   await expectFocus(page, '#reviewTitle');

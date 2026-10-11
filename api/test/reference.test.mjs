@@ -74,6 +74,7 @@ test('reference filing survives offline reload, stays retrievable, and leaves ex
   await page.locator('#view').selectOption('all'); await page.locator('#statusFilter').selectOption('next'); assert.deepEqual(await rows(), ['action']);
   await clickControl(page.locator('#openReviews'));
   for (const kind of ['Daily', 'Weekly']) {
+    if (kind === 'Weekly') await page.locator('#reviewSetup > summary').click();
     await page.locator(`#start${kind}`).click();
     await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 1'));
     await confirmed();

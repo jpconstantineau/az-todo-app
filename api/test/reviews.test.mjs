@@ -23,11 +23,23 @@ test('reviews resume offline and across devices, allow retained unknowns and und
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await page.locator('#captureText').fill('Milk\nInsurance'); await page.getByRole('button', { name: 'Save on device', exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll('#items article').length === 2); await confirmed(page);
-  await clickControl(page.locator('#openReviews')); await page.locator('#startDaily').click();
+  await clickControl(page.locator('#openReviews'));
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), true);
+  assert.equal(await page.locator('#reviewBody').isHidden(), true);
+  assert.deepEqual(await page.evaluate(() => ({
+    workflowBeforeSetup: !!(document.querySelector('#reviewBody').compareDocumentPosition(document.querySelector('#reviewSetup')) & Node.DOCUMENT_POSITION_FOLLOWING),
+    decisionsBeforeReflection: !!(document.querySelector('#reviewDecisionHelp').compareDocumentPosition(document.querySelector('#reviewReflection')) & Node.DOCUMENT_POSITION_FOLLOWING)
+  })), { workflowBeforeSetup: true, decisionsBeforeReflection: true });
+  await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), false);
+  assert.equal(await page.locator('#reviewBody').isVisible(), true);
+  assert.match(await page.locator('#reviewDecisionHelp').textContent(), /Retain keeps the current state.*Defer sets a review start date.*Undo is available/s);
   assert.match(await page.locator('#reviewDetails').textContent(), /empty/); await confirmed(page);
   await context.setOffline(true);
+  await page.locator('#reviewSetup > summary').click();
   await page.locator('#startWeekly').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2'));
+  assert.equal(await page.locator('#reviewSetup').evaluate(element => element.open), false);
   await page.locator('#reviewRetain').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('1 of 2'));
   assert.match(await page.locator('#reviewProgress').textContent(), /pending/);
   await page.locator('#reviewDefer').fill('2026-10-08');
@@ -91,6 +103,7 @@ test('review cues include projects and waiting work; competing devices and delet
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 2')); await confirmed(page);
   let session = records().find(r => r.type === 'review');
   assert.deepEqual(session.included.map(r => r.id).sort(), ['next', 'waiting']);
+  await page.locator('#reviewSetup > summary').click();
   await page.locator('#startWeekly').click(); await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 5')); await confirmed(page);
   session = records().find(r => r.type === 'review' && r.reviewKind === 'weekly');
   const index = id => String(session.included.findIndex(r => r.id === id));

@@ -98,6 +98,7 @@ test('undated waiting capture and edits survive offline reload, weekly retain/un
   await clickControl(page.locator('#openReviews'));
   await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
+  await page.locator('#reviewSetup > summary').click();
   await page.locator('#startWeekly').click();
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 1'));
   assert.match(await page.locator('#reviewDetails').textContent(), /Alex — sample quote/);

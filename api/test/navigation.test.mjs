@@ -64,6 +64,7 @@ test('navigation: reviews stay in a page card with history, editing, offline rel
   assert.match(await page.locator('#reviewDetails').textContent(), /Keep these review notes/);
   assert.equal(await page.locator('dialog:modal').count(), 0);
   await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.locator('#reviewSetup > summary').click();
   await page.locator('#startDaily').click();
   await page.waitForFunction(() => document.querySelector('#reviewError').textContent.includes('Full'));
   assert.match(await page.locator('#recoveryText').inputValue(), /2027-02-01/);

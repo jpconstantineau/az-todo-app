@@ -291,7 +291,7 @@
 .execute-check input[type="checkbox"] { width: 24px; height: 24px; min-height: 24px; margin: 0; padding: 0; }
 .execute-item .editable-title { flex: 1; min-width: 0; justify-content: flex-start; }
 .plan-panel { display: grid; gap: var(--space-4); }
-.review-reflection { border-block: var(--border-width) solid var(--border); padding-block: var(--space-2) var(--space-4); margin-block: var(--space-4); }
+.review-setup, .review-decision-help, .review-reflection { border-block: var(--border-width) solid var(--border); padding-block: var(--space-2) var(--space-4); margin-block: var(--space-4); }
 .project-plan-section { margin-block: var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface-raised); }
 .project-plan-section > h3 { margin-bottom: var(--space-2); }
 .project-plan-candidate { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: var(--space-3); align-items: end; padding-block: var(--space-2); border-bottom: var(--border-width) solid var(--border); }
