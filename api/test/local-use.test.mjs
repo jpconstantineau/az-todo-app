@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { waitForBrowser } from './browser-wait.mjs';
 import { documents, startServer } from './harness.mjs';
+import { openUtility, showView } from './navigation-helper.mjs';
 import { digest } from '../api/v1/contract.mjs';
 
 const storeState = (page, owner = 'device-local') => page.evaluate(async accountId => {
@@ -32,6 +33,10 @@ test('anonymous workspace saves, reloads and reopens from the cached shell witho
   assert.equal(await page.locator('#accountName').textContent(), 'On this device');
   assert.equal(await page.locator('#connectionLabel').textContent(), 'Saved on this device');
   assert.equal(await page.locator('#signInToSync').getAttribute('hidden'), null);
+  await openUtility(page, 'data-recovery');
+  assert.equal(await page.locator('#utility-restore-from-cloud span').first().textContent(), 'Clear device data');
+  assert.equal(await page.getByRole('link', { name: 'Clear device data', exact: true }).count(), 1);
+  await showView(page, 'capture');
   await capture(page, 'Anonymous task');
   await waitForBrowser(page, async () => {
     const store = await import('/inbox-store.js?v=17'), local = await store.transact(store.LOCAL_PROFILE);

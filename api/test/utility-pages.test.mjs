@@ -18,6 +18,42 @@ async function setup(t, url = '') {
   return { server, context, page, errors };
 }
 
+test('clear-device copy leads with data loss and preserves responsive accessible navigation', async t => {
+  const { page, context, errors } = await setup(t);
+  await openUtility(page, 'data-recovery');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  const row = page.locator('#utility-restore-from-cloud');
+  assert.equal(await row.locator('span').first().textContent(), 'Clear device data & reload cloud copy');
+  assert.equal(await row.getAttribute('aria-label'), null);
+  assert.equal(await page.getByRole('link', { name: 'Clear device data & reload cloud copy', exact: true }).count(), 1);
+  assert.ok((await row.boundingBox()).height >= 48, 'the wrapped row keeps its touch target');
+  assert.equal(await row.locator('[aria-hidden="true"]').isVisible(), true);
+  assert.ok(await row.evaluate(element => element.scrollWidth <= element.clientWidth), 'the row does not clip horizontally');
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page does not scroll horizontally');
+
+  await row.click();
+  await page.waitForFunction(() => location.hash === '#data-recovery/restore-from-cloud' && document.activeElement?.id === 'deviceResetHeading');
+  assert.equal(await page.locator('#deviceResetHeading').textContent(), 'Clear device data & reload cloud copy');
+  assert.equal(await page.title(), 'Clear device data & reload cloud copy · Personal');
+  await page.goBack();
+  await page.waitForFunction(() => location.hash === '#data-recovery' && document.activeElement?.id === 'utility-restore-from-cloud');
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+
+  await row.click();
+  await page.waitForFunction(() => location.hash === '#data-recovery/restore-from-cloud' && document.activeElement?.id === 'deviceResetHeading');
+  await page.getByRole('button', { name: 'Review device data to clear', exact: true }).click();
+  await page.waitForFunction(() => location.hash === '#data-recovery/restore-from-cloud/review' && document.activeElement?.id === 'resetReviewHeading');
+  assert.equal(await page.locator('#resetReviewHeading').textContent(), 'Review device data to clear');
+  assert.equal(await page.title(), 'Review device data to clear · Personal');
+  const confirm = page.getByRole('button', { name: 'Clear device data and reload', exact: true });
+  assert.equal(await confirm.count(), 1);
+  await context.setOffline(true);
+  await confirm.click();
+  await page.waitForFunction(() => document.querySelector('#resetReviewStatus').textContent.includes('Sign in online'));
+  assert.equal(await page.locator('#resetReviewStatus').textContent(), 'Device database was not cleared: Sign in online before clearing device data and reloading the cloud copy.');
+  assert.deepEqual(errors, []);
+});
+
 test('utility pages route directly, preserve sibling history and reflow from compact through 4K', { timeout: 60000 }, async t => {
   const { page, context, server, errors } = await setup(t, '#app-device/install');
   await page.waitForFunction(() => location.hash === '#app-device/install' && document.activeElement?.id === 'installHeading');
