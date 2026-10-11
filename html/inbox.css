@@ -140,10 +140,13 @@
 .agent-status[data-provider="cloud"] .agent-cloud-agent { display: inline; }
 .agent-unavailable { display: none; }
 .agent-status[data-state="unavailable"] .agent-unavailable { display: inline; }
-.capture-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.capture-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
 .capture-header h2 { min-width: 0; margin: 0; }
-.capture-actions { display: flex; gap: var(--space-2); }
+.capture-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
 .capture-header .icon-button { display: flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; padding: var(--space-2); }
+.split-label { display: none; font-size: var(--text-sm); }
+#previewSplit[data-has-separators] { flex-basis: auto; width: auto; }
+#previewSplit[data-has-separators] .split-label { display: inline; }
 .split-icon, .cloud-agent-icon, .cancel-icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .cloud-capture-button[data-state="ready"] { color: var(--success); }
 .cloud-capture-button[data-state="checking"], .cloud-capture-button[data-state="busy"] { color: var(--warning); }

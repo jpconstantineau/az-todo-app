@@ -36,6 +36,9 @@ let splitFeedbackTimer;
 let materializingRecurrence = false;
 let savedViewEditing = null;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
+function refreshSplitAction() {
+  $('previewSplit').toggleAttribute('data-has-separators', /[,;]/.test(capture.elements.text.value));
+}
 const workflowRoutes = ['capture', 'work', 'lists', 'plan', 'execute', 'reviews'];
 const utilityPages = new Map([
   ['app-device/install', { group: 'app-device', section: 'appDeviceInstall', heading: 'installHeading', title: 'Install To-Do', row: 'utility-install' }],
@@ -284,7 +287,7 @@ const extraction = setupCaptureExtraction({ journal, showDialog, recovery: stora
       currentDraft(local).extraction = { ...currentDraft(local).extraction, draft: null, clock: null, sourceText: '' }; currentDraft(local).capture = {};
     });
     if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the batch remains with its original account.');
-    state = saved; capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+    state = saved; capture.reset(); originalInput = undefined; $('previewHelp').hidden = true; refreshSplitAction();
     clearError(); render(); broadcast(); void sync();
   }
 });
@@ -703,6 +706,7 @@ function restoreDraft() {
   const saved = projected(state)['workspace:' + selectedWorkspace]?.deleted ? {} : currentDraft(state);
   const savedCapture = normalizeCaptureDraft(saved.capture);
   fillValues(capture, savedCapture);
+  refreshSplitAction();
   originalInput = savedCapture.original;
   extraction.restore(normalizeExtractionDraft(saved.extraction));
   $('previewHelp').hidden = originalInput === undefined;
@@ -1387,7 +1391,7 @@ function clearSplitFeedback() {
   clearTimeout(splitFeedbackTimer); splitFeedbackTimer = undefined;
   statusText('splitStatus', ''); $('splitStatus').hidden = true;
 }
-capture.addEventListener('input', () => { clearSplitFeedback(); extraction.changed(); void journal(); });
+capture.addEventListener('input', () => { clearSplitFeedback(); refreshSplitAction(); extraction.changed(); void journal(); });
 edit.addEventListener('input', () => { void journal(); });
 capture.elements.listId.addEventListener('change', refreshOptions);
 edit.elements.listId.addEventListener('change', refreshOptions);
@@ -1414,7 +1418,7 @@ capture.addEventListener('submit', event => {
       if (owner !== accountId) return;
       state = saved;
       if (JSON.stringify(captureDraft()) === JSON.stringify(submitted)) {
-        capture.reset(); originalInput = undefined; $('previewHelp').hidden = true;
+        capture.reset(); originalInput = undefined; $('previewHelp').hidden = true; refreshSplitAction();
         extraction.reset(true);
       }
       const itemCount = mutations.filter(mutation => mutation.type === 'item').length;
@@ -1479,7 +1483,7 @@ $('previewSplit').onclick = () => {
   clearSplitFeedback();
   originalInput ??= capture.elements.text.value;
   capture.elements.text.value = capture.elements.text.value.split(/[,;\n]+/).map(line => line.trim()).filter(Boolean).join('\n');
-  $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
+  refreshSplitAction(); $('previewHelp').hidden = false; capture.elements.text.focus(); void journal();
 };
 $('cancelEdit').onclick = () => $('editor').close();
 $('resumeEdit').onclick = () => { if (editing) openEditor(editing); };

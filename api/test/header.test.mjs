@@ -224,11 +224,13 @@ test('header follows workspace selection and save state, then clears identity on
   for (const id of ['sessionStatus', 'offlineStatus', 'syncStatus']) assert.equal(await page.locator(`#${id}`).isVisible(), false);
   assert.equal(await page.locator('#capture > fieldset > label').innerText(), 'Capture items');
   assert.equal(await page.locator('#captureHeading').innerText(), 'Capture');
-  assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head. Write your items here. One item per line. For commas or semicolons, preview the split first. Ctrl/⌘ + Enter saves.');
+  assert.equal(await page.locator('#captureText').getAttribute('placeholder'), 'Get it out of your head.');
   assert.equal(await page.locator('#captureHelp').getAttribute('class'), 'sr-only');
   assert.equal(await page.locator('#captureHelp').textContent(), 'One item per line. For comma- or semicolon-separated items, choose Preview comma / semicolon split before saving. Ctrl/⌘ + Enter saves.');
   assert.equal(await page.locator('#captureText').getAttribute('aria-describedby'), 'captureHelp captureCompletionHint previewHelp');
   assert.equal(await page.locator('#previewSplit svg').getAttribute('aria-hidden'), 'true');
+  assert.equal(await page.locator('#previewSplit .split-label').getAttribute('aria-hidden'), 'true');
+  assert.equal(await page.locator('#previewSplit .split-label').isHidden(), true);
   assert.deepEqual(await page.locator('#previewSplit path').evaluateAll(paths => paths.map(path => ({ d: path.getAttribute('d'), dash: path.getAttribute('stroke-dasharray') }))), [
     { d: 'M8.7 8.7 21 21', dash: null },
     { d: 'm8.7 15.3 4.6-4.6', dash: null },
@@ -259,6 +261,17 @@ test('header follows workspace selection and save state, then clears identity on
     assert.ok(heading.y + heading.height < text.y, 'Capture heading stays above the textarea');
     await shot(page, `capture-${width}`);
   }
+  await page.locator('#captureText').fill('Family errands, call Sam');
+  assert.equal(await page.locator('#previewSplit .split-label').isVisible(), true);
+  await page.getByRole('combobox', { name: 'Workspace', exact: true }).selectOption({ label: 'Personal' });
+  await page.waitForFunction(() => document.title === 'Capture · Personal');
+  assert.equal(await page.locator('#previewSplit .split-label').isHidden(), true);
+  await page.getByRole('combobox', { name: 'Workspace', exact: true }).selectOption({ label: 'Family' });
+  await page.waitForFunction(() => document.title === 'Capture · Family');
+  assert.equal(await page.locator('#captureText').inputValue(), 'Family errands, call Sam');
+  assert.equal(await page.locator('#previewSplit .split-label').isVisible(), true);
+  await page.locator('#captureText').fill('');
+  assert.equal(await page.locator('#previewSplit .split-label').isHidden(), true);
   // The capture shortcut still submits from the textarea after moving the button.
   await context.setOffline(true); await status(page, 'offline');
   assert.equal(await page.locator('#saveStatus').getAttribute('title'), 'Working offline');
