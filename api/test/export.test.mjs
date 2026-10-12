@@ -19,6 +19,7 @@ function fixture() {
     { ...base, type: 'project', id: 'dinner', workspaceId: 'personal', status: 'active', title: 'Dinner', outcome: 'Everyone fed' },
     { ...base, type: 'savedView', id: 'completed', workspaceId: 'personal', title: 'Completed shopping', query: 'milk', resultType: 'item', resultState: 'status:completed' },
     { ...base, type: 'settings', id: 'settings', defaults: { contexts: ['Home'] } },
+    { ...base, type: 'executionPolicy', id: 'personal', workspaceId: 'personal', wipLimit: 2, entries: [] },
     { ...item, id: 'deleted', title: 'Erased task', deleted: true, deletedUtc: base.createdUtc }];
   const mutation = { type: 'item', id: 'milk', action: 'update', expectedVersion: 1, fields: { title: 'Oat milk' } };
   const operation = { apiVersion: 1, accountId: 'alice', operationId: 'pending-id', mutations: [mutation] };
@@ -59,7 +60,7 @@ test('device exports retain current workspace drafts, editor baselines and undo 
 
 test('portable export round-trips originals, relationships, tombstones, exact queue and both drafts', async t => {
   const value = fixture(), before = structuredClone(value);
-  assert.deepEqual(validateDeviceExport(value), { records: 6, pendingOperations: 1, warnings: [] });
+  assert.deepEqual(validateDeviceExport(value), { records: 7, pendingOperations: 1, warnings: [] });
   assert.match(readableExport(value), /savedView: Completed shopping[\s\S]*Query: milk/);
   const directory = await mkdtemp(join(tmpdir(), 'todo-export-')); t.after(() => rm(directory, { recursive: true, force: true }));
   const input = join(directory, 'input.json'), output = join(directory, 'output.json');

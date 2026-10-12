@@ -7,6 +7,7 @@ import { validateReview, validateReviewDecision, validateReviewReflection } from
 import { validateBrief } from "./briefs.mjs";
 import { validateDailyPlan, validateDailyPlanRevision } from './daily-plans.mjs';
 import { validateProjectPlanning } from './project-planning.mjs';
+import { validateExecutionPolicy } from './execution-policy.mjs';
 
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
 import { erasedWorkspaceIds } from './workspace-erasure.mjs';
@@ -75,7 +76,7 @@ async function validateCollections(record, old, lookup) {
   }
 }
 function validateCurrentShape(record) {
-  if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') {
+  if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate', 'executionPolicy'].includes(record.type) && typeof record.workspaceId !== 'string') {
     throw new ValidationError('workspaceId is required.');
   }
   if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new ValidationError('collectionRefs is required.');
@@ -162,6 +163,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       if (record.type === 'planPreference' && (record.id !== record.workspaceId || current[i]?.record && record.workspaceId !== current[i].record.workspaceId)) {
         throw new ValidationError('Plan preference identity must match its workspace.');
       }
+      if (record.type === 'executionPolicy') await validateExecutionPolicy(record, current[i]?.record, lookup);
       await validateWorkspace(record, current[i]?.record, lookup);
       await validateCollections(record, current[i]?.record, lookup);
       await validateRecurrence(record, current[i]?.record, input.mutations[i], records, lookup, now);

@@ -1,5 +1,7 @@
 # Waiting, deferred work and dates
 
+Execution state is separate from these readiness states. See [Active work and WIP policy](active-work.md) for Started, Paused, Blocked, and the workspace WIP limit. Moving on the active-work board never rewrites the fields documented here.
+
 Issue #8 adds workflow details to the same canonical actions used by inbox,
 project and day views. Capture still needs only text. Open **Task details** to
 choose a state and dates; ordinary lists and custom statuses continue to work.
