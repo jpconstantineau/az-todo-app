@@ -85,6 +85,33 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   const help = await popup; await help.waitForLoadState();
   assert.match(await help.locator('h1').textContent(), /Help/);
   assert.match(await help.locator('#device').textContent(), /Unsynced work cannot be recovered/);
+  const topics = [
+    ['Capture', '#capture'], ['Search', '#search'], ['Local AI', '#ai-capture'], ['Process', '#work'],
+    ['Recurring', '#recurring'], ['Plan', '#plan'], ['Do', '#execute'], ['Device & sync', '#device'],
+    ['Reviews', '#reviews'], ['Clarification', '#clarification'], ['Briefs', '#briefs'], ['Lists, projects and areas', '#collections'],
+  ];
+  const topicNav = help.getByRole('navigation', { name: 'Help topics' });
+  assert.deepEqual(await topicNav.locator('a').evaluateAll(links => links.map(link => [link.textContent, link.getAttribute('href')])), topics);
+  assert.deepEqual(await help.locator('main > section.card').evaluateAll(sections => sections.map(section => '#' + section.id)), topics.map(([, href]) => href));
+  assert.equal(await help.locator('main > :first-child').evaluate(element => element === document.querySelector('nav[aria-label="Help topics"]')), true);
+  assert.match(await help.locator('main > p.muted').textContent(), /Close it to return to your workspace/);
+  await help.getByRole('link', { name: 'Open workspace', exact: true }).focus();
+  await help.keyboard.press('Tab');
+  const firstTopic = topicNav.getByRole('link', { name: 'Capture', exact: true });
+  assert.equal(await firstTopic.evaluate(element => element === document.activeElement), true);
+  assert.equal(await firstTopic.evaluate(element => getComputedStyle(element).outlineWidth), '3px');
+  await help.keyboard.press('Enter');
+  await help.waitForFunction(() => location.hash === '#capture');
+  for (const theme of ['light', 'dark']) for (const width of [320, 390]) {
+    await help.setViewportSize({ width, height: 844 });
+    await help.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    const targets = await topicNav.locator('a').evaluateAll(links => links.map(link => ({ width: link.getBoundingClientRect().width, height: link.getBoundingClientRect().height })));
+    assert.ok(targets.every(({ width: targetWidth, height }) => targetWidth >= 44 && height >= 44), `${theme} Help topics are touch targets at ${width}px`);
+    assert.ok(await help.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${theme} Help fits at ${width}px`);
+  }
+  await help.setViewportSize({ width: 320, height: 844 });
+  await help.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  assert.ok(await help.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Help fits at 200% text');
   await help.close();
   assert.equal(await page.locator('#captureText').inputValue(), 'Keep this help draft');
   await page.reload(); await page.locator('#workspace').waitFor();

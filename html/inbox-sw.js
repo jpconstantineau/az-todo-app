@@ -1,5 +1,5 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v50';
+const CACHE = 'todo-inbox-shell-v51';
 // The agent module is public shell code, without model downloads or user data.
 const ASSETS = [
   '/', '/index.html', '/help.html', '/shared.html',
