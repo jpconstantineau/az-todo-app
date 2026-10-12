@@ -12,13 +12,14 @@
   <a class="skip-link" href="#handoff">Skip to import</a>
   <header class="app-header"><div><p class="eyebrow">To-Do</p><h1>Import browser capture</h1></div><a href="/">Open workspace</a></header>
   <main id="handoff" tabindex="-1">
-    <p>Review a capture saved in your TaskGem extension, then save it to your signed-in inbox. The extension keeps its copy until the server confirms the save.</p>
-    <p>This handoff needs an internet connection. Your usual phone and offline capture remain available in the workspace.</p>
-    <p id="handoffStatus" role="status">Open this page from TaskGem to choose a saved capture.</p>
-    <p id="handoffError" role="alert" hidden></p>
+    <p id="handoffStatus" role="status" aria-atomic="true">Ready to preview this saved capture.</p>
+    <p id="handoffError" role="alert" aria-atomic="true" hidden></p>
     <a id="handoffSignIn" hidden>Sign in with GitHub</a>
-    <p id="handoffExtension"></p>
     <button id="handoffPreview" type="button" disabled>Preview saved capture</button>
+    <details>
+      <summary>How importing works</summary>
+      <p>An internet connection is required. TaskGem keeps its copy until the server confirms the import. Phone and offline capture remain available in the workspace.</p>
+    </details>
     <section id="handoffCapture" class="card" aria-labelledby="handoffTitle" hidden>
       <p class="eyebrow">Review before saving</p><h2 id="handoffTitle" tabindex="-1"></h2>
       <p id="handoffAccount"></p>
