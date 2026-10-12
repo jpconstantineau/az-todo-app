@@ -523,11 +523,14 @@ test('shell upgrade from v50 to v51 preserves drafts and an exact queued operati
   await showView(page, 'capture');
   const before = await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
   assert.equal(before.queue.length, 1, 'the upgrade must exercise a pending operation');
+  assert.equal(before.preferenceDraft.defaults.values.contexts, '@Upgrade', 'the upgrade must exercise an exact account defaults draft');
   nextShell = true; rejectUpgrade = true;
   await page.evaluate(async () => { const registration = await navigator.serviceWorker.getRegistration(); await registration.update(); });
   await waitForBrowser(page, async () => { const registration = await navigator.serviceWorker.getRegistration(); return !registration.installing && !registration.waiting; });
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, before.queue);
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).draft, before.draft);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).preferenceDraft.defaults,
+    before.preferenceDraft.defaults);
   rejectUpgrade = false;
   await openUtility(page, 'app-device/updates');
   const nextWorker = context.waitForEvent('serviceworker');
@@ -536,6 +539,8 @@ test('shell upgrade from v50 to v51 preserves drafts and an exact queued operati
   await waitForBrowser(page, async () => !!(await navigator.serviceWorker.getRegistration()).waiting);
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, before.queue);
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).preferenceDraft.defaults,
+    before.preferenceDraft.defaults);
   await page.close();
   // Closing a tab and releasing its worker client are asynchronous in Chromium.
   // Reopening early can attach the new page to the old worker and prevent activation.
@@ -545,14 +550,21 @@ test('shell upgrade from v50 to v51 preserves drafts and an exact queued operati
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v51')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
+  assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).preferenceDraft.defaults,
+    before.preferenceDraft.defaults);
+  await openAccountTaskOption(page, 'contexts');
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Upgrade');
   assert.equal(await page.evaluate(async operation => (await fetch('/api/v1/operations', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(operation)
   })).status, before.queue[0].operation), 503, 'the outage still applies under the newly active worker');
   assert.equal(records().length, 0, 'no pending write reached storage during the upgrade');
-  await context.setOffline(true); await page.reload(); await page.getByRole('button', { name: 'Edit Queued across upgrade', includeHidden: true }).waitFor({ state: 'attached' });
+  await context.setOffline(true); await page.reload(); await page.locator('#taskOptionHeading').waitFor();
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), '@Upgrade');
+  await page.getByRole('button', { name: 'Edit Queued across upgrade', includeHidden: true }).waitFor({ state: 'attached' });
   const offline = await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
   assert.deepEqual(offline.queue, before.queue);
   assert.deepEqual(offline.draft, before.draft);
+  assert.deepEqual(offline.preferenceDraft.defaults, before.preferenceDraft.defaults);
   rejectOperations = false; await context.setOffline(false);
   await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' })); await confirmed(page);
   assert.equal(records().filter(record => record.type === 'item').length, 1);
