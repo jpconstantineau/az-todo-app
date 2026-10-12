@@ -37,7 +37,7 @@ flowchart LR
 - [Progressive clarification, saved proposals and explicit decisions](docs/clarification.md)
 - [Local-first AI guidance with authenticated cloud fallback](docs/local-guidance.md)
 - [Local-first AI capture and editable batch review](docs/ai-capture.md)
-- [Editable briefs, revision decisions and selected-revision export](docs/briefs.md)
+- [Editable Brief purpose, field guide, example and revision decisions](docs/briefs.md)
 - [Keyboard focus, announcements and accessibility verification](docs/accessibility.md)
 - [Multi-device sync and collision examples](docs/durable-inbox.md#using-the-same-account-on-phone-and-laptop)
 - [Account partition decision and measurements](docs/data-api-v1.md#partition-decision-issue-27)
