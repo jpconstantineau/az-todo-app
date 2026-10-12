@@ -5,7 +5,7 @@
   <meta name="referrer" content="no-referrer">
   <title>Shared lists · To-Do</title>
   <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/inbox.css"><link rel="stylesheet" href="/shared.css">
-  <script src="/theme.js"></script><script type="module" src="/shared.js?v=44"></script>
+  <script src="/theme.js"></script><script type="module" src="/shared.js?v=45"></script>
 </head>
 <body class="container inbox-page">
   <a class="skip-link" href="#sharedMain">Skip to shared lists</a>
@@ -14,14 +14,10 @@
   <p id="sharedStatus" role="status">Checking account…</p><p id="sharedOffline" class="muted" role="status">Preparing offline reopening…</p><p id="sharedError" role="alert"></p>
   <a id="sharedSignIn" class="button" href="/.auth/login/github?post_login_redirect_uri=/shared.html" hidden>Sign in</a>
   <main id="sharedMain" hidden>
-    <div class="toolbar"><button id="sharedRefresh">Refresh and sync</button><button id="sharedExport">Export shared device copy</button></div>
-    <p class="muted">Refresh, reopen or return to this page to see others’ changes. A pending action stays on this device until confirmed; only one action can be pending at a time. Export before clearing browser storage.</p>
     <section id="sharedPending" class="card" hidden aria-labelledby="pendingHeading"><p class="eyebrow">Recovery</p><h2 id="pendingHeading">Pending action</h2><pre id="pendingText"></pre><div class="actions"><button id="retryShared">Retry unchanged</button><button id="reviewShared" hidden>Review and apply to latest list</button><button id="discardShared">Remove pending action</button></div></section>
     <div class="shared-grid">
-      <section class="card" aria-labelledby="sharedListsHeading"><p class="eyebrow">Choose</p><h2 id="sharedListsHeading">Your shared lists</h2>
+      <section class="card" id="sharedChooser" aria-labelledby="sharedListsHeading"><p class="eyebrow">Choose</p><h2 id="sharedListsHeading">Choose a list</h2>
         <label>List<select id="sharedSelect"><option value="">Choose a list</option></select></label><button id="sharedMore" hidden>Load more lists</button>
-        <details><summary>Create a shared list</summary><form id="createShared"><label>List name<input name="title" maxlength="200" required></label><button type="submit">Create shared list</button></form></details>
-        <details id="joinDetails"><summary>Join an invitation</summary><p>Invitations can be used once within seven days. The owner can change or remove access later.</p><form id="joinShared"><label>List ID<input name="listId" maxlength="128" required></label><label>Invitation code<input name="token" maxlength="128" required autocomplete="off"></label><button type="submit">Accept invitation</button></form></details>
       </section>
       <section class="card" id="sharedContent" hidden aria-labelledby="sharedTitle"><p class="eyebrow">Shared list</p><h2 id="sharedTitle" tabindex="-1"></h2><p id="sharedAccess"></p>
         <form id="addShared"><label>New item<input name="title" maxlength="200" required></label><button type="submit">Add item</button></form>
@@ -36,6 +32,14 @@
         </details>
       </section>
     </div>
+    <details id="sharedSetup" class="card shared-secondary"><summary>Create or join a shared list</summary>
+      <h2>Create a shared list</h2><form id="createShared"><label>List name<input name="title" maxlength="200" required></label><button type="submit">Create shared list</button></form>
+      <h2>Join an invitation</h2><p>Invitations can be used once within seven days. The owner can change or remove access later.</p><form id="joinShared"><label>List ID<input name="listId" maxlength="128" required></label><label>Invitation code<input name="token" maxlength="128" required autocomplete="off"></label><button type="submit">Accept invitation</button></form>
+    </details>
+    <details id="sharedUtilities" class="card shared-secondary"><summary>Sync and device copy</summary>
+      <div class="toolbar"><button id="sharedRefresh">Refresh and sync</button><button id="sharedExport">Export shared device copy</button></div>
+      <p class="muted">Refresh, reopen or return to this page to see others’ changes. A pending action stays on this device until confirmed; only one action can be pending at a time. Export before clearing browser storage.</p>
+    </details>
     <dialog id="sharedEditor" aria-labelledby="sharedEditHeading"><h2 id="sharedEditHeading">Edit shared item</h2><form id="editShared"><label>Title<input name="title" maxlength="200" required></label><button type="submit">Save shared edit</button><button type="button" id="closeSharedEdit">Close editor</button></form></dialog>
   </main>
 </body>

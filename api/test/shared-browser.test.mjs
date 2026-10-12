@@ -11,7 +11,9 @@ const settled = page => waitForBrowser(page, async () => {
   const data = await (await import('/inbox-store.js?v=9')).transact(session.accountId);
   return !data.sharedLists?.pending && !document.querySelector('#sharedContent').hidden && document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false';
 });
-const openDetails = async locator => locator.evaluate(element => { element.open = true; });
+const openDetails = async locator => {
+  if (!await locator.evaluate(element => element.open)) await locator.locator('summary').click();
+};
 
 test('shared lists browser: delayed reads cannot replace a newer snapshot or undo access denial', { timeout: 60000 }, async t => {
   documents.length = 0;
@@ -78,6 +80,41 @@ test('shared lists browser: delayed reads cannot replace a newer snapshot or und
   assert.equal((await local(first)).drafts[id].add, 'Keep this draft');
 });
 
+test('shared lists browser: active mobile work precedes collapsed setup and sync utilities', { timeout: 30000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(server.url + '/shared.html'); await page.locator('#sharedMain').waitFor();
+  await page.waitForFunction(() => document.querySelector('#sharedOffline').textContent === '');
+  assert.equal(await page.locator('#sharedContent').isVisible(), false);
+  assert.equal(await page.locator('#sharedSetup').evaluate(element => element.open), false);
+  await page.locator('#sharedSetup summary').click();
+  await page.locator('#createShared input').fill('Mobile groceries');
+  await page.locator('#createShared button').click(); await settled(page);
+  await page.locator('#addShared input').fill('Milk'); await page.locator('#addShared button').click(); await settled(page);
+
+  assert.equal(await page.locator('#sharedSetup').evaluate(element => element.open), false);
+  assert.equal(await page.locator('#sharedUtilities').evaluate(element => element.open), false);
+  assert.equal(await page.locator('#sharedStatus').textContent(), '');
+  assert.equal(await page.locator('#sharedOffline').textContent(), '');
+  assert.equal(await page.locator('#sharedAccess').textContent(), 'You own this list.');
+  assert.doesNotMatch(await page.locator('#sharedAccess').textContent(), /revision/i);
+  assert.equal(await page.evaluate(() => {
+    const content = document.querySelector('#sharedContent'), setup = document.querySelector('#sharedSetup'), utilities = document.querySelector('#sharedUtilities');
+    return !!(content.compareDocumentPosition(setup) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+      !!(setup.compareDocumentPosition(utilities) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }), true);
+  const mobile = await page.locator('#sharedContent, #sharedSetup, #sharedUtilities').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().top));
+  assert.ok(mobile[0] < mobile[1] && mobile[1] < mobile[2]);
+  await page.locator('#sharedSelect').focus(); await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#addShared input').evaluate(element => element === document.activeElement), true);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const chooser = await page.locator('#sharedChooser').boundingBox(), content = await page.locator('#sharedContent').boundingBox();
+  assert.ok(chooser && content && Math.abs(chooser.y - content.y) < 1 && chooser.x < content.x);
+});
+
 test('shared lists browser: create, invite, constrained member, offline conflict/revocation and account isolation', { timeout: 90000 }, async t => {
   documents.length = 0;
   // Two servers provide independently authenticated browser sessions over one store.
@@ -105,6 +142,7 @@ test('shared lists browser: create, invite, constrained member, offline conflict
   assert.ok(invite.includes('#listId='));
   await second.goto(invite.replace(a.url, b.url)); await second.locator('#sharedMain').waitFor();
   assert.equal(new URL(second.url()).hash, '', 'invitation removed from visible history');
+  assert.equal(await second.locator('#sharedSetup').evaluate(element => element.open), true);
   await second.locator('#joinShared button').click(); await settled(second);
   await second.getByRole('button', { name: 'Complete Milk', exact: true }).waitFor();
   assert.equal(await second.getByRole('button', { name: 'Edit Milk', exact: true }).isDisabled(), true);
@@ -112,20 +150,23 @@ test('shared lists browser: create, invite, constrained member, offline conflict
   assert.equal(await second.locator('#sharedOwner').isVisible(), false);
   await second.getByRole('button', { name: 'Complete Milk', exact: true }).click(); await settled(second);
   await second.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
-  await page.locator('#sharedRefresh').click();
+  await openDetails(page.locator('#sharedUtilities')); await page.locator('#sharedRefresh').click();
   await page.getByRole('button', { name: 'Reopen Milk', exact: true }).waitFor();
   await owner.setOffline(true);
   await page.locator('#addShared input').fill('Saved offline'); await page.locator('#addShared button').click();
   await page.locator('#sharedPending').waitFor();
+  assert.match(await page.locator('#sharedStatus').textContent(), /Offline/);
   await page.reload(); await page.locator('#sharedMain').waitFor(); await page.locator('#sharedPending').waitFor();
   assert.equal((await local(page)).pending.operation.fields.title, 'Saved offline');
   await second.locator('#addShared input').fill('Bread'); await second.locator('#addShared button').click(); await settled(second);
-  await owner.setOffline(false); await page.locator('#sharedRefresh').click();
+  await owner.setOffline(false); await openDetails(page.locator('#sharedUtilities')); await page.locator('#sharedRefresh').click();
   await page.locator('#reviewShared').waitFor();
+  assert.match(await page.locator('#sharedStatus').textContent(), /needs confirmation/);
+  assert.notEqual(await page.locator('#sharedError').textContent(), '');
   assert.equal((await local(page)).pending.code, 'shared_conflict');
   await page.locator('#reviewShared').click(); await settled(page);
   await page.getByRole('button', { name: 'Complete Saved offline', exact: true }).waitFor();
-  await second.locator('#sharedRefresh').click(); await second.getByRole('button', { name: 'Complete Saved offline', exact: true }).waitFor();
+  await openDetails(second.locator('#sharedUtilities')); await second.locator('#sharedRefresh').click(); await second.getByRole('button', { name: 'Complete Saved offline', exact: true }).waitFor();
   await member.setOffline(true);
   await second.locator('#addShared input').fill('Do not lose revoked work'); await second.locator('#addShared button').click(); await second.locator('#sharedPending').waitFor();
   await openDetails(page.locator('#sharedOwner'));
@@ -155,7 +196,7 @@ test('shared lists browser: edit/delete recovery, permissions, export, responsiv
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   page.on('dialog', dialog => dialog.accept());
   await page.goto(server.url + '/shared.html'); await page.locator('#sharedMain').waitFor();
-  await page.waitForFunction(() => document.querySelector('#sharedOffline').textContent === 'Ready to reopen shared lists offline.');
+  await page.waitForFunction(() => document.querySelector('#sharedOffline').textContent === '');
   await openDetails(page.locator('details').filter({ has: page.locator('#createShared') }));
   await page.locator('#createShared input').fill('Weekend shopping'); await page.locator('#createShared button').click(); await settled(page);
   await page.locator('#addShared input').fill('<img src=x> Milk'); await page.locator('#addShared button').click(); await settled(page);
@@ -179,6 +220,7 @@ test('shared lists browser: edit/delete recovery, permissions, export, responsiv
       }
     }
   }
+  await openDetails(page.locator('#sharedUtilities'));
   const download = page.waitForEvent('download'); await page.locator('#sharedExport').click();
   assert.equal((await download).suggestedFilename(), 'shared-lists-device-copy.json');
   await page.locator('#deleteShared').click(); await settled(page);
@@ -202,6 +244,7 @@ test('shared lists browser: quota failure keeps text and exports the unsaved for
   await page.waitForFunction(() => document.querySelector('#sharedMain').getAttribute('aria-busy') === 'false');
   assert.equal(await page.locator('#addShared input').inputValue(), 'Keep this unsaved item');
   assert.equal(documents.find(d => d.kind === 'shared-list').items.length, 0);
+  await openDetails(page.locator('#sharedUtilities'));
   const download = page.waitForEvent('download'); await page.locator('#sharedExport').click();
   const stream = await (await download).createReadStream(); let contents = '';
   for await (const chunk of stream) contents += chunk.toString();
