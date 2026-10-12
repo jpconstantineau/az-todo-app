@@ -46,7 +46,7 @@ test('acknowledgements require a committed receipt for the exact account, operat
   ]) { const value = structuredClone(receipt); change(value); assert.throws(() => committedReceipt(value, operation)); }
 });
 
-async function setup(t, mode = {}) {
+async function setup(t, mode = {}, hash = '#extension=' + extensionId + '&ticket=' + ticket) {
   documents.length = 0;
   let user = 'alice';
   const server = await startServer({ browserUser: () => user }); t.after(server.close);
@@ -72,7 +72,7 @@ async function setup(t, mode = {}) {
   const page = await context.newPage();
   page.on('pageerror', error => console.error('Handoff page error:', error.message));
   await page.route('**/.auth/me', route => route.fulfill({ json: { clientPrincipal: { userId: user, userDetails: 'Alice Example' } } }));
-  await page.goto(server.url + '/handoff.html#extension=' + extensionId + '&ticket=' + ticket);
+  await page.goto(server.url + '/handoff.html' + hash);
   return { page, context, browser, server, setUser: value => { user = value; } };
 }
 async function preview(page) {
@@ -82,6 +82,47 @@ async function preview(page) {
 }
 const saved = () => documents.filter(d => d.kind === 'record');
 const waitError = page => page.locator('#handoffError').waitFor();
+async function assertLiveMessage(page, kind, pattern) {
+  const messages = await page.locator('#handoffStatus, #handoffError').evaluateAll(elements => elements.map(element => ({
+    id: element.id, visible: !element.hidden, text: element.textContent.trim()
+  })));
+  assert.equal(messages.filter(message => message.visible && message.text).length, 1);
+  const selected = messages.find(message => message.id === (kind === 'status' ? 'handoffStatus' : 'handoffError'));
+  assert.equal(selected.visible, true); assert.match(selected.text, pattern);
+  const other = messages.find(message => message !== selected);
+  assert.equal(other.visible, false); assert.equal(other.text, '');
+}
+
+test('mobile handoff leads with one plain-language state and discloses repeat-use guarantees on request', async t => {
+  const { page } = await setup(t);
+  await assertLiveMessage(page, 'status', /^Ready to preview this saved capture\.$/);
+  assert.equal(await page.locator('#handoffStatus').getAttribute('aria-atomic'), 'true');
+  assert.equal(await page.locator('#handoffError').getAttribute('aria-atomic'), 'true');
+  assert.equal(await page.locator('#handoffExtension').count(), 0);
+  const rendered = await page.locator('body').innerText();
+  for (const value of [extensionId, ticket, 'extension ID', 'one-use handoff ticket']) assert.equal(rendered.includes(value), false);
+  const previewButton = page.getByRole('button', { name: 'Preview saved capture' });
+  assert.equal(await previewButton.isEnabled(), true);
+  const bounds = await previewButton.evaluate(button => button.getBoundingClientRect().toJSON());
+  assert.ok(bounds.top >= 0 && bounds.bottom <= 844, 'Preview should be visible in the initial 390 px viewport');
+  const details = page.locator('details'), explanation = details.locator('p');
+  assert.equal(await details.getAttribute('open'), null); assert.equal(await explanation.isVisible(), false);
+  await details.locator('summary').click();
+  assert.equal(await explanation.isVisible(), true);
+  assert.equal(await explanation.textContent(), 'An internet connection is required. TaskGem keeps its copy until the server confirms the import. Phone and offline capture remain available in the workspace.');
+});
+
+test('invalid handoff shows only plain-language recovery and hides the unusable action', async t => {
+  const { page, server } = await setup(t, {}, '#invalid');
+  await assertLiveMessage(page, 'error', /^Reopen this import from TaskGem\.$/);
+  assert.equal(await page.locator('#handoffPreview').isVisible(), false);
+  assert.equal(await page.evaluate(() => document.activeElement.id), '');
+  const rendered = await page.locator('body').innerText();
+  assert.doesNotMatch(rendered, /extension ID|one-use handoff ticket/i);
+  await page.goto(server.url + '/handoff.html?unexpected=1#extension=' + extensionId + '&ticket=' + ticket);
+  await assertLiveMessage(page, 'error', /^Open this import directly from TaskGem in a secure browser tab\.$/);
+  assert.equal(await page.locator('#handoffPreview').isVisible(), false);
+});
 
 test('explicit preview and save preserve source text, use the v1 API and acknowledge only one import', async t => {
   const { page, server, browser } = await setup(t);
@@ -95,18 +136,23 @@ test('explicit preview and save preserve source text, use the v1 API and acknowl
   assert.equal(await page.locator('#handoffOriginal').inputValue(), capture().mutations[0].fields.originalText);
   assert.match(await page.locator('#handoffAccount').textContent(), /Alice Example/);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'handoffTitle');
+  await assertLiveMessage(page, 'status', /^Review the saved capture\. Nothing has been imported yet\.$/);
   if (process.env.HANDOFF_SCREENSHOTS) {
     await mkdir(process.env.HANDOFF_SCREENSHOTS, { recursive: true });
     console.log('Handoff browser:', browser.version());
-    for (const theme of ['light', 'dark']) for (const width of [320, 390, 1440]) {
-      await page.setViewportSize({ width, height: 1000 });
-      await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  }
+  for (const theme of ['light', 'dark']) for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    if (process.env.HANDOFF_SCREENSHOTS) {
       await page.screenshot({ path: process.env.HANDOFF_SCREENSHOTS + '/handoff-' + theme + '-' + width + '.png', fullPage: true });
     }
   }
   await page.getByRole('button', { name: 'Save to my inbox' }).dblclick();
-  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported and acknowledged'));
+  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported.'));
+  await assertLiveMessage(page, 'status', /^Imported\. Open the workspace and sync to see your capture\.$/);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'handoff');
   assert.equal(saved().length, 1);
   for (const [key, value] of Object.entries(capture().mutations[0].fields)) assert.deepEqual(saved()[0].record[key], value);
   const calls = await page.evaluate(() => bridgeCalls);
@@ -125,16 +171,21 @@ for (const kind of ['response', 'acknowledgement']) test('lost ' + kind + ' retr
     await route.fetch(); await route.abort();
   }, { times: 1 });
   await preview(page); await page.locator('#handoffSave').click(); await waitError(page);
+  await assertLiveMessage(page, 'error', /Your saved capture remains in TaskGem/);
+  await page.waitForFunction(() => document.activeElement.id === 'handoffPreview');
   assert.equal(saved().length, 1);
   await page.evaluate(() => { bridgeMode.loseAck = false; });
   await preview(page); await page.locator('#handoffSave').click();
-  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported and acknowledged'));
+  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported.'));
   assert.equal(saved().length, 1); assert.equal(documents.filter(d => d.kind === 'receipt').length, 1);
 });
 
 for (const mode of [{ absent: true }, { wrongRequest: true }, { wrongTicket: true }, { wrongAccount: true }]) test('invalid bridge stays closed: ' + JSON.stringify(mode), async t => {
   const { page } = await setup(t, mode);
   await page.locator('#handoffPreview').click(); await waitError(page);
+  await assertLiveMessage(page, 'error', /Your saved capture remains in TaskGem/);
+  await page.waitForFunction(() => document.activeElement.id === 'handoffPreview');
+  if (mode.absent) assert.equal(await page.locator('#handoffError').textContent(), 'TaskGem isn’t available in this browser. Reopen the import from TaskGem in the browser where it is installed. Your saved capture remains in TaskGem.');
   assert.equal(saved().length, 0); assert.equal(await page.locator('#handoffCapture').isVisible(), false);
 });
 
@@ -143,7 +194,9 @@ test('account switching and logout before save retain capture and prevent writes
   for (const user of ['bob', null]) {
     setUser('alice'); await preview(page); setUser(user);
     await page.locator('#handoffSave').click(); await waitError(page);
+    await assertLiveMessage(page, 'error', /Your saved capture remains in TaskGem/);
     assert.equal(saved().length, 0); assert.equal(await page.locator('#handoffOriginal').inputValue(), '');
+    await page.waitForFunction(expected => document.activeElement.id === expected, user === null ? 'handoffSignIn' : 'handoffPreview');
   }
   assert.equal(await page.locator('#handoffSignIn').isVisible(), true);
   assert.equal(await page.evaluate(() => bridgeCalls.filter(c => c.message.type === 'acknowledge').length), 0);
@@ -152,7 +205,10 @@ test('account switching and logout before save retain capture and prevent writes
 test('account switching during preview discards the delayed payload', async t => {
   const { page, setUser } = await setup(t, { delay: true });
   await page.locator('#handoffPreview').click(); await page.waitForFunction(() => !!window.finishBridge);
+  await assertLiveMessage(page, 'status', /^Checking your account and saved capture…$/);
   setUser('bob'); await page.evaluate(() => finishBridge()); await waitError(page);
+  await assertLiveMessage(page, 'error', /Your saved capture remains in TaskGem/);
+  await page.waitForFunction(() => document.activeElement.id === 'handoffPreview');
   assert.equal(await page.locator('#handoffOriginal').inputValue(), ''); assert.equal(saved().length, 0);
 });
 
@@ -160,8 +216,11 @@ test('offline save and cancellation leave the extension copy unacknowledged', as
   const { page, context } = await setup(t);
   await preview(page); await context.setOffline(true);
   await page.locator('#handoffSave').click(); await waitError(page);
+  await assertLiveMessage(page, 'error', /Your saved capture remains in TaskGem/);
   assert.equal(saved().length, 0);
   await context.setOffline(false); await preview(page); await page.locator('#handoffCancel').click();
+  await assertLiveMessage(page, 'status', /^Import cancelled\. The saved capture remains in TaskGem unless a save had already completed\.$/);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'handoffPreview');
   assert.equal(await page.locator('#handoffCapture').isVisible(), false);
   assert.equal(await page.evaluate(() => bridgeCalls.filter(c => c.message.type === 'acknowledge').length), 0);
 });
@@ -169,8 +228,11 @@ test('offline save and cancellation leave the extension copy unacknowledged', as
 test('changed-content retries cannot acknowledge a previous receipt or resurrect deleted captures', async t => {
   const { page } = await setup(t, { loseAck: true });
   await preview(page); await page.locator('#handoffSave').click(); await waitError(page);
+  await assertLiveMessage(page, 'error', /Your saved capture remains in TaskGem/);
   await page.evaluate(() => { pendingCapture.mutations[0].fields.title = 'Changed'; bridgeMode.loseAck = false; });
   await preview(page); await page.locator('#handoffSave').click(); await waitError(page);
+  await assertLiveMessage(page, 'error', /retry unchanged/);
+  await page.waitForFunction(() => document.activeElement.id === 'handoffPreview');
   assert.match(await page.locator('#handoffError').textContent(), /conflicts/);
   assert.equal(saved()[0].record.title, 'Read the article');
   await page.evaluate(async () => {
@@ -180,7 +242,7 @@ test('changed-content retries cannot acknowledge a previous receipt or resurrect
     pendingCapture.mutations[0].fields.title = 'Read the article';
   });
   await preview(page); await page.locator('#handoffSave').click();
-  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported and acknowledged'));
+  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported.'));
   assert.equal(saved()[0].record.deleted, true); assert.equal(saved()[0].record.version, 2);
 });
 
@@ -217,7 +279,7 @@ test('unpacked MV3 messaging binds the actual handoff tab and rejects other tabs
   await page.bringToFront();
   // Backgrounding clears the page preview, while the extension keeps its durable copy.
   await page.reload(); await preview(page); await page.locator('#handoffSave').click();
-  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported and acknowledged'));
+  await page.waitForFunction(() => document.querySelector('#handoffStatus').textContent.startsWith('Imported.'));
   assert.equal(saved().length, 1);
   assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('pending')).pending), undefined);
 });
