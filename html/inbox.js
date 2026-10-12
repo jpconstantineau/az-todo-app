@@ -2,14 +2,14 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
-import { LOCAL_PROFILE, transact, adoptLocalProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=17';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=18';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=19';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=13';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=14';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
@@ -19,6 +19,7 @@ import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=6';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
 import { setupRecurrence } from './recurrence-ui.js?v=3';
+import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=1';
 
 const $ = id => document.getElementById(id);
 const ADOPTION_INTENT = 'todo-adopt-local';
@@ -36,6 +37,7 @@ let splitFeedbackTimer;
 let materializingRecurrence = false;
 let savedViewEditing = null;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
+let pendingWipTransition = null, pendingBlock = null;
 function refreshSplitAction() {
   $('previewSplit').toggleAttribute('data-has-separators', /[,;]/.test(capture.elements.text.value));
 }
@@ -228,7 +230,10 @@ edit.elements.workspaceId.onchange = () => {
   void journal();
 };
 function enqueue(local, owner, mutations) {
-  queueMutations(local, owner, mutations);
+  const cleanups = cleanupExecutionPolicy(projected(local), mutations);
+  const complete = [...mutations, ...cleanups.map(entry => entry.mutation)];
+  queueMutations(local, owner, complete);
+  if (cleanups.length) local.queue.at(-1).executionCleanupItemIds = cleanups.flatMap(entry => entry.itemIds);
 }
 function ensurePlanMutationsAvailable(local, mutations) {
   const touched = new Set(mutations.map(key));
@@ -239,6 +244,63 @@ function ensurePlanMutationsAvailable(local, mutations) {
 function workspaceReadOnly(workspaceId = selectedWorkspace) {
   const space = projected(state)['workspace:' + workspaceId];
   return workspaceId !== PERSONAL && (!space || space.deleted || space.archived);
+}
+function currentExecutionPolicy(records = projected(state), workspaceId = selectedWorkspace) {
+  return records[policyKey(workspaceId)] || null;
+}
+function executionMutation(policy, next) {
+  return { type: 'executionPolicy', id: next.id, action: policy ? 'update' : 'create', expectedVersion: policy?.version || 0,
+    fields: policy ? policyFields(next) : { workspaceId: next.workspaceId, ...policyFields(next) } };
+}
+async function saveExecutionPolicy(next, intent, message) {
+  const owner = accountId, generation = accountGeneration, workspaceId = next.workspaceId;
+  if (!owner || workspaceReadOnly(workspaceId)) throw new Error('Choose an active workspace before changing active work.');
+  validateExecutionPolicy(next);
+  const saved = await transact(owner, local => {
+    if (local.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before changing active work.');
+    const records = projected(local), current = currentExecutionPolicy(records, workspaceId);
+    if ((current?.version || 0) !== (next.version || 0)) throw new Error('Active work changed. Review the latest WIP count and try again.');
+    queueMutations(local, owner, [executionMutation(current, next)]);
+    local.queue.at(-1).executionTransition = intent;
+  });
+  if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the active-work save remains with its original account.');
+  state = saved; statusText('executionStatus', `${message} ${localMode() ? 'Saved on this device.' : 'Saved on device — pending server confirmation.'}`);
+  clearError(); render(); broadcast(); void sync();
+}
+function openWipDialog(item, stateName, options) {
+  pendingWipTransition = { itemId: item.id, state: stateName, options, workspaceId: item.workspaceId };
+  const records = projected(state), policy = currentExecutionPolicy(records, item.workspaceId);
+  $('wipLimitDialogMessage').textContent = `Starting “${item.title}” would exceed ${policy.wipLimit} counted item${policy.wipLimit === 1 ? '' : 's'}. Pause counted work or explicitly override the limit.`;
+  $('wipCountedItems').replaceChildren(...policy.entries.filter(entry => ['started', 'blocked'].includes(entry.state)).map(entry => {
+    const counted = records[`item:${entry.itemId}`], control = button(`Pause ${counted?.title || entry.itemId}`, async () => {
+      const latestRecords = projected(state), latest = currentExecutionPolicy(latestRecords, item.workspaceId), target = latestRecords[`item:${item.id}`], pauseItem = latestRecords[`item:${entry.itemId}`];
+      if (!latest || !target || !pauseItem) throw new Error('Active work changed. Review the latest board.');
+      let next = transitionPolicy(latest, pauseItem, 'paused');
+      next = transitionPolicy(next, target, stateName, options);
+      $('wipLimitDialog').close(); pendingWipTransition = null;
+      await saveExecutionPolicy(next, { kind: 'transition', itemId: item.id, state: stateName, options, pauseItemId: entry.itemId }, `Paused “${pauseItem.title}” and moved “${target.title}” to ${stateName}.`);
+    }, `Pause ${counted?.title || entry.itemId} and ${stateName === 'blocked' ? 'block' : 'start'} ${item.title}`);
+    return control;
+  }));
+  showDialog($('wipLimitDialog')); $('wipLimitDialogHeading').focus();
+}
+async function changeExecution(item, stateName, options = {}) {
+  const records = projected(state), current = records[`item:${item.id}`], policy = currentExecutionPolicy(records, item.workspaceId);
+  if (!policy) throw new Error('Choose and save a WIP limit before starting work.');
+  if (!current || current.deleted || current.version !== item.version || !['inbox', 'next'].includes(current.status)) throw new Error('This item changed or is no longer ready. Review its latest state.');
+  const previous = activeEntry(policy, item.id), addsSlot = ['started', 'blocked'].includes(stateName) && !['started', 'blocked'].includes(previous?.state);
+  if (addsSlot && executionCount(policy) >= policy.wipLimit && !options.override) { openWipDialog(current, stateName, options); return; }
+  const effective = { ...options, override: options.override ?? (['started', 'blocked'].includes(stateName) && ['started', 'blocked'].includes(previous?.state) && previous.override) };
+  const next = transitionPolicy(policy, current, stateName, effective);
+  await saveExecutionPolicy(next, { kind: 'transition', itemId: item.id, state: stateName, options: effective }, stateName ? `Moved “${item.title}” to ${stateName}.` : `Returned “${item.title}” to ready.`);
+}
+function openBlockDialog(item, entry = null) {
+  pendingBlock = { itemId: item.id, workspaceId: item.workspaceId };
+  $('blockWorkHeading').textContent = entry ? 'Review block' : 'Block work';
+  $('blockWorkTask').textContent = item.title;
+  $('blockWorkForm').elements.reason.value = entry?.blockedReason || '';
+  $('blockWorkForm').elements.reviewDate.value = entry?.reviewDate || localDay();
+  showDialog($('blockWorkDialog')); $('blockWorkForm').elements.reason.focus();
 }
 const dialogOpeners = new Map();
 const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
@@ -854,6 +916,53 @@ function taskIcon(control, name, title) {
   }
   control.replaceChildren(svg); control.classList.add('icon-button'); control.title = title; return control;
 }
+function renderActiveWork(recordMap, readOnly) {
+  const policy = currentExecutionPolicy(recordMap);
+  const limitInput = $('wipLimit');
+  if (document.activeElement !== limitInput) limitInput.value = policy?.wipLimit || '';
+  $('executionPolicyForm').querySelector('button').disabled = readOnly;
+  const count = executionCount(policy);
+  $('wipCounter').textContent = policy ? `${count} of ${policy.wipLimit} WIP. Blocked work counts toward WIP.${count > policy.wipLimit ? ' Explicit override active.' : ''} ${policy.localState || 'Server-confirmed'}.`
+    : 'No WIP limit chosen. Save a limit from 1 to 20 before starting work.';
+  const lanes = { started: $('startedItems'), blocked: $('blockedItems'), paused: $('pausedItems') };
+  for (const [stateName, container] of Object.entries(lanes)) {
+    const entries = (policy?.entries || []).filter(entry => entry.state === stateName);
+    container.replaceChildren(...entries.map(entry => {
+      const item = recordMap[`item:${entry.itemId}`], title = item?.title || `Unavailable item ${entry.itemId}`;
+      const article = document.createElement('article'), heading = document.createElement('h5'), stateLabel = document.createElement('p'), details = document.createElement('p'), actions = document.createElement('div');
+      article.className = 'active-card'; article.dataset.itemId = entry.itemId; heading.textContent = title;
+      stateLabel.className = 'active-state-label'; stateLabel.dataset.state = stateName; stateLabel.dataset.override = String(entry.override);
+      stateLabel.textContent = `${stateName[0].toUpperCase()}${stateName.slice(1)}${entry.override ? ' · WIP override' : ''}${item?.localState ? ` · ${item.localState}` : ''}`;
+      details.className = 'muted';
+      const stale = !item || item.deleted || !['inbox', 'next'].includes(item.status);
+      details.textContent = stateName === 'blocked' ? `Reason: ${entry.blockedReason} · Review ${entry.reviewDate} · Counts toward WIP${stale ? ' · Item changed; review and remove explicitly' : ''}`
+        : `${stateName === 'started' ? 'Counts toward WIP' : 'Does not count toward WIP'}${stale ? ' · Item changed; review and remove explicitly' : ''}`;
+      actions.className = 'actions';
+      const action = (label, callback, primary = false) => {
+        const control = button(label, callback, `${label} ${title}`, primary ? `execution:${entry.itemId}:primary` : `execution:${entry.itemId}:${label.toLowerCase().replaceAll(' ', '-')}`);
+        control.disabled = readOnly || (!item && label !== 'Return to ready');
+        control.dataset.focusFallback = `execution:${stateName}:heading`;
+        return control;
+      };
+      if (!stale) {
+        if (stateName === 'started') actions.append(action('Pause', () => changeExecution(item, 'paused'), true), action('Block', () => openBlockDialog(item, entry)));
+        if (stateName === 'paused') actions.append(action('Resume', () => changeExecution(item, 'started'), true), action('Block', () => openBlockDialog(item, entry)));
+        if (stateName === 'blocked') actions.append(action('Resume', () => changeExecution(item, 'started'), true), action('Pause', () => changeExecution(item, 'paused')), action('Review block', () => openBlockDialog(item, entry)));
+        actions.append(action('Return to ready', () => changeExecution(item, null)), action('Complete', () => item.recurrenceTemplateId ? resolveOccurrence(item, 'completed') : updateRecord(item, { status: 'completed' })));
+      } else {
+        const remove = action('Remove from active work', async () => {
+          const latest = currentExecutionPolicy(projected(state));
+          if (!latest) return;
+          const next = { ...latest, entries: latest.entries.filter(value => value.itemId !== entry.itemId) };
+          await saveExecutionPolicy(next, { kind: 'remove', itemId: entry.itemId }, `Removed “${title}” from active work.`);
+        }, true);
+        remove.disabled = readOnly; actions.append(remove);
+      }
+      article.append(heading, stateLabel, details, actions); return article;
+    }));
+    if (!entries.length) container.textContent = `No ${stateName} work.`;
+  }
+}
 function render() {
   if (!accountId || !state) return;
   if (taskOptionRoute(destination)) {
@@ -1063,7 +1172,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['archived', 'Archived'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['query', 'Search'], ['resultType', 'Result type'], ['resultState', 'Result state'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['wipLimit', 'WIP limit'], ['entries', 'Active work'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['archived', 'Archived'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['query', 'Search'], ['resultType', 'Result type'], ['resultState', 'Result state'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
@@ -1098,10 +1207,11 @@ function render() {
       : 'The move plan and its acknowledged progress remain saved on this device.';
     const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
     const recurrenceConflict = failed?.operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId);
-    $('resolve').hidden = projectPlanFailure || move || recurrenceConflict || !failed?.receipt || !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
-    $('resolve').textContent = planConflict ? 'Apply my pending plan to latest version' : reflectionConflict ? 'Merge pending reflection after accepted snapshot' : 'Apply pending edit to latest version';
+    const executionConflict = failed?.operation.mutations.some(mutation => mutation.type === 'executionPolicy');
+    $('resolve').hidden = projectPlanFailure || move || recurrenceConflict || !failed?.receipt || !executionConflict && !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').textContent = executionConflict ? 'Retry against latest active work' : planConflict ? 'Apply my pending plan to latest version' : reflectionConflict ? 'Merge pending reflection after accepted snapshot' : 'Apply pending edit to latest version';
     $('discard').hidden = move;
-    $('discard').textContent = failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
+    $('discard').textContent = executionConflict ? 'Use server active work' : failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
   }
   reviews.render();
   briefs.render();
@@ -1111,6 +1221,7 @@ function render() {
   $('planDay').value = $('day').value;
   planner.render();
   const readOnly = workspaceReadOnly();
+  renderActiveWork(recordMap, readOnly);
   const execute = navigation.execute;
   const kinds = $('executeKinds');
   const availableKinds = new Set(['list', 'project', 'checklist', ...lists.map(collectionKind)]);
@@ -1140,7 +1251,8 @@ function render() {
   $('resetExecuteFilters').hidden = !executeFilterCount;
   const executeCollection = executeCollections.find(record => viewKey(record) === execute.view);
   const executeItems = records.filter(record => executeCollection && record.type === 'item' && !archiveOnly(record, recordMap) && belongsTo(record, executeCollection));
-  const readyItems = executeItems.filter(readyToExecute);
+  const activeIds = new Set((currentExecutionPolicy(recordMap)?.entries || []).map(entry => entry.itemId));
+  const readyItems = executeItems.filter(record => readyToExecute(record) && !activeIds.has(record.id));
   $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).map(record => {
     const article = document.createElement('article'); article.className = 'execute-item'; article.dataset.id = record.id;
     const checkLabel = document.createElement('label'); checkLabel.className = 'execute-check';
@@ -1152,7 +1264,9 @@ function render() {
       finally { if (checkbox.isConnected) { checkbox.checked = false; checkbox.disabled = !accountId || workspaceReadOnly(); } }
     }));
     const title = titleButton(record); title.dataset.focusKey = `${key(record)}:execute-edit`; title.disabled = readOnly;
-    checkLabel.append(checkbox); article.append(checkLabel, title); return article;
+    const start = button('Start', () => changeExecution(record, 'started'), `Start ${record.title}`, `execution:${record.id}:primary`);
+    start.disabled = readOnly; start.dataset.focusFallback = 'execution:started:heading';
+    checkLabel.append(checkbox); article.append(checkLabel, title, start); return article;
   }));
   if (!$('executeItems').childElementCount) $('executeItems').textContent = execute.view
     ? readyItems.length && executeFilterCount ? 'No ready items match these filters. Reset context, time & energy to see more.' : `No ready items in this ${execute.kind}. Choose another ${execute.kind}.`
@@ -1208,7 +1322,11 @@ async function changeDeletion(record, action, linkedSnapshot = []) {
       const linked = Object.values(records).filter(item => item.type === 'item' && !item.recurrenceTemplateId && !item.deleted && belongsTo(item, record));
       if (JSON.stringify(linked.map(item => `${key(item)}:${item.version}`).sort()) !== JSON.stringify(linkedSnapshot)) throw new Error('This list’s items changed. Review them before deleting the list.');
       const deletions = linked.map(item => ({ type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }));
-      while (deletions.length > 19) enqueue(local, owner, deletions.splice(0, 20));
+      const policy = currentExecutionPolicy(records, record.workspaceId);
+      const needsCleanup = new Set((policy?.entries || []).map(entry => entry.itemId));
+      // Preserve full batches unless the shared terminal cleanup needs one mutation slot.
+      const batchSize = deletions.some(mutation => needsCleanup.has(mutation.id)) ? 19 : 20;
+      while (deletions.length >= batchSize) enqueue(local, owner, deletions.splice(0, batchSize));
       enqueue(local, owner, [...deletions, { type: 'list', id: record.id, action, expectedVersion: record.version }]);
       return;
     }
@@ -1503,11 +1621,14 @@ $('undoEdit').onclick = guard(async () => {
   const owner = accountId, generation = accountGeneration, operationId = state?.undoEdit?.operationId;
   if (!owner || !operationId) return;
   const saved = await transact(owner, local => {
-    const undo = local.undoEdit, current = undo && projected(local)[key(undo)];
+    const undo = local.undoEdit, records = projected(local), current = undo && records[key(undo)];
     const planning = current?.type === 'item' && Object.hasOwn(undo.fields || {}, 'plannedDay')
-      ? membershipPlanMutations(projected(local), current.workspaceId, current, undo.fields.plannedDay) : [];
+      ? membershipPlanMutations(records, current.workspaceId, current, undo.fields.plannedDay) : [];
+    const cleanup = current?.type === 'item' ? cleanupExecutionPolicy(records, [{ type: current.type, id: current.id, action: 'update', expectedVersion: undo.expectedVersion, fields: undo.fields }]) : [];
+    const related = [...planning, ...cleanup.map(entry => entry.mutation)];
     ensurePlanMutationsAvailable(local, planning);
-    undoEdit(local, owner, operationId, Date.now(), planning);
+    undoEdit(local, owner, operationId, Date.now(), related);
+    if (cleanup.length) local.queue.at(-1).executionCleanupItemIds = cleanup.flatMap(entry => entry.itemIds);
   });
   if (owner !== accountId || generation !== accountGeneration) return;
   state = saved; clearError(); render(); broadcast(); void sync();
@@ -2059,7 +2180,7 @@ document.querySelector('.skip-link').onclick = event => {
   event.preventDefault();
   if (accountId) focusDestination(); else $('loginStatus').focus();
 };
-for (const dialog of [$('editor'), $('clarifier'), $('briefs'), $('projectPlanner'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor')]) {
+for (const dialog of [$('editor'), $('clarifier'), $('briefs'), $('projectPlanner'), $('workspaceManager'), $('extractionReview'), $('recurringEditor'), $('archiveReview'), $('savedViewEditor'), $('wipLimitDialog'), $('blockWorkDialog')]) {
   dialog.addEventListener('close', () => {
     if (dialog.open) return;
     const opener = dialogOpeners.get(dialog);
@@ -2072,6 +2193,36 @@ for (const dialog of [$('editor'), $('clarifier'), $('briefs'), $('projectPlanne
     }
   });
 }
+$('executionPolicyForm').onsubmit = event => {
+  event.preventDefault();
+  void guard(async () => {
+    const records = projected(state), current = currentExecutionPolicy(records), limit = Number($('wipLimit').value);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new Error('Choose a WIP limit from 1 to 20.');
+    if (current && executionCount(current) > limit) throw new Error('Pause or return counted work before lowering the WIP limit.');
+    const next = current ? { ...current, wipLimit: limit } : { type: 'executionPolicy', id: selectedWorkspace, workspaceId: selectedWorkspace, version: 0, wipLimit: limit, entries: [] };
+    await saveExecutionPolicy(next, { kind: 'limit', wipLimit: limit }, `WIP limit set to ${limit}.`);
+  })();
+};
+$('cancelWip').onclick = () => { pendingWipTransition = null; $('wipLimitDialog').close(); };
+$('overrideWip').onclick = guard(async () => {
+  const pending = pendingWipTransition;
+  if (!pending) return;
+  const item = projected(state)[`item:${pending.itemId}`];
+  pendingWipTransition = null; $('wipLimitDialog').close();
+  if (!item) throw new Error('This item is no longer available.');
+  await changeExecution(item, pending.state, { ...pending.options, override: true });
+});
+$('cancelBlockWork').onclick = () => { pendingBlock = null; $('blockWorkDialog').close(); };
+$('blockWorkForm').onsubmit = event => {
+  event.preventDefault();
+  void guard(async () => {
+    const pending = pendingBlock, item = pending && projected(state)[`item:${pending.itemId}`];
+    if (!pending || !item) throw new Error('This item is no longer available.');
+    const reason = $('blockWorkForm').elements.reason.value, reviewDate = $('blockWorkForm').elements.reviewDate.value;
+    pendingBlock = null; $('blockWorkDialog').close();
+    await changeExecution(item, 'blocked', { reason, reviewDate });
+  })();
+};
 $('executeList').onchange = () => {
   navigation.execute.view = $('executeList').value;
   render(); void journal();
@@ -2560,7 +2711,57 @@ $('recoverProjectPlan').onclick = guard(async () => {
   if (owner !== accountId) return;
   state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL; render(); restoreDraft(); broadcast(); void sync();
 });
+async function retryExecutionConflict() {
+  const owner = accountId, failed = state.queue[0], id = failed?.operation.operationId;
+  if (!failed?.receipt || !failed.operation.mutations.some(mutation => mutation.type === 'executionPolicy')) throw new Error('Queue changed; review it again.');
+  const intent = failed.executionTransition, cleanupIds = failed.executionCleanupItemIds || [];
+  const serverPolicyMutation = failed.operation.mutations.find(mutation => mutation.type === 'executionPolicy');
+  const serverPolicy = state.records[key(serverPolicyMutation)];
+  if (!serverPolicy || serverPolicy.deleted) throw new Error('The server active-work policy is unavailable. Use server active work, then choose a WIP limit again.');
+  if (intent?.kind === 'limit' && executionCount(serverPolicy) > intent.wipLimit) throw new Error('Latest active work exceeds that lower limit. Pause or return counted work first.');
+  const saved = await transact(owner, local => {
+    const entry = local.queue[0];
+    if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');
+    local.queue.shift();
+    if (cleanupIds.length) {
+      const mutations = entry.operation.mutations.filter(mutation => mutation.type !== 'executionPolicy').map(mutation => {
+        const current = local.records[key(mutation)];
+        if (!current || current.deleted) throw new Error('The item changed or was deleted. Use server active work and review the latest item.');
+        return { ...mutation, expectedVersion: current.version };
+      });
+      const latest = local.records[key(serverPolicyMutation)];
+      mutations.push({ type: 'executionPolicy', id: latest.id, action: 'update', expectedVersion: latest.version,
+        fields: { entries: latest.entries.filter(value => !cleanupIds.includes(value.itemId)) } });
+      queueMutations(local, owner, mutations);
+      local.queue.at(-1).executionCleanupItemIds = cleanupIds;
+    } else if (intent?.kind === 'limit') {
+      queueMutations(local, owner, [{ type: 'executionPolicy', id: serverPolicy.id, action: 'update', expectedVersion: serverPolicy.version,
+        fields: { wipLimit: intent.wipLimit, entries: serverPolicy.entries } }]);
+      local.queue.at(-1).executionTransition = intent;
+    } else if (['remove'].includes(intent?.kind)) {
+      queueMutations(local, owner, [{ type: 'executionPolicy', id: serverPolicy.id, action: 'update', expectedVersion: serverPolicy.version,
+        fields: { entries: serverPolicy.entries.filter(value => value.itemId !== intent.itemId) } }]);
+      local.queue.at(-1).executionTransition = intent;
+    }
+  });
+  if (owner !== accountId) return;
+  state = saved; render(); broadcast();
+  if (cleanupIds.length || ['limit', 'remove'].includes(intent?.kind)) { void sync(); return; }
+  if (intent?.kind !== 'transition') throw new Error('This active-work intent cannot be retried automatically. Use server active work and repeat the action.');
+  const records = projected(state), item = records[`item:${intent.itemId}`];
+  if (!item) throw new Error('The item is no longer available.');
+  if (intent.pauseItemId) {
+    const policy = currentExecutionPolicy(records, item.workspaceId), paused = records[`item:${intent.pauseItemId}`];
+    if (!policy || !paused || !activeEntry(policy, paused.id)) throw new Error('The work chosen to pause changed. Review the latest active work and try again.');
+    let next = transitionPolicy(policy, paused, 'paused');
+    next = transitionPolicy(next, item, intent.state, intent.options);
+    await saveExecutionPolicy(next, intent, `Retried active-work change for “${item.title}”.`);
+  } else await changeExecution(item, intent.state, intent.options);
+}
 $('resolve').onclick = guard(async () => {
+  if (state.queue[0]?.operation.mutations.some(mutation => mutation.type === 'executionPolicy')) {
+    await retryExecutionConflict(); return;
+  }
   const owner = accountId, id = state.queue[0].operation.operationId;
   const reviewed = structuredClone(state.records);
   const reflectionMutations = await mergeReflectionConflict(state.queue[0], state.records);

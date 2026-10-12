@@ -7,6 +7,7 @@ import { clarificationFields } from "./clarification.mjs";
 import { briefFields } from "./briefs.mjs";
 import { dailyPlanFields, effortEstimate } from './daily-plans.mjs';
 import { projectPlanRevisionFields } from './project-planning.mjs';
+import { executionPolicyFields } from './execution-policy.mjs';
 
 import { collectionKinds, validateRef, validateRefs } from './collection-model.mjs';
 import { occurrenceId, recurrenceDate, recurrenceRule } from './recurrence-model.mjs';
@@ -37,7 +38,7 @@ export function identifier(value, field = "id") {
   return value;
 }
 export function recordType(value) {
-  if (!["workspace", "list", "item", "project", "projectPlanRevision", "savedView", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
+  if (!["workspace", "list", "item", "project", "projectPlanRevision", "savedView", "settings", "clarification", "review", "reviewDecision", "reviewReflection", "brief", "planPreference", "dailyPlan", "dailyPlanRevision", "recurrenceTemplate", "executionPolicy"].includes(value)) throw new ValidationError("type must be a supported v1 record type.");
   return value;
 }
 function exactText(value, max, field) {
@@ -55,6 +56,7 @@ function link(value, field) {
 }
 
 export function fieldsFor(type, action, input) {
+  if (type === 'executionPolicy') return executionPolicyFields(action, input);
   if (type === 'projectPlanRevision') return projectPlanRevisionFields(action, input);
   if (['planPreference', 'dailyPlan', 'dailyPlanRevision'].includes(type)) return dailyPlanFields(type, action, input);
   if (type === 'reviewDecision') return reviewDecisionFields(action, input);
@@ -259,6 +261,9 @@ export function validateOperation(input) {
     if (action === "restore" && !["item", "list", "project", "workspace"].includes(type)) throw new ValidationError("Only items, lists, projects and workspaces can be restored.");
     if (type === "settings" && (id !== "settings" || action === "delete")) {
       throw new ValidationError("Use the settings identity and create/update to save or reset defaults.");
+    }
+    if (type === 'executionPolicy' && ['delete', 'restore'].includes(action)) {
+      throw new ValidationError('Active-work policy uses its workspace identity and create/update only.');
     }
     if (!Number.isSafeInteger(expectedVersion) || (action === "create" ? expectedVersion !== 0 : expectedVersion < 1)) {
       throw new ValidationError("expectedVersion must be 0 for create, or the last observed positive version for update/delete/restore.");

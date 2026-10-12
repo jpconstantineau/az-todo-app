@@ -1,5 +1,7 @@
 # Versioned data API (issues #4 and #25)
 
+Workspace execution policy uses the versioned `executionPolicy` record type. Its deterministic ID equals `workspaceId`; fields are `workspaceId` (create only), `wipLimit` (integer 1–20), and up to 40 unique `entries`. Each entry contains `itemId`, `state` (`started`, `paused`, or `blocked`), `observedItemVersion`, `override`, and nullable `blockedReason`/`reviewDate`. Blocked entries require a 1–500 character reason and calendar review date. Started and blocked entries count toward WIP; writes that add a counted slot above the limit require an explicit override.
+
 The native client at `/` exclusively uses this
 JSON API. It is disabled unless `V1_API_ENABLED=true`; a disabled API shows a clear
 error without choosing another store. Retired pre-v1 HTTP paths are unregistered

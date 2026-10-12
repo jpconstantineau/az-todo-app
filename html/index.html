@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=45" defer></script>
+  <script src="/pwa.js?v=46" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=45"></script>
+  <script type="module" src="/inbox.js?v=46"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -361,7 +361,19 @@
       </section>
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
-      <h2 id="executeHeading" tabindex="-1">Do</h2>
+      <p class="eyebrow">Focus</p><h2 id="executeHeading" tabindex="-1">Do</h2>
+      <section id="activeWork" class="active-work" aria-labelledby="activeWorkHeading">
+        <div class="active-work-header"><div><h3 id="activeWorkHeading" tabindex="-1">Active work</h3><p id="executionPolicyHelp" class="muted">Choose your WIP limit. Started and blocked work count; paused work does not.</p></div>
+          <form id="executionPolicyForm" class="wip-policy"><label>WIP limit <input id="wipLimit" name="wipLimit" type="number" min="1" max="20" required></label><button type="submit">Save WIP limit</button></form></div>
+        <p id="wipCounter" class="wip-counter" role="status" aria-live="polite"></p>
+        <p id="executionStatus" role="status" aria-live="polite"></p>
+        <div class="active-lanes">
+          <section class="active-lane" aria-labelledby="startedLaneHeading"><h4 id="startedLaneHeading" tabindex="-1" data-focus-key="execution:started:heading">Started</h4><div id="startedItems"></div></section>
+          <section class="active-lane" aria-labelledby="blockedLaneHeading"><h4 id="blockedLaneHeading" tabindex="-1" data-focus-key="execution:blocked:heading">Blocked</h4><div id="blockedItems"></div></section>
+          <section class="active-lane" aria-labelledby="pausedLaneHeading"><h4 id="pausedLaneHeading" tabindex="-1" data-focus-key="execution:paused:heading">Paused</h4><div id="pausedItems"></div></section>
+        </div>
+      </section>
+      <p class="eyebrow execute-ready-label">Ready</p><h3>Ready queue</h3>
       <div class="actions execute-kinds" id="executeKinds" role="group" aria-label="Collection type">
         <button type="button" data-execute-kind="list" aria-pressed="true">List</button>
         <button type="button" data-execute-kind="project" aria-pressed="false">Project</button>
@@ -386,6 +398,18 @@
         <p class="muted">Context matches exactly; No context finds unclassified tasks. Time and energy are maximums; missing or custom estimates stay visible.</p>
       </details>
     </section>
+    <dialog id="wipLimitDialog" aria-labelledby="wipLimitDialogHeading">
+      <h2 id="wipLimitDialogHeading" tabindex="-1">WIP limit reached</h2>
+      <p id="wipLimitDialogMessage"></p><div id="wipCountedItems" class="wip-counted-items"></div>
+      <div class="actions"><button id="overrideWip" type="button">Start anyway — override WIP limit</button><button id="cancelWip" type="button">Cancel</button></div>
+    </dialog>
+    <dialog id="blockWorkDialog" aria-labelledby="blockWorkHeading">
+      <form id="blockWorkForm" method="dialog"><h2 id="blockWorkHeading" tabindex="-1">Block work</h2><p id="blockWorkTask"></p>
+        <label>Blocked reason <textarea name="reason" maxlength="500" required></textarea></label>
+        <label>Review date <input name="reviewDate" type="date" min="0001-01-01" max="9999-12-31" required></label>
+        <div class="actions"><button type="submit" value="save">Save block</button><button id="cancelBlockWork" type="button">Cancel</button></div>
+      </form>
+    </dialog>
     <section class="card review-panel" id="reviews" aria-labelledby="reviewsHeading" hidden>
       <p class="eyebrow">Reflect</p><h2 id="reviewsHeading" tabindex="-1">Daily and weekly reviews</h2>
       <fieldset id="reviewWorkspaceFields" class="workspace-fields">

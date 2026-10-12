@@ -33,6 +33,7 @@ flowchart LR
 - [TaskGem browser handoff protocol and extension integration](docs/extension-handoff.md)
 - [Portable device and server exports, and round-trip validation](docs/device-export.md)
 - [Waiting, deferred work, dates and undo](docs/workflow-states.md)
+- [Active work and WIP policy](docs/active-work.md)
 - [Resumable daily and weekly reviews](docs/reviews.md)
 - [Progressive clarification, saved proposals and explicit decisions](docs/clarification.md)
 - [Local-first AI guidance with authenticated cloud fallback](docs/local-guidance.md)

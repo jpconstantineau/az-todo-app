@@ -4,6 +4,7 @@ import { workflowFields, validateWorkflow } from './inbox-fields.js?v=5';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=5';
 import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=1';
 import { validateProjectPlanOperation } from './project-planning-model.js?v=1';
+import { validateExecutionPolicy } from './execution-policy.js?v=1';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const LOCAL_PROFILE = 'device-local';
@@ -319,7 +320,7 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
   for (const mutation of mutations) {
     if (!['workspace', 'settings'].includes(mutation.type)) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
-      if (['item', 'list', 'project', 'savedView', 'review', 'recurrenceTemplate'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
+      if (['item', 'list', 'project', 'savedView', 'review', 'recurrenceTemplate', 'executionPolicy'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
       if (['item', 'recurrenceTemplate'].includes(record.type) && !Array.isArray(record.collectionRefs)) throw new Error('collectionRefs is required.');
       if (record.type === 'project' && !['draft', 'active', 'someday', 'completed'].includes(record.status)) throw new Error('Choose a draft, active, someday or completed project status.');
       if (record.type === 'project' && record.status !== 'draft' && !record.outcome?.trim()) throw new Error('Add a desired outcome before activating this project.');
@@ -329,6 +330,7 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
         if (!['all', 'item', 'list', 'project'].includes(record.resultType)) throw new Error('Choose a supported saved view type.');
         if (!['active', 'all', 'archived'].includes(record.resultState) && !/^status:[^\s][\s\S]{0,63}$/.test(record.resultState || '')) throw new Error('Choose a supported saved view state.');
       }
+      if (record.type === 'executionPolicy') validateExecutionPolicy(record);
       if (isCollection(record) && record.archived !== undefined && typeof record.archived !== 'boolean') throw new Error('archived must be true or false.');
       for (const member of [record, ...(old ? [old] : [])]) {
         const id = workspaceOf(member, proposed), workspace = proposed['workspace:' + id];
@@ -487,7 +489,9 @@ export function applyReceipt(state, receipt, accountId) {
   if (receipt.status === 'committed') state.queue.splice(index, 1);
   else {
     if (state.undoEdit && state.queue[index].operation.mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
-    state.queue[index].failure = state.queue[index].operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId)
+    state.queue[index].failure = state.queue[index].operation.mutations.some(mutation => mutation.type === 'executionPolicy')
+      ? 'Active work changed on another device. Retry against the latest active work or use the server active work.'
+      : state.queue[index].operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId)
       ? 'This recurring series changed on another device. Keep the server outcome or export this pending intent before discarding it.'
       : 'Another edit or deletion conflicts with this save. Review both versions.';
     state.queue[index].receipt = receipt;

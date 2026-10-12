@@ -76,7 +76,8 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
       if (record.type === 'project') return !isEffectivelyArchived(record, records) && (reviewKind === 'weekly' && ['active', 'draft'].includes(record.status) || reviewKind === 'someday' && record.status === 'someday');
       if (reviewKind === 'someday' || record.type !== 'item' || ['completed', 'dropped', 'reference'].includes(record.status)) return false;
       if (archiveOnly(record, records)) return false;
-      return reviewKind === 'weekly' || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) ||
+      const execution = records[`executionPolicy:${record.workspaceId}`]?.entries?.find(entry => entry.itemId === record.id);
+      return reviewKind === 'weekly' || execution?.state === 'blocked' && execution.reviewDate <= day || record.status === 'next' || record.plannedDay === day || reviewReady(record, now) ||
         record.dueDate && record.dueDate <= day || record.dueDateUtc && Date.parse(record.dueDateUtc) < tomorrow;
     }).map(({ type, id }) => ({ type, id }));
   }
@@ -114,12 +115,15 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
     const archiveRoots = target && (target.type === 'project' ? [archivedAncestor(target, records)].filter(Boolean) : memberships(target).map(member => archivedAncestor(member, records)).filter(Boolean));
     const targetArchived = target && (target.type === 'project' ? isEffectivelyArchived(target, records) : target.type === 'item' && archiveOnly(target, records));
+    const execution = target?.type === 'item' ? records[`executionPolicy:${target.workspaceId}`]?.entries?.find(entry => entry.itemId === target.id) : null;
     $('reviewDetails').textContent = !ref ? 'This review is empty. Start another review after capturing work or changing your focus.' : !target || target.deleted
       ? 'This record was deleted or is unavailable. Acknowledge it to continue; it will not be recreated.'
       : [target.type === 'project' ? `Project status: ${target.status === 'draft' ? 'Needs outcome' : target.status} · Project outcome: ${target.outcome || 'Not supplied yet'}` : `Status: ${target.status}`, target.description,
         targetArchived ? `Archived with ${archiveRoots[0]?.title || target.title}. Edit to add an active membership, or reactivate it in Organize.` : archiveRoots.length ? `Still active through another membership; also archived with ${archiveRoots[0].title}.` : '',
         memberships(target).map(ref => `Membership: ${records[refKey(ref)]?.title || 'Unavailable collection'}`).join(' · '),
         ...['waitingOn', 'plannedDay', 'dueDate', 'dueDateUtc', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'].filter(name => target[name]).map(name => `${name}: ${target[name]}`),
+        execution ? `Active state: ${execution.state}` : '', execution?.state === 'blocked' ? `Blocked reason: ${execution.blockedReason}` : '',
+        execution?.state === 'blocked' ? `Block review date: ${execution.reviewDate}` : '', execution ? `${['started', 'blocked'].includes(execution.state) ? 'Counts' : 'Does not count'} toward WIP${execution.override ? ' · explicit override' : ''}` : '',
         reviewReady(target) ? 'Ready for review' : '', `Record version: ${target.version}`].filter(Boolean).join('\n');
     $('reviewOriginal').textContent = target?.originalText || '';
     const failed = state.queue.some(entry => entry.failure);
