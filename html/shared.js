@@ -1,4 +1,4 @@
-import { transact } from './inbox-store.js?v=17';
+import { LOCAL_PROFILE, purgeAccountProfile, transact } from './inbox-store.js?v=19';
 
 const $ = id => document.getElementById(id);
 const rights = ['view', 'add', 'edit', 'complete', 'delete'];
@@ -12,7 +12,7 @@ async function offlineReady() {
   const channel = new MessageChannel();
   channel.port1.onmessage = event => {
     channel.port1.close();
-    message('sharedOffline', event.data === 'todo-inbox-shell-v52' ? '' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
+    message('sharedOffline', event.data === 'todo-inbox-shell-v53' ? '' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
   };
   worker.postMessage('shell-version', [channel.port2]);
 }
@@ -45,6 +45,15 @@ async function request(path, body) {
     ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   let value; try { value = await response.json(); } catch { value = {}; }
   if (owner !== accountId || epoch !== generation) throw new Error('Account changed while the request was running.');
+  if (value.error === 'account_erased') {
+    const saved = await transact(null), erased = owner || saved.accountId;
+    if (erased && erased !== LOCAL_PROFILE) await purgeAccountProfile(erased);
+    clearAccount(); $('sharedSignIn').hidden = false;
+    history.replaceState(null, '', location.pathname);
+    channel.postMessage('changed');
+    $('sharedSignIn').focus();
+    throw Object.assign(new Error('Account erased — this account’s device copy was removed. Offline devices must reconnect or have their site data cleared.'), { status: 410, code: 'account_erased' });
+  }
   if (response.status === 401 || value.error === 'account_mismatch' || value.accountId && owner && value.accountId !== owner) {
     clearAccount(); $('sharedSignIn').hidden = false;
     try { await transact(null, saved => { saved.paused = true; }); }

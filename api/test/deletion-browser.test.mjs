@@ -125,6 +125,8 @@ test('deletion: lists delete completed and active linked items, including offlin
   const page = await context.newPage(), prompts = [];
   page.on('dialog', dialog => { prompts.push(dialog.message()); void dialog.accept(); });
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent.includes('Ready to reopen'));
   const statuses = await page.evaluate(async () => {
     const batches = [
       [{ type: 'list', id: 'done', action: 'create', expectedVersion: 0, fields: { title: 'Done', workspaceId: 'personal' } },

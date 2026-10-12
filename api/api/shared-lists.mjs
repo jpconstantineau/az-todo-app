@@ -6,6 +6,7 @@ import { container } from './shared/db.mjs';
 import { ValidationError, text as validateText } from './shared/validate.mjs';
 import { identifier, object, digest, bytes } from './v1/contract.mjs';
 import { ApiError } from './v1/store.mjs';
+import { acquireSharedAccountWrite, assertAccountAvailable, releaseSharedAccountWrite } from './v1/account-erasure.mjs';
 
 const permissions = ['view', 'add', 'edit', 'complete', 'delete'];
 const partition = id => [`shared:${id}`, 'shared-list', 'v1'];
@@ -56,7 +57,9 @@ function operation(raw) {
 
 async function commit(op, principal) {
   const user = principal.userId, requestHash = digest(op), receiptId = `receipt:${hash(user)}:${op.operationId}`;
+  const leaseId = digest({ listId: op.listId, operationId: op.operationId });
   for (let attempt = 0; attempt < 5; attempt++) {
+    await assertAccountAvailable(container, user);
     const old = await read(op.listId);
     const owner = old?.ownerId === user;
     const joining = op.action === 'join';
@@ -69,6 +72,7 @@ async function commit(op, principal) {
     const previous = old && await read(op.listId, receiptId);
     if (previous && (!joining || allowed(old, user).includes('view'))) {
       if (previous.requestHash !== requestHash) throw new ApiError(409, 'operation_reused', 'Use a new operation ID for different content.');
+      await releaseSharedAccountWrite(container, user, leaseId);
       return previous.response;
     }
     const ownerActions = ['rename', 'invite', 'cancelInvite', 'permissions', 'revoke', 'deleteList', 'restoreList'];
@@ -124,14 +128,19 @@ async function commit(op, principal) {
     if (bytes(next) > 200000) fail('This shared list is full. Create another list.');
     const response = { apiVersion: 1, accountId: user, listId: op.listId, operationId: op.operationId, revision: next.revision };
     const receipt = { id: receiptId, UserID: next.UserID, ObjectType: next.ObjectType, ObjectID: next.ObjectID, ttl: -1, kind: 'shared-receipt', requestHash, response };
-    const result = await container.items.batch([
-      old ? { operationType: 'Replace', id: 'list', resourceBody: next, ifMatch: old._etag } : { operationType: 'Create', resourceBody: next },
-      { operationType: 'Create', resourceBody: receipt }
-    ], partition(op.listId));
-    const codes = [result.code, ...(result.result || []).map(r => r.statusCode)];
-    if (codes.some(code => [409, 412].includes(code))) continue;
-    if (result.code < 200 || result.code >= 300 || result.result?.length !== 2 || result.result.some(r => r.statusCode < 200 || r.statusCode >= 300)) throw new ApiError(503, 'storage_unavailable', 'Save was not acknowledged. Retry the same action unchanged.');
-    return response;
+    await acquireSharedAccountWrite(container, user, leaseId);
+    try {
+      const result = await container.items.batch([
+        old ? { operationType: 'Replace', id: 'list', resourceBody: next, ifMatch: old._etag } : { operationType: 'Create', resourceBody: next },
+        { operationType: 'Create', resourceBody: receipt }
+      ], partition(op.listId));
+      const codes = [result.code, ...(result.result || []).map(r => r.statusCode)];
+      if (codes.some(code => [409, 412].includes(code))) continue;
+      if (result.code < 200 || result.code >= 300 || result.result?.length !== 2 || result.result.some(r => r.statusCode < 200 || r.statusCode >= 300)) throw new ApiError(503, 'storage_unavailable', 'Save was not acknowledged. Retry the same action unchanged.');
+      return response;
+    } finally {
+      await releaseSharedAccountWrite(container, user, leaseId);
+    }
   }
   throw new ApiError(503, 'shared_busy', 'The list is busy. Retry the same action unchanged.');
 }
@@ -143,6 +152,7 @@ function route(name, method, handler) {
       if (process.env.V1_API_ENABLED !== 'true') throw new ApiError(503, 'v1_disabled', 'Shared lists are unavailable.');
       const principal = getClientPrincipal(req.headers);
       if (!principal) throw new ApiError(401, 'sign_in_required', 'Sign in to use shared lists.');
+      await assertAccountAvailable(container, principal.userId);
       return json({ apiVersion: 1, accountId: principal.userId, ...await handler(req, principal) });
     } catch (error) {
       return json({ apiVersion: 1, error: error instanceof ValidationError ? 'invalid_request' : error.code || 'storage_unavailable',

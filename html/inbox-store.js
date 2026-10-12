@@ -227,6 +227,33 @@ export async function transact(accountId, update) {
   });
 }
 
+// Erasure is account-scoped: remove the exact cloud profile and its private/shared
+// drafts and queues in one durable transaction while preserving other profiles and
+// the device-only profile.
+export async function purgeAccountProfile(accountId) {
+  if (!accountId || accountId === LOCAL_PROFILE) throw new Error('A cloud account is required for account erasure cleanup.');
+  const db = await database();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('accounts', 'readwrite', { durability: 'strict' });
+    const store = transaction.objectStore('accounts'), request = store.get('session');
+    let failure;
+    request.onsuccess = () => {
+      try {
+        const session = request.result || {};
+        store.delete(profileStorageKey(accountId));
+        if (session.accountId === accountId) {
+          delete session.accountId;
+          session.paused = true; session.activeProfile = LOCAL_PROFILE;
+          delete session.adoptLocal;
+        }
+        store.put(session, 'session');
+      } catch (error) { failure = error; transaction.abort(); }
+    };
+    transaction.oncomplete = resolve;
+    transaction.onabort = transaction.onerror = () => reject(failure ?? transaction.error ?? new Error('Account cleanup failed.'));
+  });
+}
+
 export function projected(state) {
   const records = structuredClone(state.records);
   for (const entry of state.queue) {
