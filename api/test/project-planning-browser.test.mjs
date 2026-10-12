@@ -114,9 +114,11 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   await page.locator('#closeProjectPlanning').click();
   browserUser = 'bob'; await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'bob' && !document.querySelector('#workspace').hidden);
+  await confirmed(page);
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), '', 'another account cannot expose the planning draft');
   browserUser = 'alice'; await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact(null)).accountId === 'alice' && !document.querySelector('#workspace').hidden);
+  await confirmed(page);
   await showView(page, 'work');
   await page.locator('#view').selectOption('project:launch', { force: true }); await clickControl(opener);
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), 'Exact conflicted purpose');
