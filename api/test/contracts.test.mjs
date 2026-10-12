@@ -41,7 +41,7 @@ test('canonical shell uses local assets, safe routing and no fragment runtime', 
   const html = await readFile(new URL('index.html', root), 'utf8');
   assert.match(html, /src="\/pwa.js\?v=46"/);
   assert.match(html, /type="module" src="\/inbox.js\?v=46"/);
-  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=45"/);
+  assert.match(await readFile(new URL('shared.html', root), 'utf8'), /type="module" src="\/shared.js\?v=46"/);
   assert.deepEqual(localDefaults, apiDefaults, 'device-local task options must match the session API defaults');
   assert.equal(html.includes('id="defaultsEditor"'), false, 'task options are routed pages, not a dialog');
   assert.doesNotMatch(html, /<dialog[^>]+id="(?:appDevice|dataRecovery|deletedRecords)"/, 'utility pages are routed sections, not dialogs');
