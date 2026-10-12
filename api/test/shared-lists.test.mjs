@@ -4,7 +4,7 @@ import { documents, faults, startServer } from './harness.mjs';
 
 const token = 'a'.repeat(64);
 async function fixture(t) {
-  documents.length = 0; Object.assign(faults, { nextWrite: false, batchIndex: -1, loseBatchResponse: false });
+  documents.length = 0; Object.assign(faults, { nextWrite: false, batchIndex: -1, loseBatchResponse: false, loseBatchResponseAfter: 0 });
   const server = await startServer(); t.after(server.close);
   const request = async (path, user = 'alice', body) => {
     const response = await fetch(server.url + '/api/shared/' + path, { method: body ? 'POST' : 'GET',
@@ -90,7 +90,7 @@ test('shared lists: single-use invitations, cancellation, expiry, revocation and
 test('shared lists: lost acknowledgements, changed-content retry, concurrent writes and grants are atomic', async t => {
   const f = await fixture(t); await join(f, ['view', 'add']);
   const op = f.op('add', { id: 'milk', title: 'Milk' }, f.revision(), 'bob');
-  faults.loseBatchResponse = true;
+  faults.loseBatchResponse = true; faults.loseBatchResponseAfter = 1;
   assert.equal((await f.post(op)).status, 503);
   const receipt = await f.post(op);
   assert.equal(receipt.status, 200); assert.deepEqual(await f.post(op), receipt);
@@ -111,7 +111,7 @@ test('shared lists: join retry after lost acknowledgement and account mismatch d
   const f = await fixture(t);
   await f.act('invite', { id: 'join', token, permissions: ['view'] });
   const op = f.op('join', { token }, 0, 'bob');
-  faults.loseBatchResponse = true;
+  faults.loseBatchResponse = true; faults.loseBatchResponseAfter = 1;
   assert.equal((await f.post(op)).status, 503);
   assert.equal((await f.post(op)).status, 200);
   assert.equal((await f.get('alice')).body.list.members.length, 1);
@@ -125,7 +125,7 @@ test('shared lists: join retry after lost acknowledgement and account mismatch d
 test('shared lists: create retry is repeat-safe and paged discovery never admits an outsider', async t => {
   const f = await fixture(t);
   const create = f.op('create', { title: 'Second shared list' }, 0, 'alice', { listId: 'second' });
-  faults.loseBatchResponse = true;
+  faults.loseBatchResponse = true; faults.loseBatchResponseAfter = 1;
   assert.equal((await f.post(create)).status, 503);
   const receipt = await f.post(create);
   assert.equal(receipt.status, 200); assert.deepEqual(await f.post(create), receipt);

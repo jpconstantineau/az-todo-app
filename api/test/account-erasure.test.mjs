@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
-import { applyAccountErasure, createAccountErasurePlan, accountErasureFenceId } from '../api/v1/account-erasure.mjs';
+import { acquireSharedAccountWrite, applyAccountErasure, createAccountErasurePlan, accountErasureFenceId,
+  releaseSharedAccountWrite } from '../api/v1/account-erasure.mjs';
 import { container, documents, startServer } from './harness.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { document, recordId } from '../api/v1/contract.mjs';
+import { restoreReplayTargetConfirmed } from '../scripts/erase-account.mjs';
 
 const principal = user => Buffer.from(JSON.stringify({ userId: user, userDetails: `${user} name`, userRoles: ['authenticated'] })).toString('base64');
 async function request(server, path, user, body) {
@@ -16,6 +19,13 @@ async function request(server, path, user, body) {
 const mutation = (type, id, fields, action = 'create', expectedVersion = 0) => ({ type, id, action, expectedVersion, ...(fields ? { fields } : {}) });
 const privateOperation = (accountId, operationId, mutations) => ({ apiVersion: 1, accountId, operationId, mutations });
 const sharedOperation = (accountId, listId, operationId, expectedRevision, action, fields) => ({ accountId, listId, operationId, expectedRevision, action, fields });
+
+test('account erasure: restore replay requires a non-empty exact disabled target confirmation', () => {
+  const args = ['apply', '--restore-replay', '--confirm-disabled-target', 'disabled-copy'];
+  assert.equal(restoreReplayTargetConfirmed(args, { ACCOUNT_ERASURE_RESTORE_TARGET_DISABLED: 'true' }), false);
+  assert.equal(restoreReplayTargetConfirmed(args, { ACCOUNT_ERASURE_RESTORE_TARGET_DISABLED: 'true', COSMOS_CONTAINER: 'other-copy' }), false);
+  assert.equal(restoreReplayTargetConfirmed(args, { ACCOUNT_ERASURE_RESTORE_TARGET_DISABLED: 'true', COSMOS_CONTAINER: 'disabled-copy' }), true);
+});
 
 test('account erasure: exact plan fences all routes, purges private/shared data, resumes and isolates other accounts', async t => {
   documents.length = 0;
@@ -73,6 +83,7 @@ test('account erasure: exact plan fences all routes, purges private/shared data,
 
   const outcome = await applyAccountErasure(container, plan, { confirm: plan.erasureId, now: '2026-10-12T01:00:00.000Z' });
   assert.equal(outcome.status, 'complete');
+  assert.deepEqual(outcome.actualCounts, plan.counts);
   assert.equal(JSON.stringify(outcome).includes('Personal secret'), false);
   assert.deepEqual(documents.filter(row => row.UserID === 'alice').map(row => row.id), [accountErasureFenceId]);
   assert.deepEqual(documents.filter(row => row.UserID === 'bob'), bobBefore);
@@ -84,6 +95,54 @@ test('account erasure: exact plan fences all routes, purges private/shared data,
   assert.equal(documents.some(row => row.UserID === 'shared:bob-owned' && row.kind === 'shared-receipt' && row.response.accountId === 'bob'), true);
   assert.equal(await applyAccountErasure(container, plan, { confirm: plan.erasureId }).then(result => result.status), 'complete');
   await assert.rejects(applyAccountErasure(container, { ...plan, erasureId: 'another-decision' }, { confirm: 'another-decision' }), { code: 'different_erasure' });
+});
+
+test('account erasure: shared-write lease closes the cross-partition fence race', async () => {
+  documents.length = 0;
+  await container.items.create(document('alice', 'state', { kind: 'state', sequence: 0 }));
+  const plan = await createAccountErasurePlan(container, 'alice', {
+    authenticatedPrincipalId: 'alice', backupExpiresAfterUtc: '2026-12-01T00:00:00.000Z', erasureId: 'lease-race'
+  });
+  await acquireSharedAccountWrite(container, 'alice', 'shared-in-flight');
+  await assert.rejects(applyAccountErasure(container, plan, { confirm: plan.erasureId }), { code: 'plan_changed' });
+  await assert.rejects(createAccountErasurePlan(container, 'alice', {
+    authenticatedPrincipalId: 'alice', backupExpiresAfterUtc: '2026-12-01T00:00:00.000Z'
+  }), { code: 'shared_write_active' });
+  await releaseSharedAccountWrite(container, 'alice', 'shared-in-flight');
+  const fresh = await createAccountErasurePlan(container, 'alice', {
+    authenticatedPrincipalId: 'alice', backupExpiresAfterUtc: '2026-12-01T00:00:00.000Z', erasureId: 'after-lease'
+  });
+  await applyAccountErasure(container, fresh, { confirm: fresh.erasureId });
+  await assert.rejects(acquireSharedAccountWrite(container, 'alice', 'too-late'), { code: 'account_erased' });
+});
+
+test('account erasure: interrupted multi-batch owned-list purge keeps its anchor and deletes every receipt on resume', async () => {
+  documents.length = 0;
+  await container.items.create(document('alice', 'state', { kind: 'state', sequence: 0 }));
+  const listId = 'large-owned';
+  const sharedBase = { UserID: `shared:${listId}`, ObjectType: 'shared-list', ObjectID: 'v1', ttl: -1 };
+  await container.items.create({ id: 'list', ...sharedBase, kind: 'shared-list', listId, ownerId: 'alice', title: 'Private owned list', revision: 1,
+    deleted: false, items: [], members: [], invitations: [] });
+  for (let index = 0; index < 60; index++) await container.items.create({ id: `receipt:other:${index}`, ...sharedBase, kind: 'shared-receipt',
+    requestHash: `other-${index}`, response: { accountId: 'other', listId, operationId: `other-${index}`, revision: 1 } });
+  await container.items.create({ id: `receipt:${createHash('sha256').update('alice').digest('hex')}:alice-op`, ...sharedBase, kind: 'shared-receipt',
+    requestHash: 'alice', response: { accountId: 'alice', listId, operationId: 'alice-op', revision: 1 } });
+  const plan = await createAccountErasurePlan(container, 'alice', {
+    authenticatedPrincipalId: 'alice', backupExpiresAfterUtc: '2026-12-01T00:00:00.000Z', erasureId: 'large-owned-erasure'
+  });
+  const originalBatch = container.items.batch;
+  let sharedBatches = 0;
+  container.items.batch = async (operations, partitionKey) => {
+    if (partitionKey[0] === `shared:${listId}` && ++sharedBatches === 2) throw new Error('Injected interruption');
+    return originalBatch(operations, partitionKey);
+  };
+  try { await assert.rejects(applyAccountErasure(container, plan, { confirm: plan.erasureId }), /Injected interruption/); }
+  finally { container.items.batch = originalBatch; }
+  assert.ok(documents.some(row => row.UserID === `shared:${listId}` && row.id === 'list'));
+  const outcome = await applyAccountErasure(container, plan, { confirm: plan.erasureId });
+  assert.equal(documents.some(row => row.UserID === `shared:${listId}`), false);
+  assert.equal(outcome.actualCounts.sharedOwnedLists, 1);
+  assert.equal(outcome.actualCounts.sharedActorReceipts, 1);
 });
 
 test('account erasure: retained decision reapplies to a disabled restored snapshot and preserves post-backup work for other accounts', async () => {
@@ -101,10 +160,12 @@ test('account erasure: retained decision reapplies to a disabled restored snapsh
   await applyAccountErasure(container, plan, { confirm: plan.erasureId });
 
   documents.splice(0, documents.length, ...snapshot);
+  await container.items.create(document('alice', 'account-shared-write', { kind: 'account-shared-write', operationId: 'stale-backup-request' }));
   await container.items.create(document('alice', recordId('item', 'post-backup-a'), { kind: 'record', record: { type: 'item', id: 'post-backup-a', accountId: 'alice', title: 'Late A', version: 1 } }));
   await container.items.create(document('bob', recordId('item', 'post-backup-b'), { kind: 'record', record: { type: 'item', id: 'post-backup-b', accountId: 'bob', title: 'Late B', version: 1 } }));
   const outcome = await applyAccountErasure(container, plan, { confirm: plan.erasureId, restoreReplay: true });
   assert.equal(outcome.actualCounts.privateRecords, 2);
+  assert.equal(outcome.actualCounts.privateOther, plan.counts.privateOther + 1);
   assert.deepEqual(documents.filter(row => row.UserID === 'alice').map(row => row.id), [accountErasureFenceId]);
   assert.deepEqual(documents.filter(row => row.UserID === 'bob' && row.kind === 'record').map(row => row.record.title).sort(), ['Late B', 'Old B']);
   const retained = documents.find(row => row.UserID === 'shared:restored' && row.id === 'list');

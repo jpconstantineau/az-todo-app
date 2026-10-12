@@ -52,8 +52,16 @@ owned shared-list partition and removes membership/name plus that actor's receip
 from lists owned by others. Shared cleanup rescans after the fence to a verified
 fixed point.
 
+Shared writes reserve a text-free marker in the same private account partition
+before committing their separate list-partition batch. Fence creation reserves the
+same marker atomically, so an in-flight shared write either finishes before the
+plan can be applied or loses to the fence and cannot write. If a save is still
+active, wait for its exact retry to finish/release the marker and create a new dry
+run; do not bypass or delete the marker manually.
+
 An interruption leaves the fence active. Re-run the exact plan and erasure ID;
-completed phases are repeat-safe. A different decision is refused. The final fence
+completed phases and aggregate accounting are repeat-safe, including shared-list
+partitions larger than one batch. A different decision is refused. The final fence
 is the sanitized outcome: exact target, erasure ID, timestamps, expected/actual
 aggregates, shared dispositions, backup-expiry obligation and status. It contains no
 user content.
@@ -82,13 +90,14 @@ reconcile post-backup work for non-erased accounts, then reapply each retained
 decision with the same plan and erasure ID:
 
 ```text
-npm run erase:account -- apply --plan <protected-plan.json> --confirm <erasure-id> --restore-replay
+ACCOUNT_ERASURE_RESTORE_TARGET_DISABLED=true npm run erase:account -- apply --plan <protected-plan.json> --confirm <erasure-id> --restore-replay --confirm-disabled-target <COSMOS_CONTAINER>
 ```
 
 `--restore-replay` is only for a disabled restore target: it accepts changed restored
 storage under the already approved identity/decision, reinstalls the fence, removes
 all target data and shared references, and verifies the fixed point. It must not be
-used to bypass a changed live dry run. Enable traffic only after the erased account
+used to bypass a changed live dry run. The CLI requires both an explicit disabled-
+target environment guard and the exact configured container ID. Enable traffic only after the erased account
 is fenced/absent, shared references are absent, and non-erased post-backup work is
 verified.
 

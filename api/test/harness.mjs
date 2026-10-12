@@ -8,7 +8,7 @@ const { app, HttpRequest, HttpResponse } = functions;
 // handlers, auth parsing, validation and Azure HTTP types execute as-is.
 export const documents = [];
 export const routes = new Map();
-export const faults = { nextWrite: false, batchIndex: -1, loseBatchResponse: false };
+export const faults = { nextWrite: false, batchIndex: -1, loseBatchResponse: false, loseBatchResponseAfter: 0 };
 let etag = 0;
 process.env.V1_API_ENABLED = "true";
 const clone = value => structuredClone(value);
@@ -42,7 +42,8 @@ export const container = {
         result.push({ statusCode: operation.operationType === "Create" ? 201 : operation.operationType === 'Delete' ? 204 : 200 });
       }
       documents.splice(0, documents.length, ...staged);
-      if (faults.loseBatchResponse) { faults.loseBatchResponse = false; throw new Error("Injected lost acknowledgement"); }
+      if (faults.loseBatchResponse && faults.loseBatchResponseAfter > 0) faults.loseBatchResponseAfter--;
+      else if (faults.loseBatchResponse) { faults.loseBatchResponse = false; throw new Error("Injected lost acknowledgement"); }
       return { code: 200, result };
     },
     async create(doc) {

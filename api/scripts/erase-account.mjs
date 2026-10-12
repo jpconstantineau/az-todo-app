@@ -3,9 +3,13 @@ import { pathToFileURL } from 'node:url';
 import { applyAccountErasure, createAccountErasurePlan } from '../api/v1/account-erasure.mjs';
 
 function usage() {
-  return 'Usage:\n  node scripts/erase-account.mjs plan --account <exact-id> --verified-principal <exact-id> --backup-expires-after <utc> --out <new-plan.json>\n  node scripts/erase-account.mjs apply --plan <plan.json> --confirm <erasure-id> [--restore-replay]';
+  return 'Usage:\n  node scripts/erase-account.mjs plan --account <exact-id> --verified-principal <exact-id> --backup-expires-after <utc> --out <new-plan.json>\n  node scripts/erase-account.mjs apply --plan <plan.json> --confirm <erasure-id> [--restore-replay --confirm-disabled-target <container-id>]';
 }
 function option(args, name) { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : undefined; }
+export function restoreReplayTargetConfirmed(args, env) {
+  const target = env.COSMOS_CONTAINER, confirmation = option(args, '--confirm-disabled-target');
+  return env.ACCOUNT_ERASURE_RESTORE_TARGET_DISABLED === 'true' && Boolean(target) && confirmation === target;
+}
 async function writeExclusive(path, value) {
   const file = await open(path, 'wx');
   try { await file.writeFile(JSON.stringify(value, null, 2) + '\n'); await file.sync(); }
@@ -30,8 +34,12 @@ export async function main(args = process.argv.slice(2), env = process.env, inje
     } else {
       const path = option(args, '--plan'), confirm = option(args, '--confirm');
       if (!path) throw new Error(usage());
+      const restoreReplay = args.includes('--restore-replay');
+      if (restoreReplay && !restoreReplayTargetConfirmed(args, env)) {
+        throw new Error('Restore replay requires the disabled-target environment guard and exact container confirmation.');
+      }
       const plan = JSON.parse(await readFile(path, 'utf8'));
-      const result = await applyAccountErasure(db.container, plan, { confirm, restoreReplay: args.includes('--restore-replay') });
+      const result = await applyAccountErasure(db.container, plan, { confirm, restoreReplay });
       console.log(JSON.stringify(result));
     }
     return 0;
