@@ -1,11 +1,11 @@
 import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, collectionKind, isCollection, isEffectivelyArchived, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=5';
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
-import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=5';
+import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
 import { LOCAL_PROFILE, transact, adoptLocalProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=18';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=19';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=20';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
@@ -19,7 +19,7 @@ import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=6';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
 import { setupRecurrence } from './recurrence-ui.js?v=3';
-import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=1';
+import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, retryExecutionCleanupMutations, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=1';
 
 const $ = id => document.getElementById(id);
 const ADOPTION_INTENT = 'todo-adopt-local';
@@ -190,6 +190,7 @@ async function switchWorkspace(id) {
       local.selectedWorkspace = id;
     });
     if (owner !== accountId) return;
+    closeExecutionDialogs();
     editing = defaultsEditing = null;
     $('createdDestination').replaceChildren();
     $('editor').close(); $('savedViewEditor').close();
@@ -301,6 +302,16 @@ function openBlockDialog(item, entry = null) {
   $('blockWorkForm').elements.reason.value = entry?.blockedReason || '';
   $('blockWorkForm').elements.reviewDate.value = entry?.reviewDate || localDay();
   showDialog($('blockWorkDialog')); $('blockWorkForm').elements.reason.focus();
+}
+function closeExecutionDialogs() {
+  pendingWipTransition = pendingBlock = null;
+  for (const dialog of [$('wipLimitDialog'), $('blockWorkDialog')]) {
+    dialogOpeners.delete(dialog);
+    if (dialog.open) dialog.close();
+  }
+  $('blockWorkForm').reset();
+  $('blockWorkTask').textContent = $('wipLimitDialogMessage').textContent = '';
+  $('wipCountedItems').replaceChildren();
 }
 const dialogOpeners = new Map();
 const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
@@ -2485,6 +2496,7 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  closeExecutionDialogs();
   $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
   if (accountId && (location.hash === '#menu' || location.hash === '#preferences' || location.hash.startsWith('#preferences/') || location.hash.startsWith('#app-device') || location.hash.startsWith('#data-recovery'))) history.replaceState(null, '', location.pathname + location.search + '#capture');
   document.body.classList.remove('menu-route', 'utility-route'); $('menuView').hidden = true; $('utilityView').hidden = true; $('preferencesView').hidden = true; $('appMenu').removeAttribute('aria-current');
@@ -2724,11 +2736,7 @@ async function retryExecutionConflict() {
     if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');
     local.queue.shift();
     if (cleanupIds.length) {
-      const mutations = entry.operation.mutations.filter(mutation => mutation.type !== 'executionPolicy').map(mutation => {
-        const current = local.records[key(mutation)];
-        if (!current || current.deleted) throw new Error('The item changed or was deleted. Use server active work and review the latest item.');
-        return { ...mutation, expectedVersion: current.version };
-      });
+      const mutations = retryExecutionCleanupMutations(entry.operation.mutations, local.records);
       const latest = local.records[key(serverPolicyMutation)];
       mutations.push({ type: 'executionPolicy', id: latest.id, action: 'update', expectedVersion: latest.version,
         fields: { entries: latest.entries.filter(value => !cleanupIds.includes(value.itemId)) } });

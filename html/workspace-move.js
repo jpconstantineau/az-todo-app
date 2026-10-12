@@ -25,6 +25,11 @@ function movingRecords(record, records) {
     .sort((left, right) => (left.type === 'recurrenceTemplate' ? -1 : right.type === 'recurrenceTemplate' ? 1 : refKey(left).localeCompare(refKey(right))));
 }
 
+function executionCleanupItemIds(dependents, workspaceId, records) {
+  const movingItemIds = new Set(dependents.filter(candidate => candidate.type === 'item').map(candidate => candidate.id));
+  return (records[`executionPolicy:${workspaceId}`]?.entries || []).filter(entry => movingItemIds.has(entry.itemId)).map(entry => entry.itemId);
+}
+
 function finalFields(candidate, root, workspaceId, moving, fields) {
   let relationships;
   if (linkedRecord(candidate)) {
@@ -46,13 +51,15 @@ export function collectionMoveMutations(record, workspaceId, records, fields) {
 
 export function collectionMovePlan(record, workspaceId, records, fields, id = crypto.randomUUID()) {
   const dependents = movingRecords(record, records);
-  if (dependents.length <= 20) return null;
+  const executionCleanup = executionCleanupItemIds(dependents, record.workspaceId, records);
+  if (dependents.length <= 20 && dependents.length + (executionCleanup.length ? 1 : 0) <= 20) return null;
   const moving = new Set(dependents.filter(isCollection).map(refKey));
   return {
-    version: 1, id, phase: 'detach', step: 0,
+    version: executionCleanup.length ? 2 : 1, id, phase: executionCleanup.length ? 'cleanup' : 'detach', step: 0,
     root: { type: record.type, id: record.id }, sourceWorkspaceId: record.workspaceId, destinationWorkspaceId: workspaceId,
     entries: dependents.map(candidate => ({ type: candidate.type, id: candidate.id,
-      final: finalFields(candidate, record, workspaceId, moving, fields) })), skipped: []
+      final: finalFields(candidate, record, workspaceId, moving, fields) })), skipped: [],
+    ...(executionCleanup.length ? { executionCleanupItemIds: executionCleanup } : {})
   };
 }
 
@@ -98,11 +105,20 @@ function desiredFields(plan, entry, active) {
 }
 
 function phaseComplete(plan) {
-  plan.phase = plan.phase === 'detach' ? 'move' : plan.phase === 'move' ? 'attach' : 'complete';
+  plan.phase = plan.phase === 'cleanup' ? 'detach' : plan.phase === 'detach' ? 'move' : plan.phase === 'move' ? 'attach' : 'complete';
 }
 
 export function nextCollectionMoveOperation(plan, records, accountId, maxBytes = Infinity) {
   while (plan.phase !== 'complete') {
+    if (plan.phase === 'cleanup') {
+      const policy = records[`executionPolicy:${plan.sourceWorkspaceId}`], cleanup = new Set(plan.executionCleanupItemIds || []);
+      const entries = (policy?.entries || []).filter(entry => !cleanup.has(entry.itemId));
+      if (!policy || entries.length === policy.entries.length) { phaseComplete(plan); continue; }
+      const operationId = `${plan.id}-${String(plan.step + 1).padStart(4, '0')}`;
+      plan.step++;
+      return { operation: { apiVersion: 1, accountId, operationId, mutations: [{ type: 'executionPolicy', id: policy.id,
+        action: 'update', expectedVersion: policy.version, fields: { entries } }] }, phase: plan.phase };
+    }
     const active = activeEntries(plan, records), pending = [];
     for (const entry of active) {
       const record = records[refKey(entry)], fields = desiredFields(plan, entry, active);

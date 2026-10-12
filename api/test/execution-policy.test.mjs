@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fieldsFor } from '../api/v1/contract.mjs';
 import { documents, startServer } from './harness.mjs';
-import { cleanupExecutionPolicy, executionCount, transitionPolicy } from '../../html/execution-policy.js';
+import { cleanupExecutionPolicy, executionCount, retryExecutionCleanupMutations, transitionPolicy } from '../../html/execution-policy.js';
 import { currentCreate } from './current-record.mjs';
 import { chromium } from 'playwright';
 import { showView } from './navigation-helper.mjs';
@@ -47,6 +47,15 @@ test('browser policy transitions preserve canonical item fields and terminal cle
     const cleanup = cleanupExecutionPolicy(records, [mutation]);
     assert.deepEqual(cleanup[0].itemIds, ['task']); assert.deepEqual(cleanup[0].mutation.fields.entries, []);
   }
+  const related = { type: 'reviewDecision', id: 'decision', action: 'create', expectedVersion: 0, fields: { choice: 'complete' } };
+  assert.deepEqual(retryExecutionCleanupMutations([
+    { type: 'item', id: 'task', action: 'update', expectedVersion: 7, fields: { status: 'completed' } }, related,
+    { type: 'executionPolicy', id: 'personal', action: 'update', expectedVersion: 2, fields: { entries: [] } }
+  ], records), [{ type: 'item', id: 'task', action: 'update', expectedVersion: 7, fields: { status: 'completed' } }, related]);
+  assert.throws(() => retryExecutionCleanupMutations([
+    { type: 'item', id: 'task', action: 'update', expectedVersion: 7, fields: { status: 'completed' } }
+  ], { ...records, 'item:task': { ...item, version: 8 } }), /related record changed/);
+  assert.throws(() => retryExecutionCleanupMutations([related], { ...records, 'reviewDecision:decision': { type: 'reviewDecision', id: 'decision', version: 1 } }), /related record changed/);
 });
 
 test('API serializes concurrent starts, requires explicit override and isolates workspace ownership', { timeout: 30000 }, async t => {
@@ -88,7 +97,8 @@ test('API serializes concurrent starts, requires explicit override and isolates 
 
 test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal cleanup and offline replay', { timeout: 90000 }, async t => {
   documents.length = 0;
-  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  let browserUser = 'alice';
+  const server = await startServer({ browserUser: () => browserUser }); t.after(server.close);
   const response = await fetch(`${server.url}/api/v1/operations`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execution-browser-setup', mutations: [
       currentCreate('list', 'list', { title: 'Delivery' }),
@@ -177,4 +187,10 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
     const local = await (await import('/inbox-store.js?v=18')).transact('alice');
     return local.queue.length === 0 && local.records['executionPolicy:personal']?.entries.some(value => value.itemId === 'gamma');
   });
+  await page.getByRole('button', { name: 'Block Gamma', exact: true }).click();
+  await page.locator('#blockWorkForm textarea').fill('Alice private blocker');
+  await context.setOffline(true); browserUser = 'bob'; await context.setOffline(false);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact(null)).accountId === 'bob');
+  assert.equal(await page.locator('#blockWorkDialog').getAttribute('open'), null);
+  assert.doesNotMatch(await page.locator('body').innerText(), /Gamma|Alice private blocker/);
 });

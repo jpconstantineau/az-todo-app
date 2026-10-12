@@ -56,3 +56,18 @@ export function cleanupExecutionPolicy(records, mutations) {
       fields: { entries: policy.entries.filter(entry => !ids.has(entry.itemId)) } }, itemIds: [...ids] };
   });
 }
+
+export function retryExecutionCleanupMutations(mutations, records) {
+  return mutations.filter(mutation => mutation.type !== 'executionPolicy').map(mutation => {
+    const current = records[`${mutation.type}:${mutation.id}`];
+    if (mutation.action === 'create') {
+      if (current) throw new Error('A related record changed. Use server active work and review the latest item before repeating this action.');
+      return mutation;
+    }
+    const expectedDeleted = mutation.action === 'restore';
+    if (!current || current.version !== mutation.expectedVersion || Boolean(current.deleted) !== expectedDeleted) {
+      throw new Error('A related record changed. Use server active work and review the latest item before repeating this action.');
+    }
+    return mutation;
+  });
+}

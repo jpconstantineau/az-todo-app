@@ -124,7 +124,9 @@ test('workspaces: large list move survives offline reload and a lost acknowledge
     create('workspace', 'work', { title: 'Work' }), create('workspace', 'family', { title: 'Family' }),
     create('list', 'root', { title: 'Root', workspaceId: 'work' }), create('list', 'other', { title: 'Other', workspaceId: 'work' }),
     ...Array.from({ length: 21 }, (_, index) => create('item', `task-${index}`, { title: `Task ${index}`, originalText: `Original ${index}`,
-      workspaceId: 'work', listId: 'other', collectionRefs: [{ type: 'list', id: 'root' }, { type: 'list', id: 'other' }] }))
+      workspaceId: 'work', listId: 'other', collectionRefs: [{ type: 'list', id: 'root' }, { type: 'list', id: 'other' }] })),
+    create('executionPolicy', 'work', { workspaceId: 'work', wipLimit: 2, entries: [{ itemId: 'task-0', state: 'started', blockedReason: null,
+      reviewDate: null, override: false, observedItemVersion: 1 }] })
   ];
   const { page, context } = await setup(t, false, seeds);
   await switchTo(page, 'work'); await showView(page, 'lists'); await page.locator('#view').selectOption('root');
@@ -136,7 +138,9 @@ test('workspaces: large list move survives offline reload and a lost acknowledge
   let saved = await local(page);
   assert.equal(saved.workspaceMove.entries.length, 22);
   assert.equal(saved.queue.length, 1);
-  assert.equal(saved.queue[0].workspaceMovePhase, 'detach');
+  assert.equal(saved.workspaceMove.phase, 'cleanup');
+  assert.equal(saved.queue[0].workspaceMovePhase, 'cleanup');
+  assert.deepEqual(saved.queue[0].operation.mutations.map(mutation => `${mutation.type}:${mutation.id}`), ['executionPolicy:work']);
   assert.ok(saved.queue[0].operation.mutations.length <= 20);
   await page.reload(); await page.locator('#workspace').waitFor();
   saved = await local(page);
@@ -161,6 +165,7 @@ test('workspaces: large list move survives offline reload and a lost acknowledge
     assert.match(item.originalText, /^Original /);
   }
   assert.equal(documents.find(row => row.id === 'record:list:other').record.workspaceId, 'work');
+  assert.deepEqual(documents.find(row => row.id === 'record:executionPolicy:work').record.entries, []);
 });
 
 test('workspaces: large move pauses on a concurrent edit and resumes without overwriting it', { timeout: 90000 }, async t => {

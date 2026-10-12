@@ -4,7 +4,8 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 import { readableBrief } from './briefs.js?v=6';
 import { purgeWorkspaceState } from './workspaces.js?v=5';
 import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=1';
-const knownTypes = ['workspace', 'item', 'list', 'project', 'projectPlanRevision', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'];
+import { validateExecutionPolicy } from './execution-policy.js?v=1';
+const knownTypes = ['workspace', 'item', 'list', 'project', 'projectPlanRevision', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate', 'executionPolicy'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',
   'collectionRefs', 'parentRef', 'kind', 'revisitDate', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
@@ -15,7 +16,7 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
   'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates',
   'rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc', 'recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc',
-  'previousRevisionId', 'sections', 'candidates', 'mappings', 'query', 'resultType', 'resultState'];
+  'previousRevisionId', 'sections', 'candidates', 'mappings', 'query', 'resultType', 'resultState', 'wipLimit', 'entries'];
 
 export const validateDeviceExport = value => validateExport(value);
 export const validateAccountExport = value => validateExport(value, true);
@@ -76,7 +77,7 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   const currentShape = (entry, path) => {
-    if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate'].includes(entry.type)) {
+    if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate', 'executionPolicy'].includes(entry.type)) {
       require(typeof entry.workspaceId === 'string' && entry.workspaceId.length > 0, `${path}: workspaceId is required.`);
     }
     if (entry.type === 'item') {
@@ -109,7 +110,10 @@ function validateExport(value, server = false) {
       Number.isSafeInteger(entry.sourceVersion) && entry.sourceVersion > 0 && object(entry.sections) &&
       ['purposePrinciples', 'desiredEvidence', 'organizationApproach', 'unresolvedQuestions'].every(name => typeof entry.sections[name] === 'string') &&
       Array.isArray(entry.candidates) && entry.candidates.length <= 50 && Array.isArray(entry.mappings) && entry.mappings.length <= 18,
-    `${path}: invalid project plan revision.`);
+      `${path}: invalid project plan revision.`);
+    if (entry.type === 'executionPolicy') {
+      try { validateExecutionPolicy(entry); } catch { require(false, `${path}: invalid active-work policy.`); }
+    }
   };
   unknown(value, ['format', 'formatVersion', 'exportedAt', 'scope', 'source', 'accountId', 'state', 'draft'], 'export');
   unknown(state, ['records', 'queue', 'after', 'draft', 'preferenceDraft', 'defaultSettings', 'undoEdit', 'workspaceDrafts', 'selectedWorkspace', 'workspaceMove', 'workspaceErasureNotice'], 'state');
@@ -127,11 +131,14 @@ function validateExport(value, server = false) {
   }
   if (state.workspaceMove !== undefined) {
     const move = state.workspaceMove;
-    require(object(move) && move.version === 1 && typeof move.id === 'string' && move.id.length > 0 &&
-      ['detach', 'move', 'attach', 'complete'].includes(move.phase) && Number.isSafeInteger(move.step) && move.step >= 0 &&
+    require(object(move) && [1, 2].includes(move.version) && typeof move.id === 'string' && move.id.length > 0 &&
+      ['cleanup', 'detach', 'move', 'attach', 'complete'].includes(move.phase) && Number.isSafeInteger(move.step) && move.step >= 0 &&
       object(move.root) && ['list', 'project'].includes(move.root.type) && typeof move.root.id === 'string' &&
       typeof move.sourceWorkspaceId === 'string' && typeof move.destinationWorkspaceId === 'string' &&
-      Array.isArray(move.entries) && move.entries.length > 20 && Array.isArray(move.skipped), 'workspaceMove has an invalid resumable move shape.');
+      Array.isArray(move.entries) && (move.entries.length > 20 || move.version === 2 && move.entries.length === 20) && Array.isArray(move.skipped) &&
+      (move.version === 1 ? move.phase !== 'cleanup' && move.executionCleanupItemIds === undefined : Array.isArray(move.executionCleanupItemIds) && move.executionCleanupItemIds.length > 0 &&
+        move.executionCleanupItemIds.every(id => typeof id === 'string' && move.entries.some(entry => entry.type === 'item' && entry.id === id)) &&
+        new Set(move.executionCleanupItemIds).size === move.executionCleanupItemIds.length), 'workspaceMove has an invalid resumable move shape.');
     for (const entry of move.entries) require(object(entry) && ['list', 'project', 'item', 'recurrenceTemplate'].includes(entry.type) &&
       typeof entry.id === 'string' && object(entry.final), 'workspaceMove contains a malformed record.');
   }
@@ -211,7 +218,7 @@ function validateExport(value, server = false) {
     }
     unknown(operation, ['apiVersion', 'accountId', 'operationId', 'mutations'], `${path}.operation`);
     if (entry.workspaceMoveId !== undefined) require(typeof entry.workspaceMoveId === 'string' &&
-      ['detach', 'move', 'attach'].includes(entry.workspaceMovePhase), `${path}: malformed collection move metadata.`);
+      ['cleanup', 'detach', 'move', 'attach'].includes(entry.workspaceMovePhase), `${path}: malformed collection move metadata.`);
     unknown(entry, ['operation', 'failure', 'receipt', 'workspaceMoveId', 'workspaceMovePhase'], path);
   }
   return { records: Object.keys(state.records).length, pendingOperations: state.queue.length, warnings };
