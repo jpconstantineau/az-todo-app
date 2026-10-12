@@ -17,13 +17,14 @@ async function setup(t) {
   page.on('dialog', dialog => dialog.accept());
   await page.goto(server.url + '/shared.html');
   await page.locator('#sharedMain').waitFor();
-  await page.locator('#createShared').evaluate(form => { form.closest('details').open = true; });
+  await page.locator('#sharedSetup summary').click();
   await page.locator('#createShared input').fill('Keyboard shopping');
   await page.locator('#createShared button').click(); await settled(page);
   for (let i = 0; i < 2; i++) {
     await page.locator('#addShared input').fill('Milk');
     await page.locator('#addShared button').click(); await settled(page);
   }
+  await page.locator('#sharedUtilities summary').click();
   return { page, switchAccount: value => { account = value; } };
 }
 

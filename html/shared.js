@@ -12,7 +12,7 @@ async function offlineReady() {
   const channel = new MessageChannel();
   channel.port1.onmessage = event => {
     channel.port1.close();
-    message('sharedOffline', event.data === 'todo-inbox-shell-v49' ? 'Ready to reopen shared lists offline.' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
+    message('sharedOffline', event.data === 'todo-inbox-shell-v50' ? '' : 'An app update is needed for offline reopening. Save your work, close all app tabs and reopen online.');
   };
   worker.postMessage('shell-version', [channel.port2]);
 }
@@ -119,13 +119,13 @@ function render() {
   }
   for (const id of ['createShared', 'joinShared']) $(id).querySelector('button').disabled = working || syncing || !!state.pending;
   $('retryShared').disabled = $('reviewShared').disabled = $('discardShared').disabled = working || syncing;
-  message('sharedStatus', !navigator.onLine ? 'Offline — showing the last saved copy. Permissions are checked again when you reconnect.' : state.pending ? 'An action is saved on this device and needs confirmation.' : 'Shared device copy ready. Refresh to check for changes.');
+  message('sharedStatus', !navigator.onLine ? 'Offline — showing the last saved copy. Permissions are checked again when you reconnect.' : state.pending ? 'An action is saved on this device and needs confirmation.' : '');
   if (!list) {
     if (target || $('sharedContent').contains(focused)) $('sharedSelect').focus();
     return;
   }
   $('sharedTitle').textContent = list.title;
-  $('sharedAccess').textContent = list.deleted ? 'Deleted. Only the owner can restore this list.' : `${list.owner ? 'You own this list.' : 'Your permissions: ' + list.permissions.join(', ') + '.'} Revision ${list.revision}.`;
+  $('sharedAccess').textContent = list.deleted ? 'Deleted. Only the owner can restore this list.' : list.owner ? 'You own this list.' : 'Your permissions: ' + list.permissions.join(', ') + '.';
   $('addShared').hidden = !list.permissions.includes('add') || list.deleted;
   $('addShared').querySelector('button').disabled = !can('add');
   for (const [deleted, target] of [[false, 'sharedItems'], [true, 'sharedDeleted']]) {
@@ -336,7 +336,7 @@ try {
     history.replaceState(null, '', location.pathname);
   }
   const savedInvite = JSON.parse(sessionStorage.getItem('shared-invitation') || 'null');
-  if (savedInvite) { $('joinShared').elements.listId.value = savedInvite.listId; $('joinShared').elements.token.value = savedInvite.token; $('joinDetails').open = true; }
+  if (savedInvite) { $('joinShared').elements.listId.value = savedInvite.listId; $('joinShared').elements.token.value = savedInvite.token; $('sharedSetup').open = true; }
   if (navigator.onLine) await verify();
   else {
     const session = await transact(null);
