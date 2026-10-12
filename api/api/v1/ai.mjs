@@ -1,5 +1,7 @@
 import { app } from "../shared/http.mjs";
 import { getUserId } from "../shared/auth.mjs";
+import { container } from "../shared/db.mjs";
+import { AccountErasureError, assertAccountAvailable } from "./account-erasure.mjs";
 
 const MAX_BODY_BYTES = 32768;
 const MAX_PROMPT_CHARS = 24000;
@@ -10,6 +12,16 @@ const kinds = new Set(["capture-extraction", "clarification"]);
 const json = (value, status = 200) => new Response(JSON.stringify(value), {
   status, headers: { "content-type": "application/json; charset=utf-8" }
 });
+
+async function accountAvailability(req) {
+  try {
+    await assertAccountAvailable(container, getUserId(req.headers));
+    return null;
+  } catch (error) {
+    if (error instanceof AccountErasureError) return json({ apiVersion: 1, error: error.code, message: error.message }, error.status);
+    throw error;
+  }
+}
 
 function configuration(env = process.env) {
   const values = [env.AI_API_URL, env.AI_API_KEY, env.AI_MODEL];
@@ -103,13 +115,14 @@ export async function requestSuggestion(config, kind, prompt, fetchImpl = fetch,
 
 app.http("v1-ai-status", { route: "v1/ai/status", methods: ["GET"], authLevel: "anonymous", handler: async req => {
   if (process.env.V1_API_ENABLED !== "true") return json({ apiVersion: 1, error: "v1_disabled", message: "The v1 API is not enabled in this environment." }, 503);
-  getUserId(req.headers); // Authentication is enforced by the shared registration boundary.
+  const unavailable = await accountAvailability(req); if (unavailable) return unavailable;
   const config = configuration();
   return json({ apiVersion: 1, configured: !!config, ...(config ? { provider: config.provider, model: config.model } : {}) });
 } });
 
 app.http("v1-ai-suggestions", { route: "v1/ai/suggestions", methods: ["POST"], authLevel: "anonymous", handler: async req => {
   if (process.env.V1_API_ENABLED !== "true") return json({ apiVersion: 1, error: "v1_disabled", message: "The v1 API is not enabled in this environment." }, 503);
+  const unavailable = await accountAvailability(req); if (unavailable) return unavailable;
   const config = configuration();
   if (!config) return json({ apiVersion: 1, error: "ai_unavailable", message: "Cloud AI is not configured. Your text is kept." }, 503);
   const parsed = await readJson(req); if (parsed.error) return parsed.error;

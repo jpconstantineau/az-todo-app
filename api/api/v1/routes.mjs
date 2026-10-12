@@ -4,6 +4,8 @@ import { ValidationError } from "../shared/validate.mjs";
 import { identifier, recordType, recordId, digest, validateOperation, MAX_BODY_BYTES } from "./contract.mjs";
 import { ApiError, commit, read, changes } from "./store.mjs";
 import { defaultSettings } from "../shared/defaults.mjs";
+import { AccountErasureError, assertAccountAvailable } from './account-erasure.mjs';
+import { container } from '../shared/db.mjs';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 function route(name, method, handler) {
@@ -12,9 +14,11 @@ function route(name, method, handler) {
       try {
         if (process.env.V1_API_ENABLED !== "true") throw new ApiError(503, "v1_disabled", "The v1 API is not enabled in this environment.");
         const accountId = getUserId(req.headers);
+        await assertAccountAvailable(container, accountId);
         return await handler(req, accountId);
       } catch (error) {
         if (error instanceof ValidationError) return json({ apiVersion: 1, error: "invalid_request", message: error.message }, 400);
+        if (error instanceof AccountErasureError) return json({ apiVersion: 1, error: error.code, message: error.message }, error.status);
         if (error instanceof ApiError) return json({ apiVersion: 1, error: error.code, message: error.message }, error.status);
         // Avoid logging raw task text or Cosmos request bodies.
         return json({ apiVersion: 1, error: "storage_unavailable", message: "The request could not be acknowledged. Retain pending work and retry unchanged." }, 503);

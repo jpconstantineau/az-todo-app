@@ -421,8 +421,10 @@ enable independent multi-region writers or writers that bypass this protocol.
 No settings are created automatically by GET requests.
 
 Receipts, change history and tombstones currently have no expiration; v1 documents
-set `ttl:-1` to prevent a container default TTL from expiring them. Retention and
-account erasure are issue #13. Account partitions serialize writes and accumulate
+set `ttl:-1` to prevent a container default TTL from expiring them. General
+retention and recoverable deletion remain tracked by #13; whole-account
+removal uses the [operator-assisted account-erasure procedure](account-erasure.md).
+Account partitions serialize writes and accumulate
 history, so measure storage/RU usage before pilot expansion. Replace this bounded
 pilot design if account volume approaches Cosmos logical-partition limits or
 contention becomes significant; do not silently prune retry receipts/tombstones.

@@ -8,8 +8,10 @@
     "test:contracts": "node --experimental-test-module-mocks --test test/contracts.test.mjs",
     "test:cosmos": "node scripts/rehearse-cosmos.mjs",
     "test:workspace-erasure:cosmos": "node scripts/rehearse-workspace-erasure.mjs",
+    "test:account-erasure:cosmos": "node scripts/rehearse-account-erasure.mjs",
     "test:security:deployed": "node scripts/rehearse-security.mjs",
-    "erase:workspace": "node scripts/erase-workspace.mjs"
+    "erase:workspace": "node scripts/erase-workspace.mjs",
+    "erase:account": "node scripts/erase-account.mjs"
   },
   "engines": {
     "node": "22.x"

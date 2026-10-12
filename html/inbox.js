@@ -2,7 +2,7 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
-import { LOCAL_PROFILE, transact, adoptLocalProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=18';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=19';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=20';
@@ -2559,6 +2559,19 @@ async function pauseSession(message) {
   await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
   broadcast(); $('sessionStatus').textContent = message;
 }
+async function handleAccountErased(erasedAccountId) {
+  const saved = await transact(null), owner = erasedAccountId && erasedAccountId !== LOCAL_PROFILE ? erasedAccountId : saved.accountId;
+  const active = accountId === owner || !accountId && saved.accountId === owner;
+  if (owner) await purgeAccountProfile(owner);
+  if (!active) return accountId;
+  sessionStorage.removeItem(ADOPTION_INTENT);
+  history.replaceState(null, '', location.pathname + location.search + '#capture');
+  await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
+  broadcast();
+  statusText('sessionStatus', 'Account erased — this account’s device copy was removed. Offline devices must reconnect or have their site data cleared.');
+  requestAnimationFrame(() => { $('captureHeading').tabIndex = -1; $('captureHeading').focus(); });
+  return LOCAL_PROFILE;
+}
 async function openProfile(identity, verified) {
   let generation = accountGeneration;
   if (accountId !== identity.accountId) {
@@ -2587,7 +2600,7 @@ async function openProfile(identity, verified) {
   return accountId;
 }
 async function session({ allowOffline = false } = {}) {
-  const generation = accountGeneration;
+  const generation = accountGeneration, expectedAccountId = accountId;
   const adoptionIntent = sessionStorage.getItem(ADOPTION_INTENT);
   let identity, verified = false;
   try {
@@ -2595,6 +2608,10 @@ async function session({ allowOffline = false } = {}) {
     if (typeof identity.accountId !== 'string' || !identity.accountId) throw new Error('Missing account identity.');
     verified = true;
   } catch (failure) {
+    if (failure.code === 'account_erased') {
+      if (generation !== accountGeneration || accountId !== expectedAccountId) throw new Error('Account changed while checking the session. Retry after signing in.');
+      return handleAccountErased(expectedAccountId);
+    }
     if (failure.status === 401 || failure.status === 403) {
       identity = { accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings };
       await transact(null, saved => {
@@ -2634,9 +2651,9 @@ async function sync() {
   if (syncing || localMode() || !navigator.onLine || document.hidden) return;
   syncing = true; clearTimeout(retryTimer);
   connectionStatus();
-  let continueSync = false;
+  let continueSync = false, owner;
   try {
-    const owner = await session({ allowOffline: true });
+    owner = await session({ allowOffline: true });
     if (owner === LOCAL_PROFILE) { retryDelay = 2000; clearError('sync'); return; }
     if (!navigator.locks) throw new Error('This browser cannot coordinate safe sync between tabs. Export your device copy and use a browser with Web Locks.');
     await navigator.locks.request(`todo-sync:${owner}`, async () => {
@@ -2686,7 +2703,9 @@ async function sync() {
     }
     retryDelay = 2000; clearError('sync'); broadcast();
   } catch (failure) {
-    if ([401, 403].includes(failure.status) || failure.code === 'account_mismatch') {
+    if (failure.code === 'account_erased') {
+      await handleAccountErased(owner);
+    } else if ([401, 403].includes(failure.status) || failure.code === 'account_mismatch') {
       if (accountId) await pauseSession('Session changed or expired. Sign in to the original account to resume its pending work.');
     } else {
       error(`Sync paused: ${failure.message} Pending work stays on this device.`, 'sync');

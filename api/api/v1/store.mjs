@@ -11,6 +11,7 @@ import { validateExecutionPolicy } from './execution-policy.mjs';
 
 import { validateWorkspace, workspaceOf } from "./workspaces.mjs";
 import { erasedWorkspaceIds } from './workspace-erasure.mjs';
+import { assertAccountAvailable } from './account-erasure.mjs';
 import { validateClarification } from './clarification.mjs';
 
 import { normalizeMembership, memberships, isCollection, collectionContents, refKey } from './collection-model.mjs';
@@ -97,6 +98,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
   // All v1 writers serialize on the account state ETag. Reads can be stale;
   // a failed precondition retries the whole read/validate/commit decision.
   for (let attempt = 0; attempt < 5; attempt++) {
+    await assertAccountAvailable(container, accountId);
     const state = await read(accountId, "state");
     const previous = await read(accountId, receiptId);
     const current = await Promise.all(input.mutations.map(m => read(accountId, recordId(m.type, m.id))));
@@ -122,6 +124,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       const batch = [state ? replace(nextState, state._etag) : create(nextState),
         create(document(accountId, receiptId, { kind: "receipt", requestHash, response: satisfied })),
         create(document(accountId, `change:${sequence}`, { kind: "change", sequence, response: satisfied }))];
+      await assertAccountAvailable(container, accountId);
       const result = await container.items.batch(batch, partition(accountId));
       const codes = [result.code, ...(result.result ?? []).map(row => row.statusCode)];
       if (codes.some(code => [409, 412].includes(code))) continue;
@@ -233,6 +236,7 @@ export async function commit(accountId, input, requestHash = digest(input)) {
       create(document(accountId, receiptId, { kind: "receipt", requestHash, response })),
       create(document(accountId, `change:${sequence}`, { kind: "change", sequence, response }))];
     if (bytes(batch) > 1500000) throw new ValidationError("Operation is too large; send fewer records per operation.");
+    await assertAccountAvailable(container, accountId);
     const result = await container.items.batch(batch, partition(accountId));
     const codes = [result.code, ...(result.result ?? []).map(r => r.statusCode)];
     if (codes.some(code => [409, 412].includes(code))) continue;

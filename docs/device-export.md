@@ -256,8 +256,10 @@ The deletion browser check waits for IndexedDB validation and completed deletion
 before checking state, verifies that remote deletion clears edit undo, and uses
 distinct module/cache URLs for the integrated shell.
 
-Account erasure, permanent purge and backup-erasure/restore policy remain open
-under #13; this change covers recoverable item/list/project deletion only.
+Exports still perform no erasure. Permanent whole-account removal and the required
+backup/restore controls use the separate [operator-assisted account-erasure
+procedure](account-erasure.md); recoverable item/list/project deletion remains the
+behavior described here.
 
 One named non-Personal workspace can instead use the operator-assisted
 [workspace erasure procedure](workspace-erasure.md). Updated clients purge that
