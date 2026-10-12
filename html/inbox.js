@@ -929,6 +929,7 @@ function taskIcon(control, name, title) {
 }
 function renderActiveWork(recordMap, readOnly) {
   const policy = currentExecutionPolicy(recordMap);
+  $('activeLanes').hidden = !policy?.entries?.length;
   const limitInput = $('wipLimit');
   if (document.activeElement !== limitInput) limitInput.value = policy?.wipLimit || '';
   $('executionPolicyForm').querySelector('button').disabled = readOnly;
@@ -959,7 +960,9 @@ function renderActiveWork(recordMap, readOnly) {
         if (stateName === 'started') actions.append(action('Pause', () => changeExecution(item, 'paused'), true), action('Block', () => openBlockDialog(item, entry)));
         if (stateName === 'paused') actions.append(action('Resume', () => changeExecution(item, 'started'), true), action('Block', () => openBlockDialog(item, entry)));
         if (stateName === 'blocked') actions.append(action('Resume', () => changeExecution(item, 'started'), true), action('Pause', () => changeExecution(item, 'paused')), action('Review block', () => openBlockDialog(item, entry)));
-        actions.append(action('Return to ready', () => changeExecution(item, null)), action('Complete', () => item.recurrenceTemplateId ? resolveOccurrence(item, 'completed') : updateRecord(item, { status: 'completed' })));
+        const returnToReady = action('Return to ready', () => changeExecution(item, null));
+        returnToReady.dataset.focusFallback = `execution:${entry.itemId}:primary`;
+        actions.append(returnToReady, action('Complete', () => item.recurrenceTemplateId ? resolveOccurrence(item, 'completed') : updateRecord(item, { status: 'completed' })));
       } else {
         const remove = action('Remove from active work', async () => {
           const latest = currentExecutionPolicy(projected(state));

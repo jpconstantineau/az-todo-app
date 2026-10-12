@@ -114,6 +114,7 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   await page.goto(server.url); await page.waitForTimeout(1000); assert.deepEqual(errors, []);
   if (await page.locator('#workspace').isHidden()) throw new Error(`Workspace stayed hidden: ${await page.locator('#loginStatus').textContent()} ${await page.locator('#error').textContent()}`);
   await page.locator('#workspace').waitFor(); await showView(page, 'execute');
+  assert.equal(await page.locator('#activeLanes').isVisible(), false, 'empty lanes leave the ready queue in the initial mobile viewport');
   await page.locator('#executeList').selectOption('list');
   await page.locator('#wipLimit').fill('1'); await page.getByRole('button', { name: 'Save WIP limit' }).click();
   await waitForBrowser(page, async () => {
@@ -123,6 +124,7 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   const startAlpha = page.getByRole('button', { name: 'Start Alpha', exact: true });
   await startAlpha.focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Pause Alpha', exact: true }).waitFor();
+  assert.equal(await page.locator('#activeLanes').isVisible(), true);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).queue.length === 0);
   assert.match(await page.locator('#wipCounter').innerText(), /1 of 1 WIP/);
   const startBeta = page.getByRole('button', { name: 'Start Beta', exact: true });
@@ -187,6 +189,10 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
     const local = await (await import('/inbox-store.js?v=18')).transact('alice');
     return local.queue.length === 0 && local.records['executionPolicy:personal']?.entries.some(value => value.itemId === 'gamma');
   });
+  await page.getByRole('button', { name: 'Return to ready Gamma', exact: true }).click();
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Start Gamma');
+  await page.getByRole('button', { name: 'Start Gamma', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).queue.length === 0);
   await page.getByRole('button', { name: 'Block Gamma', exact: true }).click();
   await page.locator('#blockWorkForm textarea').fill('Alice private blocker');
   await context.setOffline(true); browserUser = 'bob'; await context.setOffline(false);

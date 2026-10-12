@@ -367,7 +367,7 @@
           <form id="executionPolicyForm" class="wip-policy"><label>WIP limit <input id="wipLimit" name="wipLimit" type="number" min="1" max="20" required></label><button type="submit">Save WIP limit</button></form></div>
         <p id="wipCounter" class="wip-counter" role="status" aria-live="polite"></p>
         <p id="executionStatus" role="status" aria-live="polite"></p>
-        <div class="active-lanes">
+        <div id="activeLanes" class="active-lanes">
           <section class="active-lane" aria-labelledby="startedLaneHeading"><h4 id="startedLaneHeading" tabindex="-1" data-focus-key="execution:started:heading">Started</h4><div id="startedItems"></div></section>
           <section class="active-lane" aria-labelledby="blockedLaneHeading"><h4 id="blockedLaneHeading" tabindex="-1" data-focus-key="execution:blocked:heading">Blocked</h4><div id="blockedItems"></div></section>
           <section class="active-lane" aria-labelledby="pausedLaneHeading"><h4 id="pausedLaneHeading" tabindex="-1" data-focus-key="execution:paused:heading">Paused</h4><div id="pausedItems"></div></section>

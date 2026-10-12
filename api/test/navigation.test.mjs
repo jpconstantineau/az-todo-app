@@ -147,7 +147,7 @@ test('navigation: Execute selects a list, opens details and completes exact item
   await showView(page, 'execute');
   assert.equal(await page.locator('#executeItems article').count(), 0, 'choosing a list is required');
   await page.locator('#executeList').selectOption(groceries.id);
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Milk', 'Bread']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Milk', 'Bread']);
   const firstResult = await page.locator('#executeItems article').first().boundingBox();
   assert.ok(firstResult && firstResult.y < 844, 'the first Do result is inside the initial phone viewport');
   await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).focus();
@@ -165,9 +165,9 @@ test('navigation: Execute selects a list, opens details and completes exact item
   await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.some(entry => entry.operation.mutations.some(mutation => mutation.id === id && mutation.fields?.status === 'completed')), milk.id);
   const pending = (await local(page)).queue;
   assert.equal(pending.length, 1);
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Bread']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Bread']);
   await page.locator('#executeList').selectOption(chores.id);
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Laundry']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Laundry']);
   await page.locator('#executeList').selectOption(groceries.id);
   await waitForBrowser(page, async id => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.execute.view === id, groceries.id);
   await showView(page, 'work');
@@ -176,7 +176,7 @@ test('navigation: Execute selects a list, opens details and completes exact item
   await page.waitForFunction(() => document.querySelector('#doWork').getAttribute('aria-current') === 'page');
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), groceries.id);
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Bread']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Bread']);
   assert.deepEqual((await local(page)).queue, pending);
   await page.getByRole('checkbox', { name: 'Complete Bread', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#executeItems').textContent.includes('No ready items'));
@@ -210,7 +210,7 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   await showView(page, 'execute');
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a list', 'Errands']);
   await page.locator('#executeList').selectOption('regular');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk', 'Buy furniture']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Buy milk', 'Buy furniture']);
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
   await page.locator('#executeFilters > summary').focus(); await page.keyboard.press('Enter');
   assert.equal(await page.locator('#executeFilters').getAttribute('open'), '');
@@ -220,27 +220,27 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   await page.locator('#executeContextFilter').selectOption('context:Store');
   await page.locator('#executeTimeFilter').selectOption('30');
   await page.locator('#executeEnergyFilter').selectOption('low');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Buy milk']);
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), null);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.execute.energy === 'low');
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), 'regular');
   assert.equal(await page.locator('#executeTimeFilter').inputValue(), '30');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Buy milk']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Buy milk']);
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), null);
   await page.locator('[data-execute-kind="project"]').click();
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a project', 'Trip']);
   await page.locator('#executeList').selectOption('project:project');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [], 'Execute filters continue across collection types');
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), [], 'Execute filters continue across collection types');
   assert.equal(await page.locator('#inspectExecute').isVisible(), true);
   await page.locator('#executeFilters > summary').click();
   await page.locator('#resetExecuteFilters').click();
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Book tickets']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Book tickets']);
   await page.locator('[data-execute-kind="checklist"]').click();
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a checklist', 'Packing']);
   await page.locator('#executeList').selectOption('checklist');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Pack passport']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Pack passport']);
   assert.equal(await page.locator('#executeFilterSummary').textContent(), 'Context, time & energy');
 });
 
@@ -263,7 +263,7 @@ test('navigation: Execute offers existing collection kinds, including an Area wi
     await control.click();
     assert.equal(await control.getAttribute('aria-pressed'), 'true');
     await page.locator('#executeList').selectOption(kind);
-    assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [`${title} task`]);
+    assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), [`${title} task`]);
   }
   const area = (await local(page)).records['item:area-task'];
   assert.equal(area.projectId, null);
@@ -274,7 +274,7 @@ test('navigation: Execute offers existing collection kinds, including an Area wi
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('[data-execute-kind="area"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('#executeList').inputValue(), 'area');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Area task']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Area task']);
 });
 
 test('navigation: Execute offers only ready work in every collection and opens excluded work for review', { timeout: 90000 }, async t => {
@@ -311,7 +311,7 @@ test('navigation: Execute offers only ready work in every collection and opens e
   for (const [kind, id] of [['list', 'regular'], ['project', 'project:project'], ['checklist', 'checklist']]) {
     await page.locator(`[data-execute-kind="${kind}"]`).click();
     await page.locator('#executeList').selectOption(id);
-    assert.deepEqual(await page.locator('#executeItems button').allTextContents(), [`${kind} inbox`, `${kind} next`]);
+    assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), [`${kind} inbox`, `${kind} next`]);
     assert.equal(await page.locator('#executeItems input[type=checkbox]').count(), 2);
     await page.locator('#inspectExecute').click();
     await page.waitForFunction(value => document.querySelector('#listWorkspace').getAttribute('aria-current') === 'page' && document.querySelector('#view').value === value, id);
@@ -339,7 +339,7 @@ test('navigation: Execute offers only ready work in every collection and opens e
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.execute.view === 'checklist');
   await context.setOffline(true); await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), 'checklist');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['checklist inbox', 'checklist next']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['checklist inbox', 'checklist next']);
 });
 
 test('navigation: Execute keeps failed completions unchecked, clears deleted lists and isolates accounts', { timeout: 90000 }, async t => {
@@ -395,12 +395,12 @@ test('navigation: Execute scopes lists and saved selection to each workspace and
   assert.equal(await page.locator('#executeList').inputValue(), '');
   assert.equal(await page.locator('#executeList option[value="' + personalList.id + '"]').count(), 0);
   await page.locator('#executeList').selectOption('work-list');
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Work task']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Work task']);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).workspaceDrafts.work.navigation.execute.view === 'work-list');
   await page.locator('#workspaceSelect').selectOption('personal');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === 'personal');
   assert.equal(await page.locator('#executeList').inputValue(), personalList.id);
-  assert.deepEqual(await page.locator('#executeItems button').allTextContents(), ['Personal task']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Personal task']);
   await page.locator('#workspaceSelect').selectOption('work');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).selectedWorkspace === 'work');
   await clickControl(page.locator('#manageWorkspaces'));
