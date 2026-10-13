@@ -32,10 +32,10 @@ test('Preferences routes expose only live categories with route, focus, Back and
   const before = await page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
   await openPreferences(page);
   assert.equal(await page.title(), 'Preferences · Personal');
-  assert.deepEqual(await page.locator('#preferencesCategories > li > a > span:first-child').allTextContents(), ['Appearance', 'Capture', 'Process', 'Task options']);
-  assert.equal(await page.locator('#preferencesView').getByText(/Organize|Plan|Do|Review/, { exact: true }).count(), 0);
+  assert.deepEqual(await page.locator('#preferencesCategories > li > a > span:first-child').allTextContents(), ['Appearance', 'Capture', 'Process', 'Do', 'Task options']);
+  assert.equal(await page.locator('#preferencesView').getByText(/Organize|Plan|Review/, { exact: true }).count(), 0);
   assert.equal(await page.locator('#preferencesView').getByText(/Install|update|reset/i).count(), 0);
-  assert.deepEqual(await page.locator('#preferencesCategories .menu-row-value').allTextContents(), ['Dark · Browser', 'Off · Browser', '12 actions · Browser', 'Account']);
+  assert.deepEqual(await page.locator('#preferencesCategories .menu-row-value').allTextContents(), ['Dark · Browser', 'Off · Browser', '12 actions · Browser', 'Not set · Workspace', 'Account']);
 
   await openPreference(page, 'appearance');
   assert.equal(new URL(page.url()).hash, '#preferences/appearance');
@@ -85,6 +85,16 @@ test('Preferences routes expose only live categories with route, focus, Back and
   assert.equal(afterResize.draft.capture.text, before.draft.capture.text);
   await page.locator('.preferences-detail:visible .preference-back').click();
   await page.waitForFunction(() => location.hash === '#preferences' && document.activeElement?.id === 'preference-appearance');
+
+  await openPreference(page, 'do');
+  assert.equal(new URL(page.url()).hash, '#preferences/do');
+  assert.equal(await page.title(), 'Do · Personal');
+  assert.equal(await page.locator('#preferencesDoHeading').evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.locator('#activeWork').isVisible(), true);
+  assert.equal(await page.locator('#doPreferenceScope').textContent(), 'Personal · Workspace');
+  assert.equal(await page.locator('#preference-do').getAttribute('aria-current'), 'page');
+  await page.locator('#preferencesDo .preference-back').click();
+  await page.waitForFunction(() => location.hash === '#preferences' && document.activeElement?.id === 'preference-do');
 
   await page.goto(server.url + '#preferences/process'); await page.locator('#preferencesProcessHeading').waitFor();
   assert.equal(await page.locator('#preferencesProcessHeading').evaluate(element => element === document.activeElement), true);

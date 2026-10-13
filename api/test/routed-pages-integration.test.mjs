@@ -266,7 +266,7 @@ test('route navigation, threshold resizing, history, offline reload and touch ke
   await touchPage.locator('#openPreferences').tap();
   await touchPage.waitForFunction(() => location.hash === '#preferences');
   assert.deepEqual(await touchPage.locator('#preferencesCategories .menu-row > span:first-child').allTextContents(),
-    ['Appearance', 'Capture', 'Process', 'Task options']);
+    ['Appearance', 'Capture', 'Process', 'Do', 'Task options']);
   assert.ok(await touchPage.locator('#preferencesCategories .menu-row').evaluateAll(rows => rows.every(row => row.getBoundingClientRect().height >= 48)));
 });
 
@@ -279,6 +279,7 @@ test('direct routed families reload, fall back safely and clear account-owned ro
   });
   const directRoutes = [
     ['#preferences/appearance', '#preferencesAppearanceHeading'],
+    ['#preferences/do', '#preferencesDoHeading'],
     ['#preferences/process/clarify-actions', '#clarifyActionsHeading'],
     ['#preferences/process/clarify-actions/add', '#clarifyActionEditorHeading'],
     ['#preferences/task-options/contexts', '#taskOptionHeading'],

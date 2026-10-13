@@ -5,7 +5,7 @@ import { documents, startServer } from './harness.mjs';
 import { cleanupExecutionPolicy, executionCount, retryExecutionCleanupMutations, transitionPolicy } from '../../html/execution-policy.js';
 import { currentCreate } from './current-record.mjs';
 import { chromium } from 'playwright';
-import { showView } from './navigation-helper.mjs';
+import { openPreference, showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 
 const entry = (itemId, state = 'started', extra = {}) => ({ itemId, state, blockedReason: null, reviewDate: null,
@@ -116,25 +116,35 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   await page.locator('#workspace').waitFor(); await showView(page, 'execute');
   assert.equal(await page.locator('#activeLanes').isVisible(), false, 'empty lanes leave the ready queue in the initial mobile viewport');
   await page.locator('#executeList').selectOption('list');
+  await openPreference(page, 'do');
+  assert.equal(await page.locator('#preferencesDoHeading').evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.locator('#doPreferenceScope').textContent(), 'Personal · Workspace');
   await page.locator('#wipLimit').fill('1'); await page.getByRole('button', { name: 'Save WIP limit' }).click();
   await waitForBrowser(page, async () => {
     const local = await (await import('/inbox-store.js?v=18')).transact('alice');
     return local.queue.length === 0 && local.records['executionPolicy:personal']?.wipLimit === 1;
   });
+  assert.equal(await page.locator('#preference-do-summary').textContent(), '0 of 1 WIP · Workspace');
+  await showView(page, 'execute');
   const startAlpha = page.getByRole('button', { name: 'Start Alpha', exact: true });
   await startAlpha.focus(); await page.keyboard.press('Enter');
+  await openPreference(page, 'do');
   await page.getByRole('button', { name: 'Pause Alpha', exact: true }).waitFor();
   assert.equal(await page.locator('#activeLanes').isVisible(), true);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).queue.length === 0);
   assert.match(await page.locator('#wipCounter').innerText(), /1 of 1 WIP/);
+  assert.equal(await page.locator('#preference-do-summary').textContent(), '1 of 1 WIP · Workspace');
+  await showView(page, 'execute');
   const startBeta = page.getByRole('button', { name: 'Start Beta', exact: true });
   await startBeta.click(); await page.locator('#wipLimitDialog').waitFor(); await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Start Beta');
   await startBeta.click(); await page.getByRole('button', { name: 'Start anyway — override WIP limit' }).click();
+  await openPreference(page, 'do');
   await page.getByRole('button', { name: 'Pause Beta', exact: true }).waitFor();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).queue.length === 0);
   assert.match(await page.locator('#wipCounter').innerText(), /2 of 1 WIP.*override/i);
   await page.getByRole('button', { name: 'Block Alpha', exact: true }).click();
+  await page.locator('#blockWorkDialog').waitFor({ state: 'visible' });
   await page.locator('#blockWorkForm textarea').fill('Waiting for vendor');
   const reviewDay = await page.evaluate(() => {
     const now = new Date(), pad = value => String(value).padStart(2, '0');
@@ -153,7 +163,7 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   const alphaReviewValue = await page.locator('#reviewRecord option').evaluateAll(options => options.find(option => option.textContent.includes('Alpha'))?.value);
   await page.locator('#reviewRecord').selectOption(alphaReviewValue);
   assert.match(await page.locator('#reviewDetails').textContent(), /Blocked reason: Waiting for vendor.*Counts toward WIP/s);
-  await showView(page, 'execute');
+  await openPreference(page, 'do');
   await page.getByRole('button', { name: 'Pause Beta', exact: true }).click();
   await page.waitForTimeout(500);
   if (!await page.getByRole('button', { name: 'Resume Beta', exact: true }).count()) throw new Error(`Pause failed: ${await page.locator('#executionStatus').textContent()} ${await page.locator('#error').textContent()} ${await page.locator('#activeWork').innerText()}`);
@@ -169,6 +179,7 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   const beta = documents.find(row => row.id === 'record:item:beta').record;
   assert.equal(beta.plannedDay, '2030-02-02'); assert.equal(beta.dueDate, '2030-03-01');
   assert.equal(beta.projectId, 'project'); assert.equal(beta.listId, 'list');
+  await showView(page, 'execute');
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Start Gamma', exact: true }).click();
@@ -177,6 +188,7 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
     return local.queue.some(entry => entry.operation.mutations.some(mutation => mutation.type === 'executionPolicy' && mutation.fields.entries.some(value => value.itemId === 'gamma')));
   });
   await page.reload(); await page.locator('#workspace').waitFor();
+  await openPreference(page, 'do');
   await page.getByRole('button', { name: 'Pause Gamma', exact: true }).waitFor();
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -190,9 +202,11 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
     return local.queue.length === 0 && local.records['executionPolicy:personal']?.entries.some(value => value.itemId === 'gamma');
   });
   await page.getByRole('button', { name: 'Return to ready Gamma', exact: true }).click();
-  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Start Gamma');
+  await page.waitForFunction(() => document.activeElement?.id === 'preferencesDoHeading');
+  await showView(page, 'execute');
   await page.getByRole('button', { name: 'Start Gamma', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).queue.length === 0);
+  await openPreference(page, 'do');
   await page.getByRole('button', { name: 'Block Gamma', exact: true }).click();
   await page.locator('#blockWorkForm textarea').fill('Alice private blocker');
   await context.setOffline(true); browserUser = 'bob'; await context.setOffline(false);

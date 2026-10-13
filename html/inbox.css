@@ -289,7 +289,8 @@ details.collection-settings:not([open]) { padding-block: 0; }
 .execute-item { display: flex; align-items: center; gap: var(--space-2); }
 .active-work { margin-block: var(--space-4); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
 .active-work-header { display: flex; align-items: end; justify-content: space-between; gap: var(--space-4); }
-.active-work-header h3, .active-lane h4 { margin-block: 0 var(--space-1); }
+.active-work-header h2, .active-lane h3 { margin-block: 0 var(--space-1); }
+.active-work-header h2 { font-size: var(--text-base); letter-spacing: 0; }
 .wip-policy { display: flex; align-items: end; gap: var(--space-2); }
 .wip-policy label { margin: 0; }
 .wip-policy input { width: 6rem; }
@@ -302,9 +303,10 @@ details.collection-settings:not([open]) { padding-block: 0; }
 .active-card .actions button, .wip-counted-items button { min-height: 44px; }
 .active-state-label { font-weight: var(--weight-title); }
 .active-state-label[data-state="blocked"], .active-state-label[data-override="true"] { color: var(--warning); }
-.execute-ready-label { margin-top: var(--space-5); }
 .wip-counted-items { display: grid; gap: var(--space-2); margin-block: var(--space-3); }
 #blockWorkForm textarea { min-height: 7rem; }
+.execute-kinds { max-width: 100%; align-items: stretch; flex-wrap: wrap; }
+.execute-kinds button { min-width: 0; min-height: 44px; flex: 1 1 9rem; white-space: normal; }
 .execute-kinds [aria-pressed="true"] { border-color: var(--link); background: var(--selected); }
 #executeList, #executeFilters { display: block; margin-bottom: var(--space-3); }
 .execute-check { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; min-height: 44px; margin: 0; cursor: pointer; }
