@@ -34,6 +34,37 @@ health. Record that response after each deployment and confirm `v22.*`; neither
 a configuration file nor a successful static page proves which runtime started.
 An anonymous request must be denied and must not receive that diagnostic header.
 
+## Automated deployment gate
+
+The `Task flow tests` workflow is the only production deployment path. Each push
+tests its event SHA, then a main-only job checks out that recorded SHA, confirms
+that `refs/heads/main` still identifies it, and uploads it. Per-ref concurrency
+cancels superseded runs. The successful upload writes a run summary linking the
+test result, event and candidate SHAs, deployed checkout SHA, production
+environment, and Azure URL. A failed test, cancelled run, or stale candidate does
+not reach the production upload. Do not rerun a failed deployment after main has
+moved; the freshness check will reject it.
+
+Create a GitHub environment named `production`, restrict its deployment branches
+to `main`, and store `AZURE_STATIC_WEB_APPS_API_TOKEN_PRODUCTION` only as an
+environment secret. The repository-scoped
+`AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_SMOKE_020A5481E` remains limited to PR
+preview creation and cleanup. Using the same Azure token value for both names
+separates GitHub access but not the Azure credential; true credential and runtime
+isolation requires a separate SWA resource/token and is outside this change.
+
+PRs from this repository create or update a preview on opened, synchronized, or
+reopened events and close it when the PR closes. The preview declares `main` as
+its production branch and alone receives pull-request write permission for Azure's
+PR comment integration. Fork PRs are intentionally skipped because the preview
+credential is unavailable to untrusted forks; `pull_request_target` is not used.
+
+Rollback is an ordinary revert or forward-fix on `main`, so the replacement SHA
+passes the same tests and freshness gate. There is no arbitrary historical or
+manual production dispatch. Before reverting application code, confirm the data
+and queued-operation compatibility described under Recovery, costs and operations;
+never restore a stale database or clear browser storage as a rollback.
+
 | Environment setting/check | Required value or observation | Release evidence |
 | --- | --- | --- |
 | Deployment | Exact commit and successful SWA workflow; `/html` app and `/api` API | UNVERIFIED |
