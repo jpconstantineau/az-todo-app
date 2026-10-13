@@ -5,12 +5,46 @@ export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc
 
 export const readyToExecute = record => ['inbox', 'next'].includes(record.status);
 
+export function executionDurationMinutes(value) {
+  const duration = /^(\d+(?:\.\d+)?)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$/i.exec(typeof value === 'string' ? value.trim() : '');
+  return duration ? Number(duration[1]) * (/^h/i.test(duration[2]) ? 60 : 1) : null;
+}
+
+const executionTitleCollator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+const codePointCompare = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+export function compareExecutionItems(left, right) {
+  const priority = value => {
+    const index = ['p1', 'p2', 'p3', 'p4', 'p5'].indexOf(typeof value === 'string' ? value.toLowerCase().replace(/\s+/g, '') : '');
+    return index < 0 ? 5 : index;
+  };
+  let compared = priority(left.priority) - priority(right.priority);
+  if (compared) return compared;
+
+  const leftDuration = executionDurationMinutes(left.timeRequired), rightDuration = executionDurationMinutes(right.timeRequired);
+  if (leftDuration === null || rightDuration === null) {
+    if (leftDuration !== rightDuration) return leftDuration === null ? 1 : -1;
+  } else if (leftDuration !== rightDuration) return rightDuration - leftDuration;
+
+  const energy = value => {
+    const index = ['high', 'medium', 'low'].indexOf(typeof value === 'string' ? value.toLowerCase().replace(/\s+/g, '') : '');
+    return index < 0 ? 3 : index;
+  };
+  compared = energy(left.energy) - energy(right.energy);
+  if (compared) return compared;
+
+  const leftTitle = typeof left.title === 'string' ? left.title : '', rightTitle = typeof right.title === 'string' ? right.title : '';
+  const leftHasTitle = !!leftTitle, rightHasTitle = !!rightTitle;
+  if (leftHasTitle !== rightHasTitle) return leftHasTitle ? -1 : 1;
+  compared = executionTitleCollator.compare(leftTitle, rightTitle) || codePointCompare(leftTitle, rightTitle);
+  return compared || codePointCompare(typeof left.id === 'string' ? left.id : '', typeof right.id === 'string' ? right.id : '');
+}
+
 export function matchesExecutionFilters(record, filters) {
   if (filters.context === '@none' && record.contexts?.length) return false;
   if (filters.context?.startsWith('context:') && !record.contexts?.includes(filters.context.slice(8))) return false;
   // Custom estimates that cannot be compared stay visible alongside unspecified values.
-  const duration = /^(\d+(?:\.\d+)?)\s*(m|min|mins|minutes?|h|hr|hrs|hours?)$/i.exec(record.timeRequired?.trim() || '');
-  if (filters.minutes && duration && Number(duration[1]) * (/^h/i.test(duration[2]) ? 60 : 1) > Number(filters.minutes)) return false;
+  const duration = executionDurationMinutes(record.timeRequired);
+  if (filters.minutes && duration !== null && duration > Number(filters.minutes)) return false;
   const levels = ['low', 'medium', 'high'];
   const required = levels.indexOf(record.energy?.trim().toLowerCase());
   const available = levels.indexOf(filters.energy);

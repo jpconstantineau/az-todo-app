@@ -136,8 +136,11 @@ test('navigation: Execute selects a list, opens details and completes exact item
   assert.equal(await page.locator('.inbox-grid > #execute').isVisible(), true);
   assert.match(await page.locator('#executeItems').innerText(), /No lists yet/);
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
-  assert.equal(await page.locator('#executeHelp').getAttribute('open'), null);
-  assert.equal(await page.locator('#inspectExecute').isVisible(), true);
+  assert.equal(await page.getByText('Focus', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('Ready', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('Ready queue', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('How Do chooses tasks', { exact: true }).count(), 0);
+  assert.equal(await page.getByText(/Inspect saved work in Organize/).count(), 0);
   await capture(page, 'Milk\nBread', 'Groceries'); await confirmed(page);
   await capture(page, 'Laundry', 'Chores'); await confirmed(page);
   await capture(page, 'Unfiled'); await confirmed(page);
@@ -147,7 +150,7 @@ test('navigation: Execute selects a list, opens details and completes exact item
   await showView(page, 'execute');
   assert.equal(await page.locator('#executeItems article').count(), 0, 'choosing a list is required');
   await page.locator('#executeList').selectOption(groceries.id);
-  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Milk', 'Bread']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Bread', 'Milk']);
   const firstResult = await page.locator('#executeItems article').first().boundingBox();
   assert.ok(firstResult && firstResult.y < 844, 'the first Do result is inside the initial phone viewport');
   await page.getByRole('checkbox', { name: 'Complete Milk', exact: true }).focus();
@@ -210,7 +213,7 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   await showView(page, 'execute');
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a list', 'Errands']);
   await page.locator('#executeList').selectOption('regular');
-  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Buy milk', 'Buy furniture']);
+  assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Buy furniture', 'Buy milk']);
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
   await page.locator('#executeFilters > summary').focus(); await page.keyboard.press('Enter');
   assert.equal(await page.locator('#executeFilters').getAttribute('open'), '');
@@ -232,7 +235,6 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a project', 'Trip']);
   await page.locator('#executeList').selectOption('project:project');
   assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), [], 'Execute filters continue across collection types');
-  assert.equal(await page.locator('#inspectExecute').isVisible(), true);
   await page.locator('#executeFilters > summary').click();
   await page.locator('#resetExecuteFilters').click();
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), '');
@@ -247,17 +249,34 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
 test('navigation: Execute offers existing collection kinds, including an Area without a Project', { timeout: 90000 }, async t => {
   const { page, context, url } = await setup(t, '#execute');
   const kinds = { area: 'Area', role: 'Role', initiative: 'Initiative', program: 'Program', reference: 'Reusable reference' };
-  assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Project', 'Checklist']);
-  const mutations = Object.entries(kinds).flatMap(([kind, title]) => [
+  assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Checklist', 'Project', ...Object.values(kinds)]);
+  assert.ok(await page.locator('#executeKinds button').evaluateAll(buttons => buttons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false')));
+  assert.equal(await page.locator('#executeList').isDisabled(), true);
+  const mutations = [
+    currentCreate('list', 'list', { title: 'List', kind: 'list' }),
+    currentCreate('list', 'checklist', { title: 'Checklist', kind: 'checklist' }),
+    currentCreate('project', 'project', { title: 'Project', outcome: 'Done' }),
+    ...Object.entries(kinds).flatMap(([kind, title]) => [
     currentCreate('list', kind, { title, kind }),
     currentCreate('item', `${kind}-task`, { title: `${title} task`, status: 'next', collectionRefs: [{ type: 'list', id: kind }] })
-  ]);
+    ])
+  ];
   const response = await fetch(url + '/api/v1/operations', { method: 'POST', headers: { origin: url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execute-other-kinds', mutations }) });
   assert.equal(response.status, 200, await response.text());
   await clickControl(page.locator('#sync'));
   await page.locator('[data-execute-kind="reference"]').waitFor(); await confirmed(page);
-  assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Project', 'Checklist', ...Object.values(kinds)]);
+  assert.deepEqual(await page.locator('#executeKinds button').allTextContents(), ['List', 'Checklist', 'Project', ...Object.values(kinds)]);
+  assert.ok(await page.locator('#executeKinds button').evaluateAll(buttons => buttons.every(button => !button.disabled)));
+  assert.equal(await page.locator('#executeKinds [aria-pressed="true"]').count(), 1);
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no selector overflow at ${width}px`);
+    const buttons = await page.locator('#executeKinds button').evaluateAll(controls => controls.map(control => ({ height: control.getBoundingClientRect().height, top: control.getBoundingClientRect().top, scrollWidth: control.scrollWidth, width: control.clientWidth, whiteSpace: getComputedStyle(control).whiteSpace })));
+    assert.ok(buttons.every(button => button.height >= 44 && button.scrollWidth <= button.width && button.whiteSpace === 'normal'));
+    if (width === 320) assert.ok(new Set(buttons.map(button => Math.round(button.top))).size > 1, 'all kinds wrap to multiple rows on a phone');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   for (const [kind, title] of Object.entries(kinds)) {
     const control = page.locator(`[data-execute-kind="${kind}"]`);
     await control.click();
@@ -275,6 +294,15 @@ test('navigation: Execute offers existing collection kinds, including an Area wi
   assert.equal(await page.locator('[data-execute-kind="area"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('#executeList').inputValue(), 'area');
   assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Area task']);
+  await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice', local => { local.records['list:area'].archived = true; }));
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('[data-execute-kind="area"]').isDisabled(), true);
+  assert.equal(await page.locator('[data-execute-kind="list"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#executeList').inputValue(), '');
+  await waitForBrowser(page, async () => {
+    const execute = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.navigation.execute;
+    return execute.kind === 'list' && execute.view === '';
+  });
 });
 
 test('navigation: Execute offers only ready work in every collection and opens excluded work for review', { timeout: 90000 }, async t => {
@@ -313,11 +341,10 @@ test('navigation: Execute offers only ready work in every collection and opens e
     await page.locator('#executeList').selectOption(id);
     assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), [`${kind} inbox`, `${kind} next`]);
     assert.equal(await page.locator('#executeItems input[type=checkbox]').count(), 2);
-    await page.locator('#inspectExecute').click();
-    await page.waitForFunction(value => document.querySelector('#listWorkspace').getAttribute('aria-current') === 'page' && document.querySelector('#view').value === value, id);
-    await page.waitForFunction(() => document.activeElement.id === 'itemsHeading');
+    await showView(page, 'lists');
+    await page.locator('#view').selectOption(id);
     assert.equal(await page.locator('#view').inputValue(), id);
-    assert.equal(await page.locator('#statusFilter').inputValue(), '@all');
+    await page.locator('#statusFilter').selectOption('@all');
     assert.equal(await page.locator('#items article').count(), states.length);
     assert.match(await page.locator('#items').innerText(), /Ready for review — choose Next or set a new date/);
     assert.equal((await local(page)).records[`item:${kind}-waiting-due`].status, 'waiting');
@@ -329,9 +356,8 @@ test('navigation: Execute offers only ready work in every collection and opens e
   assert.match(await page.locator('#executeItems').innerText(), /No ready items in this list/);
   const emptyState = await page.locator('#executeItems').boundingBox();
   assert.ok(emptyState && emptyState.y < 844, 'the Do empty state is inside the initial phone viewport');
-  assert.equal(await page.locator('#inspectExecute').isVisible(), true);
-  await page.locator('#inspectExecute').click();
-  await page.waitForFunction(() => document.querySelector('#view').value === 'holding');
+  await showView(page, 'lists');
+  await page.locator('#view').selectOption('holding');
   assert.deepEqual(await page.locator('#items h3').allTextContents(), ['Holding waiting']);
   await showView(page, 'execute');
   await page.locator('[data-execute-kind="checklist"]').click();
@@ -362,6 +388,7 @@ test('navigation: Execute keeps failed completions unchecked, clears deleted lis
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('#executeList').inputValue(), '');
   assert.equal(await page.locator('#executeItems article').count(), 0);
+  assert.ok(await page.locator('#executeKinds button').evaluateAll(buttons => buttons.every(button => button.disabled && button.getAttribute('aria-pressed') === 'false')));
   setUser('bob'); await context.setOffline(false); await clickControl(page.locator('#sync'));
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact(null)).accountId === 'bob');
   await confirmed(page);

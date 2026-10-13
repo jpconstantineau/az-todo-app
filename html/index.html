@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=47" defer></script>
+  <script src="/pwa.js?v=48" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=47"></script>
+  <script type="module" src="/inbox.js?v=48"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -139,6 +139,23 @@
                 </form>
                 <p id="clarifyActionEditorStatus" class="muted" role="status" aria-live="polite"></p>
                 <section class="clarify-remove" aria-labelledby="clarifyRemoveHeading"><h2 id="clarifyRemoveHeading">Remove action</h2><p id="clarifyRemoveHelp"></p><button id="removeClarifyAction" class="danger-button" type="button">Remove action</button></section>
+              </div>
+            </section>
+          </div>
+        </section>
+        <section id="preferencesDo" class="preferences-detail" aria-labelledby="preferencesDoHeading" hidden>
+          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Do preferences">← Back</button><h1 id="preferencesDoHeading" tabindex="-1">Do</h1></div>
+          <div class="preferences-content">
+            <p id="doPreferenceScope" class="preference-scope">Workspace</p>
+            <section id="activeWork" class="active-work" aria-labelledby="activeWorkHeading">
+              <div class="active-work-header"><div><h2 id="activeWorkHeading" tabindex="-1">Active work</h2><p id="executionPolicyHelp" class="muted">Choose your WIP limit. Started and blocked work count; paused work does not.</p></div>
+                <form id="executionPolicyForm" class="wip-policy"><label>WIP limit <input id="wipLimit" name="wipLimit" type="number" min="1" max="20" required></label><button type="submit">Save WIP limit</button></form></div>
+              <p id="wipCounter" class="wip-counter" role="status" aria-live="polite"></p>
+              <p id="executionStatus" role="status" aria-live="polite"></p>
+              <div id="activeLanes" class="active-lanes">
+                <section class="active-lane" aria-labelledby="startedLaneHeading"><h3 id="startedLaneHeading" tabindex="-1" data-focus-key="execution:started:heading">Started</h3><div id="startedItems"></div></section>
+                <section class="active-lane" aria-labelledby="blockedLaneHeading"><h3 id="blockedLaneHeading" tabindex="-1" data-focus-key="execution:blocked:heading">Blocked</h3><div id="blockedItems"></div></section>
+                <section class="active-lane" aria-labelledby="pausedLaneHeading"><h3 id="pausedLaneHeading" tabindex="-1" data-focus-key="execution:paused:heading">Paused</h3><div id="pausedItems"></div></section>
               </div>
             </section>
           </div>
@@ -361,23 +378,16 @@
       </section>
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
-      <p class="eyebrow">Focus</p><h2 id="executeHeading" tabindex="-1">Do</h2>
-      <section id="activeWork" class="active-work" aria-labelledby="activeWorkHeading">
-        <div class="active-work-header"><div><h3 id="activeWorkHeading" tabindex="-1">Active work</h3><p id="executionPolicyHelp" class="muted">Choose your WIP limit. Started and blocked work count; paused work does not.</p></div>
-          <form id="executionPolicyForm" class="wip-policy"><label>WIP limit <input id="wipLimit" name="wipLimit" type="number" min="1" max="20" required></label><button type="submit">Save WIP limit</button></form></div>
-        <p id="wipCounter" class="wip-counter" role="status" aria-live="polite"></p>
-        <p id="executionStatus" role="status" aria-live="polite"></p>
-        <div id="activeLanes" class="active-lanes">
-          <section class="active-lane" aria-labelledby="startedLaneHeading"><h4 id="startedLaneHeading" tabindex="-1" data-focus-key="execution:started:heading">Started</h4><div id="startedItems"></div></section>
-          <section class="active-lane" aria-labelledby="blockedLaneHeading"><h4 id="blockedLaneHeading" tabindex="-1" data-focus-key="execution:blocked:heading">Blocked</h4><div id="blockedItems"></div></section>
-          <section class="active-lane" aria-labelledby="pausedLaneHeading"><h4 id="pausedLaneHeading" tabindex="-1" data-focus-key="execution:paused:heading">Paused</h4><div id="pausedItems"></div></section>
-        </div>
-      </section>
-      <p class="eyebrow execute-ready-label">Ready</p><h3>Ready queue</h3>
+      <h2 id="executeHeading" tabindex="-1">Do</h2>
       <div class="actions execute-kinds" id="executeKinds" role="group" aria-label="Collection type">
-        <button type="button" data-execute-kind="list" aria-pressed="true">List</button>
-        <button type="button" data-execute-kind="project" aria-pressed="false">Project</button>
-        <button type="button" data-execute-kind="checklist" aria-pressed="false">Checklist</button>
+        <button type="button" data-execute-kind="list" aria-pressed="false" disabled>List</button>
+        <button type="button" data-execute-kind="checklist" aria-pressed="false" disabled>Checklist</button>
+        <button type="button" data-execute-kind="project" aria-pressed="false" disabled>Project</button>
+        <button type="button" data-execute-kind="area" aria-pressed="false" disabled>Area</button>
+        <button type="button" data-execute-kind="role" aria-pressed="false" disabled>Role</button>
+        <button type="button" data-execute-kind="initiative" aria-pressed="false" disabled>Initiative</button>
+        <button type="button" data-execute-kind="program" aria-pressed="false" disabled>Program</button>
+        <button type="button" data-execute-kind="reference" aria-pressed="false" disabled>Reusable reference</button>
       </div>
       <select id="executeList" aria-label="Choose List"><option value="">Choose a list</option></select>
       <details id="executeFilters">
@@ -391,25 +401,7 @@
         <button id="resetExecuteFilters" type="button" hidden>Reset context, time &amp; energy</button>
       </details>
       <div id="executeItems"></div>
-      <p class="muted"><a id="inspectExecute" href="#lists">Inspect saved work in Organize</a> to see every status and review cue.</p>
-      <details id="executeHelp">
-        <summary>How Do chooses tasks</summary>
-        <p>Do shows Inbox and Next items, including ordinary checklist entries. Waiting and deferred dates cue review without changing status; Someday, Reference, Dropped, Completed and custom statuses stay out of this work queue.</p>
-        <p class="muted">Context matches exactly; No context finds unclassified tasks. Time and energy are maximums; missing or custom estimates stay visible.</p>
-      </details>
     </section>
-    <dialog id="wipLimitDialog" aria-labelledby="wipLimitDialogHeading">
-      <h2 id="wipLimitDialogHeading" tabindex="-1">WIP limit reached</h2>
-      <p id="wipLimitDialogMessage"></p><div id="wipCountedItems" class="wip-counted-items"></div>
-      <div class="actions"><button id="overrideWip" type="button">Start anyway — override WIP limit</button><button id="cancelWip" type="button">Cancel</button></div>
-    </dialog>
-    <dialog id="blockWorkDialog" aria-labelledby="blockWorkHeading">
-      <form id="blockWorkForm" method="dialog"><h2 id="blockWorkHeading" tabindex="-1">Block work</h2><p id="blockWorkTask"></p>
-        <label>Blocked reason <textarea name="reason" maxlength="500" required></textarea></label>
-        <label>Review date <input name="reviewDate" type="date" min="0001-01-01" max="9999-12-31" required></label>
-        <div class="actions"><button type="submit" value="save">Save block</button><button id="cancelBlockWork" type="button">Cancel</button></div>
-      </form>
-    </dialog>
     <section class="card review-panel" id="reviews" aria-labelledby="reviewsHeading" hidden>
       <p class="eyebrow">Reflect</p><h2 id="reviewsHeading" tabindex="-1">Daily and weekly reviews</h2>
       <fieldset id="reviewWorkspaceFields" class="workspace-fields">
@@ -487,6 +479,18 @@
       <button id="closeReviews" type="button">Stop and close review</button>
     </section>
     </div>
+    <dialog id="wipLimitDialog" aria-labelledby="wipLimitDialogHeading">
+      <h2 id="wipLimitDialogHeading" tabindex="-1">WIP limit reached</h2>
+      <p id="wipLimitDialogMessage"></p><div id="wipCountedItems" class="wip-counted-items"></div>
+      <div class="actions"><button id="overrideWip" type="button">Start anyway — override WIP limit</button><button id="cancelWip" type="button">Cancel</button></div>
+    </dialog>
+    <dialog id="blockWorkDialog" aria-labelledby="blockWorkHeading">
+      <form id="blockWorkForm" method="dialog"><h2 id="blockWorkHeading" tabindex="-1">Block work</h2><p id="blockWorkTask"></p>
+        <label>Blocked reason <textarea name="reason" maxlength="500" required></textarea></label>
+        <label>Review date <input name="reviewDate" type="date" min="0001-01-01" max="9999-12-31" required></label>
+        <div class="actions"><button type="submit" value="save">Save block</button><button id="cancelBlockWork" type="button">Cancel</button></div>
+      </form>
+    </dialog>
     <dialog class="side-panel" id="extractionReview" aria-labelledby="extractionHeading">
       <p class="eyebrow">Review capture</p><h2 id="extractionHeading" tabindex="-1" aria-describedby="extractionHelp">Suggested tasks</h2>
       <p id="extractionHelp">These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, use Merge into previous task.</p>

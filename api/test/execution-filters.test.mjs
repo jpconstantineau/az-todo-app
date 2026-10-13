@@ -6,7 +6,38 @@ import { documents, startServer } from './harness.mjs';
 import { showView } from './navigation-helper.mjs';
 import { waitForBrowser } from './browser-wait.mjs';
 import { currentCreate } from './current-record.mjs';
-import { matchesExecutionFilters } from '../../html/inbox-fields.js';
+import { compareExecutionItems, executionDurationMinutes, matchesExecutionFilters } from '../../html/inbox-fields.js';
+
+test('Do ordering normalizes known metadata and stays deterministic through title and ID ties', () => {
+  assert.equal(executionDurationMinutes('1.5 hours'), 90);
+  assert.equal(executionDurationMinutes(' 30 MIN '), 30);
+  assert.equal(executionDurationMinutes('1h 30m'), null);
+  const items = [
+    { id: 'unknown-priority', title: 'Unknown priority', priority: 'urgent', timeRequired: '10m', energy: 'High' },
+    { id: 'missing-priority', title: 'Missing priority', timeRequired: '2h', energy: 'High' },
+    { id: 'p5', title: 'P5', priority: 'p5', timeRequired: '2h', energy: 'High' },
+    { id: 'p4', title: 'P4', priority: 'P 4', timeRequired: '2h', energy: 'High' },
+    { id: 'p3', title: 'P3', priority: ' P3 ', timeRequired: '2h', energy: 'High' },
+    { id: 'p2', title: 'P2', priority: 'p2', timeRequired: '2h', energy: 'High' },
+    { id: 'p1-long', title: 'Long', priority: 'P1', timeRequired: '1.5 hours', energy: 'Low' },
+    { id: 'p1-short-high', title: 'Short high', priority: 'P1', timeRequired: '30 min', energy: ' HIGH ' },
+    { id: 'p1-short-medium', title: 'Short medium', priority: 'P1', timeRequired: '30m', energy: 'Medium' },
+    { id: 'p1-short-low', title: 'Short low', priority: 'P1', timeRequired: '30m', energy: 'low' },
+    { id: 'p1-short-custom', title: 'Short custom', priority: 'P1', timeRequired: '30m', energy: 'Focused' },
+    { id: 'p1-custom-duration', title: 'Custom duration', priority: 'P1', timeRequired: 'quick', energy: 'High' },
+    { id: 'title-10', title: 'Task 10', priority: 'P1' },
+    { id: 'title-2-b', title: 'task 2', priority: 'P1' },
+    { id: 'title-2-a', title: 'Task 2', priority: 'P1' },
+    { id: 'missing-title', title: null, priority: 'P1' }
+  ];
+  assert.deepEqual(items.toSorted(compareExecutionItems).map(item => item.id), [
+    'p1-long', 'p1-short-high', 'p1-short-medium', 'p1-short-low', 'p1-short-custom', 'p1-custom-duration',
+    'title-2-a', 'title-2-b', 'title-10', 'missing-title', 'p2', 'p3', 'p4', 'p5', 'missing-priority', 'unknown-priority'
+  ]);
+  assert.deepEqual([
+    { id: 'b', title: 'Same' }, { id: 'a', title: 'Same' }
+  ].toSorted(compareExecutionItems).map(item => item.id), ['a', 'b']);
+});
 
 test('execution filters compare limits and retain unspecified or custom estimates', () => {
   const filters = { context: 'context:@Home', minutes: '30', energy: 'medium' };

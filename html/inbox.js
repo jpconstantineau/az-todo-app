@@ -4,7 +4,7 @@ import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './works
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
 import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=19';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
-import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute } from './inbox-fields.js?v=5';
+import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems } from './inbox-fields.js?v=6';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=20';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
@@ -63,7 +63,7 @@ const preferenceCategories = [
   { id: 'process', label: 'Process', scope: 'Browser', section: 'preferencesProcess' },
   { id: 'organize', label: 'Organize' },
   { id: 'plan', label: 'Plan' },
-  { id: 'do', label: 'Do' },
+  { id: 'do', label: 'Do', scope: 'Workspace', section: 'preferencesDo' },
   { id: 'review', label: 'Review' },
   { id: 'task-options', label: 'Task options', scope: 'Account', section: 'taskOptionsView' }
 ];
@@ -929,9 +929,11 @@ function taskIcon(control, name, title) {
 }
 function renderActiveWork(recordMap, readOnly) {
   const policy = currentExecutionPolicy(recordMap);
+  $('doPreferenceScope').textContent = `${$('workspaceSelect').selectedOptions[0]?.textContent || 'Unavailable'} · Workspace`;
   $('activeLanes').hidden = !policy?.entries?.length;
   const limitInput = $('wipLimit');
   if (document.activeElement !== limitInput) limitInput.value = policy?.wipLimit || '';
+  limitInput.disabled = readOnly;
   $('executionPolicyForm').querySelector('button').disabled = readOnly;
   const count = executionCount(policy);
   $('wipCounter').textContent = policy ? `${count} of ${policy.wipLimit} WIP. Blocked work counts toward WIP.${count > policy.wipLimit ? ' Explicit override active.' : ''} ${policy.localState || 'Server-confirmed'}.`
@@ -1236,25 +1238,25 @@ function render() {
   planner.render();
   const readOnly = workspaceReadOnly();
   renderActiveWork(recordMap, readOnly);
+  refreshPreferenceRows();
   const execute = navigation.execute;
   const kinds = $('executeKinds');
-  const availableKinds = new Set(['list', 'project', 'checklist', ...lists.map(collectionKind)]);
+  const availableKinds = new Set([...lists.map(collectionKind), ...(projects.length ? ['project'] : [])]);
+  const priorKind = execute.kind, priorView = execute.view;
+  const firstAvailableKind = Object.keys(collectionKinds).find(kind => availableKinds.has(kind));
+  if (!availableKinds.has(execute.kind)) { execute.kind = firstAvailableKind || Object.keys(collectionKinds)[0]; execute.view = ''; }
   for (const control of kinds.querySelectorAll('[data-execute-kind]')) {
-    if (!availableKinds.has(control.dataset.executeKind)) control.remove();
+    const available = availableKinds.has(control.dataset.executeKind);
+    control.disabled = !available;
+    control.setAttribute('aria-pressed', String(available && control.dataset.executeKind === execute.kind));
   }
-  for (const [kind, label] of Object.entries(collectionKinds)) {
-    if (!availableKinds.has(kind) || kinds.querySelector(`[data-execute-kind="${kind}"]`)) continue;
-    const control = document.createElement('button');
-    control.type = 'button'; control.dataset.executeKind = kind; control.textContent = label;
-    kinds.append(control);
-  }
-  if (!availableKinds.has(execute.kind)) { execute.kind = 'list'; execute.view = ''; }
-  for (const control of kinds.querySelectorAll('[data-execute-kind]')) control.setAttribute('aria-pressed', String(control.dataset.executeKind === execute.kind));
   const executeCollections = (execute.kind === 'project' ? projects : lists.filter(list => collectionKind(list) === execute.kind));
   options($('executeList'), executeCollections.map(record => ({ id: viewKey(record), title: record.title })), [['', `Choose a ${execute.kind}`]]);
   $('executeList').value = executeCollections.some(record => viewKey(record) === execute.view) ? execute.view : '';
+  $('executeList').disabled = !firstAvailableKind;
   $('executeList').setAttribute('aria-label', `Choose ${collectionKinds[execute.kind]}`);
   execute.view = $('executeList').value;
+  if (priorKind !== execute.kind || priorView !== execute.view) queueMicrotask(() => { void journal(); });
   options($('executeContextFilter'), contexts.map(context => ({ id: `context:${context}`, title: context })), [['', 'Any context'], ['@none', 'No context']]);
   for (const [field, id] of [['context', 'executeContextFilter'], ['minutes', 'executeTimeFilter'], ['energy', 'executeEnergyFilter']]) {
     $(id).value = execute[field] || '';
@@ -1267,7 +1269,7 @@ function render() {
   const executeItems = records.filter(record => executeCollection && record.type === 'item' && !archiveOnly(record, recordMap) && belongsTo(record, executeCollection));
   const activeIds = new Set((currentExecutionPolicy(recordMap)?.entries || []).map(entry => entry.itemId));
   const readyItems = executeItems.filter(record => readyToExecute(record) && !activeIds.has(record.id));
-  $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).map(record => {
+  $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).sort(compareExecutionItems).map(record => {
     const article = document.createElement('article'); article.className = 'execute-item'; article.dataset.id = record.id;
     const checkLabel = document.createElement('label'); checkLabel.className = 'execute-check';
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.disabled = readOnly;
@@ -1661,6 +1663,10 @@ function preferenceSummary(category) {
   }
   if (category.id === 'capture') return `${captureCloudPreference.enabled ? 'On' : 'Off'} · ${category.scope}`;
   if (category.id === 'process') return `${currentClarificationActions().length} actions · ${category.scope}`;
+  if (category.id === 'do') {
+    const policy = state && currentExecutionPolicy(projected(state));
+    return policy ? `${executionCount(policy)} of ${policy.wipLimit} WIP · ${category.scope}` : `Not set · ${category.scope}`;
+  }
   return category.scope;
 }
 function refreshPreferenceRows() {
@@ -2241,12 +2247,9 @@ $('executeList').onchange = () => {
   navigation.execute.view = $('executeList').value;
   render(); void journal();
 };
-$('inspectExecute').onclick = () => {
-  Object.assign(navigation.lists, { view: navigation.execute.view, status: '@all', context: '', minutes: '', energy: '' });
-};
 $('executeKinds').onclick = event => {
   const control = event.target.closest('[data-execute-kind]');
-  if (!control) return;
+  if (!control || control.disabled) return;
   navigation.execute.kind = control.dataset.executeKind;
   navigation.execute.view = '';
   render(); void journal();

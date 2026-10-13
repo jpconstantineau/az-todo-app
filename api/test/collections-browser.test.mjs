@@ -156,7 +156,9 @@ test('collections browser: direct settings preserve contents and surface due col
   assert.deepEqual(savedLists[0].record.parentRef, ref('list', 'home'));
   assert.equal(documents.filter(doc => doc.id === 'record:item:buy-milk').length, 1);
   await showView(page, 'execute');
-  assert.equal(await page.locator('#executeList option[value="groceries"]').count(), 0);
+  assert.equal(await page.locator('[data-execute-kind="list"]').isDisabled(), true);
+  assert.equal(await page.locator('[data-execute-kind="checklist"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#executeList option[value="groceries"]').count(), 1);
   await page.locator('[data-execute-kind="checklist"]').click();
   await page.locator('#executeList').selectOption('groceries');
   await page.getByRole('button', { name: 'Edit Buy milk', exact: true }).waitFor();
