@@ -1901,7 +1901,7 @@ function showDialog(dialog) {
 }
 function menuEntry() {
   const entry = history.state?.todoMenu;
-  const returnable = workflowRoutes.includes(entry?.returnRoute) || isPreferenceRoute(entry?.returnRoute) || isUtilityPageRoute(entry?.returnRoute);
+  const returnable = workflowRoutes.includes(entry?.returnRoute) || isPreferenceRoute(entry?.returnRoute) || isUtilityPageRoute(entry?.returnRoute) || !!taskOptionRoute(entry?.returnRoute);
   return entry?.session === menuHistorySession && entry.accountId === accountId && entry.origin === location.origin && returnable && entry.target === 'appMenu' ? entry : null;
 }
 function workflowEntry(route = destination) {
@@ -1977,8 +1977,11 @@ async function enterMenu() {
     return;
   }
   const scrollX = window.scrollX, scrollY = window.scrollY;
+  const owner = accountId, generation = accountGeneration, route = destination, hash = location.hash, workspaceId = selectedWorkspace;
   const deleted = projected(state)['workspace:' + selectedWorkspace]?.deleted;
   if (!deleted) await journal();
+  // A draft save can finish after another click, route, dialog or account change.
+  if (owner !== accountId || generation !== accountGeneration || route !== destination || hash !== location.hash || workspaceId !== selectedWorkspace || document.querySelector('dialog[open]')) return;
   const marker = { session: menuHistorySession, accountId, origin: location.origin, route: destination, scrollX, scrollY, target: 'appMenu' };
   const current = history.state && typeof history.state === 'object' ? history.state : {};
   history.replaceState({ ...current, todoWorkflow: marker }, '', '#' + destination);
