@@ -323,6 +323,7 @@ test('Day builds an ordered offline plan with relative estimates, assessment his
   assert.match(await page.locator('#planDayActions').innerText(), /L \(tshirt, previous scale\)/);
   assert.match(await page.locator('#planDayActions').innerText(), /M \(tshirt, previous scale\)/);
 
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Move Second day action up from position 2' }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length > 0);
