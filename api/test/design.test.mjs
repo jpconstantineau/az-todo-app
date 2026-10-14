@@ -125,6 +125,14 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await page.setViewportSize({ width: 320, height: 900 });
   if (new URL(page.url()).hash === '#menu') await page.locator('#menuBack').click();
 
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height:900 });
+    await openPreference(page, 'appearance');
+    assert.equal(await page.locator('#customThemeSummary').isVisible(), true);
+    assert.equal(await page.locator('#openCustomTheme').isVisible(), true);
+    await fits(); await shot(`appearance-${width}`);
+  }
+
   // Measure resolved semantic colors, not just literal token values.
   function luminance(rgb) {
     return rgb.map(value => { value /= 255; return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; })
@@ -147,12 +155,19 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
       assert.ok((a + .05) / (b + .05) >= 4.5, `${option.label}: dropdown text contrast is at least 4.5:1`);
     }
   }
-  for (const theme of ['light', 'dark']) {
-    await appearance(theme);
+  for (const style of ['hashicorp','hmi','hmi-cvd']) for (const theme of ['light','dark']) {
+    await openPreference(page, 'appearance');
+    await page.locator('select[data-style-theme]').selectOption(style);
+    await page.locator('[data-appearance]').selectOption(theme);
     await page.reload();
     await page.locator('#workspace').waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
+    assert.equal(await page.locator('html').getAttribute('data-style-theme'), style);
     assert.equal(await page.locator('[data-appearance]').inputValue(), theme);
+    assert.deepEqual(await page.locator('html').evaluate(element => {
+      const computed = getComputedStyle(element);
+      return [computed.getPropertyValue('--radius-control').trim(), computed.getPropertyValue('--radius-panel').trim()];
+    }), style === 'hashicorp' ? ['8px','12px'] : ['4px','8px']);
     const colors = await page.evaluate(() => {
       const probe = document.createElement('span'); document.body.append(probe);
       const values = Object.fromEntries(['canvas', 'surface', 'surface-raised', 'ink', 'muted', 'link', 'focus', 'success', 'warning', 'error', 'control-border', 'primary', 'on-primary'].map(token => {
@@ -167,16 +182,17 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
         const [a, b] = [luminance(colors[foreground]), luminance(colors[background])].sort((a, b) => b - a);
         const ratio = (a + .05) / (b + .05);
         const threshold = ['focus', 'control-border'].includes(foreground) ? 3 : 4.5;
-        assert.ok(ratio >= threshold, `${theme} ${foreground}/${background}: ${ratio.toFixed(2)} >= ${threshold}`);
+        assert.ok(ratio >= threshold, `${style} ${theme} ${foreground}/${background}: ${ratio.toFixed(2)} >= ${threshold}`);
         if (threshold === 4.5) minimum = Math.min(minimum, ratio);
       }
     }
     const [a, b] = [luminance(colors.primary), luminance(colors['on-primary'])].sort((a, b) => b - a);
     assert.ok((a + .05) / (b + .05) >= 4.5);
     await dropdownContrast();
-    console.log(`${theme} minimum text contrast: ${minimum.toFixed(2)}:1`);
-    if (theme === 'light') await shot('inbox-light-320');
+    console.log(`${style} ${theme} minimum text contrast: ${minimum.toFixed(2)}:1`);
+    if (style === 'hashicorp' && theme === 'light') await shot('inbox-light-320');
   }
+  await openPreference(page, 'appearance'); await page.locator('select[data-style-theme]').selectOption('hashicorp');
   await appearance('system');
   await page.reload();
   await page.locator('#workspace').waitFor();

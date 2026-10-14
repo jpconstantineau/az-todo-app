@@ -69,6 +69,7 @@ const preferenceCategories = [
 ];
 const livePreferenceCategories = preferenceCategories.filter(category => category.section);
 const preferenceRoutes = new Map(livePreferenceCategories.map(category => [`preferences/${category.id}`, category]));
+const appearanceCustomRoute = 'preferences/appearance/custom';
 const clarifyPreferenceRoot = 'preferences/process/clarify-actions';
 const taskOptionSlugs = new Map(Object.keys(optionFields).map(name => [name === 'timeRequired' ? 'time-required' : name, name]));
 const taskOptionSlug = name => name === 'timeRequired' ? 'time-required' : name;
@@ -87,9 +88,10 @@ function clarifyPreferenceRoute(route) {
   const match = route.match(/^preferences\/process\/clarify-actions\/edit\/([A-Za-z0-9_-]{1,128})$/);
   return match ? { view: 'editor', id: match[1] } : null;
 }
-const preferenceCategory = route => preferenceRoutes.get(route) || (clarifyPreferenceRoute(route) ? preferenceRoutes.get('preferences/process') : null) || (taskOptionRoute(route)?.type === 'settings' ? preferenceRoutes.get('preferences/task-options') : null);
+const preferenceCategory = route => preferenceRoutes.get(route) || (route === appearanceCustomRoute ? preferenceRoutes.get('preferences/appearance') : null) || (clarifyPreferenceRoute(route) ? preferenceRoutes.get('preferences/process') : null) || (taskOptionRoute(route)?.type === 'settings' ? preferenceRoutes.get('preferences/task-options') : null);
 const isPreferenceRoute = route => route === 'preferences' || !!preferenceCategory(route);
 function preferenceRouteTitle(route) {
+  if (route === appearanceCustomRoute) return 'Custom theme';
   const taskOption = taskOptionRoute(route);
   if (taskOption?.type === 'settings') return taskOption.field ? `Account · ${optionFields[taskOption.field]}` : 'Account task options';
   const clarify = clarifyPreferenceRoute(route);
@@ -98,6 +100,7 @@ function preferenceRouteTitle(route) {
   return preferenceRoutes.get(route)?.label;
 }
 function preferenceRouteParent(route) {
+  if (route === appearanceCustomRoute) return { parent: 'preferences/appearance', target: 'openCustomTheme' };
   const taskOption = taskOptionRoute(route);
   if (taskOption?.type === 'settings' && taskOption.field) return { parent: 'preferences/task-options', target: `task-option-${taskOptionSlug(taskOption.field)}` };
   const clarify = clarifyPreferenceRoute(route);
@@ -1658,8 +1661,8 @@ $('editor').addEventListener('close', () => {
 $('editor').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
 function preferenceSummary(category) {
   if (category.id === 'appearance') {
-    const value = document.documentElement.dataset.theme || 'dark';
-    return `${value[0].toUpperCase()}${value.slice(1)} · ${category.scope}`;
+    const appearance = window.todoAppearance.getState();
+    return `${appearance.name} · ${appearance.mode[0].toUpperCase()}${appearance.mode.slice(1)} · ${category.scope}`;
   }
   if (category.id === 'capture') return `${captureCloudPreference.enabled ? 'On' : 'Off'} · ${category.scope}`;
   if (category.id === 'process') return `${currentClarificationActions().length} actions · ${category.scope}`;
@@ -1683,8 +1686,64 @@ function setupPreferenceRows() {
 }
 setupPreferenceRows();
 document.addEventListener('clarification-actions-change', refreshPreferenceRows);
-addEventListener('todo-appearance-change', refreshPreferenceRows);
+addEventListener('todo-appearance-change', event => {
+  refreshPreferenceRows();
+  statusText('appearanceStatus', event.detail.storageError ? 'Appearance changed for this tab but could not be saved in this browser.' : '');
+  const state = window.todoAppearance.getState();
+  $('openCustomTheme').textContent = state.hasCustom ? 'Edit custom theme' : 'Create custom theme';
+  $('customThemeDescription').textContent = state.hasCustom ? 'Edit the one custom theme saved only in this browser.' : 'Create one custom theme from the selected style. It stays only in this browser.';
+});
 document.addEventListener('capturecloudpreferencechange', refreshPreferenceRows);
+
+function themePath(object, path, value) {
+  const parts = path.split('.'), leaf = parts.pop(); let target = object;
+  for (const part of parts) target = target[part];
+  if (arguments.length === 3) target[leaf] = value;
+  return target[leaf];
+}
+function setupCustomThemeForm() {
+  const fields = [];
+  for (const group of window.todoAppearance.fieldGroups) {
+    const fieldset = document.createElement('fieldset'), legend = document.createElement('legend'), grid = document.createElement('div');
+    legend.textContent = group.name; grid.className = 'custom-theme-grid';
+    for (const field of group.fields) {
+      const label = document.createElement('label'), text = document.createElement('span'), value = document.createElement('span'), control = document.createElement(field.type === 'choice' ? 'select' : 'input'), error = document.createElement('span');
+      label.className = 'custom-theme-control'; text.textContent = field.label; value.className = 'custom-theme-value'; control.name = field.path; control.dataset.themePath = field.path;
+      if (field.type === 'color') control.type = 'color';
+      else if (field.type === 'choice') for (const choice of field.choices) { const option = document.createElement('option'); option.value = choice; option.textContent = choice[0].toUpperCase() + choice.slice(1); control.append(option); }
+      else { control.type = 'number'; control.min = field.min; control.max = field.max; control.step = field.step || 1; }
+      error.className = 'field-error'; error.id = `custom-${field.path.replace('.','-')}-error`; control.setAttribute('aria-describedby', error.id);
+      value.append(control); if (field.unit) { const unit = document.createElement('output'); unit.textContent = field.unit; value.append(unit); }
+      label.append(text, value, error); grid.append(label); fields.push(control);
+    }
+    fieldset.append(legend, grid); $('customThemeFields').append(fieldset);
+  }
+  return fields;
+}
+let customThemeFields;
+function loadCustomThemeForm() {
+  customThemeFields ||= setupCustomThemeForm();
+  const theme = window.todoAppearance.getEditableTheme(), form = $('customThemeForm');
+  form.elements.name.value = theme.name === 'HashiCorp' || theme.name === 'HMI' || theme.name === 'HMI (CVD)' ? `${theme.name} custom` : theme.name;
+  for (const control of customThemeFields) control.value = themePath(theme, control.dataset.themePath);
+  form.querySelectorAll('.field-error').forEach(error => { error.textContent = ''; }); statusText('customThemeError','');
+}
+function customThemeCandidate() {
+  const candidate = window.todoAppearance.getEditableTheme(), form = $('customThemeForm'); candidate.name = form.elements.name.value;
+  for (const control of customThemeFields) themePath(candidate, control.dataset.themePath, control.type === 'number' ? control.valueAsNumber : control.value);
+  return candidate;
+}
+$('customThemeForm').addEventListener('submit', event => {
+  event.preventDefault(); const result = window.todoAppearance.saveCustom(customThemeCandidate());
+  $('customThemeForm').querySelectorAll('.field-error').forEach(error => { error.textContent = ''; });
+  if (!result.valid) {
+    for (const [path, message] of Object.entries(result.errors)) { const error = $(`custom-${path.replace('.','-')}-error`); if (error) error.textContent = message; }
+    statusText('customThemeError','Review the highlighted theme settings. Your saved theme was not changed.');
+    const first = Object.keys(result.errors)[0], control = first === 'name' ? $('customThemeForm').elements.name : $('customThemeForm').elements[first]; control?.focus(); return;
+  }
+  statusText('appearanceStatus', result.storageError ? 'Custom theme applies to this tab but could not be saved in this browser.' : 'Custom theme saved in this browser.');
+  void leavePreferences();
+});
 function taskOptionTarget(route = destination) {
   const parsed = taskOptionRoute(route);
   if (!parsed || !accountId || !state?.defaultSettings) return null;
@@ -1776,8 +1835,8 @@ function setupTaskOptionRows() {
 }
 setupTaskOptionRows();
 function renderPreferences() {
-  const category = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), hub = destination === 'preferences';
-  $('preferencesView').dataset.route = hub ? 'hub' : clarify ? `clarify-${clarify.view}` : 'detail';
+  const category = preferenceCategory(destination), clarify = clarifyPreferenceRoute(destination), customTheme = destination === appearanceCustomRoute, hub = destination === 'preferences';
+  $('preferencesView').dataset.route = hub ? 'hub' : customTheme ? 'custom-theme' : clarify ? `clarify-${clarify.view}` : 'detail';
   $('preferencesHubBar').hidden = !hub;
   for (const entry of livePreferenceCategories) {
     const active = category?.id === entry.id;
@@ -1787,6 +1846,9 @@ function renderPreferences() {
   }
   $('preferencesProcessPage').hidden = category?.id !== 'process' || !!clarify;
   $('clarifyActionsPage').hidden = !clarify;
+  $('appearancePage').hidden = customTheme;
+  $('customThemePage').hidden = !customTheme;
+  if (customTheme) loadCustomThemeForm();
   if (clarify) clarificationPreferences.render(destination);
   refreshPreferenceRows();
 }
@@ -1818,6 +1880,7 @@ function focusDestination() {
   else if (destination === 'preferences') $('preferencesHeading').focus({ preventScroll: true });
   else if (taskOption) $(taskOption.field ? 'taskOptionHeading' : 'taskOptionsMasterHeading').focus({ preventScroll: true });
   else if (clarify) clarificationPreferences.focus();
+  else if (destination === appearanceCustomRoute) $('customThemeHeading').focus({ preventScroll: true });
   else if (preference) $(`${preference.section}Heading`).focus({ preventScroll: true });
   else (destination === 'capture' ? workspaceReadOnly() ? $('workspaceSelect') : capture.elements.text : destination === 'plan' ? $('planHeading') : destination === 'execute' ? $('executeHeading') : destination === 'reviews' ? $('reviewsHeading') : $('itemsHeading')).focus();
 }
@@ -2177,6 +2240,9 @@ $('addClarifyAction').addEventListener('click', event => {
 document.addEventListener('clarification-preference-navigate', event => enterPreferenceRoute(event.detail.route, { replace: event.detail.replace }));
 $('preferencesBack').onclick = () => { void leavePreferences(); };
 for (const control of document.querySelectorAll('.preference-back')) control.onclick = () => { void leavePreferences(); };
+$('openCustomTheme').onclick = event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); enterPreferenceRoute(appearanceCustomRoute); } };
+$('customThemeBack').onclick = () => { void leavePreferences(); };
+$('cancelCustomTheme').onclick = () => { void leavePreferences(); };
 $('clarifyActionsBack').onclick = () => { void leavePreferences(); };
 $('clarifyActionEditorBack').onclick = () => { void leavePreferences(); };
 $('utilityHubBack').onclick = leaveUtilityPage;

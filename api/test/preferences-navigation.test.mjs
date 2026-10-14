@@ -35,7 +35,7 @@ test('Preferences routes expose only live categories with route, focus, Back and
   assert.deepEqual(await page.locator('#preferencesCategories > li > a > span:first-child').allTextContents(), ['Appearance', 'Capture', 'Process', 'Do', 'Task options']);
   assert.equal(await page.locator('#preferencesView').getByText(/Organize|Plan|Review/, { exact: true }).count(), 0);
   assert.equal(await page.locator('#preferencesView').getByText(/Install|update|reset/i).count(), 0);
-  assert.deepEqual(await page.locator('#preferencesCategories .menu-row-value').allTextContents(), ['Dark · Browser', 'Off · Browser', '12 actions · Browser', 'Not set · Workspace', 'Account']);
+  assert.deepEqual(await page.locator('#preferencesCategories .menu-row-value').allTextContents(), ['HashiCorp · Dark · Browser', 'Off · Browser', '12 actions · Browser', 'Not set · Workspace', 'Account']);
 
   await openPreference(page, 'appearance');
   assert.equal(new URL(page.url()).hash, '#preferences/appearance');
@@ -45,10 +45,10 @@ test('Preferences routes expose only live categories with route, focus, Back and
   assert.equal(await page.locator('#preference-appearance').getAttribute('aria-current'), 'page');
   assert.equal(await page.locator('#preferencesAppearance select[data-appearance]').count(), 1);
   assert.equal(await page.locator('#preferencesAppearance dialog').count(), 0);
-  assert.deepEqual(await page.locator('#preferencesAppearance p').allTextContents(), ['Browser']);
+  assert.match(await page.locator('#preferencesAppearance .preference-scope').textContent(), /Saved in this browser/);
   const theme = page.locator('#preferencesAppearance [data-appearance]');
   await theme.selectOption('light');
-  assert.equal(await page.locator('#preference-appearance-summary').textContent(), 'Light · Browser');
+  assert.equal(await page.locator('#preference-appearance-summary').textContent(), 'HashiCorp · Light · Browser');
   assert.equal(await page.evaluate(() => localStorage.getItem('todo-appearance')), 'light');
   await theme.focus();
 
@@ -72,7 +72,7 @@ test('Preferences routes expose only live categories with route, focus, Back and
       assert.equal(Math.round(shell.x), 24);
       assert.equal(Math.round(width - shell.x - shell.width), 24);
     }
-    assert.ok(await page.locator('.preferences-detail:visible .menu-page-bar').evaluate(element => element.getBoundingClientRect().height >= 48));
+    assert.ok(await page.locator('#appearancePage .menu-page-bar').evaluate(element => element.getBoundingClientRect().height >= 48));
   }
   await page.setViewportSize({ width: 320, height: 568 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
@@ -111,6 +111,78 @@ test('Preferences routes expose only live categories with route, focus, Back and
   assert.equal(await page.locator('#captureCloudAI').isChecked(), false);
   assert.match(await page.locator('#captureCloudAIHelp').textContent(), /signed in and online.*sends nothing.*Only pressing.*list names/s);
   assert.equal(await page.locator('#preferencesCapture .preference-scope').textContent(), 'Browser');
+});
+
+test('Appearance separates preset style from mode and validates one routed browser-local custom theme', { timeout: 90000 }, async t => {
+  const { page, context, server } = await setup(t);
+  await openPreference(page, 'appearance');
+  const style = page.locator('select[data-style-theme]'), mode = page.locator('[data-appearance]');
+  assert.equal(await style.inputValue(), 'hashicorp');
+  assert.equal(await mode.inputValue(), 'dark');
+  assert.equal(await page.locator('html').getAttribute('data-style-theme'), 'hashicorp');
+  assert.equal(await style.locator('option[value="custom"]').getAttribute('hidden'), '');
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height:900 });
+    assert.equal(await page.locator('#customThemeSummary').isVisible(), true);
+    assert.match(await page.locator('#customThemeDescription').textContent(), /Create one custom theme.*only in this browser/);
+    assert.equal(await page.locator('#openCustomTheme').textContent(), 'Create custom theme');
+    const action = await page.locator('#openCustomTheme').boundingBox();
+    assert.ok(action && action.x >= 0 && action.x + action.width <= width && action.y < 900, `custom theme action is visible at ${width}px`);
+  }
+
+  const other = await context.newPage(); await other.goto(server.url + '#preferences/appearance'); await other.locator('#preferencesAppearanceHeading').waitFor();
+  await style.selectOption('hmi-cvd'); await mode.selectOption('system');
+  await other.waitForFunction(() => document.documentElement.dataset.styleTheme === 'hmi-cvd' && document.documentElement.dataset.theme === 'system');
+  assert.equal(await page.locator('#preference-appearance-summary').textContent(), 'HMI (CVD) · System · Browser');
+  assert.deepEqual(await page.evaluate(() => [localStorage.getItem('todo-style-theme'), localStorage.getItem('todo-appearance')]), ['hmi-cvd','system']);
+  await page.emulateMedia({ colorScheme:'light' });
+  assert.equal(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(212, 214, 216)');
+  await page.emulateMedia({ colorScheme:'dark' });
+  assert.equal(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(32, 36, 40)');
+
+  await page.locator('#openCustomTheme').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance/custom' && document.activeElement?.id === 'customThemeHeading');
+  assert.deepEqual(await page.locator('#customThemeFields legend').allTextContents(), ['Light colors','Dark colors','Typography','Spacing and density','Corners and borders','Depth and motion']);
+  assert.equal(await page.locator('#customThemeForm [name="name"]').inputValue(), 'HMI (CVD) custom');
+  await page.locator('#customThemeForm [name="name"]').fill('Discard me');
+  await page.locator('#cancelCustomTheme').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance' && document.activeElement?.id === 'openCustomTheme');
+  assert.equal(await page.evaluate(() => localStorage.getItem('todo-custom-theme')), null);
+
+  await page.locator('#openCustomTheme').click(); await page.locator('#customThemeHeading').waitFor();
+  await page.locator('#customThemeForm [name="tokens.target"]').fill('12');
+  await page.getByRole('button', { name:'Save custom theme' }).click();
+  assert.equal(new URL(page.url()).hash, '#preferences/appearance/custom');
+  assert.match(await page.locator('#custom-tokens-target-error').textContent(), /44 to 64/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('todo-custom-theme')), null);
+  await page.locator('#customThemeForm [name="name"]').fill('Control room');
+  await page.locator('#customThemeForm [name="tokens.target"]').fill('48');
+  await page.locator('#customThemeForm [name="light.canvas"]').fill('#ddeeff');
+  await page.getByRole('button', { name:'Save custom theme' }).click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance' && document.documentElement.dataset.styleTheme === 'custom');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('todo-custom-theme')));
+  assert.equal(saved.version, 1); assert.equal(saved.name, 'Control room'); assert.equal(saved.tokens.target, 48); assert.equal(saved.light.canvas, '#ddeeff');
+  assert.equal(await page.locator('#preference-appearance-summary').textContent(), 'Control room · System · Browser');
+  await other.waitForFunction(() => document.documentElement.dataset.styleTheme === 'custom' && document.querySelector('#preference-appearance-summary').textContent.startsWith('Control room'));
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('html').getAttribute('data-style-theme'), 'custom');
+  assert.equal(await page.locator('select[data-style-theme]').inputValue(), 'custom');
+  assert.equal(await page.locator('select[data-style-theme] option[value="custom"]').getAttribute('hidden'), null);
+  assert.equal(await page.locator('#openCustomTheme').textContent(), 'Edit custom theme');
+  assert.match(await page.locator('#customThemeDescription').textContent(), /Edit the one custom theme/);
+  await page.locator('#openCustomTheme').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance/custom' && document.activeElement?.id === 'customThemeHeading');
+  assert.equal(await page.locator('#customThemeForm [name="name"]').inputValue(), 'Control room');
+  await page.locator('#customThemeBack').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance' && document.activeElement?.id === 'openCustomTheme');
+
+  await page.evaluate(() => {
+    const value = JSON.parse(localStorage.getItem('todo-custom-theme')); value.injected = { '--ink':'red' };
+    localStorage.setItem('todo-custom-theme', JSON.stringify(value)); localStorage.setItem('todo-style-theme','custom');
+  });
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('html').getAttribute('data-style-theme'), 'hashicorp');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--ink').trim()), 'light-dark(#15181e, #ffffff)');
 });
 
 test('Clarify action pages keep ordered browser settings, explicit drafts, focus and responsive routes', { timeout: 90000 }, async t => {
@@ -284,7 +356,7 @@ test('Appearance storage updates every tab and visible summary without native ch
   await openPreferences(other);
   await other.evaluate(() => {
     window.appearanceEvents = { storage: 0, applied: 0, native: 0 };
-    addEventListener('storage', event => { if (event.key === 'todo-appearance' || event.key === null) appearanceEvents.storage++; });
+    addEventListener('storage', event => { if (['todo-appearance','todo-style-theme','todo-custom-theme',null].includes(event.key)) appearanceEvents.storage++; });
     addEventListener('todo-appearance-change', () => appearanceEvents.applied++);
     document.addEventListener('change', event => { if (event.target.matches('[data-appearance]')) appearanceEvents.native++; });
   });
@@ -297,15 +369,15 @@ test('Appearance storage updates every tab and visible summary without native ch
     await page.locator('[data-appearance]').selectOption(value);
     await other.waitForFunction(expected => document.documentElement.dataset.theme === expected &&
       document.querySelector('[data-appearance]').value === expected &&
-      document.querySelector('#preference-appearance-summary').textContent === `${expected[0].toUpperCase()}${expected.slice(1)} · Browser`, value);
+      document.querySelector('#preference-appearance-summary').textContent === `HashiCorp · ${expected[0].toUpperCase()}${expected.slice(1)} · Browser`, value);
     assert.equal(await page.evaluate(() => localStorage.getItem('todo-appearance')), value);
-    assert.equal(await other.locator('#preference-appearance-summary').textContent(), `${label} · Browser`);
+    assert.equal(await other.locator('#preference-appearance-summary').textContent(), `HashiCorp · ${label} · Browser`);
   }
   await page.evaluate(() => localStorage.clear());
   await other.waitForFunction(() => document.documentElement.dataset.theme === 'dark' &&
     document.querySelector('[data-appearance]').value === 'dark' &&
-    document.querySelector('#preference-appearance-summary').textContent === 'Dark · Browser');
-  assert.deepEqual(await other.evaluate(() => appearanceEvents), { storage: 4, applied: 4, native: 0 });
+    document.querySelector('#preference-appearance-summary').textContent === 'HashiCorp · Dark · Browser');
+  assert.deepEqual(await other.evaluate(() => appearanceEvents), { storage: 5, applied: 5, native: 0 });
   const after = await page.evaluate(async () => {
     const local = await (await import('/inbox-store.js?v=15')).transact('alice');
     return { queue: local.queue, preferenceDraft: local.preferenceDraft };

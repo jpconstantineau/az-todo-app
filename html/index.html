@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=48" defer></script>
+  <script src="/pwa.js?v=50" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=48"></script>
+  <script type="module" src="/inbox.js?v=50"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -91,8 +91,29 @@
       <div class="preferences-layout">
         <nav id="preferencesNav" class="preferences-master" aria-label="Preference categories"><ul id="preferencesCategories"></ul></nav>
         <section id="preferencesAppearance" class="preferences-detail" aria-labelledby="preferencesAppearanceHeading" hidden>
-          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Appearance preferences">← Back</button><h1 id="preferencesAppearanceHeading" tabindex="-1">Appearance</h1></div>
-          <div class="preferences-content appearance-preference"><label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label><p class="preference-scope">Browser</p></div>
+          <div id="appearancePage">
+            <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Appearance preferences">← Back</button><h1 id="preferencesAppearanceHeading" tabindex="-1">Appearance</h1></div>
+            <div class="preferences-content appearance-preference">
+              <label>Style<select data-style-theme><option value="hashicorp">HashiCorp</option><option value="hmi">HMI</option><option value="hmi-cvd">HMI (CVD)</option><option value="custom" hidden disabled>Custom</option></select></label>
+              <label>Mode<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+              <p class="preference-scope">Saved in this browser. System mode follows the device while keeping the selected style.</p>
+              <section id="customThemeSummary" class="custom-theme-summary" aria-labelledby="customThemeSummaryHeading">
+                <h2 id="customThemeSummaryHeading">Custom theme</h2>
+                <p id="customThemeDescription">Create one custom theme from the selected style. It stays only in this browser.</p>
+                <a id="openCustomTheme" class="button primary" href="#preferences/appearance/custom">Create custom theme</a>
+              </section>
+              <p id="appearanceStatus" class="muted" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+          <div id="customThemePage" hidden>
+            <div class="menu-page-bar"><button id="customThemeBack" type="button" aria-label="Back from custom theme">← Back</button><h1 id="customThemeHeading" tabindex="-1">Custom theme</h1></div>
+            <form id="customThemeForm" class="preferences-content custom-theme-form" novalidate>
+              <label>Name<input name="name" maxlength="60" required aria-describedby="custom-name-error"><span id="custom-name-error" class="field-error"></span></label>
+              <div id="customThemeFields"></div>
+              <p id="customThemeError" role="alert"></p>
+              <div class="actions"><button type="submit">Save custom theme</button><button id="cancelCustomTheme" type="button">Cancel</button></div>
+            </form>
+          </div>
         </section>
         <section id="preferencesCapture" class="preferences-detail" aria-labelledby="preferencesCaptureHeading" hidden>
           <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Capture preferences">← Back</button><h1 id="preferencesCaptureHeading" tabindex="-1">Capture</h1></div>

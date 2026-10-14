@@ -206,6 +206,19 @@ details.collection-settings:not([open]) { padding-block: 0; }
 .preferences-content { min-width: 0; padding-top: var(--space-4); overflow-wrap: anywhere; }
 .appearance-preference label { width: 100%; }
 .appearance-preference select { min-height: 48px; }
+.custom-theme-summary { margin-top: var(--space-6); padding-top: var(--space-4); border-top: var(--border-width) solid var(--border); }
+.custom-theme-summary h2 { margin: 0 0 var(--space-2); font-size: var(--text-lg); }
+.custom-theme-summary p { margin: 0 0 var(--space-4); color: var(--muted); }
+.custom-theme-form fieldset { min-width: 0; margin: 0 0 var(--space-6); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); }
+.custom-theme-form legend { padding-inline: var(--space-2); font-size: var(--text-lg); font-weight: var(--weight-emphasis); }
+.custom-theme-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-4); }
+.custom-theme-control { min-width: 0; }
+.custom-theme-control input[type="color"] { padding: var(--space-1); }
+.custom-theme-value { display: flex; align-items: center; gap: var(--space-2); }
+.custom-theme-value input, .custom-theme-value select { flex: 1; }
+.custom-theme-value output { min-width: 2.5rem; color: var(--muted); }
+.field-error { display: block; min-height: 1.25em; color: var(--error); font-size: var(--text-sm); }
+#customThemeError:empty, #appearanceStatus:empty { display: none; }
 .capture-preference label { display: flex; align-items: flex-start; gap: var(--space-2); min-height: 48px; }
 .capture-preference input { flex: 0 0 auto; }
 .preference-scope { margin: 0 0 var(--space-4); color: var(--muted); font-size: var(--text-sm); }
@@ -227,6 +240,8 @@ details.collection-settings:not([open]) { padding-block: 0; }
   .preferences-shell[data-route="detail"] .preferences-detail { width: 100%; max-width: 760px; margin: 0; }
   .preferences-shell[data-route^="clarify"] { width: min(100%, 1064px); }
   .preferences-shell[data-route^="clarify"] #preferencesNav { display: none; }
+  .preferences-shell[data-route="custom-theme"] #preferencesNav { display: none; }
+  .preferences-shell[data-route="custom-theme"] .preferences-detail { width: min(100%, 760px); }
   .preferences-shell[data-route^="clarify"] .preferences-layout { display: block; }
   .preferences-shell[data-route^="clarify"] #preferencesProcess { width: 100%; max-width: none; }
   .preferences-shell[data-route="clarify-list"] .clarify-action-master { width: 320px; }
@@ -250,10 +265,14 @@ details.collection-settings:not([open]) { padding-block: 0; }
 @media (max-width: 1023px) {
   .preferences-shell[data-route="detail"] #preferencesNav { display: none; }
   .preferences-shell[data-route^="clarify"] #preferencesNav { display: none; }
+  .preferences-shell[data-route="custom-theme"] #preferencesNav { display: none; }
   .preferences-shell[data-route="clarify-editor"] .clarify-action-master { display: none; }
   .clarify-action-master, .clarify-action-editor { width: min(100%, 720px); margin-inline: auto; }
   .task-options-shell[data-route="editor"] .task-options-master { display: none; }
   .utility-pages-shell[data-route="detail"] .utility-pages-master { display: none; }
+}
+@media (max-width: 479px) {
+  .custom-theme-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (min-width: 600px) {
   .appearance-preference { max-width: 24rem; }
