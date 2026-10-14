@@ -147,11 +147,14 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
       assert.ok((a + .05) / (b + .05) >= 4.5, `${option.label}: dropdown text contrast is at least 4.5:1`);
     }
   }
-  for (const theme of ['light', 'dark']) {
-    await appearance(theme);
+  for (const style of ['hashicorp','hmi','hmi-cvd']) for (const theme of ['light','dark']) {
+    await openPreference(page, 'appearance');
+    await page.locator('select[data-style-theme]').selectOption(style);
+    await page.locator('[data-appearance]').selectOption(theme);
     await page.reload();
     await page.locator('#workspace').waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
+    assert.equal(await page.locator('html').getAttribute('data-style-theme'), style);
     assert.equal(await page.locator('[data-appearance]').inputValue(), theme);
     const colors = await page.evaluate(() => {
       const probe = document.createElement('span'); document.body.append(probe);
@@ -167,16 +170,17 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
         const [a, b] = [luminance(colors[foreground]), luminance(colors[background])].sort((a, b) => b - a);
         const ratio = (a + .05) / (b + .05);
         const threshold = ['focus', 'control-border'].includes(foreground) ? 3 : 4.5;
-        assert.ok(ratio >= threshold, `${theme} ${foreground}/${background}: ${ratio.toFixed(2)} >= ${threshold}`);
+        assert.ok(ratio >= threshold, `${style} ${theme} ${foreground}/${background}: ${ratio.toFixed(2)} >= ${threshold}`);
         if (threshold === 4.5) minimum = Math.min(minimum, ratio);
       }
     }
     const [a, b] = [luminance(colors.primary), luminance(colors['on-primary'])].sort((a, b) => b - a);
     assert.ok((a + .05) / (b + .05) >= 4.5);
     await dropdownContrast();
-    console.log(`${theme} minimum text contrast: ${minimum.toFixed(2)}:1`);
-    if (theme === 'light') await shot('inbox-light-320');
+    console.log(`${style} ${theme} minimum text contrast: ${minimum.toFixed(2)}:1`);
+    if (style === 'hashicorp' && theme === 'light') await shot('inbox-light-320');
   }
+  await openPreference(page, 'appearance'); await page.locator('select[data-style-theme]').selectOption('hashicorp');
   await appearance('system');
   await page.reload();
   await page.locator('#workspace').waitFor();

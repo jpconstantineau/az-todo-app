@@ -21,6 +21,7 @@
   --text-xs: .75rem;
   --text-sm: .875rem;
   --text-base: 1rem;
+  --text-lg: 1.125rem;
   --text-heading: 1.375rem;
   --text-title: 1.75rem;
   --weight-body: 500;
@@ -32,6 +33,7 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
   --radius-control: 8px;
@@ -39,13 +41,16 @@
   --border-width: 1px;
   --focus-width: 3px;
   --target: 44px;
+  --panel-shadow: none;
+  --motion-duration: 150ms;
+  --numeric-variant: normal;
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 :root[data-theme="system"] { color-scheme: light dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--canvas); color: var(--ink); font: var(--weight-body) var(--text-base)/var(--line-body) var(--font); }
+body { margin: 0; background: var(--canvas); color: var(--ink); font: var(--weight-body) var(--text-base)/var(--line-body) var(--font); font-variant-numeric: var(--numeric-variant); }
 .container { max-width: 1280px; margin-inline: auto; padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right)) var(--space-8) max(var(--space-6), env(safe-area-inset-left)); }
 h1, h2, h3 { line-height: var(--line-heading); overflow-wrap: anywhere; }
 h1 { font-size: var(--text-title); font-weight: var(--weight-title); letter-spacing: -.6px; margin: 0; }
@@ -75,7 +80,7 @@ details { min-width: 0; }
 .app-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; padding-bottom: var(--space-6); margin-bottom: var(--space-6); border-bottom: var(--border-width) solid var(--border); }
 .appearance { display: flex; gap: var(--space-2); align-items: center; margin: 0; }
 .appearance select { width: auto; margin: 0; }
-.card, dialog { padding: var(--space-6); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--ink); min-width: 0; }
+.card, dialog { padding: var(--space-6); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--ink); min-width: 0; box-shadow: var(--panel-shadow); }
 dialog { max-width: min(640px, calc(100% - 32px)); }
 dialog::backdrop { background: rgb(0 0 0 / .65); }
 .side-panel { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(560px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-6); }

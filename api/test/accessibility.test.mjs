@@ -299,11 +299,17 @@ test('accessibility: contextual dialogs and routed preferences return to their o
   await expectFocus(page, '#preferencesAppearanceHeading');
   await page.emulateMedia({ forcedColors: 'active' });
   await page.keyboard.press('Tab');
+  await expectFocus(page, '#preferencesAppearance select[data-style-theme]');
+  assert.ok(await page.locator('#preferencesAppearance select[data-style-theme]').evaluate(element => element.matches(':focus-visible')));
+  assert.equal(await page.locator('#preferencesAppearance select[data-style-theme]').evaluate(element => getComputedStyle(element).outlineWidth), '3px');
+  await page.keyboard.press('Tab');
   await expectFocus(page, '#preferencesAppearance [data-appearance]');
   assert.ok(await page.locator('#preferencesAppearance [data-appearance]').evaluate(element => element.matches(':focus-visible')));
   assert.equal(await page.locator('#preferencesAppearance [data-appearance]').evaluate(element => getComputedStyle(element).outlineWidth), '3px');
   await page.keyboard.press('ArrowDown');
   assert.equal(await page.locator('#preferencesAppearance [data-appearance]').inputValue(), 'light');
+  await page.keyboard.press('Shift+Tab');
+  await expectFocus(page, '#preferencesAppearance select[data-style-theme]');
   await page.keyboard.press('Shift+Tab');
   await expectFocus(page, '#preferencesAppearance .preference-back');
   await page.emulateMedia({ forcedColors: 'none' });

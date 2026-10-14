@@ -91,8 +91,25 @@
       <div class="preferences-layout">
         <nav id="preferencesNav" class="preferences-master" aria-label="Preference categories"><ul id="preferencesCategories"></ul></nav>
         <section id="preferencesAppearance" class="preferences-detail" aria-labelledby="preferencesAppearanceHeading" hidden>
-          <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Appearance preferences">← Back</button><h1 id="preferencesAppearanceHeading" tabindex="-1">Appearance</h1></div>
-          <div class="preferences-content appearance-preference"><label>Theme<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label><p class="preference-scope">Browser</p></div>
+          <div id="appearancePage">
+            <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Appearance preferences">← Back</button><h1 id="preferencesAppearanceHeading" tabindex="-1">Appearance</h1></div>
+            <div class="preferences-content appearance-preference">
+              <label>Style<select data-style-theme><option value="hashicorp">HashiCorp</option><option value="hmi">HMI</option><option value="hmi-cvd">HMI (CVD)</option><option value="custom" disabled>Custom</option></select></label>
+              <label>Mode<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
+              <a id="openCustomTheme" class="button" href="#preferences/appearance/custom">Create custom theme</a>
+              <p class="preference-scope">Saved in this browser. System mode follows the device while keeping the selected style.</p>
+              <p id="appearanceStatus" class="muted" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+          <div id="customThemePage" hidden>
+            <div class="menu-page-bar"><button id="customThemeBack" type="button" aria-label="Back from custom theme">← Back</button><h1 id="customThemeHeading" tabindex="-1">Custom theme</h1></div>
+            <form id="customThemeForm" class="preferences-content custom-theme-form" novalidate>
+              <label>Name<input name="name" maxlength="60" required aria-describedby="custom-name-error"><span id="custom-name-error" class="field-error"></span></label>
+              <div id="customThemeFields"></div>
+              <p id="customThemeError" role="alert"></p>
+              <div class="actions"><button type="submit">Save custom theme</button><button id="cancelCustomTheme" type="button">Cancel</button></div>
+            </form>
+          </div>
         </section>
         <section id="preferencesCapture" class="preferences-detail" aria-labelledby="preferencesCaptureHeading" hidden>
           <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Capture preferences">← Back</button><h1 id="preferencesCaptureHeading" tabindex="-1">Capture</h1></div>
