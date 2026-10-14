@@ -111,11 +111,15 @@ export function fieldsFor(type, action, input) {
   if (type === 'review') return reviewFields(action, input);
   if (type === "clarification") return clarificationFields(input);
   if (type === "settings") {
-    object(input, ["defaults"], "fields");
-    return { defaults: validateDefaults(input.defaults) };
+    object(input, ["defaults", "eisenhowerPriority"], "fields");
+    if (!Object.keys(input).length) throw new ValidationError('fields must contain an edit.');
+    if ('eisenhowerPriority' in input && typeof input.eisenhowerPriority !== 'boolean') throw new ValidationError('eisenhowerPriority must be true or false.');
+    return { ...(action === 'create' && !('defaults' in input) ? { defaults: structuredClone(defaultSettings) } : {}),
+      ...('defaults' in input ? { defaults: validateDefaults(input.defaults) } : {}),
+      ...('eisenhowerPriority' in input ? { eisenhowerPriority: input.eisenhowerPriority } : {}) };
   }
   if (type === 'recurrenceTemplate') {
-    const managed = ['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
+    const managed = ['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'importance', 'urgency', 'referenceLinks'];
     const recurrence = ['rule', 'paused', 'tombstoned', 'nextOccurrenceNumber', 'nextIntendedDate', 'openOccurrenceId', 'lastResolvedUtc'];
     object(input, [...managed, ...recurrence], 'fields');
     const result = {};
@@ -150,7 +154,7 @@ export function fieldsFor(type, action, input) {
   const shared = ["title", "description", "workspaceId"];
   const capture = ["originalText", "sourceUrl", "sourceTitle", "selectedText", "captureId", "capturedAt", "captureTimeZone"];
   const recurrenceOccurrenceFields = ['recurrenceTemplateId', 'recurrenceNumber', 'intendedDate', 'sourceTemplateVersion', 'occurrenceState', 'occurrenceResolvedUtc'];
-  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "effortEstimate", "referenceLinks", ...recurrenceOccurrenceFields];
+  const itemFields = ["collectionRefs", "listId", "projectId", "plannedDay", "plannedWeek", "dueDate", "startDate", "reviewDate", "status", "dueDateUtc", "startDateUtc", "reviewDateUtc", "waitingOn", "contexts", "areas", "energy", "timeRequired", "priority", "importance", "urgency", "effortEstimate", "referenceLinks", ...recurrenceOccurrenceFields];
   const allowed = [...shared, ...(action === "create" ? capture : []), ...(type === "item" ? itemFields : type === "project" ? ["outcome", "parentRef", "status", "revisitDate", "archived", "planningHeadId"] : ["defaults", "kind", "parentRef", "revisitDate", "archived"])];
   object(input, allowed, "fields");
   if (action === 'create') {
@@ -195,6 +199,10 @@ export function fieldsFor(type, action, input) {
       result[key] = value;
     }
     else if (key === 'occurrenceResolvedUtc') result[key] = value === null ? null : utcDate(value);
+    else if (['importance', 'urgency'].includes(key)) {
+      if (![-1, 0, 1].includes(value)) throw new ValidationError(`${key} must be -1, 0 or 1.`);
+      result[key] = value;
+    }
     else if (key === "defaults") result[key] = validateDefaults(value);
     else if (key === "title") {
       result[key] = exactText(value, 200, key);

@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=50" defer></script>
+  <script src="/pwa.js?v=51" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=50"></script>
+  <script type="module" src="/inbox.js?v=51"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -196,6 +196,10 @@
             <p id="defaultsError" role="alert" hidden></p>
             <form id="defaultsForm" class="form-grid">
               <label id="taskOptionLabel" for="taskOptionValue">Contexts — one per line</label>
+              <div id="matrixPreference" hidden>
+                <label><input id="eisenhowerPriority" type="checkbox"> Use Eisenhower priority</label>
+                <p class="muted">Manual priorities and matrix answers are kept separately. Switching modes restores the values for that mode. Matrix mode uses five fixed priority levels; the options below apply in manual mode.</p>
+              </div>
               <textarea id="taskOptionValue" rows="12" wrap="soft" spellcheck="false"></textarea>
               <p id="taskOptionStatus" class="muted" role="status" aria-live="polite"></p>
               <div class="actions"><button type="submit">Save</button><button id="discardDefaultsDraft" type="button">Discard draft</button><button id="resetDefaults" type="button">Use built-in defaults</button></div>

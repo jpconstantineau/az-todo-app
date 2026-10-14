@@ -39,11 +39,11 @@ test('v1 gating stays explicit and retired paths use the normal not-found respon
 test('canonical shell uses local assets, safe routing and no fragment runtime', async () => {
   const root = new URL('../../html/', import.meta.url);
   const html = await readFile(new URL('index.html', root), 'utf8');
-  assert.match(html, /src="\/pwa.js\?v=50"/);
-  assert.match(html, /type="module" src="\/inbox.js\?v=50"/);
+  assert.match(html, /src="\/pwa.js\?v=51"/);
+  assert.match(html, /type="module" src="\/inbox.js\?v=51"/);
   const shellPages = await Promise.all(['index.html', 'help.html', 'shared.html', 'handoff.html'].map(name => readFile(new URL(name, root), 'utf8')));
   for (const page of shellPages) assert.ok(page.indexOf('src="/theme.js"') < page.indexOf('rel="stylesheet"'), 'theme bootstrap precedes stylesheets');
-  assert.match(shellPages[2], /type="module" src="\/shared.js\?v=50"/);
+  assert.match(shellPages[2], /type="module" src="\/shared.js\?v=51"/);
   assert.deepEqual(localDefaults, apiDefaults, 'device-local task options must match the session API defaults');
   assert.equal(html.includes('id="defaultsEditor"'), false, 'task options are routed pages, not a dialog');
   assert.doesNotMatch(html, /<dialog[^>]+id="(?:appDevice|dataRecovery|deletedRecords)"/, 'utility pages are routed sections, not dialogs');

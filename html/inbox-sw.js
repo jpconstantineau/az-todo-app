@@ -1,7 +1,9 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v56';
+const CACHE = 'todo-inbox-shell-v57';
 // The agent module is public shell code, without model downloads or user data.
 const ASSETS = [
+  '/reviews.js?v=15',
+  '/inbox.js?v=51', '/shared.js?v=51', '/pwa.js?v=51', '/inbox-fields.js?v=7', '/inbox-store.js?v=20', '/inbox-export.js?v=21', '/plan.js?v=7', '/recurrence-model.js?v=2', '/recurrence-ui.js?v=4', '/capture-extraction.js?v=6',
   '/', '/index.html', '/help.html', '/shared.html',
   '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
   '/inbox.js?v=50', '/inbox-store.js?v=19', '/shared.js?v=50', '/pwa.js?v=50', '/inbox-fields.js?v=6',

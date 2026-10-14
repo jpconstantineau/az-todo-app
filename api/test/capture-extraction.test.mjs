@@ -423,14 +423,14 @@ test('list-name permission is opt-in, persists per account and cancellation stop
 test('merge review tasks preserves notes and attributes, journals the result and refuses overflow', async t => {
   const { page, context } = await setup(t);
   await page.locator('#captureText').fill(source); await page.locator('#extractStart').click(); await page.locator('#extractionReview').waitFor();
-  const second = page.locator('#extractionItems fieldset').last();
+  const second = page.locator('#extractionItems > fieldset').last();
   await second.locator('[name=description]').fill('a'.repeat(4000));
   await page.getByRole('button', { name: 'Merge into previous task' }).click();
   assert.match(await page.locator('#extractionError').textContent(), /exceed/);
-  assert.equal(await page.locator('#extractionItems fieldset').count(), 2);
+  assert.equal(await page.locator('#extractionItems > fieldset').count(), 2);
   await second.locator('[name=description]').fill('Get oat milk');
   await page.getByRole('button', { name: 'Merge into previous task' }).click();
-  assert.equal(await page.locator('#extractionItems fieldset').count(), 1);
+  assert.equal(await page.locator('#extractionItems > fieldset').count(), 1);
   const notes = await page.locator('#extractionItems [name=description]').inputValue();
   assert.match(notes, /Buy milk/); assert.match(notes, /Get oat milk/); assert.match(notes, /Priority: urgent/);
   assert.equal(await page.locator('#extractionItems [name=description]').evaluate(el => document.activeElement === el), true);

@@ -1,3 +1,5 @@
+import { addPriorityControls } from './inbox-fields.js?v=7';
+
 // Local suggestions are data. Only an explicitly reviewed batch reaches the outbox.
 import { modelOptions, destroyModel, validateSuggestion } from './local-guidance.js?v=3';
 import { beginModelWork, modelReadiness } from './local-agent.js?v=2';
@@ -104,13 +106,14 @@ export function extractionMutations(draft, records, workspaceId = 'personal') {
       text(item[name], 64, name);
       if (/[\r\n\t]/.test(item[name])) throw new Error(`${name} must be a single line.`);
     }
+    for (const name of ['importance', 'urgency']) if (name in item && ![-1, 0, 1].includes(item[name])) throw new Error(`${name} must be -1, 0 or 1.`);
     const dueDate = day(item.dueDate);
     const dueDateUtc = item.dueTime ? capturedTime(item.dueDate + 'T' + item.dueTime, draft.clock.timeZone) : null;
     const listId = project ? null : item.listId || null, projectId = project ? item.listId.slice(8) : null;
     const fields = { title, description: text(item.description, 4000, 'Notes'), originalText: draft.source, workspaceId,
       captureId: draft.id, capturedAt: draft.clock.capturedAt, captureTimeZone: draft.clock.timeZone,
       listId, projectId, collectionRefs: [['list', listId], ['project', projectId]].filter(([, id]) => id).map(([type, id]) => ({ type, id })),
-      priority: item.priority || null, contexts: item.context ? [item.context] : [],
+      priority: item.priority || null, ...Object.fromEntries(['importance', 'urgency'].filter(name => name in item).map(name => [name, item[name]])), contexts: item.context ? [item.context] : [],
       dueDate: dueDateUtc ? null : dueDate, dueDateUtc, status: 'inbox' };
     // Leave room for server metadata/default fields in the 32 KiB record limit.
     if (new TextEncoder().encode(JSON.stringify(fields)).length > 30000) throw new Error('A task and its original capture are too large. Copy/export the draft and use a smaller capture.');
@@ -118,7 +121,7 @@ export function extractionMutations(draft, records, workspaceId = 'personal') {
   });
 }
 
-export function setupCaptureExtraction({ current, journal, save, showDialog, recovery, cloudEligible = () => false }) {
+export function setupCaptureExtraction({ matrix = () => false, current, journal, save, showDialog, recovery, cloudEligible = () => false }) {
   const $ = id => document.getElementById(id);
   const field = $('captureText'), mirror = $('captureMirror');
   let completion = null, pendingCursor = null, composing = false, listSource = '', startControl;
@@ -160,6 +163,9 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
     if (!draft.items.length) $('captureSuggestedTasks').textContent = draft.notes || 'No tasks found. Open review to add tasks manually.';
   }
   function refreshLists() {
+    for (const group of $('extractionItems').querySelectorAll('.matrix-priority')) {
+      group.hidden = !matrix(); group.parentElement.querySelector('[name=priority]').closest('label').hidden = matrix();
+    }
     const lists = current()?.lists || [], signature = JSON.stringify(lists);
     if (includeLists && signature !== listSource) cancel();
     listSource = signature;
@@ -282,14 +288,17 @@ export function setupCaptureExtraction({ current, journal, save, showDialog, rec
         input.value = item[name]; input.oninput = () => { item[name] = input.value; renderSummary(); void journal(); };
         label.append(input); fieldset.append(label);
       }
+      const matrixControls = addPriorityControls(fieldset, item, (name, score) => { item[name] = score; void journal(); }, `${item.id}-`);
+      matrixControls.hidden = !matrix();
+      fieldset.querySelector('[name=priority]').closest('label').hidden = matrix();
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = `Remove task ${index + 1}`;
       remove.onclick = () => { draft.items.splice(index, 1); render(); $('extractAdd').focus(); void journal(); }; fieldset.append(remove);
       if (index > 0) {
         const merge = document.createElement('button'); merge.type = 'button'; merge.textContent = 'Merge into previous task';
         merge.onclick = () => {
           const previous = draft.items[index - 1];
-          const details = [['listId', 'List'], ['priority', 'Priority'], ['context', 'Context'], ['dueDate', 'Deadline date'], ['dueTime', 'Deadline time']]
-            .filter(([name]) => item[name]).map(([name, label]) => `${label}: ${name === 'listId' ? current()?.lists.find(list => list.id === item.listId)?.title || 'Unavailable list' : item[name]}`).join('\n');
+          const details = [['listId', 'List'], ['priority', 'Priority'], ['importance', 'Importance'], ['urgency', 'Urgency'], ['context', 'Context'], ['dueDate', 'Deadline date'], ['dueTime', 'Deadline time']]
+            .filter(([name]) => ['importance', 'urgency'].includes(name) ? name in item : item[name]).map(([name, label]) => `${label}: ${name === 'listId' ? current()?.lists.find(list => list.id === item.listId)?.title || 'Unavailable list' : item[name]}`).join('\n');
           const combined = [previous.description, item.title, item.description, details, item.uncertainty].filter(Boolean).join('\n');
           if (combined.length > 4000) { $('extractionError').textContent = 'Merged notes would exceed 4,000 characters. Edit the notes before merging.'; return; }
           previous.description = combined; draft.items.splice(index, 1); $('extractionError').textContent = ''; render();

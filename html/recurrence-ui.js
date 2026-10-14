@@ -1,7 +1,8 @@
-import { materializeMutations, nextAfterResolution, recurrenceDate, recurrenceRule, recurrenceZone, zonedDate } from './recurrence-model.js?v=1';
+import { materializeMutations, nextAfterResolution, recurrenceDate, recurrenceRule, recurrenceZone, zonedDate } from './recurrence-model.js?v=2';
 import { archiveOnly, isEffectivelyArchived } from './collection-model.js?v=5';
+import { addPriorityControls, priorityFields, refreshPriorityControls } from './inbox-fields.js?v=7';
 
-const fields = ['title', 'description', 'mode', 'interval', 'unit', 'anchorDate', 'timeZone', 'destination', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
+const fields = ['title', 'description', 'mode', 'interval', 'unit', 'anchorDate', 'timeZone', 'destination', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'importance', 'urgency', 'referenceLinks'];
 const split = value => [...new Set(value.split(/[,\n]/).map(entry => entry.trim()).filter(Boolean))];
 const tags = (value, field) => {
   const entries = split(value);
@@ -20,12 +21,13 @@ const destinationFields = value => {
   return { collectionRefs: id ? [{ type, id }] : [], listId: type === 'list' ? id : null, projectId: type === 'project' ? id : null };
 };
 
-export function setupRecurrence({ records, workspaceId, readOnly, save, showDialog, restoreFocus, journal, label }) {
+export function setupRecurrence({ matrix = () => false, records, workspaceId, readOnly, save, showDialog, restoreFocus, journal, label }) {
   const $ = id => document.getElementById(id), dialog = $('recurringEditor'), form = $('recurringForm');
   let editing = null;
+  addPriorityControls(form.elements.priority.closest('label').parentElement);
   const templates = () => Object.values(records()).filter(record => record.type === 'recurrenceTemplate');
   const history = template => Object.values(records()).filter(record => record.type === 'item' && record.recurrenceTemplateId === template.id && record.occurrenceState !== 'open').sort((a, b) => b.recurrenceNumber - a.recurrenceNumber);
-  const values = () => Object.fromEntries(fields.map(name => [name, form.elements.namedItem(name)?.value ?? '']));
+  const values = () => Object.fromEntries(fields.map(name => [name, ['importance', 'urgency'].includes(name) ? Number(form.elements.namedItem(name)?.value ?? 0) : form.elements.namedItem(name)?.value ?? '']));
   const snapshot = () => editing || dialog.open ? { editing: editing && { id: editing.id, version: editing.version }, values: values(), open: dialog.open } : null;
   function destinations(selected = '') {
     const map = records();
@@ -51,6 +53,7 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
       : (() => { const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone; return { interval: '1', mode: 'fixed', unit: 'day', anchorDate: zonedDate(new Date(), timeZone), timeZone, status: 'inbox' }; })();
     for (const [name, value] of Object.entries(defaults)) { const control = form.elements.namedItem(name); if (control) control.value = value ?? ''; }
     if (defaults.mode) form.elements.mode.value = defaults.mode;
+    refreshPriorityControls(form, matrix());
     $('recurringEditorHeading').textContent = template ? `Recurring template: ${template.title}` : 'New recurring template';
     $('pauseRecurring').hidden = !template || !!template.tombstoned; $('deleteRecurring').hidden = !template;
     $('pauseRecurring').textContent = template?.paused ? 'Resume template' : 'Pause template';
@@ -65,7 +68,7 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     try {
       const input = values(), rule = recurrenceRule({ mode: input.mode, unit: input.unit, interval: Number(input.interval), anchorDate: recurrenceDate(input.anchorDate), timeZone: recurrenceZone(input.timeZone) });
       const managed = { title: input.title, description: input.description, workspaceId: workspaceId(), ...destinationFields(input.destination), status: input.status,
-        contexts: tags(input.contexts, 'Contexts'), areas: tags(input.areas, 'Areas'), energy: input.energy || null, timeRequired: input.timeRequired || null, priority: input.priority || null, referenceLinks: referenceLinks(input.referenceLinks) };
+        contexts: tags(input.contexts, 'Contexts'), areas: tags(input.areas, 'Areas'), energy: input.energy || null, timeRequired: input.timeRequired || null, ...priorityFields(input, matrix()), referenceLinks: referenceLinks(input.referenceLinks) };
       for (const [name, value] of [['Energy', managed.energy], ['Time', managed.timeRequired], ['Priority', managed.priority]]) {
         if (value && (value.length > 64 || /[\u0000-\u001f\u007f]/.test(value))) throw new Error(`${name} must be a single-line value of at most 64 characters.`);
       }
@@ -89,6 +92,7 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
   dialog.addEventListener('close', () => { editing = null; void journal(); });
   $('newRecurring').onclick = () => open(null, $('view').value && ['list', 'project'].includes(records()[`list:${$('view').value}`]?.type) ? `list:${$('view').value}` : $('view').value.startsWith('project:') ? $('view').value : '');
   function refresh(listMode) {
+    refreshPriorityControls(form, matrix());
     $('recurringSection').hidden = !listMode;
     if (!listMode) return;
     const map = records();
@@ -115,6 +119,7 @@ export function setupRecurrence({ records, workspaceId, readOnly, save, showDial
     if (!saved) { dialog.close(); return; }
     const template = saved.editing && records()[`recurrenceTemplate:${saved.editing.id}`];
     open(template || null); for (const [name, value] of Object.entries(saved.values || {})) { const control = form.elements.namedItem(name); if (control) control.value = value; }
+    refreshPriorityControls(form, matrix());
     if (!saved.open) dialog.close();
   }
   return { open, refresh, materialize, snapshot, restore };

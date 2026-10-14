@@ -1,5 +1,7 @@
 import { archiveOnly, archivedAncestor, ancestry, collectionKind, collectionKinds, isCollection, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
 
+import { effectivePriority } from './inbox-fields.js?v=7';
+
 const $ = id => document.getElementById(id);
 const dateText = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const validDay = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && !value.startsWith('0000') &&
@@ -184,12 +186,12 @@ const moveDay = (day, offset) => {
   const date = new Date(`${day}T12:00:00`); date.setDate(date.getDate() + offset); return dateText(date);
 };
 
-function dayDetails(item) {
+function dayDetails(item, matrix = false) {
   const deadline = item.dueDate || item.dueDateUtc;
-  return [item.status, item.priority ? `Priority ${item.priority}` : 'No permanent priority', deadline ? `Deadline ${deadline}` : 'No deadline'].join(' · ');
+  return [item.status, effectivePriority(item, matrix) ? `Priority ${effectivePriority(item, matrix)}` : 'No permanent priority', deadline ? `Deadline ${deadline}` : 'No deadline'].join(' · ');
 }
 
-export function setupPlan({ records, workspaceId, navigation, readOnly, save, savePlan, edit, inspectDeleted, openCollection, openProcess, journal }) {
+export function setupPlan({ matrix = () => false, records, workspaceId, navigation, readOnly, save, savePlan, edit, inspectDeleted, openCollection, openProcess, journal }) {
   let lastDayAnnouncement = '';
   const choose = focus => {
     navigation().focus = focus;
@@ -321,7 +323,7 @@ export function setupPlan({ records, workspaceId, navigation, readOnly, save, sa
       const meta = document.createElement('span'); meta.className = 'day-plan-meta';
       const estimate = item.effortEstimate ? item.effortEstimate.scale === method ? `${item.effortEstimate.value} ${method === 'fibonacci' ? 'points' : ''}`.trim() : `${item.effortEstimate.value} (${item.effortEstimate.scale}, previous scale)` : 'Unestimated';
       const archive = memberships(item).map(ref => archivedAncestor(ref, recordMap)).find(Boolean);
-      meta.textContent = `${archiveOnly(item, recordMap) ? `Archived with ${archive?.title || 'collection'} · ` : ''}${dayDetails(item)} · ${estimate}`;
+      meta.textContent = `${archiveOnly(item, recordMap) ? `Archived with ${archive?.title || 'collection'} · ` : ''}${dayDetails(item, matrix())} · ${estimate}`;
       content.append(title, meta);
       const controls = document.createElement('div'); controls.className = 'day-plan-controls'; controls.setAttribute('role', 'group'); controls.setAttribute('aria-label', `Order and plan controls for ${item.title}, position ${index + 1}`);
       const up = control('Move up', () => reorder(item, index - 1), `Move ${item.title} up from position ${index + 1}`, `plan:day:${item.id}:up`);
