@@ -125,6 +125,14 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
   await page.setViewportSize({ width: 320, height: 900 });
   if (new URL(page.url()).hash === '#menu') await page.locator('#menuBack').click();
 
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height:900 });
+    await openPreference(page, 'appearance');
+    assert.equal(await page.locator('#customThemeSummary').isVisible(), true);
+    assert.equal(await page.locator('#openCustomTheme').isVisible(), true);
+    await fits(); await shot(`appearance-${width}`);
+  }
+
   // Measure resolved semantic colors, not just literal token values.
   function luminance(rgb) {
     return rgb.map(value => { value /= 255; return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; })
@@ -156,6 +164,10 @@ test('design: responsive populated workspaces and appearance', { timeout: 120000
     assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
     assert.equal(await page.locator('html').getAttribute('data-style-theme'), style);
     assert.equal(await page.locator('[data-appearance]').inputValue(), theme);
+    assert.deepEqual(await page.locator('html').evaluate(element => {
+      const computed = getComputedStyle(element);
+      return [computed.getPropertyValue('--radius-control').trim(), computed.getPropertyValue('--radius-panel').trim()];
+    }), style === 'hashicorp' ? ['8px','12px'] : ['4px','8px']);
     const colors = await page.evaluate(() => {
       const probe = document.createElement('span'); document.body.append(probe);
       const values = Object.fromEntries(['canvas', 'surface', 'surface-raised', 'ink', 'muted', 'link', 'focus', 'success', 'warning', 'error', 'control-border', 'primary', 'on-primary'].map(token => {

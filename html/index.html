@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=49" defer></script>
+  <script src="/pwa.js?v=50" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=49"></script>
+  <script type="module" src="/inbox.js?v=50"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -94,10 +94,14 @@
           <div id="appearancePage">
             <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Appearance preferences">← Back</button><h1 id="preferencesAppearanceHeading" tabindex="-1">Appearance</h1></div>
             <div class="preferences-content appearance-preference">
-              <label>Style<select data-style-theme><option value="hashicorp">HashiCorp</option><option value="hmi">HMI</option><option value="hmi-cvd">HMI (CVD)</option><option value="custom" disabled>Custom</option></select></label>
+              <label>Style<select data-style-theme><option value="hashicorp">HashiCorp</option><option value="hmi">HMI</option><option value="hmi-cvd">HMI (CVD)</option><option value="custom" hidden disabled>Custom</option></select></label>
               <label>Mode<select data-appearance><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select></label>
-              <a id="openCustomTheme" class="button" href="#preferences/appearance/custom">Create custom theme</a>
               <p class="preference-scope">Saved in this browser. System mode follows the device while keeping the selected style.</p>
+              <section id="customThemeSummary" class="custom-theme-summary" aria-labelledby="customThemeSummaryHeading">
+                <h2 id="customThemeSummaryHeading">Custom theme</h2>
+                <p id="customThemeDescription">Create one custom theme from the selected style. It stays only in this browser.</p>
+                <a id="openCustomTheme" class="button primary" href="#preferences/appearance/custom">Create custom theme</a>
+              </section>
               <p id="appearanceStatus" class="muted" role="status" aria-live="polite"></p>
             </div>
           </div>

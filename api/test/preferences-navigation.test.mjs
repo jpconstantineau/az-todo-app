@@ -120,6 +120,15 @@ test('Appearance separates preset style from mode and validates one routed brows
   assert.equal(await style.inputValue(), 'hashicorp');
   assert.equal(await mode.inputValue(), 'dark');
   assert.equal(await page.locator('html').getAttribute('data-style-theme'), 'hashicorp');
+  assert.equal(await style.locator('option[value="custom"]').getAttribute('hidden'), '');
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height:900 });
+    assert.equal(await page.locator('#customThemeSummary').isVisible(), true);
+    assert.match(await page.locator('#customThemeDescription').textContent(), /Create one custom theme.*only in this browser/);
+    assert.equal(await page.locator('#openCustomTheme').textContent(), 'Create custom theme');
+    const action = await page.locator('#openCustomTheme').boundingBox();
+    assert.ok(action && action.x >= 0 && action.x + action.width <= width && action.y < 900, `custom theme action is visible at ${width}px`);
+  }
 
   const other = await context.newPage(); await other.goto(server.url + '#preferences/appearance'); await other.locator('#preferencesAppearanceHeading').waitFor();
   await style.selectOption('hmi-cvd'); await mode.selectOption('system');
@@ -158,6 +167,14 @@ test('Appearance separates preset style from mode and validates one routed brows
   await page.reload(); await page.locator('#workspace').waitFor();
   assert.equal(await page.locator('html').getAttribute('data-style-theme'), 'custom');
   assert.equal(await page.locator('select[data-style-theme]').inputValue(), 'custom');
+  assert.equal(await page.locator('select[data-style-theme] option[value="custom"]').getAttribute('hidden'), null);
+  assert.equal(await page.locator('#openCustomTheme').textContent(), 'Edit custom theme');
+  assert.match(await page.locator('#customThemeDescription').textContent(), /Edit the one custom theme/);
+  await page.locator('#openCustomTheme').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance/custom' && document.activeElement?.id === 'customThemeHeading');
+  assert.equal(await page.locator('#customThemeForm [name="name"]').inputValue(), 'Control room');
+  await page.locator('#customThemeBack').click();
+  await page.waitForFunction(() => location.hash === '#preferences/appearance' && document.activeElement?.id === 'openCustomTheme');
 
   await page.evaluate(() => {
     const value = JSON.parse(localStorage.getItem('todo-custom-theme')); value.injected = { '--ink':'red' };

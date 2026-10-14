@@ -20,7 +20,7 @@
     light:{canvas:'#d4d6d8',surface:'#eceeef',surfaceRaised:'#dfe2e4',ink:'#202428',muted:'#50565c',border:'#777e85',controlBorder:'#596168',link:'#005a7a',focus:'#005a7a',primary:'#41484f',onPrimary:'#ffffff',selected:'#c3dce5',success:'#276749',warning:'#765300',error:'#9b2c2c'},
     dark:{canvas:'#202428',surface:'#2b3035',surfaceRaised:'#363c42',ink:'#edf0f2',muted:'#bcc2c8',border:'#858e97',controlBorder:'#a1aab3',link:'#7fd7f5',focus:'#7fd7f5',primary:'#c4cbd2',onPrimary:'#202428',selected:'#344f59',success:'#87d5aa',warning:'#ffd166',error:'#ffaaa5'}
   };
-  const hmiTokens = {...hashicorp.tokens,textHeading:20,textTitle:26,weightTitle:600,radiusControl:2,radiusPanel:4,borderWidth:2,elevation:'flat'};
+  const hmiTokens = {...hashicorp.tokens,textHeading:20,textTitle:26,weightTitle:600,radiusControl:4,radiusPanel:8,borderWidth:2,elevation:'flat'};
   const presets = {
     hashicorp,
     hmi:{version:1,name:'HMI',light:{...hmiColors.light},dark:{...hmiColors.dark},tokens:{...hmiTokens}},
@@ -63,7 +63,11 @@
     root.style.setProperty('--numeric-variant',style.startsWith('hmi') ? 'tabular-nums' : 'normal');
     setMeta(theme);
     document.querySelectorAll('[data-appearance]').forEach(select => { select.value = mode; });
-    document.querySelectorAll('[data-style-theme]').forEach(select => { select.value = style; select.querySelector('option[value="custom"]')?.toggleAttribute('disabled',!custom); });
+    document.querySelectorAll('[data-style-theme]').forEach(select => {
+      select.value = style;
+      const option = select.querySelector('option[value="custom"]');
+      option?.toggleAttribute('disabled',!custom); option?.toggleAttribute('hidden',!custom);
+    });
     dispatchEvent(new CustomEvent('todo-appearance-change',{detail:{mode,style,name:theme.name,custom:!!custom,storageError}}));
   }
   function restore() {

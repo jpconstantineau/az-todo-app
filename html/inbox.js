@@ -1691,6 +1691,7 @@ addEventListener('todo-appearance-change', event => {
   statusText('appearanceStatus', event.detail.storageError ? 'Appearance changed for this tab but could not be saved in this browser.' : '');
   const state = window.todoAppearance.getState();
   $('openCustomTheme').textContent = state.hasCustom ? 'Edit custom theme' : 'Create custom theme';
+  $('customThemeDescription').textContent = state.hasCustom ? 'Edit the one custom theme saved only in this browser.' : 'Create one custom theme from the selected style. It stays only in this browser.';
 });
 document.addEventListener('capturecloudpreferencechange', refreshPreferenceRows);
 

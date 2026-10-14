@@ -206,6 +206,9 @@ details.collection-settings:not([open]) { padding-block: 0; }
 .preferences-content { min-width: 0; padding-top: var(--space-4); overflow-wrap: anywhere; }
 .appearance-preference label { width: 100%; }
 .appearance-preference select { min-height: 48px; }
+.custom-theme-summary { margin-top: var(--space-6); padding-top: var(--space-4); border-top: var(--border-width) solid var(--border); }
+.custom-theme-summary h2 { margin: 0 0 var(--space-2); font-size: var(--text-lg); }
+.custom-theme-summary p { margin: 0 0 var(--space-4); color: var(--muted); }
 .custom-theme-form fieldset { min-width: 0; margin: 0 0 var(--space-6); padding: var(--space-4); border: var(--border-width) solid var(--border); border-radius: var(--radius-panel); }
 .custom-theme-form legend { padding-inline: var(--space-2); font-size: var(--text-lg); font-weight: var(--weight-emphasis); }
 .custom-theme-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-4); }
