@@ -1,10 +1,12 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v58';
+const CACHE = 'todo-inbox-shell-v59';
 // The agent module is public shell code, without model downloads or user data.
 const ASSETS = [
+  '/inbox.js?v=53', '/shared.js?v=53', '/pwa.js?v=53', '/inbox.js?v=52', '/shared.js?v=52', '/pwa.js?v=52',
+  '/reviews.js?v=15',
+  '/inbox.js?v=51', '/shared.js?v=51', '/pwa.js?v=51', '/inbox-fields.js?v=7', '/inbox-store.js?v=20', '/inbox-export.js?v=21', '/plan.js?v=7', '/recurrence-model.js?v=2', '/recurrence-ui.js?v=4', '/capture-extraction.js?v=6',
   '/', '/index.html', '/help.html', '/shared.html',
   '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-  '/inbox.js?v=52', '/shared.js?v=52', '/pwa.js?v=52',
   '/inbox.js?v=50', '/inbox-store.js?v=19', '/shared.js?v=50', '/pwa.js?v=50', '/inbox-fields.js?v=6',
   '/inbox.js?v=49', '/shared.js?v=49', '/pwa.js?v=49', '/inbox.js?v=48', '/shared.js?v=48', '/pwa.js?v=48', '/inbox.js?v=47', '/shared.js?v=47', '/pwa.js?v=47', '/inbox.js?v=46', '/inbox.js?v=45', '/inbox.js?v=44', '/inbox.js?v=43', '/inbox.js?v=42', '/inbox.js?v=41', '/inbox.js?v=40', '/inbox.js?v=39', '/inbox.js?v=38', '/inbox.js?v=37', '/inbox.js?v=36', '/inbox.js?v=35', '/inbox.js?v=34', '/inbox.js?v=33', '/inbox.js?v=32', '/inbox.js?v=31', '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=6', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=18', '/inbox-store.js?v=17', '/inbox-store.js?v=16', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=5', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=20', '/inbox-export.js?v=19', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/local-defaults.js?v=1', '/search-model.js?v=1', '/execution-policy.js?v=1',
   '/collection-model.js?v=5', '/collection-model.js?v=4', '/collection-model.js?v=3', '/collections.js?v=5', '/collections.js?v=4', '/workspace-move.js?v=6', '/workspace-move.js?v=5', '/workspace-move.js?v=4', '/workspaces.js?v=5', '/workspaces.js?v=4', '/recurrence-model.js?v=1', '/recurrence-ui.js?v=3', '/recurrence-ui.js?v=2', '/recurrence-ui.js?v=1',
