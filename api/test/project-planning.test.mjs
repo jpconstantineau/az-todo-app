@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { documents, faults, startServer } from './harness.mjs';
-import { projectPlanMutations, recoverProjectPlanDraft, acceptedPlanBriefContext } from '../../html/project-planning-model.js';
+import { emptyProjectPlan, draftFromAccepted, resumeProjectPlanDraft, projectPlanMutations, recoverProjectPlanDraft, acceptedPlanBriefContext } from '../../html/project-planning-model.js';
+import { enqueue } from '../../html/inbox-store.js';
 import { templateBrief } from '../../html/briefs.js';
 import { deviceExport, readableExport, validateDeviceExport } from '../../html/inbox-export.js';
 
@@ -45,11 +46,104 @@ test('project planning model creates only selected canonical Next items without 
   }
   assert.deepEqual(mutations[1].fields.mappings.map(mapping => mapping.kind), ['action', 'learning']);
   const tooMany = draft(source);
-  tooMany.candidates = Array.from({ length: 19 }, (_, index) => ({ id: `action-${index}`, title: `Action ${index}`, kind: 'action' }));
-  assert.throws(() => projectPlanMutations(source, tooMany, { 'project:launch': source }), /at most 18/i);
+  tooMany.candidates = Array.from({ length: 51 }, (_, index) => ({ id: `action-${index}`, title: `Action ${index}`, kind: 'action' }));
+  assert.throws(() => projectPlanMutations(source, tooMany, { 'project:launch': source }), /at most 50/i);
   const uncommitted = draft(source);
   uncommitted.candidates = uncommitted.candidates.map(candidate => ({ ...candidate, kind: 'brainstorm' }));
   assert.throws(() => projectPlanMutations(source, uncommitted, { 'project:launch': source }), /at least one Action or Bounded learning step/i);
+});
+
+test('outcome-first drafts refine the canonical outcome while preserving legacy notes and pending operations', () => {
+  const source = { type: 'project', id: 'launch', version: 1, workspaceId: 'personal', outcome: 'Original outcome', deleted: false };
+  assert.equal(emptyProjectPlan(source).sections.outcome, source.outcome);
+  const legacy = draft(source), resumed = resumeProjectPlanDraft(legacy, source);
+  assert.deepEqual(resumed.sections, { outcome: source.outcome, ...legacy.sections });
+  assert.equal(Object.hasOwn(legacy.sections, 'outcome'), false, 'resuming does not rewrite saved historical data');
+  resumed.sections.outcome = 'A customer independently completes setup';
+  const mutations = projectPlanMutations(source, resumed, { 'project:launch': source });
+  assert.deepEqual(mutations[0].fields, { planningHeadId: mutations[1].id, outcome: resumed.sections.outcome });
+  const latest = { ...source, planningHeadId: mutations[1].id, version: 2, outcome: 'Refined outside the planner' };
+  const revision = { type: 'projectPlanRevision', id: mutations[1].id, version: 1, deleted: false, ...mutations[1].fields };
+  const records = { 'project:launch': latest, [`projectPlanRevision:${revision.id}`]: revision };
+  assert.equal(draftFromAccepted(latest, records).sections.outcome, latest.outcome, 'editing starts from the current canonical outcome');
+  assert.match(acceptedPlanBriefContext(latest, records).context.join('\n'), /Accepted outcome: A customer independently completes setup/);
+  const pending = { mutations: projectPlanMutations(source, legacy, { 'project:launch': source }) };
+  assert.deepEqual(recoverProjectPlanDraft(pending, latest, records).sections, { outcome: latest.outcome, ...legacy.sections });
+  assert.deepEqual(recoverProjectPlanDraft({ mutations }, latest, records).sections, resumed.sections, 'new pending outcome survives a conflict');
+  resumed.sections.outcome = '  ';
+  assert.throws(() => projectPlanMutations(source, resumed, {}), /successful outcome/);
+});
+
+test('19 and 50 selected actions accept atomically, replay once, and do not extend ordinary save limits', async t => {
+  const { post } = await setup(t);
+  for (const count of [19, 50]) {
+    const source = project(), plan = resumeProjectPlanDraft(draft(source), source);
+    plan.sections.outcome = `Users finish ${count} steps`;
+    plan.candidates = Array.from({ length: count }, (_, index) => ({ id: `idea-${index}`, title: `Step ${index}`, kind: 'action' }));
+    const mutations = projectPlanMutations(source, plan, { 'project:launch': source });
+    assert.equal(mutations.length, count + 2);
+    if (count === 50) {
+      const tooManyCandidates = structuredClone(mutations);
+      tooManyCandidates[1].fields.candidates.push({ id: 'extra-idea', title: 'One too many', kind: 'brainstorm' });
+      assert.equal((await post(tooManyCandidates)).status, 400, 'the existing 50-candidate bound still applies');
+    }
+    const state = { records: { 'project:launch': source }, queue: [], draft: {} };
+    enqueue(state, 'alice', mutations);
+    assert.equal(state.queue.length, 1, 'the full plan queues as one atomic operation');
+    for (const mutate of [
+      entries => { entries[0].fields.title = 'Unrelated edit'; },
+      entries => { entries[0].fields.outcome = 'Mismatched outcome'; },
+      entries => { entries[2].fields.plannedDay = '2026-10-15'; },
+      entries => { entries[2].id = 'unmapped-item'; },
+      entries => { entries[1].fields.mappings.pop(); }
+    ]) {
+      const forged = structuredClone(mutations); mutate(forged);
+      const before = structuredClone(documents);
+      assert.throws(() => enqueue({ records: state.records, queue: [], draft: {} }, 'alice', forged));
+      assert.equal((await post(forged)).status, 400);
+      assert.deepEqual(documents, before, 'malformed large operations have no partial effects');
+    }
+    const beforeItems = documents.filter(row => row.record?.type === 'item').length;
+    const response = await post(mutations, `large-plan-${count}`);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.deepEqual(await post(mutations, `large-plan-${count}`), response);
+    assert.equal(project().outcome, plan.sections.outcome);
+    assert.equal(record('projectPlanRevision', mutations[1].id).sections.outcome, project().outcome);
+    assert.equal(documents.filter(row => row.record?.type === 'item').length, beforeItems + count);
+    const currentRecords = Object.fromEntries(documents.filter(row => row.kind === 'record').map(row => [`${row.record.type}:${row.record.id}`, row.record]));
+    const again = projectPlanMutations(project(), draftFromAccepted(project(), currentRecords), currentRecords);
+    assert.equal(again.length, 2, 'reacceptance reuses all live mapped actions');
+    assert.equal((await post(again)).status, 200);
+    const exported = deviceExport('alice', { records: currentRecords, queue: [], draft: {}, after: 1 }, {});
+    assert.deepEqual(validateDeviceExport(JSON.parse(JSON.stringify(exported))).warnings, []);
+    assert.match(readableExport(exported), new RegExp(plan.sections.outcome));
+  }
+  const ordinary = Array.from({ length: 21 }, (_, index) => create('list', `ordinary-${index}`, { title: `List ${index}`, workspaceId: 'personal' }));
+  assert.throws(() => enqueue({ records: {}, queue: [], draft: {} }, 'alice', ordinary), /1–20/);
+  assert.equal((await post(ordinary)).status, 400);
+  const plan = resumeProjectPlanDraft(draft(project()), project());
+  plan.candidates = Array.from({ length: 51 }, (_, index) => ({ id: `idea-${index}`, title: `Idea ${index}`, kind: 'action' }));
+  assert.throws(() => projectPlanMutations(project(), plan, {}), /at most 50/);
+});
+
+test('planning keeps request and record byte bounds without queuing partial work', async t => {
+  const { post } = await setup(t), source = project();
+  const plan = resumeProjectPlanDraft(draft(source), source);
+  for (const name of Object.keys(plan.sections)) plan.sections[name] = '界'.repeat(4000);
+  plan.candidates = Array.from({ length: 19 }, (_, index) => ({ id: `idea-${index}`, title: '界'.repeat(200), kind: 'action' }));
+  const mutations = projectPlanMutations(source, plan, { 'project:launch': source });
+  const state = { records: { 'project:launch': source }, queue: [], draft: { projectPlanning: plan } }, before = structuredClone(state);
+  assert.throws(() => enqueue(state, 'alice', mutations), /storage request limit/);
+  assert.deepEqual(state, before, 'capacity rejection retains the exact draft and queues nothing');
+  assert.equal((await post(mutations)).status, 413, 'the API request byte guard remains in force');
+  for (const name of Object.keys(plan.sections)) plan.sections[name] = 'x'.repeat(4000);
+  plan.candidates = Array.from({ length: 50 }, (_, index) => ({ id: `idea-${index}`, title: 'x'.repeat(200), kind: index ? 'brainstorm' : 'action' }));
+  const tooLargeRecord = projectPlanMutations(source, plan, { 'project:launch': source });
+  const response = await post(tooLargeRecord);
+  assert.equal(response.status, 400, JSON.stringify(response.body));
+  assert.match(JSON.stringify(response.body), /too large|smaller|shorten/i);
+  assert.equal(project().planningHeadId ?? null, null);
+  assert.equal(documents.filter(row => row.record?.type === 'projectPlanRevision').length, 0);
 });
 
 test('project planning API atomically preserves immutable revisions, retries and conflicts', async t => {
@@ -150,7 +244,7 @@ test('accepted plan brief context is head-only, truthful about current membershi
   const operation = { mutations: projectPlanMutations(pendingProject, draft(pendingProject), { 'project:launch': pendingProject }, ids('pending-revision', 'pending-action', 'pending-learn')) };
   const recovered = recoverProjectPlanDraft(operation, { ...source, version: 3, planningHeadId: 'new-head' }, records);
   assert.equal(recovered.sourceVersion, 3); assert.equal(recovered.previousRevisionId, 'new-head');
-  assert.deepEqual(recovered.sections, draft(source).sections);
+  assert.deepEqual(recovered.sections, { outcome: source.outcome, ...draft(source).sections });
   assert.deepEqual(recovered.candidates.map(({ id, title, kind }) => ({ id, title, kind })), draft(source).candidates);
   const exported = deviceExport('alice', { records: Object.fromEntries(Object.entries(records).map(([key, record]) => [key, { accountId: 'alice', createdUtc: '2026-10-08T00:00:00.000Z', updatedUtc: '2026-10-08T00:00:00.000Z', ...record }])), queue: [], draft: {}, after: 1 }, {});
   assert.deepEqual(validateDeviceExport(JSON.parse(JSON.stringify(exported))).warnings, []);

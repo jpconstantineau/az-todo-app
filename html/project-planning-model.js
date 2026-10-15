@@ -6,7 +6,11 @@ const projectMember = (item, project) => item?.projectId === project.id &&
 
 export function emptyProjectPlan(project) {
   return { version: 1, projectId: project.id, sourceVersion: project.version, previousRevisionId: project.planningHeadId || null,
-    sections: Object.fromEntries(sectionNames.map(name => [name, ''])), candidates: [] };
+    sections: { outcome: project.outcome || '', ...Object.fromEntries(sectionNames.map(name => [name, ''])) }, candidates: [] };
+}
+
+export function resumeProjectPlanDraft(draft, project) {
+  return { ...clone(draft), sections: { outcome: project?.outcome || '', ...clone(draft.sections) } };
 }
 
 export function acceptedProjectPlan(project, records) {
@@ -20,7 +24,7 @@ export function draftFromAccepted(project, records) {
   if (!revision) return emptyProjectPlan(project);
   const mapping = new Map(revision.mappings.map(entry => [entry.candidateId, entry.itemId]));
   return { version: 1, projectId: project.id, sourceVersion: project.version, previousRevisionId: revision.id,
-    sections: clone(revision.sections), candidates: revision.candidates.map(candidate => {
+    sections: { ...clone(revision.sections), outcome: project.outcome || '' }, candidates: revision.candidates.map(candidate => {
       const itemId = mapping.get(candidate.id), item = itemId && records[`item:${itemId}`];
       return { ...clone(candidate), ...(item && !item.deleted && item.status === 'next' && item.workspaceId === project.workspaceId && projectMember(item, project) ? { itemId } : {}) };
     }) };
@@ -29,6 +33,7 @@ export function draftFromAccepted(project, records) {
 export function validateProjectPlanDraft(draft) {
   if (!draft || draft.version !== 1 || typeof draft.projectId !== 'string' || !Number.isSafeInteger(draft.sourceVersion) || draft.sourceVersion < 1) throw new Error('This project planning draft is invalid.');
   if (!draft.sections || sectionNames.some(name => typeof draft.sections[name] !== 'string' || draft.sections[name].length > 4000)) throw new Error('Planning sections are limited to 4,000 characters each.');
+  if (Object.hasOwn(draft.sections, 'outcome') && (typeof draft.sections.outcome !== 'string' || !draft.sections.outcome.trim() || draft.sections.outcome.length > 4000)) throw new Error('Describe a successful outcome in at most 4,000 characters before accepting.');
   if (!Array.isArray(draft.candidates) || draft.candidates.length > 50) throw new Error('A project plan supports at most 50 candidate ideas.');
   const ids = new Set();
   for (const candidate of draft.candidates) {
@@ -40,7 +45,6 @@ export function validateProjectPlanDraft(draft) {
   }
   const selected = draft.candidates.filter(candidate => candidate.kind !== 'brainstorm');
   if (!selected.length) throw new Error('Select at least one Action or Bounded learning step before accepting.');
-  if (selected.length > 18) throw new Error('Select at most 18 actions or bounded learning steps per acceptance.');
   if (!draft.candidates.length && !Object.values(draft.sections).some(value => value.trim())) throw new Error('Add planning context or a candidate idea before accepting.');
   return draft;
 }
@@ -63,7 +67,8 @@ export function projectPlanMutations(project, input, records, createId = () => c
     mappings.push({ candidateId: candidate.id, itemId, kind: candidate.kind });
   }
   return [
-    { type: 'project', id: project.id, action: 'update', expectedVersion: project.version, fields: { planningHeadId: revisionId } },
+    { type: 'project', id: project.id, action: 'update', expectedVersion: project.version, fields: { planningHeadId: revisionId,
+      ...(Object.hasOwn(draft.sections, 'outcome') ? { outcome: draft.sections.outcome } : {}) } },
     { type: 'projectPlanRevision', id: revisionId, action: 'create', expectedVersion: 0, fields: {
       projectId: project.id, sourceVersion: project.version, previousRevisionId: project.planningHeadId || null,
       sections: clone(draft.sections), candidates: draft.candidates.map(({ id, title, kind }) => ({ id, title, kind })), mappings
@@ -75,15 +80,16 @@ export function validateProjectPlanOperation(mutations, records, proposed) {
   const revisions = mutations.filter(mutation => mutation.type === 'projectPlanRevision');
   const heads = mutations.filter(mutation => mutation.type === 'project' && Object.hasOwn(mutation.fields || {}, 'planningHeadId'));
   if (!revisions.length && !heads.length) return;
-  if (revisions.length !== 1 || heads.length !== 1 || revisions[0].action !== 'create' || heads[0].action !== 'update') throw new Error('A project plan acceptance needs one paired head and immutable revision.');
+  if (revisions.length !== 1 || heads.length !== 1 || revisions[0].action !== 'create' || records[`projectPlanRevision:${revisions[0].id}`] || heads[0].action !== 'update') throw new Error('A project plan acceptance needs one paired head and immutable revision.');
   const revision = proposed[`projectPlanRevision:${revisions[0].id}`], project = proposed[`project:${heads[0].id}`], old = records[`project:${heads[0].id}`];
   validateProjectPlanDraft({ version: 1, projectId: revision.projectId, sourceVersion: revision.sourceVersion, previousRevisionId: revision.previousRevisionId,
     sections: revision.sections, candidates: revision.candidates });
   if (!old || project.planningHeadId !== revision.id || revision.projectId !== project.id || revision.sourceVersion !== heads[0].expectedVersion || revision.previousRevisionId !== (old.planningHeadId || null)) throw new Error('The project plan head and revision do not match.');
-  if (Object.keys(heads[0].fields).length !== 1) throw new Error('Plan acceptance may update only the project planning head.');
+  const hasOutcome = Object.hasOwn(revision.sections, 'outcome');
+  if (Object.keys(heads[0].fields).length !== (hasOutcome ? 2 : 1) || hasOutcome && heads[0].fields.outcome !== revision.sections.outcome) throw new Error('Plan acceptance may update only its matching outcome and planning head.');
   const selected = revision.candidates.filter(candidate => candidate.kind !== 'brainstorm');
   const mapped = new Map(revision.mappings.map(mapping => [mapping.candidateId, mapping])), mappedItems = new Set(revision.mappings.map(mapping => mapping.itemId));
-  if (mapped.size !== selected.length || mappedItems.size !== revision.mappings.length || selected.some(candidate => mapped.get(candidate.id)?.kind !== candidate.kind)) throw new Error('Every selected candidate needs one exact item mapping.');
+  if (revision.mappings.length !== selected.length || mapped.size !== selected.length || mappedItems.size !== revision.mappings.length || selected.some(candidate => mapped.get(candidate.id)?.kind !== candidate.kind)) throw new Error('Every selected candidate needs one exact item mapping.');
   const allowed = new Set([`project:${project.id}`, `projectPlanRevision:${revision.id}`, ...revision.mappings.map(mapping => `item:${mapping.itemId}`)]);
   if (mutations.some(mutation => !allowed.has(`${mutation.type}:${mutation.id}`))) throw new Error('Plan acceptance may contain only its project head, revision and mapped actions.');
   for (const mapping of revision.mappings) {
@@ -99,6 +105,7 @@ export function validateProjectPlanOperation(mutations, records, proposed) {
       throw new Error('New accepted actions must exactly match their selected candidate without fabricated scheduling or targets.');
     }
   }
+  return true;
 }
 
 export function acceptedPlanBriefContext(subject, records) {
@@ -106,9 +113,10 @@ export function acceptedPlanBriefContext(subject, records) {
   const revision = acceptedProjectPlan(project, records);
   if (!project || project.deleted || !revision) return { context: [], missing: [] };
   const context = [`Accepted project plan provenance: project:${project.id} at version ${project.version}; projectPlanRevision:${revision.id} at version ${revision.version}.`];
+  if (revision.sections.outcome?.trim()) context.push(`Accepted outcome: ${revision.sections.outcome}`);
   if (revision.sections.purposePrinciples.trim()) context.push(`Accepted purpose & principles: ${revision.sections.purposePrinciples}`);
-  if (revision.sections.desiredEvidence.trim()) context.push(`Accepted desired evidence: ${revision.sections.desiredEvidence}`);
-  if (revision.sections.organizationApproach.trim()) context.push(`Accepted organization / approach: ${revision.sections.organizationApproach}`);
+  if (revision.sections.desiredEvidence.trim()) context.push(`Earlier planning notes — desired evidence: ${revision.sections.desiredEvidence}`);
+  if (revision.sections.organizationApproach.trim()) context.push(`Accepted organizing — parts, sequence and priorities: ${revision.sections.organizationApproach}`);
   const candidates = new Map(revision.candidates.map(candidate => [candidate.id, candidate]));
   for (const mapping of revision.mappings) {
     const item = records[`item:${mapping.itemId}`], candidate = candidates.get(mapping.candidateId);
@@ -117,7 +125,7 @@ export function acceptedPlanBriefContext(subject, records) {
       ? `Current accepted-plan ${mapping.kind === 'learning' ? 'bounded learning step' : 'action'}: ${item.title} (item:${item.id} at version ${item.version}).`
       : `Accepted-plan history: ${candidate?.title || mapping.candidateId} mapped to item:${mapping.itemId}; it is no longer a current project Next action.`);
   }
-  const missing = revision.sections.unresolvedQuestions.trim() ? [`Accepted unresolved questions: ${revision.sections.unresolvedQuestions}`] : [];
+  const missing = revision.sections.unresolvedQuestions.trim() ? [`Earlier planning notes — unresolved questions: ${revision.sections.unresolvedQuestions}`] : [];
   return { context, missing };
 }
 
@@ -126,7 +134,7 @@ export function recoverProjectPlanDraft(operation, project, records) {
   if (!revision || !project || project.deleted) throw new Error('The pending project plan cannot be recovered against an unavailable project.');
   const mapping = new Map(revision.mappings.map(entry => [entry.candidateId, entry.itemId]));
   return { version: 1, projectId: project.id, sourceVersion: project.version, previousRevisionId: project.planningHeadId || null,
-    sections: clone(revision.sections), candidates: revision.candidates.map(candidate => {
+    sections: { outcome: project.outcome || '', ...clone(revision.sections) }, candidates: revision.candidates.map(candidate => {
       const itemId = mapping.get(candidate.id), item = itemId && records[`item:${itemId}`];
       return { ...clone(candidate), ...(item && !item.deleted && item.status === 'next' && item.workspaceId === project.workspaceId && projectMember(item, project) ? { itemId } : {}) };
     }) };

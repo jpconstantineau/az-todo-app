@@ -20,8 +20,13 @@ export function projectPlanRevisionFields(action, input) {
   const projectId = identifier(input.projectId, 'projectId');
   if (!Number.isSafeInteger(input.sourceVersion) || input.sourceVersion < 1) fail('Plan sourceVersion must identify the observed project version.');
   const previousRevisionId = input.previousRevisionId === null ? null : identifier(input.previousRevisionId, 'previousRevisionId');
-  object(input.sections, sectionNames, 'sections');
+  object(input.sections, [...sectionNames, 'outcome'], 'sections');
   const sections = {};
+  if (Object.hasOwn(input.sections, 'outcome')) {
+    if (typeof input.sections.outcome !== 'string' || !input.sections.outcome.trim()) fail('Describe a successful outcome before accepting.');
+    text(input.sections.outcome, 4000, 'outcome');
+    sections.outcome = input.sections.outcome;
+  }
   for (const name of sectionNames) {
     if (typeof input.sections[name] !== 'string') fail(`${name} must be text.`);
     text(input.sections[name], 4000, name);
@@ -43,7 +48,6 @@ export function projectPlanRevisionFields(action, input) {
   if (!Array.isArray(input.mappings)) fail('Plan mappings must be an array.');
   const selected = candidates.filter(candidate => candidate.kind !== 'brainstorm');
   if (!selected.length) fail('Select at least one Action or Bounded learning step before accepting.');
-  if (selected.length > 18) fail('Accept at most 18 actions or bounded learning steps at once.');
   const mappedCandidates = new Set(), mappedItems = new Set();
   const mappings = input.mappings.map((mapping, index) => {
     object(mapping, ['candidateId', 'itemId', 'kind'], `mappings[${index}]`);
@@ -67,7 +71,8 @@ export async function validateProjectPlanning(records, oldRecords, mutations, lo
   if (revisions.length !== 1 || headChanges.length !== 1) fail('A project plan acceptance requires one paired project head and revision.');
   const revision = revisions[0], revisionMutation = mutations[records.indexOf(revision)], head = headChanges[0];
   if (revisionMutation.action !== 'create' || oldRecords[records.indexOf(revision)]) fail('Project plan revisions are immutable and create-only.');
-  if (Object.keys(head.mutation.fields).length !== 1) fail('Plan acceptance may update only the project planning head.');
+  const hasOutcome = Object.hasOwn(revision.sections, 'outcome');
+  if (Object.keys(head.mutation.fields).length !== (hasOutcome ? 2 : 1) || hasOutcome && head.mutation.fields.outcome !== revision.sections.outcome) fail('Plan acceptance may update only its matching outcome and planning head.');
   if (head.mutation.action !== 'update' || head.record.deleted || head.record.planningHeadId !== revision.id || revision.projectId !== head.record.id) fail('The project head must advance to its paired planning revision.');
   if (revision.sourceVersion !== head.mutation.expectedVersion || revision.previousRevisionId !== (head.old?.planningHeadId || null)) fail('The project or its accepted plan changed. Review the latest plan before accepting again.');
   if (revision.previousRevisionId) {

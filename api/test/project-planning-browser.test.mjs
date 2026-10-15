@@ -33,6 +33,10 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   const opener = page.getByRole('button', { name: /^Plan project / });
   await clickControl(opener);
   assert.ok(await page.locator('#projectPlanner').isVisible());
+  assert.equal(await page.locator('#projectPlanOutcome').inputValue(), 'Customers can use it');
+  await page.locator('#projectPlanOutcome').evaluate(input => { if (document.activeElement !== input) throw new Error('Outcome must receive initial focus'); });
+  assert.deepEqual(await page.locator('#projectPlanningForm h3').allTextContents(), ['Outcome', 'Purpose & principles', 'Brainstorm — Candidate ideas', 'Organize', 'Next actions']);
+  assert.equal(await page.locator('#projectPlanEarlierNotes').isVisible(), false);
   await page.locator('#closeProjectPlanning').click();
   assert.equal((await local(page)).draft.projectPlanning ?? null, null, 'opening and closing an untouched planner creates no draft');
   await clickControl(opener);
@@ -41,32 +45,49 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   page.once('dialog', dialog => { void dialog.accept(); });
   await page.locator('#discardProjectPlanning').click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning == null);
-  await clickControl(opener);
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=23');
+    await transact('alice', state => {
+      state.draft.projectPlanning = { version: 1, projectId: 'launch', sourceVersion: 1, previousRevisionId: null, open: true,
+        sections: { purposePrinciples: '', desiredEvidence: 'A customer completes setup', organizationApproach: '', unresolvedQuestions: 'Which step is unclear?' }, candidates: [] };
+    });
+  });
+  await page.reload(); await page.locator('#projectPlanner').waitFor(); await confirmed(page);
+  assert.equal(await page.locator('#projectPlanOutcome').inputValue(), 'Customers can use it', 'legacy drafts resume from the canonical project outcome');
+  await page.locator('#projectPlanEarlierNotes summary').click();
+  assert.equal(await page.locator('[name=desiredEvidence]').inputValue(), 'A customer completes setup');
+  assert.equal(await page.locator('[name=unresolvedQuestions]').inputValue(), 'Which step is unclear?');
+  await page.locator('#projectPlanOutcome').fill('  ');
+  await page.locator('#acceptProjectPlan').click();
+  await page.waitForFunction(() => document.querySelector('#projectPlanningStatus').textContent.includes('successful outcome'));
+  assert.match(await page.locator('#projectPlanningStatus').textContent(), /successful outcome/, 'validation errors survive the final redraw');
+  await page.locator('#projectPlanOutcome').fill('A customer independently completes setup');
   await page.locator('[name=purposePrinciples]').fill('Help customers finish a first run');
-  await page.locator('[name=desiredEvidence]').fill('A customer completes setup');
   await page.locator('[name=organizationApproach]').fill('Learn, then publish');
-  await page.locator('[name=unresolvedQuestions]').fill('Which step is unclear?');
-  for (const [title, kind] of [['Consider a video', 'brainstorm'], ['Publish the guide', 'action'], ['Interview pilot users', 'learning']]) {
+  const ideas = [['Consider a video', 'brainstorm'], ['Publish the guide', 'action'], ['Interview pilot users', 'learning'], ...Array.from({ length: 17 }, (_, index) => [`Next step ${index + 1}`, 'action'])];
+  for (const [title, kind] of ideas) {
     await page.locator('#addProjectPlanCandidate').click();
     const row = page.locator('.project-plan-candidate').last();
     await row.locator('input').fill(title); await row.locator('select').selectOption(kind);
   }
   await waitForBrowser(page, async () => {
     const state = await (await import('/inbox-store.js?v=15')).transact('alice');
-    return state.draft.projectPlanning?.sections.purposePrinciples === 'Help customers finish a first run' && state.draft.projectPlanning.candidates.length === 3;
+    return state.draft.projectPlanning?.sections.purposePrinciples === 'Help customers finish a first run' && state.draft.projectPlanning.candidates.length === 20 && state.draft.projectPlanning.candidates.at(-1).kind === 'action';
   });
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true); await page.reload(); await page.locator('#projectPlanner').waitFor();
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), 'Help customers finish a first run');
-  assert.deepEqual(await page.locator('.project-plan-candidate input').evaluateAll(inputs => inputs.map(input => input.value)), ['Consider a video', 'Publish the guide', 'Interview pilot users']);
+  assert.equal(await page.locator('#projectPlanOutcome').inputValue(), 'A customer independently completes setup');
+  assert.deepEqual(await page.locator('.project-plan-candidate input').evaluateAll(inputs => inputs.map(input => input.value)), ideas.map(([title]) => title));
   await page.locator('#acceptProjectPlan').click();
   await waitForBrowser(page, async () => {
     const state = await (await import('/inbox-store.js?v=15')).transact('alice'), entry = state.queue[0];
-    return state.draft.projectPlanning === null && entry?.operation.mutations.filter(mutation => mutation.type === 'item').length === 2 &&
+    return state.draft.projectPlanning === null && entry?.operation.mutations.filter(mutation => mutation.type === 'item').length === 19 &&
       entry.operation.mutations.some(mutation => mutation.type === 'projectPlanRevision');
   });
   const pending = await local(page), operation = pending.queue[0].operation;
-  assert.equal(operation.mutations.length, 4);
+  assert.equal(operation.mutations.length, 21);
+  assert.equal(operation.mutations[0].fields.outcome, 'A customer independently completes setup');
   for (const item of operation.mutations.filter(entry => entry.type === 'item')) {
     assert.equal(item.fields.status, 'next'); assert.equal(item.fields.projectId, 'launch');
     for (const field of ['dueDate', 'startDate', 'reviewDate', 'plannedDay', 'timeRequired']) assert.equal(field in item.fields, false);
@@ -77,7 +98,8 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
     return state.queue.length === 0 && Object.values(state.records).filter(record => record.type === 'projectPlanRevision').length === 1;
   });
   await confirmed(page);
-  assert.equal(documents.filter(row => row.UserID === 'alice' && row.record?.type === 'item' && row.record.projectId === 'launch').length, 2);
+  assert.equal(documents.find(row => row.record?.type === 'project' && row.record.id === 'launch').record.outcome, 'A customer independently completes setup');
+  assert.equal(documents.filter(row => row.UserID === 'alice' && row.record?.type === 'item' && row.record.projectId === 'launch').length, 19);
 
   await page.locator('#view').selectOption('project:launch', { force: true }); await clickControl(opener);
   await page.locator('#closeProjectPlanning').click();
@@ -96,6 +118,7 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   assert.ok(await page.locator('#recoverProjectPlan').isVisible());
   assert.match(await page.locator('#comparison').textContent(), /Exact conflicted purpose/);
   await page.locator('#recoverProjectPlan').click(); await page.locator('#projectPlanner').waitFor();
+  assert.equal(await page.locator('#projectPlanOutcome').inputValue(), 'A customer independently completes setup');
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), 'Exact conflicted purpose');
   await waitForBrowser(page, async () => {
     const state = await (await import('/inbox-store.js?v=15')).transact('alice');
@@ -125,7 +148,33 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), 'Exact conflicted purpose');
   await page.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }; });
   await page.locator('#acceptProjectPlan').click(); await page.locator('#recovery').waitFor();
+  await page.waitForFunction(() => document.querySelector('#projectPlanningStatus').textContent.includes('latest planning draft was not saved'));
+  assert.match(await page.locator('#projectPlanningStatus').textContent(), /latest planning draft was not saved/, 'journal errors remain visible');
   assert.match(await page.locator('#recoveryText').inputValue(), /Exact conflicted purpose/);
   assert.equal((await local(page)).queue.length, 0, 'a failed journal cannot queue a partial plan acceptance');
   assert.deepEqual(errors, []);
+});
+
+test('planner capacity errors remain visible and preserve the saved draft without a queue entry', { timeout: 30000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  assert.equal((await post(server.url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Customers can use it' })])).status, 200);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage(); await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.evaluate(async () => {
+    const { transact } = await import('/inbox-store.js?v=23');
+    await transact('alice', state => {
+      state.draft.projectPlanning = { version: 1, projectId: 'launch', sourceVersion: 1, previousRevisionId: null, open: true,
+        sections: { outcome: '界'.repeat(4000), purposePrinciples: '界'.repeat(4000), organizationApproach: '界'.repeat(4000), desiredEvidence: '', unresolvedQuestions: '' },
+        candidates: Array.from({ length: 50 }, (_, index) => ({ id: `idea-${index}`, title: '界'.repeat(200), kind: 'action' })) };
+    });
+  });
+  await page.reload(); await page.locator('#projectPlanner').waitFor(); await confirmed(page);
+  const draft = (await local(page)).draft.projectPlanning;
+  await page.locator('#acceptProjectPlan').click();
+  await page.waitForFunction(() => document.querySelector('#projectPlanningStatus').textContent.includes('storage request limit'));
+  assert.equal(await page.locator('#projectPlanOutcome').inputValue(), draft.sections.outcome);
+  assert.deepEqual((await local(page)).draft.projectPlanning, draft);
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal(documents.filter(row => row.record?.type === 'projectPlanRevision').length, 0);
 });

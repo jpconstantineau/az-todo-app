@@ -253,8 +253,8 @@ export function validateOperation(input) {
   if (input.apiVersion !== 1) throw new ValidationError("apiVersion must be 1.");
   if (typeof input.accountId !== "string" || !input.accountId) throw new ValidationError("accountId is required.");
   identifier(input.operationId, "operationId");
-  if (!Array.isArray(input.mutations) || !input.mutations.length || input.mutations.length > 20) {
-    throw new ValidationError("mutations must contain 1–20 records.");
+  if (!Array.isArray(input.mutations) || !input.mutations.length || input.mutations.length > 52) {
+    throw new ValidationError("mutations must contain 1–20 records, or up to 52 for a project plan acceptance.");
   }
   const seen = new Set();
   const mutations = input.mutations.map(mutation => {
@@ -286,6 +286,18 @@ export function validateOperation(input) {
     }
     return { type, id, action, expectedVersion, ...(!fieldless ? { fields } : {}) };
   });
+  if (mutations.length > 20) {
+    const revisions = mutations.filter(mutation => mutation.type === 'projectPlanRevision');
+    const revision = revisions.length === 1 && revisions[0], plan = revision?.fields;
+    const heads = mutations.filter(mutation => mutation.type === 'project');
+    const head = heads.length === 1 && heads[0];
+    const items = mutations.filter(mutation => mutation.type === 'item');
+    if (!plan || !head || head.action !== 'update' || head.id !== plan.projectId || head.fields.planningHeadId !== revision.id ||
+        head.expectedVersion !== plan.sourceVersion || items.length !== mutations.length - 2 ||
+        items.some(item => item.action !== 'create' || !plan.mappings.some(mapping => mapping.itemId === item.id))) {
+      throw new ValidationError('More than 20 records require a paired project plan acceptance with only mapped actions.');
+    }
+  }
   return { ...input, mutations };
 }
 

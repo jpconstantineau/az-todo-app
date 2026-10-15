@@ -3,7 +3,7 @@ import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=5'
 import { workflowFields, validateWorkflow } from './inbox-fields.js?v=7';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=6';
 import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=2';
-import { validateProjectPlanOperation } from './project-planning-model.js?v=1';
+import { validateProjectPlanOperation } from './project-planning-model.js?v=2';
 import { validateExecutionPolicy } from './execution-policy.js?v=2';
 import { checklistResetPlan } from './checklist-reset.js?v=1';
 
@@ -338,7 +338,7 @@ function validateRecurrenceMutation(mutation, record, old, proposed, records) {
 }
 
 function operationFor(state, accountId, mutations, operationId = crypto.randomUUID()) {
-  if (!mutations.length || mutations.length > MAX_OPERATION_MUTATIONS) throw new Error('Save 1–20 records at a time.');
+  if (!mutations.length || mutations.length > 52) throw new Error('Save 1–20 records at a time, or up to 50 actions in one project plan.');
   const records = projected(state);
   const proposed = { ...records };
   for (const mutation of mutations) {
@@ -385,9 +385,10 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
     }
     validateRecurrenceMutation(mutation, proposed[key(mutation)], records[key(mutation)], proposed, records);
   }
-  validateProjectPlanOperation(mutations, records, proposed);
+  const projectPlan = validateProjectPlanOperation(mutations, records, proposed);
+  if (mutations.length > MAX_OPERATION_MUTATIONS && !projectPlan) throw new Error('Save 1–20 records at a time.');
   const operation = { apiVersion: 1, accountId, operationId, mutations };
-  if (size(operation) > MAX_OPERATION_BYTES) throw new Error('This capture is too large. Save fewer items at a time. Your text is still here.');
+  if (size(operation) > MAX_OPERATION_BYTES) throw new Error(projectPlan ? 'This plan exceeds the storage request limit. Shorten its notes or ideas before accepting. Your draft is still here.' : 'This capture is too large. Save fewer items at a time. Your text is still here.');
   return operation;
 }
 
