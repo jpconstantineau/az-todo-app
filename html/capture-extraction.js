@@ -284,7 +284,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       for (const [name, labelText] of [['title', 'Title'], ['description', 'Notes'], ['listId', 'List'], ['priority', 'Priority'], ['context', 'Context'], ['dueDate', 'Deadline date'], ['dueTime', 'Deadline time (optional)']]) {
         const manualContexts = draft.manual && name === 'context';
         const label = document.createElement('label'); label.textContent = manualContexts ? 'Contexts (one per line)' : labelText;
-        const input = document.createElement(name === 'description' || manualContexts ? 'textarea' : name === 'listId' ? 'select' : 'input'); input.name = name;
+        const input = document.createElement(name === 'description' || manualContexts || draft.manual && name === 'title' ? 'textarea' : name === 'listId' ? 'select' : 'input'); input.name = name;
         if (name === 'listId') {
           input.append(new Option('No list', ''), ...(current()?.lists || []).map(list => new Option(list.title, list.id)));
           if (item.listId && ![...input.options].some(option => option.value === item.listId)) input.add(new Option('Unavailable list — choose another', item.listId));
@@ -314,7 +314,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
           const combined = [previous.description, item.title, item.description, details, item.uncertainty].filter(Boolean).join('\n');
           if (combined.length > 4000) { $('extractionError').textContent = 'Merged notes would exceed 4,000 characters. Edit the notes before merging.'; return; }
           previous.description = combined; draft.items.splice(index, 1); $('extractionError').textContent = ''; render();
-          $('extractionItems').children[index - 1].querySelector('textarea').focus(); void journal();
+          $('extractionItems').children[index - 1].querySelector('[name=description]').focus(); void journal();
         };
         fieldset.append(merge);
       }
@@ -361,7 +361,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
   $('extractAdd').onclick = () => {
     if (!draft || draft.items.length >= 20) return;
     draft.items.push({ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID() }); render();
-    $('extractionItems').lastElementChild.querySelector('input').focus(); void journal();
+    $('extractionItems').lastElementChild.querySelector('[name=title]').focus(); void journal();
   };
   $('extractCancel').onclick = () => { const focus = startControl; cancel(); status('Cancelled. Your capture and any reviewed suggestions are kept.'); (focus?.getClientRects().length ? focus : field).focus(); };
   $('extractAuto').onchange = () => {

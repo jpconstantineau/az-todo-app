@@ -245,13 +245,13 @@ test('manual review preserves explicit contexts and destination and blocks chang
   await page.locator('#capture [name=contexts]').selectOption(['Home', 'Work, remote']);
   await page.locator('#capture [name=listId]').selectOption('chosen');
   await page.locator('#capture [name=newList]').fill('New list');
-  await page.locator('#captureText').fill('Review the report tomorrow');
+  await page.locator('#captureText').fill('Review the report\ntomorrow');
   await page.locator('#extractManual').click();
   await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.includes('Create the list in Lists first'));
   assert.equal(await page.locator('#extractionReview').evaluate(el => el.open), false);
   await page.locator('#capture [name=newList]').fill('');
   await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
-  assert.equal(await page.locator('#extractionItems [name=title]').inputValue(), 'Review the report tomorrow');
+  assert.equal(await page.locator('#extractionItems [name=title]').inputValue(), 'Review the report\ntomorrow');
   assert.equal(await page.locator('#extractionItems [name=context]').inputValue(), 'Home\nWork, remote');
   assert.equal(await page.locator('#extractionItems [name=listId]').inputValue(), 'chosen');
   await page.locator('#extractClose').click();
@@ -260,8 +260,8 @@ test('manual review preserves explicit contexts and destination and blocks chang
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Capture changed'));
   assert.equal(records().filter(r => r.type === 'item').length, 0);
   await page.locator('#extractionReview').waitFor({ state: 'hidden' });
-  await page.locator('#captureText').fill('Review the report tomorrow');
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Review the report tomorrow');
+  await page.locator('#captureText').fill('Review the report\ntomorrow');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Review the report\ntomorrow');
   await context.setOffline(true);
   await page.locator('#extractManual').click(); await page.locator('#extractAccept').click();
   await page.locator('#extractionReview').waitFor({ state: 'hidden' });
