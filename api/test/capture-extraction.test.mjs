@@ -311,6 +311,50 @@ test('manual review journals before opening and storage failure retains the comp
   await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
   await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
   assert.deepEqual((await local(page)).draft.extraction.draft, recovery.draft.extraction.draft);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); }; });
+  await page.locator('#extractionItems [name=title]').fill('Recover these corrected notes');
+  await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('#recoveryText').value.includes('Recover these corrected notes'));
+  const corrected = JSON.parse(await page.locator('#recoveryText').inputValue()).draft.extraction.draft;
+  await page.evaluate(() => {
+    window.failedReviewWrites = 0;
+    IDBObjectStore.prototype.put = () => { failedReviewWrites++; throw new DOMException('Full', 'QuotaExceededError'); };
+  });
+  await page.locator('#extractManual').click();
+  await page.waitForFunction(() => failedReviewWrites > 0);
+  assert.equal(await page.locator('#extractionReview').evaluate(el => el.open), false);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  assert.deepEqual((await local(page)).draft.extraction.draft, corrected);
+});
+
+test('manual resume persists an AI review whose original journal failed before opening', { timeout: 60000 }, async t => {
+  const { page } = await setup(t, { delay: true });
+  await page.locator('#captureText').fill(source); await page.locator('#extractStart').click();
+  await page.waitForFunction(() => !!window.finishAI);
+  await page.evaluate(raw => {
+    window.originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); };
+    finishAI(raw);
+  }, output());
+  await page.waitForFunction(() => document.querySelector('#extractionStatus').textContent.includes('Suggestions could not be saved'));
+  const unsaved = JSON.parse(await page.locator('#recoveryText').inputValue()).draft.extraction.draft;
+  assert.equal((await local(page)).draft.extraction.draft, null);
+  await page.evaluate(() => {
+    window.failedReviewWrites = 0;
+    IDBObjectStore.prototype.put = () => { failedReviewWrites++; throw new DOMException('Full', 'QuotaExceededError'); };
+  });
+  await page.locator('#extractManual').click();
+  await page.waitForFunction(() => failedReviewWrites > 0);
+  assert.equal(await page.locator('#extractionReview').evaluate(el => el.open), false);
+  assert.equal((await local(page)).draft.extraction.draft, null);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  assert.deepEqual((await local(page)).draft.extraction.draft, unsaved);
+  assert.equal(await page.evaluate(() => aiCalls.prompts.length), 1);
+  await page.locator('#extractClose').click(); await page.reload(); await page.locator('#workspace').waitFor();
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  assert.deepEqual((await local(page)).draft.extraction.draft, unsaved);
 });
 
 test('manual oversized batch and unavailable destination retain review without partial tasks', { timeout: 60000 }, async t => {

@@ -130,7 +130,7 @@ export function extractionMutations(draft, records, workspaceId = 'personal') {
 export function setupCaptureExtraction({ matrix = () => false, current, journal, save, showDialog, recovery, cloudEligible = () => false }) {
   const $ = id => document.getElementById(id);
   const field = $('captureText'), mirror = $('captureMirror');
-  let completion = null, pendingCursor = null, composing = false, listSource = '', startControl, manualNeedsSave = false;
+  let completion = null, pendingCursor = null, composing = false, listSource = '', startControl, reviewNeedsSave = false, reviewRevision = 0;
   let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, cloudCheck, model, finish, busy = false, timer, enabled = false, includeLists = false, cloudReady = false, cloudLabel = '', cloudPhase = 'unavailable', cloudBusy = false;
   const unavailableMessage = 'AI suggestions are unavailable here. Choose Review tasks manually, or use one item per line and Save on device.';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; $('extractionStatus').hidden = !message; };
@@ -296,15 +296,15 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
         input.oninput = () => {
           if (manualContexts) item.contexts = input.value.split('\n').map(value => value.trim()).filter(Boolean);
           else item[name] = input.value;
-          renderSummary(); void journal();
+          renderSummary(); void journalReview();
         };
         label.append(input); fieldset.append(label);
       }
-      const matrixControls = addPriorityControls(fieldset, item, (name, score) => { item[name] = score; void journal(); }, `${item.id}-`);
+      const matrixControls = addPriorityControls(fieldset, item, (name, score) => { item[name] = score; void journalReview(); }, `${item.id}-`);
       matrixControls.hidden = !matrix();
       fieldset.querySelector('[name=priority]').closest('label').hidden = matrix();
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = `Remove task ${index + 1}`;
-      remove.onclick = () => { draft.items.splice(index, 1); render(); $('extractAdd').focus(); void journal(); }; fieldset.append(remove);
+      remove.onclick = () => { draft.items.splice(index, 1); render(); $('extractAdd').focus(); void journalReview(); }; fieldset.append(remove);
       if (index > 0) {
         const merge = document.createElement('button'); merge.type = 'button'; merge.textContent = 'Merge into previous task';
         merge.onclick = () => {
@@ -314,7 +314,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
           const combined = [previous.description, item.title, item.description, details, item.uncertainty].filter(Boolean).join('\n');
           if (combined.length > 4000) { $('extractionError').textContent = 'Merged notes would exceed 4,000 characters. Edit the notes before merging.'; return; }
           previous.description = combined; draft.items.splice(index, 1); $('extractionError').textContent = ''; render();
-          $('extractionItems').children[index - 1].querySelector('[name=description]').focus(); void journal();
+          $('extractionItems').children[index - 1].querySelector('[name=description]').focus(); void journalReview();
         };
         fieldset.append(merge);
       }
@@ -323,19 +323,28 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     $('extractAccept').disabled = !draft.items.length;
     $('extractAdd').disabled = draft.items.length >= 20;
   }
+  async function journalReview() {
+    // An older write must not mark newer corrections as durable.
+    const revision = ++reviewRevision, run = generation;
+    reviewNeedsSave = true;
+    const saved = await journal();
+    if (run !== generation || revision !== reviewRevision) return false;
+    if (saved) reviewNeedsSave = false;
+    return saved;
+  }
+  async function resumeReview() {
+    if (!draft) return;
+    const focused = document.activeElement, run = generation, input = current();
+    if (reviewNeedsSave) {
+      const saved = await journalReview();
+      if (!saved || run !== generation || input?.accountId !== current()?.accountId || JSON.stringify(captureInput(input)) !== JSON.stringify(captureInput(current()))) return;
+    }
+    render(); finishInteraction(focused, true);
+  }
   $('extractManual').onclick = async () => {
     const focused = document.activeElement;
     cancel();
-    if (draft) {
-      const run = generation;
-      if (manualNeedsSave) {
-        const saved = await journal();
-        if (run !== generation || !saved) return;
-        manualNeedsSave = false;
-      }
-      render(); openReview();
-      return;
-    }
+    if (draft) { await resumeReview(); return; }
     const input = current();
     if (!input?.text.trim()) { status('Enter a capture first, then choose Review tasks manually.'); return; }
     if (input.newList?.trim()) { status('Create the list in Lists first, then clear Or create a list and select it in Context or list before reviewing tasks.'); return; }
@@ -347,21 +356,19 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       draft = { id: crypto.randomUUID(), manual: true, source, inputCapture: captureInput(input), clock: structuredClone(clock), notes: '',
         items: [{ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID(),
           title: source.length <= 200 ? source : '', listId: input.listId || '', contexts: [...(input.contexts || [])] }] };
-      manualNeedsSave = true;
-      const saved = await journal();
+      const saved = await journalReview();
       if (run !== generation || owner !== current()?.accountId || JSON.stringify(captureInput(current())) !== JSON.stringify(captureInput(input))) return;
       if (!saved) { status('Review could not be saved. Copy/export the recovery text before leaving, then retry Review tasks manually.'); return; }
-      manualNeedsSave = false;
       render(); status('Manual review saved on device. Only acceptance creates tasks.'); finishInteraction(focused, true);
     } catch (error) { if (run === generation) { status(error.message); recovery(error); } }
   };
-  $('extractReview').onclick = () => { render(); openReview(); };
+  $('extractReview').onclick = () => { cancel(); void resumeReview(); };
   $('extractionReview').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   $('extractClose').onclick = () => $('extractionReview').close();
   $('extractAdd').onclick = () => {
     if (!draft || draft.items.length >= 20) return;
     draft.items.push({ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID() }); render();
-    $('extractionItems').lastElementChild.querySelector('[name=title]').focus(); void journal();
+    $('extractionItems').lastElementChild.querySelector('[name=title]').focus(); void journalReview();
   };
   $('extractCancel').onclick = () => { const focus = startControl; cancel(); status('Cancelled. Your capture and any reviewed suggestions are kept.'); (focus?.getClientRects().length ? focus : field).focus(); };
   $('extractAuto').onchange = () => {
@@ -452,7 +459,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       if (draft) throw new Error('A review is already saved. Accept it or return to the original before requesting another batch.');
       draft = { id: crypto.randomUUID(), source, inputCapture: captureInput(input), clock: structuredClone(clock), ...result };
       render();
-      if (!await journal()) throw new Error('Suggestions could not be saved. Copy/export them before leaving.');
+      if (!await journalReview()) throw new Error('Suggestions could not be saved. Copy/export them before leaving.');
       if (stale()) return;
       status('Suggestions saved on device, not committed. Review every task and deadline.');
       ready = true;
@@ -487,8 +494,8 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     changed, refreshLists,
     suspend() { cancel(); $('extractionReview').close(); },
     snapshot: () => ({ draft: structuredClone(draft), clock, sourceText, enabled, includeLists }),
-    restore(value) { cancel(); manualNeedsSave = false; draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); void checkCloud(); },
-    reset(keepEnabled = false) { cancel(); manualNeedsSave = false; cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : ''); updateControls(); },
+    restore(value) { cancel(); reviewNeedsSave = false; draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); void checkCloud(); },
+    reset(keepEnabled = false) { cancel(); reviewNeedsSave = false; cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : ''); updateControls(); },
     close() { $('extractionReview').close(); },
     cloudState,
     retryCloud: checkCloud
