@@ -17,6 +17,105 @@ async function post(url, mutations, operationId = crypto.randomUUID()) {
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=15')).transact('alice'));
 
+test('planner refresh preserves native controls, selection and keyboard removal destinations', { timeout: 60000 }, async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  assert.equal((await post(server.url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Customers can use it' })])).status, 200);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const page = await browser.newPage(); await page.goto(server.url + '/#work');
+  await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.locator('#view').selectOption('project:launch');
+  await clickControl(page.getByRole('button', { name: 'Plan project Launch' }));
+  const rows = page.locator('.project-plan-candidate'), add = page.locator('#addProjectPlanCandidate');
+  for (const [title, kind] of [['Prepare launch', 'action'], ['Interview users', 'learning'], ['Publish guide', 'brainstorm']]) {
+    await add.focus(); await page.keyboard.press('Enter');
+    assert.ok(await rows.last().locator('input').evaluate(input => document.activeElement === input));
+    await rows.last().locator('input').fill(title); await rows.last().locator('select').selectOption(kind);
+  }
+  await waitForBrowser(page, async () => {
+    const draft = (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning;
+    return draft?.candidates.length === 3 && draft.candidates.at(-1).title === 'Publish guide';
+  });
+  const before = (await local(page)).draft.projectPlanning;
+  // Heading mutation marks the actual global render caused by a same-account refresh.
+  const refresh = () => page.evaluate(() => new Promise(resolve => {
+    const observer = new MutationObserver(() => { observer.disconnect(); resolve(); });
+    observer.observe(document.querySelector('#projectPlanningHeading'), { childList: true });
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  }));
+  await refresh();
+  await page.evaluate(() => {
+    window.plannerStatusChanges = 0;
+    new MutationObserver(changes => { window.plannerStatusChanges += changes.length; })
+      .observe(document.querySelector('#projectPlanningStatus'), { childList: true });
+  });
+  const title = rows.first().locator('input');
+  await title.focus();
+  await title.evaluate(input => { window.plannerControl = input; input.setSelectionRange(2, 6); });
+  await refresh();
+  assert.deepEqual(await title.evaluate(input => [input === window.plannerControl, document.activeElement === input, input.selectionStart, input.selectionEnd, input.value]),
+    [true, true, 2, 6, 'Prepare launch']);
+  assert.equal(await page.evaluate(() => window.plannerStatusChanges), 0, 'unchanged refresh does not repeat the live status');
+  await page.keyboard.type('X');
+  await page.keyboard.press('Tab');
+  const select = rows.first().locator('select');
+  assert.ok(await select.evaluate(control => document.activeElement === control));
+  await select.evaluate(control => { window.plannerControl = control; }); await refresh();
+  assert.deepEqual(await select.evaluate(control => [control === window.plannerControl, document.activeElement === control, control.value]), [true, true, 'action']);
+  await page.keyboard.press('Tab');
+  const remove = rows.first().locator('button');
+  await remove.evaluate(control => { if (document.activeElement !== control) throw new Error('Tab must reach Remove'); window.plannerControl = control; });
+  await refresh();
+  assert.ok(await remove.evaluate(control => control === window.plannerControl && document.activeElement === control));
+  await page.keyboard.press('Shift+Tab'); assert.ok(await select.evaluate(control => document.activeElement === control));
+  const outcome = page.locator('#projectPlanOutcome');
+  await outcome.focus(); await outcome.evaluate(input => input.setSelectionRange(1, 5)); await refresh();
+  assert.deepEqual(await outcome.evaluate(input => [document.activeElement === input, input.selectionStart, input.selectionEnd]), [true, 1, 5]);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.candidates[0].title === 'PrXe launch');
+  assert.deepEqual((await local(page)).draft.projectPlanning.candidates, before.candidates.map((candidate, index) => index ? candidate : { ...candidate, title: 'PrXe launch' }));
+
+  // Keep the removal journal pending, then choose another valid control before it finishes.
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('todo-inbox-v1', 1); request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result, transaction = db.transaction('accounts', 'readwrite'), store = transaction.objectStore('accounts');
+      window.releasePlannerWrite = false;
+      window.plannerWriteFinished = new Promise(done => { transaction.oncomplete = () => { db.close(); done(); }; });
+      const hold = () => { const get = store.get('account:alice'); get.onsuccess = () => { resolve(); if (!window.releasePlannerWrite) hold(); }; };
+      hold();
+    };
+  }));
+  await rows.nth(1).locator('button').focus(); await page.keyboard.press('Enter');
+  assert.ok(await rows.nth(1).locator('input').evaluate(input => document.activeElement === input), 'middle removal focuses next title');
+  await outcome.focus(); await page.evaluate(async () => { window.releasePlannerWrite = true; await window.plannerWriteFinished; });
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.candidates.length === 2);
+  assert.ok(await outcome.evaluate(input => document.activeElement === input), 'journal completion respects a later focus choice');
+  assert.deepEqual((await local(page)).draft.projectPlanning.candidates.map(candidate => candidate.id), [before.candidates[0].id, before.candidates[2].id]);
+  await rows.last().locator('button').focus(); await page.keyboard.press('Enter');
+  assert.ok(await rows.first().locator('input').evaluate(input => document.activeElement === input), 'last removal focuses previous title');
+  await rows.first().locator('button').focus(); await page.keyboard.press('Enter');
+  assert.ok(await add.evaluate(control => document.activeElement === control), 'only removal focuses Add');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.candidates.length === 0);
+  assert.equal((await local(page)).queue.length, 0);
+  assert.equal(documents.filter(row => ['item', 'projectPlanRevision'].includes(row.record?.type)).length, 0);
+
+  await page.evaluate(async () => {
+    await (await import('/inbox-store.js?v=15')).transact('alice', state => {
+      state.draft.projectPlanning.sections.desiredEvidence = 'Earlier evidence';
+    });
+  });
+  await page.reload(); await page.locator('#projectPlanner').waitFor(); await confirmed(page);
+  await page.locator('#projectPlanEarlierNotes summary').click();
+  const evidence = page.locator('#projectPlanEvidence');
+  await evidence.fill('');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.sections.desiredEvidence === '');
+  await refresh();
+  assert.ok(await evidence.isVisible(), 'clearing the last legacy note keeps its section reachable during refresh');
+  assert.ok(await evidence.evaluate(input => document.activeElement === input), 'refresh keeps focus on the cleared legacy note');
+  await page.keyboard.type('Revised evidence');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.sections.desiredEvidence === 'Revised evidence');
+});
+
 test('project planner resumes offline, accepts selected actions, and recovers exact content after conflict', { timeout: 120000 }, async t => {
   documents.length = 0; let browserUser = 'alice'; const server = await startServer({ browserUser: () => browserUser }); t.after(server.close);
   assert.equal((await post(server.url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Customers can use it' })])).status, 200);
