@@ -10,7 +10,8 @@ import { defaultSettings } from '../api/shared/defaults.mjs';
 
 const create = currentCreate;
 const ref = (type, id) => ({ type, id });
-const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+const synced = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' &&
+  document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
 const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=10')).transact('alice'));
 async function setup(t, items = []) {
   documents.length = 0; let user = 'alice';
@@ -199,8 +200,27 @@ test('checklist reset: a later chunk conflict pauses without reapplying removed 
   const accepted = (await local(page)).records;
   assert.equal(accepted['item:chore-20'].status, 'completed'); assert.deepEqual(accepted['item:chore-20'].collectionRefs, []);
   assert.equal(Object.values(accepted).filter(record => record.status === 'next').length, 20);
-  setUser('bob'); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
-  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact(null)).accountId === 'bob'); await synced(page);
+  // A focus-triggered session check can finish between revealing Menu and
+  // clicking Sync. Hold that account transition until the real click finishes.
+  let releaseSession, observeSession;
+  const sessionGate = new Promise(resolve => { releaseSession = resolve; });
+  const sessionStarted = new Promise(resolve => { observeSession = resolve; });
+  const holdSession = async route => { observeSession(); await sessionGate; await route.continue(); };
+  await page.route('**/api/v1/session', holdSession);
+  const bobChanges = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/v1/changes' && url.searchParams.get('accountId') === 'bob' && response.ok();
+  });
+  setUser('bob'); await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await sessionStarted;
+  try { await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); }
+  finally { releaseSession(); }
+  const changes = await (await bobChanges).json();
+  await waitForBrowser(page, async highWater => {
+    const store = await import('/inbox-store.js?v=23');
+    return (await store.transact(null)).accountId === 'bob' && (await store.transact('bob')).after >= highWater;
+  }, changes.highWater);
+  await synced(page); await page.unroute('**/api/v1/session', holdSession);
   assert.equal(await page.locator('#executeChecklistResetStatus').textContent(), '');
   assert.equal(await page.locator('#checklistResetStatus').textContent(), '');
   assert.equal(await page.locator('#resetExecuteChecklist').isVisible(), false);

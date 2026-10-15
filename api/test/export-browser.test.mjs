@@ -162,7 +162,10 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
   const page = await browser.newPage({ serviceWorkers: 'block' });
   await page.goto(server.url); await page.locator('#workspace').waitFor();
-  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  // An empty outbox is rendered before the initial account pull finishes.
+  // Finish that sync so a later account-switch click cannot be ignored as busy.
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' &&
+    document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
   const downloads = []; page.on('download', file => downloads.push(file));
   const pattern = '**/api/v1/export?*';
   let held;
@@ -198,7 +201,8 @@ test('server export cancels promptly, rejects malformed/error pages and discards
   // The stored account changes before its controls return and sync requests finish.
   // Let Bob's change request finish before simulating a separate sign-out.
   await bobChanges;
-  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' && !document.querySelector('#appHeader').hidden);
+  await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.' &&
+    document.querySelector('#connectionLabel').textContent === 'Saved to cloud' && !document.querySelector('#appHeader').hidden);
   user = null;
   await clickControl(page.locator('#accountExport'));
   await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.includes('server copy'));
