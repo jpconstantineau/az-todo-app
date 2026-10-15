@@ -9,6 +9,7 @@ import { documents, faults, startServer } from './harness.mjs';
 const records = () => documents.filter(doc => doc.kind === 'record').map(doc => doc.record);
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
 const label = (page, expected) => page.waitForFunction(value => document.querySelector('#sessionStatus').textContent === value, expected);
+const accountStatus = (page, expected) => page.waitForFunction(value => document.querySelector('#accountStatus').dataset.state === value, expected);
 const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'));
 async function setup(t) {
   documents.length = 0;
@@ -75,6 +76,7 @@ test('account label: verified name is text only; rename does not change ownershi
   assert.ok(cached.every(url => !url.includes('/.auth/') && !url.includes('/api/')));
   await context.setOffline(true); await page.reload();
   await page.locator('#workspace').waitFor(); await label(page, 'Your device inbox · Offline');
+  await accountStatus(page, 'unverified');
   assert.equal(await page.locator('#accountName').textContent(), 'renamed-handle');
   assert.ok(requests > 0);
 });
@@ -88,8 +90,8 @@ test('account label: missing, malformed, mismatched and failed profiles leave ca
   let body = bodies[0], status = 200, invalidJson = false;
   await page.route('**/.auth/me', route => route.fulfill({ status, contentType: 'application/json', body: invalidJson ? '{' : JSON.stringify(body) }));
   await open(page, url);
-  for (body of bodies) { await sync(page); await label(page, 'Your device inbox'); }
-  for (status of [401, 500]) { await sync(page); await label(page, 'Your device inbox'); }
+  for (body of bodies) { await sync(page); await label(page, 'Your device inbox'); await accountStatus(page, 'authenticated'); }
+  for (status of [401, 500]) { await sync(page); await label(page, 'Your device inbox'); await accountStatus(page, 'authenticated'); }
   status = 200; invalidJson = true; await sync(page); await label(page, 'Your device inbox');
   await capture(page, 'Profile is optional'); await confirmed(page);
   assert.equal(records()[0].title, 'Profile is optional');
@@ -104,6 +106,7 @@ test('account label: delayed previous-account responses and expiry cannot restor
     return route.fulfill({ json: { clientPrincipal: { userId: 'bob', userDetails: 'bob-handle' } } });
   });
   await open(page, url);
+  await accountStatus(page, 'authenticated');
   // A hung profile does not hold the workspace or the sync queue hostage.
   await capture(page, 'Alice item'); await confirmed(page);
   hold = false; setUser('bob'); await sync(page); await label(page, 'Device inbox for bob-handle');
@@ -112,10 +115,12 @@ test('account label: delayed previous-account responses and expiry cannot restor
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await label(page, 'Device inbox for bob-handle');
   assert.equal(await page.locator('#accountName').textContent(), 'bob-handle');
+  await accountStatus(page, 'authenticated');
   setUser(null); await clickControl(page.getByRole('button', { includeHidden: true, name: 'Sync now' }));
   await page.waitForFunction(() => document.querySelector('#sessionStatus').textContent.startsWith('On this device'));
   assert.doesNotMatch(await page.locator('#sessionStatus').textContent(), /bob-handle|late-alice/);
   assert.equal(await page.locator('#accountName').textContent(), 'On this device');
+  await accountStatus(page, 'signed-out');
   assert.equal(await page.locator('#items article').count(), 0);
 });
 

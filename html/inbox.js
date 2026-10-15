@@ -34,6 +34,16 @@ let taskOptionJournalPromise = Promise.resolve(true);
 let exportController;
 let resetImpact, resetReviewLoading = false;
 let splitFeedbackTimer;
+let signInPending = false;
+function accountStatus(value) {
+  const button = $('accountStatus');
+  button.dataset.state = value;
+  button.disabled = value === 'checking';
+  button.title = value === 'authenticated' ? 'Signed in — account status'
+    : value === 'signed-out' ? 'Not signed in — sign in to sync'
+    : value === 'unverified' ? 'Sign-in status unverified — sign in' : 'Checking sign-in status';
+  button.setAttribute('aria-label', button.title);
+}
 let materializingRecurrence = false;
 let savedViewEditing = null;
 let selectedWorkspace = PERSONAL, switchingWorkspace = false;
@@ -2486,16 +2496,42 @@ $('export').onclick = guard(async () => {
   const value = deviceExport(owner, snapshot, currentDraft, source);
   downloadExport(value, readable, readable ? 'todo-tasks.txt' : 'todo-device-recovery.json');
 });
-$('signInToSync').onclick = guard(async event => {
-  if (!localMode()) return;
-  event.preventDefault();
-  if (!await journal()) throw new Error('The current draft could not be saved. Copy the recovery text before signing in.');
-  const intent = crypto.randomUUID();
-  sessionStorage.setItem(ADOPTION_INTENT, intent);
-  try { await transact(null, saved => { saved.adoptLocal = intent; saved.activeProfile = LOCAL_PROFILE; }); }
-  catch (failure) { sessionStorage.removeItem(ADOPTION_INTENT); throw failure; }
-  location.href = $('signInToSync').href;
+$('signInToSync').onclick = guard(signIn);
+$('accountStatus').onclick = guard(async event => {
+  if ($('accountStatus').dataset.state === 'authenticated') location.hash = '#app-device/connection';
+  else await signIn(event);
 });
+async function signIn(event) {
+  event.preventDefault();
+  if (signInPending || !accountId || $('accountStatus').dataset.state === 'checking') return;
+  const owner = accountId, generation = accountGeneration, loginDestination = $('signInToSync').href;
+  signInPending = true;
+  try {
+    const journaled = await journal();
+    if (owner !== accountId || generation !== accountGeneration) return;
+    if (!journaled) throw new Error('The current draft could not be saved. Copy the recovery text before signing in.');
+    if (owner === LOCAL_PROFILE) {
+      const intent = crypto.randomUUID();
+      sessionStorage.setItem(ADOPTION_INTENT, intent);
+      try { await transact(null, saved => {
+        if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed before signing in. Try again.');
+        saved.adoptLocal = intent; saved.activeProfile = LOCAL_PROFILE;
+      }); }
+      catch (failure) { sessionStorage.removeItem(ADOPTION_INTENT); throw failure; }
+      if (owner !== accountId || generation !== accountGeneration) {
+        await transact(null, saved => { if (saved.adoptLocal === intent) delete saved.adoptLocal; });
+        if (sessionStorage.getItem(ADOPTION_INTENT) === intent) sessionStorage.removeItem(ADOPTION_INTENT);
+        return;
+      }
+    }
+    if (owner === accountId && generation === accountGeneration) location.href = loginDestination;
+  } catch (failure) {
+    if (owner === accountId && generation === accountGeneration && destination === 'menu') {
+      history.replaceState(null, '', '#capture'); workspace(true, { save: false });
+    }
+    throw failure;
+  } finally { signInPending = false; }
+}
 $('sharedLists').onclick = event => {
   if (!localMode()) return;
   event.preventDefault();
@@ -2591,7 +2627,8 @@ async function showAccountName(owner, generation, verified) {
 }
 function hideAccount() {
   closeExecutionDialogs();
-  $('appHeader').hidden = true; $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
+  $('appHeader').dataset.ready = 'false'; accountStatus('checking');
+  $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
   if (accountId && (location.hash === '#menu' || location.hash === '#preferences' || location.hash.startsWith('#preferences/') || location.hash.startsWith('#app-device') || location.hash.startsWith('#data-recovery'))) history.replaceState(null, '', location.pathname + location.search + '#capture');
   document.body.classList.remove('menu-route', 'utility-route'); $('menuView').hidden = true; $('utilityView').hidden = true; $('preferencesView').hidden = true; $('appMenu').removeAttribute('aria-current');
   document.querySelectorAll('#preferencesCategories [aria-current]').forEach(link => link.removeAttribute('aria-current'));
@@ -2645,6 +2682,7 @@ function hideAccount() {
   $('recoveryText').value = ''; $('recovery').hidden = true; $('workspace').hidden = true; $('signOut').hidden = true;
 }
 async function pauseSession(message) {
+  $('appHeader').dataset.ready = 'false'; accountStatus('checking');
   try { await transact(null, session => { session.paused = true; session.activeProfile = LOCAL_PROFILE; }); }
   catch { error('Could not record sign-out on this device. Keep this browser profile private; its offline cache may still be available.', 'storage'); }
   await openProfile({ accountId: LOCAL_PROFILE, defaultSettings: localDefaultSettings }, false);
@@ -2653,6 +2691,7 @@ async function pauseSession(message) {
 async function handleAccountErased(erasedAccountId) {
   const saved = await transact(null), owner = erasedAccountId && erasedAccountId !== LOCAL_PROFILE ? erasedAccountId : saved.accountId;
   const active = accountId === owner || !accountId && saved.accountId === owner;
+  if (active) { $('appHeader').dataset.ready = 'false'; accountStatus('checking'); }
   if (owner) await purgeAccountProfile(owner);
   if (!active) return accountId;
   sessionStorage.removeItem(ADOPTION_INTENT);
@@ -2666,15 +2705,18 @@ async function handleAccountErased(erasedAccountId) {
 async function openProfile(identity, verified) {
   let generation = accountGeneration;
   if (accountId !== identity.accountId) {
-    const sessionState = await transact(null);
     hideAccount();
-    if (sessionState.activeProfile && sessionState.activeProfile !== identity.accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
     generation = accountGeneration;
+    const sessionState = await transact(null);
+    if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
+    if (sessionState.activeProfile && sessionState.activeProfile !== identity.accountId) history.replaceState(null, '', location.pathname + location.search + '#capture');
     await transact(null, saved => {
+      if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
       saved.activeProfile = identity.accountId;
       if (identity.accountId !== LOCAL_PROFILE) { saved.accountId = identity.accountId; saved.paused = false; }
     });
     const saved = await transact(identity.accountId, local => {
+      if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
       if (identity.defaultSettings) local.defaultSettings = identity.defaultSettings;
     });
     if (generation !== accountGeneration) throw new Error('Account changed while opening its device copy. Reload to continue.');
@@ -2686,7 +2728,8 @@ async function openProfile(identity, verified) {
   }
   $('workspace').hidden = false; $('signOut').hidden = localMode();
   $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
-  $('appHeader').hidden = false; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
+  $('appHeader').dataset.ready = 'true'; $('workspaceSkip').hidden = false; $('appUpdateStatus').hidden = false;
+  accountStatus(localMode() ? 'signed-out' : verified && navigator.onLine ? 'authenticated' : 'unverified');
   void showAccountName(accountId, generation, verified);
   return accountId;
 }
@@ -2699,8 +2742,9 @@ async function session({ allowOffline = false } = {}) {
     if (typeof identity.accountId !== 'string' || !identity.accountId) throw new Error('Missing account identity.');
     verified = true;
   } catch (failure) {
+    if (generation !== accountGeneration || accountId !== expectedAccountId) throw new Error('Account changed while checking the session. Retry after signing in.');
+    if (accountId) accountStatus(localMode() ? 'signed-out' : 'unverified');
     if (failure.code === 'account_erased') {
-      if (generation !== accountGeneration || accountId !== expectedAccountId) throw new Error('Account changed while checking the session. Retry after signing in.');
       return handleAccountErased(expectedAccountId);
     }
     if (failure.status === 401 || failure.status === 403) {
@@ -3067,7 +3111,7 @@ channel.onmessage = guard(async () => {
   }
 });
 addEventListener('online', () => { void sync(); });
-addEventListener('offline', () => { profileRequest++; $('sessionStatus').textContent = localMode() ? 'On this device · Offline' : 'Offline — saves remain on this device until you reconnect.'; render(); });
+addEventListener('offline', () => { profileRequest++; if (accountId) accountStatus(localMode() ? 'signed-out' : 'unverified'); $('sessionStatus').textContent = localMode() ? 'On this device · Offline' : 'Offline — saves remain on this device until you reconnect.'; render(); });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { render(); void materializeRecurrence(); }
   if (!document.hidden && navigator.onLine && !localMode()) { $('workspace').hidden = true; void sync(); }

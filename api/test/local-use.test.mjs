@@ -64,6 +64,7 @@ test('anonymous workspace saves, reloads and reopens from the cached shell witho
   await page.reload();
   await page.getByRole('button', { name: 'Edit Anonymous task', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#sessionStatus').textContent(), 'On this device · Offline');
+  assert.equal(await page.locator('#accountStatus').getAttribute('data-state'), 'signed-out');
   assert.deepEqual((await storeState(page)).queue, before.queue);
   assert.deepEqual(errors, []);
 });
@@ -89,8 +90,7 @@ test('explicit sign in adopts device-only operations once after pulling existing
     user = 'alice';
     await route.fulfill({ status: 302, headers: { location: '/' }, body: '' });
   });
-  await page.locator('#appMenu').click();
-  await page.getByRole('link', { name: 'Sign in to sync' }).click();
+  await page.locator('#accountStatus').click();
   await page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
   const account = await storeState(page, 'alice');
   assert.equal(account.queue.length, 0);

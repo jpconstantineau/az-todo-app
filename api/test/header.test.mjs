@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { documents, startServer } from './harness.mjs';
-import { clickControl, openUtility } from './navigation-helper.mjs';
+import { clickControl, openUtility, openPreferences, showView } from './navigation-helper.mjs';
+import { waitForBrowser } from './browser-wait.mjs';
 
 async function setup(t, user, mode) {
   documents.length = 0;
@@ -40,6 +41,7 @@ async function setup(t, user, mode) {
 }
 const status = (page, value) => page.waitForFunction(value => document.querySelector('#saveStatus').dataset.state === value, value);
 const agentStatus = (page, value) => page.waitForFunction(value => document.querySelector('#agentStatus').dataset.state === value, value);
+const accountStatus = (page, value) => page.waitForFunction(value => document.querySelector('#accountStatus').dataset.state === value, value);
 const local = page => page.evaluate(async () => (await import('/inbox-store.js?v=21')).transact('alice'));
 async function shot(page, name) {
   if (!process.env.HEADER_SCREENSHOTS) return;
@@ -52,9 +54,14 @@ async function loadingShell(page) {
   assert.equal(await page.title(), 'To-Do');
   assert.equal(await page.locator('#signedOut h1').innerText(), 'Welcome');
   assert.equal(await page.locator('#loginStatus').textContent(), 'Opening your workspace…');
-  for (const selector of ['#appHeader', '#accountName', '#workspaceSelect', '#saveStatus', '#agentStatus', '#agentLabel', '#appMenu', '#workspaceSkip', '#workspace', '#appUpdateStatus', '#preferencesView', '#utilityView']) {
+  assert.equal(await page.locator('#appHeader').isVisible(), true);
+  assert.equal(await page.locator('#accountStatus').isVisible(), true);
+  assert.equal(await page.locator('#accountStatus').isDisabled(), true);
+  assert.equal(await page.locator('#accountStatus').getAttribute('aria-label'), 'Checking sign-in status');
+  for (const selector of ['#accountName', '#workspaceSelect', '#saveStatus', '#agentStatus', '#agentLabel', '#appMenu', '#workspaceSkip', '#workspace', '#appUpdateStatus', '#preferencesView', '#utilityView']) {
     assert.equal(await page.locator(selector).isVisible(), false, selector);
   }
+  await shot(page, 'account-checking');
 }
 
 async function deviceLocal(page) {
@@ -66,6 +73,8 @@ async function deviceLocal(page) {
   assert.equal(await page.locator('#signInToSync').getAttribute('hidden'), null);
   assert.equal(await page.locator('#signOut').isVisible(), false);
   assert.match(await page.title(), / · Personal$/);
+  await accountStatus(page, 'signed-out');
+  assert.equal(await page.locator('.account-question').isVisible(), true);
 }
 
 test('loading hides application chrome before the session check and then opens device-local use', async t => {
@@ -102,6 +111,172 @@ test('fresh signed-out session opens the device-local workspace without an error
   assert.match(await page.locator('#connectionLabel').textContent(), /Saved on this device/);
   assert.doesNotMatch(await page.locator('body').innerText(), /401/);
   await shot(page, 'device-local');
+  if (process.env.HEADER_SCREENSHOTS) for (const mode of ['light', 'dark']) {
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.evaluate(mode => todoAppearance.choose(mode, 'hashicorp'), mode);
+    await shot(page, `account-signed-out-${mode}-320`);
+  }
+});
+
+test('account avatar stays accessible across routes, themes and narrow layouts', async t => {
+  const { page, url } = await setup(t, 'alice');
+  const longName = 'A very long account identity with no short display name';
+  await page.route('**/.auth/me', route => route.fulfill({ json: { clientPrincipal: { userId: 'alice', userDetails: longName } } }));
+  await page.goto(url); await status(page, 'confirmed'); await accountStatus(page, 'authenticated');
+  await page.waitForFunction(name => document.querySelector('#accountName').textContent === name, longName);
+  const avatar = page.getByRole('button', { name: 'Signed in — account status', exact: true });
+  assert.equal(await avatar.getAttribute('title'), 'Signed in — account status');
+  assert.equal(await avatar.locator('svg').getAttribute('aria-hidden'), 'true');
+  assert.equal(await page.locator('.account-question').isVisible(), false);
+  await clickControl(page.locator('#manageWorkspaces'));
+  await page.locator('#createWorkspace input').fill('A very long workspace name to truncate');
+  await page.locator('#createWorkspace button').click();
+  await page.getByRole('button', { name: 'Rename workspace: A very long workspace name to truncate', exact: true }).waitFor();
+  await page.locator('#closeWorkspaces').click(); await page.locator('#menuBack').click();
+  await page.locator('#workspaceSelect').selectOption({ label: 'A very long workspace name to truncate' });
+  await page.waitForFunction(() => document.title === 'Capture · A very long workspace name to truncate');
+  for (const width of [320, 1440]) for (const style of ['hashicorp', 'hmi', 'hmi-cvd']) for (const mode of ['light', 'dark']) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate(({ mode, style }) => todoAppearance.choose(mode, style), { mode, style });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    for (const control of ['#accountStatus', '#agentStatus', '#appMenu', '#workspaceSelect']) {
+      const bounds = await page.locator(control).boundingBox();
+      assert.ok(bounds.width >= 44 && bounds.height >= 44, control);
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, control);
+    }
+    assert.equal(await avatar.evaluate(button => getComputedStyle(button).color), await page.locator('#saveStatus').evaluate(icon => getComputedStyle(icon).color));
+    await shot(page, `account-${style}-${mode}-${width}`);
+  }
+  for (const view of ['capture', 'work', 'lists', 'plan', 'execute', 'reviews']) {
+    await showView(page, view); assert.equal(await avatar.isVisible(), true);
+  }
+  await page.locator('#appMenu').click(); await page.locator('#menuView').waitFor(); assert.equal(await avatar.isVisible(), true);
+  await openPreferences(page); assert.equal(await avatar.isVisible(), true);
+  await openUtility(page, 'data-recovery/export'); assert.equal(await avatar.isVisible(), true);
+  await page.locator('#agentStatus').focus(); await page.keyboard.press('Tab');
+  assert.equal(await avatar.evaluate(button => document.activeElement === button), true);
+  assert.equal(await avatar.evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
+  await page.keyboard.press('Enter');
+  await page.locator('#connectionHeading').waitFor();
+  assert.equal(new URL(page.url()).hash, '#app-device/connection');
+  assert.equal(await avatar.isVisible(), true);
+});
+
+test('signed-out avatar journals the current draft and adoption intent before login', async t => {
+  const { page, url } = await setup(t, null);
+  await page.goto(url); await deviceLocal(page);
+  const avatar = page.getByRole('button', { name: 'Not signed in — sign in to sync', exact: true });
+  assert.equal(await avatar.getAttribute('title'), 'Not signed in — sign in to sync');
+  assert.equal(await avatar.evaluate(button => getComputedStyle(button).color), await page.locator('body').evaluate(body => {
+    const sample = document.createElement('span'); sample.style.color = 'var(--error)'; body.append(sample);
+    const color = getComputedStyle(sample).color; sample.remove(); return color;
+  }));
+  // No input event: the login handler itself must journal this current value.
+  await page.locator('#captureText').evaluate(input => { input.value = 'Draft at sign-in'; });
+  const login = page.waitForRequest(request => request.url().includes('/.auth/login/github?'));
+  await page.route('**/.auth/login/github?**', route => route.fulfill({ status: 204 }));
+  await page.locator('#agentStatus').focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
+  const request = await login;
+  assert.equal(new URL(request.url()).pathname + new URL(request.url()).search, '/.auth/login/github?post_login_redirect_uri=/');
+  const saved = await page.evaluate(async () => {
+    const store = await import('/inbox-store.js?v=21');
+    return { profile: await store.transact(store.LOCAL_PROFILE), session: await store.transact(null), nonce: sessionStorage.getItem('todo-adopt-local') };
+  });
+  assert.equal(saved.profile.draft.capture.text, 'Draft at sign-in');
+  assert.ok(saved.nonce); assert.equal(saved.session.adoptLocal, saved.nonce);
+});
+
+for (const control of ['avatar', 'menu']) for (const failure of ['draft', 'intent', 'tab-storage']) {
+  test(`${control} login stops safely when ${failure} storage fails`, async t => {
+    const { page, url } = await setup(t, null);
+    await page.goto(url); await deviceLocal(page);
+    await page.locator('#captureText').fill('Previously saved draft');
+    await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=21')).transact('device-local')).draft.capture.text === 'Previously saved draft');
+    if (control === 'menu') { await page.locator('#appMenu').click(); await page.locator('#menuView').waitFor(); }
+    let logins = 0;
+    await page.route('**/.auth/login/github?**', route => { logins++; return route.fulfill({ status: 204 }); });
+    await page.evaluate(failure => {
+      document.querySelector('#captureText').value = 'Current draft must survive';
+      window.originalPut = IDBObjectStore.prototype.put;
+      window.originalSetItem = Storage.prototype.setItem;
+      IDBObjectStore.prototype.put = function (value, key) {
+        if (failure === 'draft' && key === 'local-profile' || failure === 'intent' && key === 'session' && value.adoptLocal) throw new Error('Injected login storage failure');
+        return originalPut.call(this, value, key);
+      };
+      Storage.prototype.setItem = function (key, value) {
+        if (failure === 'tab-storage' && key === 'todo-adopt-local') throw new Error('Injected tab storage failure');
+        return originalSetItem.call(this, key, value);
+      };
+    }, failure);
+    await page.locator(control === 'avatar' ? '#accountStatus' : '#signInToSync').click();
+    await page.locator('#error').waitFor();
+    await page.waitForFunction(() => /could not be saved|Injected/.test(document.querySelector('#error').textContent));
+    assert.equal(logins, 0);
+    const saved = await page.evaluate(async () => {
+      IDBObjectStore.prototype.put = originalPut; Storage.prototype.setItem = originalSetItem;
+      const store = await import('/inbox-store.js?v=21');
+      return { session: await store.transact(null), profile: await store.transact('device-local'), nonce: sessionStorage.getItem('todo-adopt-local') };
+    });
+    assert.ok(!saved.session.adoptLocal); assert.equal(saved.nonce, null);
+    assert.equal(saved.session.activeProfile, 'device-local');
+    assert.deepEqual(saved.profile.queue, []);
+    assert.equal(saved.profile.draft.capture.text, failure === 'draft' ? 'Previously saved draft' : 'Current draft must survive');
+    assert.equal(await page.locator('#captureText').inputValue(), 'Current draft must survive');
+    if (failure === 'draft') assert.equal(JSON.parse(await page.locator('#recoveryText').inputValue()).draft.capture.text, 'Current draft must survive');
+  });
+}
+
+test('unverified cached account reauth journals its own draft without adoption intent', async t => {
+  const { page, context, url } = await setup(t, 'alice');
+  await page.goto(url); await status(page, 'confirmed'); await accountStatus(page, 'authenticated');
+  await context.setOffline(true); await accountStatus(page, 'unverified');
+  await page.route('**/api/v1/session', route => route.abort());
+  await context.setOffline(false); await status(page, 'confirmed'); await accountStatus(page, 'unverified');
+  await page.locator('#captureText').evaluate(input => { input.value = 'Alice reauthentication draft'; });
+  const login = page.waitForRequest(request => request.url().includes('/.auth/login/github?'));
+  await page.route('**/.auth/login/github?**', route => route.fulfill({ status: 204 }));
+  await page.getByRole('button', { name: 'Sign-in status unverified — sign in', exact: true }).click();
+  await login;
+  const saved = await page.evaluate(async () => {
+    const store = await import('/inbox-store.js?v=21');
+    return { account: await store.transact('alice'), session: await store.transact(null), nonce: sessionStorage.getItem('todo-adopt-local') };
+  });
+  assert.equal(saved.account.draft.capture.text, 'Alice reauthentication draft');
+  assert.equal(saved.session.activeProfile, 'alice');
+  assert.ok(!saved.session.adoptLocal); assert.equal(saved.nonce, null);
+  await page.unroute('**/api/v1/session');
+  await clickControl(page.locator('#sync')); await accountStatus(page, 'authenticated');
+});
+
+test('account transition exposes a checking avatar while the new profile is still opening', async t => {
+  const { page, url, setUser } = await setup(t, 'alice');
+  await page.goto(url); await status(page, 'confirmed'); await accountStatus(page, 'authenticated');
+  await page.evaluate(() => {
+    const transact = IDBDatabase.prototype.transaction;
+    const complete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    window.holdProfile = true;
+    IDBDatabase.prototype.transaction = function (...args) {
+      const transaction = transact.apply(this, args);
+      Object.defineProperty(transaction, 'oncomplete', { set(handler) {
+        complete.set.call(transaction, event => {
+          if (holdProfile && document.querySelector('#appHeader').dataset.ready === 'false') {
+            holdProfile = false; window.finishProfile = () => handler(event);
+          } else handler(event);
+        });
+      } });
+      return transaction;
+    };
+  });
+  setUser('bob'); await clickControl(page.locator('#sync'));
+  await page.waitForFunction(() => !!window.finishProfile);
+  await accountStatus(page, 'checking');
+  assert.equal(await page.locator('#accountStatus').isVisible(), true);
+  assert.equal(await page.locator('#accountStatus').isDisabled(), true);
+  for (const id of ['accountName', 'workspaceSelect', 'saveStatus', 'agentStatus', 'appMenu', 'workspace']) assert.equal(await page.locator('#' + id).isVisible(), false, id);
+  await page.evaluate(() => finishProfile());
+  await accountStatus(page, 'authenticated'); await status(page, 'confirmed');
+  await page.waitForFunction(() => document.querySelector('#accountName').textContent === 'bob-handle');
+  assert.equal(await page.locator('#items article').count(), 0);
 });
 
 for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'unavailable' }, 'unavailable'], [{ checkFail: true }, 'error'], [{ state: 'downloadable' }, 'downloadable'], [{ state: 'downloading' }, 'busy'], [{ state: 'available' }, 'available']]) {

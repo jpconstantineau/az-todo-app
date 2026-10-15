@@ -201,6 +201,7 @@ test('account erasure: offline device purges only the erased profile before subm
     return session.paused && !session.accountId && alice.queue.length === 0 && Object.keys(alice.records).length === 0 && alice.sharedLists === undefined &&
       document.querySelector('#sessionStatus').textContent.startsWith('Account erased');
   });
+  assert.equal(await page.locator('#accountStatus').getAttribute('data-state'), 'signed-out');
   const bob = await page.evaluate(async () => (await (await import('/inbox-store.js?v=19')).transact('bob')).records['item:bob']);
   assert.equal(bob.title, 'Bob local');
   const isolated = await page.evaluate(async () => {
@@ -213,6 +214,6 @@ test('account erasure: offline device purges only the erased profile before subm
   assert.equal(isolated.session.accountId, 'bob'); assert.equal(isolated.session.paused, false);
   assert.equal(isolated.charlie.draft.capture, undefined);
   assert.equal(new URL(page.url()).hash, '#capture');
-  assert.equal(await page.locator('#captureHeading').evaluate(element => element === document.activeElement), true);
+  await page.waitForFunction(() => document.querySelector('#captureHeading') === document.activeElement);
   assert.equal(documents.some(row => row.UserID === 'alice' && row.id === 'receipt:' + plan.erasureId), false);
 });
