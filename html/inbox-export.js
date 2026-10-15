@@ -1,7 +1,7 @@
 // A device snapshot is never an instruction to replay old writes.
 const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-import { readableBrief } from './briefs.js?v=6';
+import { readableBrief } from './briefs.js?v=7';
 import { purgeWorkspaceState } from './workspaces.js?v=5';
 import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=2';
 import { validateExecutionPolicy } from './execution-policy.js?v=2';
@@ -111,7 +111,8 @@ function validateExport(value, server = false) {
     if (entry.type === 'projectPlanRevision') require(entry.deleted !== true && typeof entry.projectId === 'string' &&
       Number.isSafeInteger(entry.sourceVersion) && entry.sourceVersion > 0 && object(entry.sections) &&
       ['purposePrinciples', 'desiredEvidence', 'organizationApproach', 'unresolvedQuestions'].every(name => typeof entry.sections[name] === 'string') &&
-      Array.isArray(entry.candidates) && entry.candidates.length <= 50 && Array.isArray(entry.mappings) && entry.mappings.length <= 18,
+      (!Object.hasOwn(entry.sections, 'outcome') || typeof entry.sections.outcome === 'string' && !!entry.sections.outcome.trim() && entry.sections.outcome.length <= 4000) &&
+      Array.isArray(entry.candidates) && entry.candidates.length <= 50 && Array.isArray(entry.mappings) && entry.mappings.length <= 50,
       `${path}: invalid project plan revision.`);
     if (entry.type === 'executionPolicy') {
       try { validateExecutionPolicy(entry); } catch { require(false, `${path}: invalid active-work policy.`); }

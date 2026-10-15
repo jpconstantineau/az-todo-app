@@ -2,18 +2,18 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=6';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
-import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, enqueueChecklistReset, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=22';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, enqueueChecklistReset, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=23';
 import { checklistResetPlan } from './checklist-reset.js?v=1';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems, effectivePriority, priorityFields, refreshPriorityControls } from './inbox-fields.js?v=7';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=22';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=23';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=16';
-import { setupBriefs } from './briefs.js?v=6';
-import { setupProjectPlanning } from './project-planning.js?v=1';
-import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
+import { setupBriefs } from './briefs.js?v=7';
+import { setupProjectPlanning } from './project-planning.js?v=2';
+import { recoverProjectPlanDraft } from './project-planning-model.js?v=2';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=6';
 import { setupAgentStatus } from './local-agent.js?v=2';
 import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
@@ -1264,11 +1264,12 @@ function render() {
       const project = state.records[`project:${pending.projectId}`];
       const accepted = project?.planningHeadId && state.records[`projectPlanRevision:${project.planningHeadId}`];
       const describeProjectPlan = revision => revision ? [
+        ...(revision.sections.outcome === undefined ? [] : [`Outcome: ${revision.sections.outcome}`]),
         `Purpose & principles: ${revision.sections.purposePrinciples || '(blank)'}`,
-        `Desired evidence: ${revision.sections.desiredEvidence || '(blank)'}`,
-        `Organization / approach: ${revision.sections.organizationApproach || '(blank)'}`,
-        `Unresolved questions: ${revision.sections.unresolvedQuestions || '(blank)'}`,
-        `Candidates: ${revision.candidates.map(candidate => `${candidate.title} [${candidate.kind}]`).join('; ') || '(none)'}`
+        `Organize — parts, sequence and priorities: ${revision.sections.organizationApproach || '(blank)'}`,
+        ...(revision.sections.desiredEvidence ? [`Earlier planning notes — desired evidence: ${revision.sections.desiredEvidence}`] : []),
+        ...(revision.sections.unresolvedQuestions ? [`Earlier planning notes — unresolved questions: ${revision.sections.unresolvedQuestions}`] : []),
+        `Candidate ideas and next action commitments: ${revision.candidates.map(candidate => `${candidate.title} [${candidate.kind}]`).join('; ') || '(none)'}`
       ].join('\n') : 'No accepted project plan';
       $('comparison').textContent = `My pending plan\n${describeProjectPlan(pending)}\n\nLatest accepted plan\n${describeProjectPlan(accepted)}`;
     } else if (planConflict) {
