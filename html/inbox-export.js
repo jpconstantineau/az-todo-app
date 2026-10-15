@@ -3,7 +3,7 @@ const FORMAT = 'az-todo-device-export';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 import { readableBrief } from './briefs.js?v=6';
 import { purgeWorkspaceState } from './workspaces.js?v=5';
-import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=1';
+import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=2';
 import { validateExecutionPolicy } from './execution-policy.js?v=1';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'projectPlanRevision', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate', 'executionPolicy'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
@@ -11,7 +11,7 @@ const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'ver
   'collectionRefs', 'parentRef', 'kind', 'revisitDate', 'listId', 'projectId', 'plannedDay', 'plannedWeek', 'status', 'statusBeforeCompletion', 'completedUtc', 'nextAction',
   'dueDate', 'startDate', 'reviewDate', 'dueDateUtc', 'startDateUtc', 'reviewDateUtc',
   'workflowBeforeTransition', 'completionBeforeTransition', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired',
-  'priority', 'effortEstimate', 'referenceLinks', 'outcome', 'planningHeadId', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
+  'priority', 'importance', 'urgency', 'eisenhowerPriority', 'effortEstimate', 'referenceLinks', 'outcome', 'planningHeadId', 'defaults', 'reviewKind', 'reviewDay', 'included', 'flowVersion', 'step', 'decision', 'proposal',
   'subjectType', 'subjectId', 'sourceVersion', 'previousBriefId', 'content',
   'previousReviewId', 'decisionHeads', 'decisionCount', 'reviewId', 'previousReflectionId', 'promptVersion', 'prompts', 'conclusion', 'followUpIds', 'sequence', 'index', 'choice', 'recordVersion', 'before', 'changes',
   'estimationMethod', 'planDay', 'actionIds', 'loadAssessment', 'carryoverDecisions', 'revisionHead', 'revisionCount', 'planId', 'operationKind', 'after', 'carryoverDecision', 'estimates',
@@ -77,6 +77,8 @@ function validateExport(value, server = false) {
     for (const field of Object.keys(entry)) if (!allowed.includes(field)) warnings.push(`${path}.${field}: preserved, interpretation unsupported`);
   };
   const currentShape = (entry, path) => {
+    for (const name of ['importance', 'urgency']) if (name in entry) require(['item', 'recurrenceTemplate'].includes(entry.type) && [-1, 0, 1].includes(entry[name]), `${path}: invalid ${name}.`);
+    if ('eisenhowerPriority' in entry) require(entry.type === 'settings' && typeof entry.eisenhowerPriority === 'boolean', `${path}: invalid eisenhowerPriority.`);
     if (['item', 'list', 'project', 'savedView', 'review', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate', 'executionPolicy'].includes(entry.type)) {
       require(typeof entry.workspaceId === 'string' && entry.workspaceId.length > 0, `${path}: workspaceId is required.`);
     }
@@ -202,7 +204,11 @@ function validateExport(value, server = false) {
         reviewReflection(mutation.fields, `${path}.fields`);
       }
       if (mutation.action === 'create') currentShape({ type: mutation.type, ...mutation.fields }, `${path}.fields`);
-      if (mutation.fields) unknown(mutation.fields, recordFields, `${path}.fields`);
+      if (mutation.fields) {
+        for (const name of ['importance', 'urgency']) if (name in mutation.fields) require(['item', 'recurrenceTemplate'].includes(mutation.type) && [-1, 0, 1].includes(mutation.fields[name]), `${path}: invalid ${name}.`);
+        if ('eisenhowerPriority' in mutation.fields) require(mutation.type === 'settings' && typeof mutation.fields.eisenhowerPriority === 'boolean', `${path}: invalid eisenhowerPriority.`);
+        unknown(mutation.fields, recordFields, `${path}.fields`);
+      }
       unknown(mutation, ['id', 'type', 'action', 'expectedVersion', 'fields'], `${path}.mutation`);
     }
     if (entry.receipt !== undefined) {

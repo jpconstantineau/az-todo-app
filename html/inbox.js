@@ -2,23 +2,23 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
-import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=19';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=20';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
-import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems } from './inbox-fields.js?v=6';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=20';
+import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems, effectivePriority, priorityFields, refreshPriorityControls } from './inbox-fields.js?v=7';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=21';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=14';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=15';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=5';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=6';
 import { setupAgentStatus } from './local-agent.js?v=2';
 import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
-import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=6';
-import { resolveOccurrenceMutations } from './recurrence-model.js?v=1';
-import { setupRecurrence } from './recurrence-ui.js?v=3';
+import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=7';
+import { resolveOccurrenceMutations } from './recurrence-model.js?v=2';
+import { setupRecurrence } from './recurrence-ui.js?v=4';
 import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, retryExecutionCleanupMutations, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=1';
 
 const $ = id => document.getElementById(id);
@@ -318,7 +318,7 @@ function closeExecutionDialogs() {
 }
 const dialogOpeners = new Map();
 const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
-  readOnly: workspaceReadOnly, showDialog, restoreFocus, journal, label: collectionLabel, save: saveRecurrence });
+  matrix: matrixPriority, readOnly: workspaceReadOnly, showDialog, restoreFocus, journal, label: collectionLabel, save: saveRecurrence });
 async function saveRecurrence(mutations, message, clearRecurrenceDraft = false, targetWorkspaceId = selectedWorkspace) {
   const owner = accountId, generation = accountGeneration;
   if (!owner || workspaceReadOnly(targetWorkspaceId)) throw new Error('Choose an active workspace before changing recurring work.');
@@ -343,7 +343,7 @@ async function materializeRecurrence() {
   catch (failure) { if (accountId) error(`Recurring work was not created: ${failure.message}`); }
   finally { materializingRecurrence = false; }
 }
-const extraction = setupCaptureExtraction({ journal, showDialog, recovery: storageFailure,
+const extraction = setupCaptureExtraction({ matrix: matrixPriority, journal, showDialog, recovery: storageFailure,
   cloudEligible: () => captureCloudPreference.enabled && !!accountId && accountId !== LOCAL_PROFILE,
   current: () => {
     if (!accountId || workspaceReadOnly()) return null;
@@ -480,7 +480,7 @@ async function saveDailyPlan(mutations) {
     state = saved; clearError(); render(); broadcast(); void sync(); return true;
   } catch (failure) { if (owner === accountId) storageFailure(failure); return false; }
 }
-const planner = setupPlan({ records: scopedRecords, workspaceId: () => selectedWorkspace, navigation: () => navigation.plan, readOnly: workspaceReadOnly,
+const planner = setupPlan({ matrix: matrixPriority, records: scopedRecords, workspaceId: () => selectedWorkspace, navigation: () => navigation.plan, readOnly: workspaceReadOnly,
   save: async (record, fields) => { if (!await updateRecord(record, fields)) render(); },
   savePlan: saveDailyPlan,
   edit: record => openEditor(record),
@@ -524,11 +524,13 @@ edit.elements.kind.onchange = () => {
 edit.elements.projectStatus.addEventListener('change', () => { edit.elements.outcome.required = edit.elements.projectStatus.value !== 'draft'; void journal(); });
 $('includeNested').onchange = () => { navigation.lists.nested = $('includeNested').checked; render(); void journal(); };
 
+function matrixPriority() { return accountId ? projected(state)['settings:settings']?.eisenhowerPriority === true : false; }
 function userDefaults() { return { ...state.defaultSettings, ...(projected(state)['settings:settings']?.defaults ?? {}) }; }
 function effectiveDefaults(listId) { return { ...userDefaults(), ...projected(state)[`list:${listId}`]?.defaults }; }
 function refreshOptions() {
   refreshTaskOptions(capture, effectiveDefaults(capture.elements.listId.value));
   refreshTaskOptions(edit, effectiveDefaults(edit.elements.listId.value));
+  refreshPriorityControls(edit, matrixPriority());
 }
 const collectionSettingsForm = $('collectionSettingsForm');
 collectionSettingsForm.elements.kind.replaceChildren(...Object.entries(collectionKinds).map(([kind, label]) => new Option(label, kind)));
@@ -1139,7 +1141,7 @@ function render() {
     else title.append(titleButton(record));
     const notes = document.createElement('p'); notes.className = 'notes'; notes.textContent = record.description;
     const metadata = document.createElement('p'); metadata.className = 'notes';
-    metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, record.priority].filter(Boolean).join(' · ');
+    metadata.textContent = [...(record.contexts || []), ...(record.areas || []), record.energy, record.timeRequired, effectivePriority(record, matrixPriority())].filter(Boolean).join(' · ');
     for (const ref of memberships(record)) {
       const collection = recordMap[refKey(ref)], archived = archivedAncestor(ref, recordMap);
       metadata.append(` · ${collection ? collectionLabel(collection) : 'Unavailable collection: ' + refKey(ref)}${archived ? ` (Archived with ${archived.title})` : ''}`);
@@ -1191,7 +1193,7 @@ function render() {
   if (failed || moveFailure) {
     $('failureMessage').textContent = failed?.failure || moveFailure;
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
-      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['wipLimit', 'WIP limit'], ['entries', 'Active work'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['archived', 'Archived'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['query', 'Search'], ['resultType', 'Result type'], ['resultState', 'Result state'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
+      [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['wipLimit', 'WIP limit'], ['entries', 'Active work'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['archived', 'Archived'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['query', 'Search'], ['resultType', 'Result type'], ['resultState', 'Result state'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Manual priority'], ['importance', 'Importance (-1 no, 0 unset, 1 yes)'], ['urgency', 'Urgency (-1 no, 0 unset, 1 yes)'], ['eisenhowerPriority', 'Use Eisenhower priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
     const planConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = failed?.receipt && failed.operation.mutations.some(mutation => mutation.type === 'reviewReflection');
@@ -1272,7 +1274,7 @@ function render() {
   const executeItems = records.filter(record => executeCollection && record.type === 'item' && !archiveOnly(record, recordMap) && belongsTo(record, executeCollection));
   const activeIds = new Set((currentExecutionPolicy(recordMap)?.entries || []).map(entry => entry.itemId));
   const readyItems = executeItems.filter(record => readyToExecute(record) && !activeIds.has(record.id));
-  $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).sort(compareExecutionItems).map(record => {
+  $('executeItems').replaceChildren(...readyItems.filter(record => matchesExecutionFilters(record, execute)).sort((a, b) => compareExecutionItems(a, b, matrixPriority())).map(record => {
     const article = document.createElement('article'); article.className = 'execute-item'; article.dataset.id = record.id;
     const checkLabel = document.createElement('label'); checkLabel.className = 'execute-check';
     const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.disabled = readOnly;
@@ -1434,9 +1436,10 @@ function openEditor(record, focus = true, show = true) {
   $('recurrenceEditScope').hidden = !recurringOpen;
   edit.elements.workspaceId.disabled = !!recurringOpen;
   refreshOptions();
-  fillValues(edit, { ...fields, projectStatus: record.type === 'project' ? fields.status : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: record.type === 'item' ? memberships(fields) : [], dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: record.type === 'item' ? fields.status : 'inbox' });
+  fillValues(edit, { importance: 0, urgency: 0, ...fields, projectStatus: record.type === 'project' ? fields.status : 'active', parentRef: fields.parentRef ? refKey(fields.parentRef) : '', kind: collectionKind(fields), collectionRefs: record.type === 'item' ? memberships(fields) : [], dueLocal: fields.dueLocal ?? localDate(fields.dueDateUtc), status: record.type === 'item' ? fields.status : 'inbox' });
   editing.initialFields = record.fields ? structuredClone(record.initialFields) : formValues(edit);
   if (record.fields) fillValues(edit, record.fields);
+  refreshPriorityControls(edit, matrixPriority());
   $('editListLabel').hidden = record.type !== 'item';
   $('editAdvanced').hidden = record.type !== 'item';
   $('editProjectLifecycle').hidden = record.type !== 'project';
@@ -1584,12 +1587,14 @@ edit.addEventListener('submit', event => {
   try {
     const values = formValues(edit);
     fields = { title: values.title, description: values.description,
-      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields) } : { workspaceId: values.workspaceId, parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
+      ...(editing.type === 'item' ? { workspaceId: values.workspaceId, collectionRefs: values.collectionRefs, listId: values.listId || null, ...taskFields(values, editing.initialFields), ...priorityFields(values, matrixPriority()) } : { workspaceId: values.workspaceId, parentRef: values.parentRef ? parseRef(values.parentRef) : null, ...(editing.type === 'project' ? { outcome: values.outcome, status: values.projectStatus } : { kind: values.kind }) }) };
+    for (const name of matrixPriority() ? ['priority'] : ['importance', 'urgency']) delete fields[name];
     const current = projected(state)[key(editing)];
     if (current?.recurrenceTemplateId && current.occurrenceState === 'open') {
       recurrenceScope = edit.elements.recurrenceScope.value;
-      recurrenceManagedFields = Object.fromEntries(['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks']
-        .map(name => [name, structuredClone(fields[name] ?? current[name] ?? (['collectionRefs', 'contexts', 'areas'].includes(name) ? [] : null))]));
+      recurrenceManagedFields = Object.fromEntries(['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'importance', 'urgency', 'referenceLinks']
+        .filter(name => !(matrixPriority() ? ['priority'] : ['importance', 'urgency']).includes(name))
+        .map(name => [name, structuredClone(fields[name] ?? current[name] ?? (['importance', 'urgency'].includes(name) ? 0 : ['collectionRefs', 'contexts', 'areas'].includes(name) ? [] : null))]));
     }
     if (editing.version === 0 && editing.type === 'list') fields.defaults = structuredClone(userDefaults());
     else if (editing.version > 0) {
@@ -1781,6 +1786,7 @@ function ensureTaskOptionEditing(target) {
     accountId: target.accountId, type: target.type, id: target.id, workspaceId: target.workspaceId,
     version: draft?.version ?? target.version, title: draft?.title || target.title,
     selectedField: draft?.selectedField || null,
+    eisenhowerPriority: draft?.eisenhowerPriority ?? (target.record?.eisenhowerPriority === true),
     values: { ...freshTaskOptionValues(target), ...(draft?.values || {}) }
   };
   renderedTaskOptionField = null;
@@ -1811,6 +1817,8 @@ function renderTaskOptions() {
   const title = optionFields[field];
   $('taskOptionHeading').textContent = `${scopeTitle} · ${title}`;
   $('taskOptionLabel').textContent = `${title} — one per line`;
+  $('matrixPreference').hidden = target.type !== 'settings' || field !== 'priority';
+  $('eisenhowerPriority').checked = defaultsEditing.eisenhowerPriority === true;
   $('taskOptionScope').textContent = target.unavailable
     ? `List “${target.title}” is no longer available in this workspace. Copy the draft values or discard the draft; it cannot be saved to another list or workspace.`
     : target.type === 'settings'
@@ -2385,6 +2393,11 @@ $('taskOptionRows').addEventListener('click', event => {
 });
 $('taskOptionsMasterBack').onclick = () => { void leaveTaskOptions(); };
 $('taskOptionEditorBack').onclick = () => { void leaveTaskOptions(); };
+$('eisenhowerPriority').addEventListener('change', () => {
+  if (!defaultsEditing) return;
+  defaultsEditing.eisenhowerPriority = $('eisenhowerPriority').checked;
+  void journalTaskOptions();
+});
 $('taskOptionValue').addEventListener('input', () => {
   snapshotTaskOptionValue(); $('defaultsError').hidden = true; statusText('taskOptionStatus', 'Saving draft on this device…');
   const pending = journalTaskOptions();
@@ -2437,7 +2450,7 @@ $('defaultsForm').addEventListener('submit', event => {
     try {
       if (local.queue.some(entry => entry.failure)) throw taskOptionLogical('Resolve the failed save before changing task options.');
       currentTaskOptionRecord(local, target);
-      enqueue(local, owner, [{ type: target.type, id: target.id, action: target.version ? 'update' : 'create', expectedVersion: target.version, fields: { defaults } }]);
+      enqueue(local, owner, [{ type: target.type, id: target.id, action: target.version ? 'update' : 'create', expectedVersion: target.version, fields: { defaults, ...(target.type === 'settings' ? { eisenhowerPriority: target.eisenhowerPriority === true } : {}) } }]);
       if (target.type === 'settings') local.preferenceDraft = { ...(local.preferenceDraft || {}), defaults: null };
       else workspaceDraft(local, target.workspaceId).defaults = null;
     } catch (failure) { failure.taskOptionLogical = true; throw failure; }

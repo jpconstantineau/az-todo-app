@@ -199,10 +199,11 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v56')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v57')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
+    '/reviews.js?v=15', '/inbox.js?v=51', '/shared.js?v=51', '/pwa.js?v=51', '/inbox-fields.js?v=7', '/inbox-store.js?v=20', '/inbox-export.js?v=21', '/plan.js?v=7', '/recurrence-model.js?v=2', '/recurrence-ui.js?v=4', '/capture-extraction.js?v=6',
     '/inbox.js?v=50', '/inbox-store.js?v=19', '/shared.js?v=50', '/pwa.js?v=50', '/inbox-fields.js?v=6',
     '/inbox.js?v=49', '/shared.js?v=49', '/pwa.js?v=49', '/inbox.js?v=48', '/shared.js?v=48', '/pwa.js?v=48', '/inbox.js?v=47', '/shared.js?v=47', '/pwa.js?v=47', '/inbox.js?v=46', '/inbox-store.js?v=18', '/execution-policy.js?v=1', '/inbox-export.js?v=20', '/workspace-move.js?v=6', '/reviews.js?v=14', '/pwa.js?v=46',
     '/inbox.js?v=45', '/inbox.js?v=44', '/inbox.js?v=43', '/inbox.js?v=42', '/inbox.js?v=41', '/inbox.js?v=40', '/inbox.js?v=39', '/inbox.js?v=38', '/inbox.js?v=37', '/inbox.js?v=36', '/inbox.js?v=35', '/inbox.js?v=34', '/inbox.js?v=33', '/inbox.js?v=32', '/inbox.js?v=31', '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=6', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=17', '/inbox-store.js?v=16', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=5', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=19', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/local-defaults.js?v=1', '/search-model.js?v=1',
@@ -490,19 +491,19 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v55 to v56 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v56 to v57 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v56', 'shell-v55'),
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v57', 'shell-v56'),
   ])));
   previousAssets.set('/', previousAssets.get('/index.html'));
   const currentWorker = await readFile(new URL('inbox-sw.js', root), 'utf8');
   // Keep the current/prior asset pairs intact in the synthetic old worker. Rewriting
   // its current query to the already-retained prior query would make cache.addAll
   // reject duplicate requests before the upgrade scenario can begin.
-  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v56', 'shell-v55'));
+  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v57', 'shell-v56'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => {
     if (!nextShell) return previousAssets.get(path);
@@ -516,7 +517,7 @@ test('shell upgrade from v55 to v56 preserves drafts and an exact queued operati
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v55')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v56')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
@@ -550,7 +551,7 @@ test('shell upgrade from v55 to v56 preserves drafts and an exact queued operati
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v56')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v57')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).preferenceDraft.defaults,
     before.preferenceDraft.defaults);

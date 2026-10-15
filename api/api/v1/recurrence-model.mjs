@@ -107,6 +107,6 @@ export function materializationDate(template, now = new Date()) {
 }
 
 export function recurrenceSnapshot(template) {
-  return Object.fromEntries(['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks']
-    .map(name => [name, structuredClone(template[name])])) ;
+  return Object.fromEntries(['title', 'description', 'workspaceId', 'collectionRefs', 'listId', 'projectId', 'status', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'importance', 'urgency', 'referenceLinks']
+    .filter(name => template[name] !== undefined).map(name => [name, structuredClone(template[name])]));
 }

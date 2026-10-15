@@ -1,6 +1,6 @@
 import { refKey } from './collection-model.js?v=4';
 export const optionFields = { contexts: 'Contexts', areas: 'Areas', energy: 'Energy', timeRequired: 'Time required', priority: 'Priority', statuses: 'Statuses' };
-export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'referenceLinks'];
+export const advancedFields = ['status', 'projectId', 'plannedDay', 'dueLocal', 'dueDate', 'startDate', 'reviewDate', 'startDateUtc', 'reviewDateUtc', 'waitingOn', 'contexts', 'areas', 'energy', 'timeRequired', 'priority', 'importance', 'urgency', 'referenceLinks'];
 export const workflowFields = ['status', 'waitingOn', 'startDate', 'startDateUtc', 'reviewDate', 'reviewDateUtc'];
 
 export const readyToExecute = record => ['inbox', 'next'].includes(record.status);
@@ -12,12 +12,13 @@ export function executionDurationMinutes(value) {
 
 const executionTitleCollator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
 const codePointCompare = (left, right) => left < right ? -1 : left > right ? 1 : 0;
-export function compareExecutionItems(left, right) {
+export function compareExecutionItems(left, right, matrix = false) {
   const priority = value => {
     const index = ['p1', 'p2', 'p3', 'p4', 'p5'].indexOf(typeof value === 'string' ? value.toLowerCase().replace(/\s+/g, '') : '');
     return index < 0 ? 5 : index;
   };
-  let compared = priority(left.priority) - priority(right.priority);
+  let compared = priority(effectivePriority(left, matrix)) - priority(effectivePriority(right, matrix));
+  if (!compared && matrix) compared = (right.urgency ?? 0) - (left.urgency ?? 0);
   if (compared) return compared;
 
   const leftDuration = executionDurationMinutes(left.timeRequired), rightDuration = executionDurationMinutes(right.timeRequired);
@@ -76,6 +77,7 @@ export function formValues(form) {
     if (form.elements.namedItem(name)?.multiple) values[name] = [...form.elements.namedItem(name).selectedOptions].map(option => name === 'collectionRefs' ? { type: option.value.split(':')[0], id: option.value.split(':')[1] } : option.value);
   }
   if ('referenceLinks' in values) values.referenceLinks = values.referenceLinks.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+  for (const name of ['importance', 'urgency']) if (name in values) values[name] = Number(values[name]);
   return values;
 }
 export function fillValues(form, values) {
@@ -135,6 +137,10 @@ export function taskFields(values, initial = null) {
     }
     result.referenceLinks = values.referenceLinks;
   }
+  for (const name of ['importance', 'urgency']) if (name in values) {
+    if (![-1, 0, 1].includes(values[name])) throw new Error(`${name} must be -1, 0 or 1.`);
+    result[name] = values[name];
+  }
   for (const name of unchanged) delete result[name];
   return result;
 }
@@ -161,6 +167,7 @@ export function addTaskControls(container) {
       if (['waiting', 'deferred'].includes(input.value)) dates.open = true;
     });
   }
+  addPriorityControls(metadata);
   const help = document.createElement('p'); help.className = 'muted';
   help.textContent = 'Choose a calendar date or a timed value for each purpose. Waiting needs a dependency; its review date is optional. Undated waiting work stays in Waiting and weekly reviews. Deferred work appears in Ready for review from its start date on your next refresh; choose Next when ready. Neither changes your deadline or planned day.';
   dates.append(help);
@@ -193,4 +200,38 @@ export function optionsFromText(name, value) {
 
 export function defaultsFrom(form) {
   return Object.fromEntries(Object.keys(optionFields).map(name => [name, optionsFromText(name, form.elements.namedItem(name).value)]));
+}
+
+export const effectivePriority = (record, matrix = false) => matrix ? `P${3 - (record.importance ?? 0) - (record.urgency ?? 0)}` : record.priority;
+
+export function priorityFields(values, matrix = false) {
+  return matrix ? { importance: values.importance ?? 0, urgency: values.urgency ?? 0 } : { priority: values.priority || null };
+}
+
+export function addPriorityControls(container, values = {}, onChange = null, prefix = '') {
+  const group = document.createElement('div'); group.className = 'matrix-priority';
+  for (const [name, question, yes, no] of [['importance', 'How important is this compared with your other work?', 'Important', 'Not important'], ['urgency', 'How urgent is this compared with your other work?', 'Urgent', 'Not urgent']]) {
+    const fieldset = document.createElement('fieldset'), legend = document.createElement('legend'); legend.textContent = question; fieldset.append(legend);
+    for (const [score, title] of [[1, yes], [0, 'Unset'], [-1, no]]) {
+      const label = document.createElement('label'), input = document.createElement('input');
+      input.type = 'radio'; input.name = prefix + name; input.value = String(score); input.defaultChecked = input.checked = score === (values[name] ?? 0);
+      label.append(input, title); fieldset.append(label);
+      input.addEventListener('change', () => { updatePriorityPreview(group); onChange?.(name, score); });
+    }
+    group.append(fieldset);
+  }
+  const output = document.createElement('output'), help = document.createElement('p'); output.setAttribute('aria-live', 'polite'); help.className = 'muted';
+  help.textContent = 'Unset is the middle of each scale. Urgency breaks ties within a priority level.';
+  group.append(output, help); container.append(group); updatePriorityPreview(group); return group;
+}
+export function updatePriorityPreview(group) {
+  const axes = Object.fromEntries([...group.querySelectorAll('input:checked')].map(input => [input.name.endsWith('importance') ? 'importance' : 'urgency', Number(input.value)]));
+  group.querySelector('output').textContent = `Priority ${effectivePriority(axes, true)}`;
+}
+export function refreshPriorityControls(form, matrix) {
+  const manual = form.elements.namedItem('priority'), group = form.querySelector('.matrix-priority');
+  if (!group) return;
+  manual.closest('label').hidden = matrix;
+  group.hidden = !matrix;
+  updatePriorityPreview(group);
 }

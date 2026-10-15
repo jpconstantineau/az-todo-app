@@ -1,8 +1,8 @@
 import { normalizeMembership, memberships, isCollection, collectionContents, ancestry, archivedAncestor, refKey } from './collection-model.js?v=5';
 import { PERSONAL, purgeWorkspaceState, workspaceOf } from './workspaces.js?v=5';
-import { workflowFields, validateWorkflow } from './inbox-fields.js?v=5';
+import { workflowFields, validateWorkflow } from './inbox-fields.js?v=7';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=6';
-import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=1';
+import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=2';
 import { validateProjectPlanOperation } from './project-planning-model.js?v=1';
 import { validateExecutionPolicy } from './execution-policy.js?v=1';
 
@@ -345,6 +345,9 @@ function operationFor(state, accountId, mutations, operationId = crypto.randomUU
     if (['item', 'recurrenceTemplate'].includes(mutation.type)) normalizeMembership(proposed[key(mutation)], records[key(mutation)], mutation.fields);
   }
   for (const mutation of mutations) {
+    for (const name of ['importance', 'urgency']) if (name in (mutation.fields || {}) && (!['item', 'recurrenceTemplate'].includes(mutation.type) || ![-1, 0, 1].includes(mutation.fields[name]))) throw new Error(`${name} must be -1, 0 or 1 on tasks or recurring templates.`);
+    if ('eisenhowerPriority' in (mutation.fields || {}) && (mutation.type !== 'settings' || typeof mutation.fields.eisenhowerPriority !== 'boolean')) throw new Error('eisenhowerPriority must be true or false on settings.');
+    if (mutation.type === 'settings' && mutation.fields && (!Object.keys(mutation.fields).length || Object.keys(mutation.fields).some(name => !['defaults', 'eisenhowerPriority'].includes(name)))) throw new Error('Settings must contain defaults and/or eisenhowerPriority.');
     if (!['workspace', 'settings'].includes(mutation.type)) {
       const record = proposed[key(mutation)], old = records[key(mutation)];
       if (['item', 'list', 'project', 'savedView', 'review', 'recurrenceTemplate', 'executionPolicy'].includes(record.type) && typeof record.workspaceId !== 'string') throw new Error('workspaceId is required.');
