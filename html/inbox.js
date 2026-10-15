@@ -2724,7 +2724,9 @@ async function openProfile(identity, verified) {
     state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL;
     render(); $('workspace').hidden = false; restoreDraft(); requestAnimationFrame(focusDestination); broadcast();
   } else if (identity.defaultSettings && !state.defaultSettings) {
-    state = await transact(accountId, local => { local.defaultSettings = identity.defaultSettings; });
+    const saved = await transact(identity.accountId, local => { local.defaultSettings = identity.defaultSettings; });
+    if (generation !== accountGeneration || identity.accountId !== accountId) throw new Error('Account changed while opening its device copy. Reload to continue.');
+    state = saved;
   }
   $('workspace').hidden = false; $('signOut').hidden = localMode();
   $('signedOut').hidden = true; $('workspaceSelect').hidden = false; $('saveStatus').hidden = false;
@@ -2765,6 +2767,7 @@ async function session({ allowOffline = false } = {}) {
   if (generation !== accountGeneration) throw new Error('Account changed while checking the session. Retry after signing in.');
   if (verified) {
     const savedSession = await transact(null);
+    if (generation !== accountGeneration || accountId !== expectedAccountId) throw new Error('Account changed while checking the session. Retry after signing in.');
     if (adoptionIntent && savedSession.adoptLocal === adoptionIntent) {
       try {
         await adoptLocalProfile(identity.accountId, adoptionIntent);
@@ -2773,12 +2776,14 @@ async function session({ allowOffline = false } = {}) {
       catch (failure) {
         await transact(null, saved => { if (saved.adoptLocal === adoptionIntent) delete saved.adoptLocal; });
         sessionStorage.removeItem(ADOPTION_INTENT);
+        if (generation !== accountGeneration || accountId !== expectedAccountId) throw new Error('Account changed while checking the session. Retry after signing in.');
         await openProfile(identity, verified);
         error(`${failure.message} Device-only work remains available after signing out.`);
         return identity.accountId;
       }
     }
   }
+  if (generation !== accountGeneration || accountId !== expectedAccountId) throw new Error('Account changed while checking the session. Retry after signing in.');
   return openProfile(identity, verified);
 }
 

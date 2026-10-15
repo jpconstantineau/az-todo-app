@@ -279,6 +279,73 @@ test('account transition exposes a checking avatar while the new profile is stil
   assert.equal(await page.locator('#items article').count(), 0);
 });
 
+for (const boundary of ['defaults', 'session']) test(`late ${boundary} storage completion cannot reopen or render a signed-out account`, async t => {
+  const { page, url } = await setup(t, 'alice');
+  let includeDefaults = false;
+  await page.route('**/api/v1/session', route => route.fulfill({ json: {
+    apiVersion: 1, accountId: 'alice', ...(includeDefaults ? { defaultSettings: { contexts: [] } } : {})
+  } }));
+  await page.goto(url); await status(page, 'confirmed'); await accountStatus(page, 'authenticated');
+  await page.locator('#appMenu').click(); await page.locator('#menuView').waitFor();
+  await page.evaluate(async boundary => {
+    const store = await import('/inbox-store.js?v=21');
+    await store.transact('alice', profile => {
+      profile.records['item:private'] = { type: 'item', id: 'private', title: 'Alice private task', accountId: 'alice', version: 1, status: 'inbox', workspaceId: 'personal', collectionRefs: [] };
+      profile.queue = [{ operation: { apiVersion: 1, accountId: 'alice', operationId: 'alice-pending', mutations: [
+        { type: 'item', id: 'pending', action: 'create', expectedVersion: 0, fields: { title: 'Alice pending task', workspaceId: 'personal', collectionRefs: [], status: 'inbox' } }
+      ] } }];
+    });
+    await store.transact(store.LOCAL_PROFILE, profile => { profile.draft.capture = { text: 'Device-only draft' }; });
+    const get = IDBObjectStore.prototype.get, put = IDBObjectStore.prototype.put;
+    const complete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    let held = false;
+    IDBObjectStore.prototype.get = function (key) {
+      if (boundary === 'session' && key === 'session' && this.transaction.mode === 'readonly' && !held) {
+        held = true;
+        const transaction = this.transaction;
+        Object.defineProperty(transaction, 'oncomplete', { set(handler) {
+          complete.set.call(transaction, event => { window.releaseAccountCompletion = () => handler(event); });
+        } });
+      }
+      return get.call(this, key);
+    };
+    IDBObjectStore.prototype.put = function (value, key) {
+      if (boundary === 'defaults' && key === 'account:alice' && value.defaultSettings && !held) {
+        held = true;
+        const transaction = this.transaction, handler = transaction.oncomplete;
+        transaction.oncomplete = event => { window.releaseAccountCompletion = () => handler(event); };
+      }
+      return put.call(this, value, key);
+    };
+  }, boundary);
+  const queued = (await local(page)).queue;
+  includeDefaults = boundary === 'defaults';
+  await page.locator('#sync').click();
+  await page.waitForFunction(() => !!window.releaseAccountCompletion);
+  await page.evaluate(async () => {
+    const store = await import('/inbox-store.js?v=21');
+    await store.transact(null, session => { session.activeProfile = store.LOCAL_PROFILE; session.paused = true; });
+    const channel = new BroadcastChannel('todo-inbox'); channel.postMessage('changed'); channel.close();
+  });
+  await deviceLocal(page);
+  assert.equal(await page.locator('#captureText').inputValue(), 'Device-only draft');
+  await page.evaluate(() => releaseAccountCompletion());
+  // This error identifies the resumed old sync's completion; the pre-existing
+  // local profile alone would not prove the stale continuation finished.
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Account changed while'));
+  await page.evaluate(() => dispatchEvent(new Event('focus')));
+  await deviceLocal(page);
+  assert.doesNotMatch(await page.locator('#items').textContent(), /Alice private task|Alice pending task/);
+  assert.equal(await page.locator('#captureText').inputValue(), 'Device-only draft');
+  const saved = await page.evaluate(async () => {
+    const store = await import('/inbox-store.js?v=21');
+    return { session: await store.transact(null), alice: await store.transact('alice') };
+  });
+  assert.equal(saved.session.activeProfile, 'device-local'); assert.equal(saved.session.paused, true);
+  assert.equal(saved.alice.records['item:private'].title, 'Alice private task');
+  assert.deepEqual(saved.alice.queue, queued);
+});
+
 for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'unavailable' }, 'unavailable'], [{ checkFail: true }, 'error'], [{ state: 'downloadable' }, 'downloadable'], [{ state: 'downloading' }, 'busy'], [{ state: 'available' }, 'available']]) {
   test('agent header identifies model availability: ' + JSON.stringify(mode), async t => {
     const { page, url } = await setup(t, 'alice', mode);
