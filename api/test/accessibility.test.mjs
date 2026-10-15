@@ -80,6 +80,7 @@ test('accessibility: review decisions and brief revisions keep a keyboard path t
   const { page } = await setup(t);
   await capture(page, 'Insurance\nPolicy');
   await keyboardActivate(page, '#openReviews');
+  await expectFocus(page, '#reviewsHeading');
   await keyboardActivate(page, '#startDaily');
   await page.waitForFunction(() => document.querySelector('#reviewProgress').textContent.includes('0 of 0'));
   await expectFocus(page, '#reviewTitle');
@@ -136,6 +137,7 @@ test('accessibility: delayed review and brief saves preserve a later focus choic
     } });
   });
   await keyboardActivate(page, '#openReviews');
+  await expectFocus(page, '#reviewsHeading');
   await page.evaluate(() => { window.delaySave = true; });
   await keyboardActivate(page, '#startWeekly');
   await page.waitForFunction(() => !!window.releaseSave);
@@ -160,6 +162,7 @@ test('accessibility: brief storage errors return focus and unchanged review/brie
   const { page } = await setup(t);
   await capture(page, 'Insurance');
   await keyboardActivate(page, '#openReviews');
+  await expectFocus(page, '#reviewsHeading');
   await keyboardActivate(page, '#startWeekly');
   await expectFocus(page, '#reviewTitle');
   await page.keyboard.press('Escape');
