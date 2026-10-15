@@ -2,7 +2,8 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=6';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
-import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=21';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, enqueueChecklistReset, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=22';
+import { checklistResetPlan } from './checklist-reset.js?v=1';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems, effectivePriority, priorityFields, refreshPriorityControls } from './inbox-fields.js?v=7';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=22';
@@ -34,6 +35,7 @@ let taskOptionJournalPromise = Promise.resolve(true);
 let exportController;
 let resetImpact, resetReviewLoading = false;
 let splitFeedbackTimer;
+let resettingChecklist = false;
 let signInPending = false;
 function accountStatus(value) {
   const button = $('accountStatus');
@@ -548,11 +550,51 @@ function refreshOptions() {
   refreshPriorityControls(edit, matrixPriority());
 }
 const collectionSettingsForm = $('collectionSettingsForm');
+function renderChecklistReset(id, checklist) {
+  const control = $(id), plan = checklistResetPlan(projected(state), checklist, selectedWorkspace);
+  const status = $(id === 'resetChecklist' ? 'checklistResetStatus' : 'executeChecklistResetStatus');
+  const scope = `${accountId}:${selectedWorkspace}:${checklist ? key(checklist) : ''}`;
+  if (status.dataset.scope !== scope) { status.textContent = ''; status.dataset.scope = scope; }
+  control.hidden = !plan;
+  control.textContent = `Reset checklist… (${plan?.mutations.length || 0})`;
+  control.disabled = !plan?.mutations.length || resettingChecklist || switchingWorkspace || workspaceReadOnly() || state.queue.some(entry => entry.failure);
+  control.dataset.key = plan ? key(checklist) : '';
+}
+async function resetChecklist(control, statusId, fallbackId) {
+  const owner = accountId, generation = accountGeneration, workspaceId = selectedWorkspace, route = destination;
+  if (!owner || resettingChecklist || switchingWorkspace || workspaceReadOnly() || state.queue.some(entry => entry.failure)) return;
+  const reviewed = checklistResetPlan(projected(state), projected(state)[control.dataset.key], workspaceId);
+  if (!reviewed?.mutations.length) return;
+  const title = projected(state)[control.dataset.key].title, count = reviewed.mutations.length;
+  if (!confirm(`Reset “${title}”? Reopen ${count} completed items as Next. This includes all directly assigned items, regardless of filters, and affects these items in every collection. Nested collections, other statuses and scheduled recurring items stay unchanged.`)) return;
+  resettingChecklist = true; statusText(statusId, ''); render();
+  const stillHere = () => owner === accountId && generation === accountGeneration && workspaceId === selectedWorkspace;
+  try {
+    const saved = await transact(owner, local => {
+      if (!stillHere()) throw new Error('Account or workspace changed. Review the checklist again.');
+      enqueueChecklistReset(local, owner, reviewed);
+    });
+    if (!stillHere()) return;
+    state = saved; clearError();
+    if (control.dataset.key === key(reviewed.checklist)) statusText(statusId, `${count} items reopened — ${localMode() ? 'saved on this device' : 'saved on device, pending server confirmation'}.`);
+    broadcast(); void sync();
+  } catch (failure) { if (stillHere()) error(failure.message); }
+  finally {
+    resettingChecklist = false;
+    if (accountId && state) render();
+    if (stillHere()) {
+      if (destination === route && control.dataset.key === key(reviewed.checklist) && (document.activeElement === control || document.activeElement === document.body)) $(fallbackId).focus();
+    }
+  }
+}
+$('resetChecklist').onclick = () => { void resetChecklist($('resetChecklist'), 'checklistResetStatus', 'view'); };
+$('resetExecuteChecklist').onclick = () => { void resetChecklist($('resetExecuteChecklist'), 'executeChecklistResetStatus', 'executeList'); };
 collectionSettingsForm.elements.kind.replaceChildren(...Object.entries(collectionKinds).map(([kind, label]) => new Option(label, kind)));
 function localDay(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 function renderCollectionSettings(context, records, listMode) {
+  renderChecklistReset('resetChecklist', listMode ? context : null);
   const recordMap = scopedRecords();
   const due = records.filter(record => isCollection(record) && !isEffectivelyArchived(record, recordMap) && record.revisitDate && record.revisitDate <= localDay())
     .sort((a, b) => a.revisitDate.localeCompare(b.revisitDate) || a.title.localeCompare(b.title));
@@ -585,7 +627,7 @@ function renderCollectionSettings(context, records, listMode) {
   $('collectionSettingsHelp').textContent = context.type === 'project'
     ? 'Projects stay projects. Parent and revisit changes keep the project outcome, actions and history.'
     : `${collectionKind(context) === 'reference' ? 'Reusable reference is for non-actionable source material. A revisit date only resurfaces the collection; it does not turn entries into actions. ' : ''}Changing type, parent or revisit date keeps contents and history.`;
-  for (const control of collectionSettingsForm.elements) control.disabled = workspaceReadOnly() || control.name === 'kind' && context.type === 'project';
+  for (const control of collectionSettingsForm.elements) if (control.id !== 'resetChecklist') control.disabled = workspaceReadOnly() || control.name === 'kind' && context.type === 'project';
   $('archiveCollection').disabled = workspaceReadOnly();
 }
 collectionSettingsForm.onsubmit = event => {
@@ -1211,7 +1253,7 @@ function render() {
   $('resumeMove').hidden = !state.workspaceMove || !failed?.workspaceMoveId && !moveFailure;
   $('recoverProjectPlan').hidden = !projectPlanFailure;
   if (failed || moveFailure) {
-    $('failureMessage').textContent = failed?.failure || moveFailure;
+    $('failureMessage').textContent = (failed?.failure || moveFailure) + (failed?.checklistReset ? ' This checklist reset is paused. Earlier server-confirmed chunks remain reset. Keep the server version for this save, then review and reset the latest checklist again.' : '');
     const describe = record => !record ? 'No server record' : record.deleted ? 'Deleted on server' :
       [['content', 'Brief content'], ['subjectType', 'Brief source type'], ['subjectId', 'Brief source ID'], ['sourceVersion', 'Brief source version'], ['previousBriefId', 'Previous brief revision'], ['step', 'Clarification step'], ['decision', 'Clarification decision'], ['answers', 'Accepted answers / unknowns'], ['proposal', 'Unaccepted proposal'], ['reviewKind', 'Review kind'], ['included', 'Included records'], ['decisionHeads', 'Latest decisions'], ['decisionCount', 'History entries'], ['reviewId', 'Review'], ['previousReflectionId', 'Previous reflection'], ['promptVersion', 'Prompt version'], ['prompts', 'Prompts'], ['conclusion', 'Conclusion'], ['followUpIds', 'Follow-up actions'], ['sequence', 'Decision sequence'], ['index', 'Reviewed record index'], ['choice', 'Decision'], ['recordVersion', 'Reviewed record version'], ['before', 'Prior workflow / plan'], ['after', 'Resulting plan'], ['changes', 'Workflow changes'], ['wipLimit', 'WIP limit'], ['entries', 'Active work'], ['estimationMethod', 'Estimation method'], ['actionIds', 'Numbered order'], ['loadAssessment', 'Load assessment'], ['carryoverDecisions', 'Carryover decisions'], ['estimates', 'Tagged estimates'], ['collectionRefs', 'Memberships'], ['parentRef', 'Parent'], ['kind', 'Kind'], ['archived', 'Archived'], ['revisitDate', 'Revisit on'], ['title', 'Title'], ['query', 'Search'], ['resultType', 'Result type'], ['resultState', 'Result state'], ['description', 'Notes'], ['outcome', 'Desired outcome'], ['projectId', 'Project ID'], ['plannedDay', 'Planned day'], ['plannedWeek', 'Planned week'], ['status', 'Status'], ['waitingOn', 'Waiting for'], ['startDate', 'Deferred until'], ['startDateUtc', 'Deferred until (UTC)'], ['reviewDate', 'Review on'], ['reviewDateUtc', 'Review on (UTC)'], ['dueDate', 'Deadline'], ['listId', 'List'], ['defaults', 'Defaults'], ['dueDateUtc', 'Due'], ['contexts', 'Contexts'], ['areas', 'Areas'], ['energy', 'Energy'], ['timeRequired', 'Time required'], ['effortEstimate', 'Effort estimate'], ['priority', 'Manual priority'], ['importance', 'Importance (-1 no, 0 unset, 1 yes)'], ['urgency', 'Urgency (-1 no, 0 unset, 1 yes)'], ['eisenhowerPriority', 'Use Eisenhower priority'], ['referenceLinks', 'Reference links'], ['rule', 'Recurrence rule'], ['paused', 'Paused'], ['tombstoned', 'Stopped'], ['nextOccurrenceNumber', 'Next occurrence number'], ['nextIntendedDate', 'Next intended date'], ['openOccurrenceId', 'Open occurrence'], ['lastResolvedUtc', 'Last resolved'], ['recurrenceTemplateId', 'Recurring template'], ['recurrenceNumber', 'Occurrence number'], ['intendedDate', 'Intended date'], ['sourceTemplateVersion', 'Source template version'], ['occurrenceState', 'Occurrence state'], ['occurrenceResolvedUtc', 'Occurrence resolved']]
         .filter(([field]) => field in record).map(([field, label]) => `${label}: ${field === 'listId' ? lists.find(list => list.id === record[field])?.title || 'No list / unavailable list' : typeof record[field] === 'object' ? JSON.stringify(record[field], null, 2) : record[field]}`).join('\n');
@@ -1249,7 +1291,7 @@ function render() {
     const move = !!state.workspaceMove && (!!failed?.workspaceMoveId || !!moveFailure);
     const recurrenceConflict = failed?.operation.mutations.some(mutation => mutation.type === 'recurrenceTemplate' || mutation.fields?.recurrenceTemplateId);
     const executionConflict = failed?.operation.mutations.some(mutation => mutation.type === 'executionPolicy');
-    $('resolve').hidden = projectPlanFailure || move || recurrenceConflict || !failed?.receipt || !executionConflict && !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
+    $('resolve').hidden = !!failed?.checklistReset || projectPlanFailure || move || recurrenceConflict || !failed?.receipt || !executionConflict && !planConflict && !reflectionConflict && failed.operation.mutations.some(mutation => ['review', 'brief'].includes(mutation.type) || mutation.action !== 'update' || !state.records[key(mutation)] || state.records[key(mutation)].deleted);
     $('resolve').textContent = executionConflict ? 'Retry against latest active work' : planConflict ? 'Apply my pending plan to latest version' : reflectionConflict ? 'Merge pending reflection after accepted snapshot' : 'Apply pending edit to latest version';
     $('discard').hidden = move;
     $('discard').textContent = executionConflict ? 'Use server active work' : failed?.receipt ? 'Use server version for this save' : 'Remove this rejected save';
@@ -1291,6 +1333,7 @@ function render() {
   $('executeFilterSummary').textContent = `Context, time & energy${executeFilterCount ? ` (${executeFilterCount} active)` : ''}`;
   $('resetExecuteFilters').hidden = !executeFilterCount;
   const executeCollection = executeCollections.find(record => viewKey(record) === execute.view);
+  renderChecklistReset('resetExecuteChecklist', executeCollection);
   const executeItems = records.filter(record => executeCollection && record.type === 'item' && !archiveOnly(record, recordMap) && belongsTo(record, executeCollection));
   const activeIds = new Set((currentExecutionPolicy(recordMap)?.entries || []).map(entry => entry.itemId));
   const readyItems = executeItems.filter(record => readyToExecute(record) && !activeIds.has(record.id));
@@ -2630,6 +2673,8 @@ async function showAccountName(owner, generation, verified) {
   }
 }
 function hideAccount() {
+  for (const id of ['checklistResetStatus', 'executeChecklistResetStatus']) statusText(id, '');
+  $('resetChecklist').hidden = $('resetExecuteChecklist').hidden = true;
   closeExecutionDialogs();
   $('appHeader').dataset.ready = 'false'; accountStatus('checking');
   $('workspaceSkip').hidden = true; $('appUpdateStatus').hidden = true;
@@ -2935,6 +2980,7 @@ async function retryExecutionConflict() {
   } else await changeExecution(item, intent.state, intent.options);
 }
 $('resolve').onclick = guard(async () => {
+  if (state.queue[0]?.checklistReset) throw new Error('Keep the server version for this save, then review and reset the latest checklist again.');
   if (state.queue[0]?.operation.mutations.some(mutation => mutation.type === 'executionPolicy')) {
     await retryExecutionConflict(); return;
   }
@@ -2945,6 +2991,7 @@ $('resolve').onclick = guard(async () => {
   const saved = await transact(owner, local => {
     const entry = local.queue[0];
     if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');
+    if (entry.checklistReset) throw new Error('Checklist resets must be reviewed again against current membership.');
     const planConflict = entry.operation.mutations.some(mutation => mutation.type === 'dailyPlan');
     const reflectionConflict = !!reflectionMutations;
     const mutations = planConflict || reflectionConflict ? [] : entry.operation.mutations.map(mutation => {

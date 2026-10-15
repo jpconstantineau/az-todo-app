@@ -1,8 +1,8 @@
 // Only public shell assets are cached. Never cache API/auth requests or task data.
-const CACHE = 'todo-inbox-shell-v63';
+const CACHE = 'todo-inbox-shell-v64';
 // The agent module is public shell code, without model downloads or user data.
 const ASSETS = [
-  '/inbox.js?v=57', '/shared.js?v=57', '/pwa.js?v=57', '/collections.js?v=6', '/reviews.js?v=16', '/plan.js?v=8',
+  '/inbox.js?v=58', '/shared.js?v=58', '/pwa.js?v=58', '/checklist-reset.js?v=1', '/inbox-store.js?v=22', '/inbox.js?v=57', '/shared.js?v=57', '/pwa.js?v=57', '/collections.js?v=6', '/reviews.js?v=16', '/plan.js?v=8',
   '/inbox.js?v=56', '/shared.js?v=56', '/pwa.js?v=56', '/inbox.js?v=55', '/shared.js?v=55', '/pwa.js?v=55', '/inbox.js?v=54', '/shared.js?v=54', '/pwa.js?v=54', '/execution-policy.js?v=2', '/inbox-store.js?v=21', '/inbox-export.js?v=22',
   '/inbox.js?v=53', '/shared.js?v=53', '/pwa.js?v=53', '/inbox.js?v=52', '/shared.js?v=52', '/pwa.js?v=52',
   '/reviews.js?v=15',

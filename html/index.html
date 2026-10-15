@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=57" defer></script>
+  <script src="/pwa.js?v=58" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=57"></script>
+  <script type="module" src="/inbox.js?v=58"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -310,7 +310,7 @@
           <label>Collection type<select name="kind" aria-describedby="collectionSettingsHelp"></select></label>
           <label>Parent collection<select name="parentRef"></select></label>
           <label>Revisit on (optional)<input name="revisitDate" type="date" min="0001-01-01" max="9999-12-31"></label>
-          <p id="collectionSettingsHelp" class="muted"></p><div class="actions"><button type="submit">Save collection settings on device</button><button id="archiveCollection" type="button">Archive collection…</button></div><p id="collectionSettingsStatus" role="status" aria-live="polite"></p>
+          <p id="collectionSettingsHelp" class="muted"></p><div class="actions"><button type="submit">Save collection settings on device</button><button id="resetChecklist" type="button" hidden>Reset checklist…</button><button id="archiveCollection" type="button">Archive collection…</button></div><p id="checklistResetStatus" role="status" aria-live="polite"></p><p id="collectionSettingsStatus" role="status" aria-live="polite"></p>
         </form>
       </details>
       <details id="recurringSection" class="collection-settings" hidden>
@@ -419,6 +419,8 @@
         <button type="button" data-execute-kind="reference" aria-pressed="false" disabled>Reusable reference</button>
       </div>
       <select id="executeList" aria-label="Choose List"><option value="">Choose a list</option></select>
+      <div class="actions"><button id="resetExecuteChecklist" type="button" hidden>Reset checklist…</button></div>
+      <p id="executeChecklistResetStatus" role="status" aria-live="polite"></p>
       <details id="executeFilters">
         <summary id="executeFilterSummary">Context, time &amp; energy</summary>
         <div class="execution-controls">
