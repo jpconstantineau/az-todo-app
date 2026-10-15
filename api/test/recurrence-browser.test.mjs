@@ -50,6 +50,7 @@ test('recurring template UI creates one offline-safe occurrence, exposes history
     const template = Object.values(records).find(record => record.type === 'recurrenceTemplate'), occurrence = Object.values(records).find(record => record.recurrenceTemplateId);
     return template?.description === 'Use rainwater next time' && template.referenceLinks?.[0] === 'https://example.com/plants' && occurrence?.description === '' && occurrence.referenceLinks?.length === 0;
   });
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true);
   await row.getByRole('button', { name: 'Complete Water plants' }).click();
   await waitForBrowser(page, async () => {
