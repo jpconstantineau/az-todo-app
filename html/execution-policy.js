@@ -5,8 +5,8 @@ export const activeEntry = (policy, itemId) => policy?.entries?.find(entry => en
 
 export function validateExecutionPolicy(policy) {
   if (!policy || policy.id !== policy.workspaceId) throw new Error('Active-work policy identity must match its workspace.');
-  if (!Number.isSafeInteger(policy.wipLimit) || policy.wipLimit < 1 || policy.wipLimit > 20) throw new Error('Choose a WIP limit from 1 to 20.');
-  if (!Array.isArray(policy.entries) || policy.entries.length > 40) throw new Error('Active work supports at most 40 items.');
+  if (!Number.isSafeInteger(policy.wipLimit) || policy.wipLimit < 0 || policy.wipLimit > 50) throw new Error('Choose a WIP limit from 0 to 50 (0 means no limit).');
+  if (!Array.isArray(policy.entries)) throw new Error('Active work must be an array.');
   if (new Set(policy.entries.map(entry => entry.itemId)).size !== policy.entries.length) throw new Error('An item can appear in active work only once.');
   for (const entry of policy.entries) {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(entry.itemId || '') || !EXECUTION_STATES.includes(entry.state) ||
@@ -17,7 +17,7 @@ export function validateExecutionPolicy(policy) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewDate || '') || !Number.isFinite(Date.parse(entry.reviewDate)) || new Date(entry.reviewDate).toISOString().slice(0, 10) !== entry.reviewDate) throw new Error('Blocked work needs a valid review date.');
     } else if (entry.blockedReason !== null || entry.reviewDate !== null) throw new Error('Only blocked work can retain a blocked reason and review date.');
   }
-  if (executionCount(policy) > policy.wipLimit && policy.entries.filter(entry => ['started', 'blocked'].includes(entry.state) && entry.override).length < executionCount(policy) - policy.wipLimit) {
+  if (policy.wipLimit > 0 && executionCount(policy) > policy.wipLimit && policy.entries.filter(entry => ['started', 'blocked'].includes(entry.state) && entry.override).length < executionCount(policy) - policy.wipLimit) {
     throw new Error('Every WIP slot above the limit needs an explicit override.');
   }
   return policy;

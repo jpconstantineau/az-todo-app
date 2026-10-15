@@ -19,7 +19,7 @@ function fixture() {
     { ...base, type: 'project', id: 'dinner', workspaceId: 'personal', status: 'active', title: 'Dinner', outcome: 'Everyone fed' },
     { ...base, type: 'savedView', id: 'completed', workspaceId: 'personal', title: 'Completed shopping', query: 'milk', resultType: 'item', resultState: 'status:completed' },
     { ...base, type: 'settings', id: 'settings', defaults: { contexts: ['Home'] } },
-    { ...base, type: 'executionPolicy', id: 'personal', workspaceId: 'personal', wipLimit: 2, entries: [] },
+    { ...base, type: 'executionPolicy', id: 'personal', workspaceId: 'personal', wipLimit: 0, entries: [] },
     { ...item, id: 'deleted', title: 'Erased task', deleted: true, deletedUtc: base.createdUtc }];
   const mutation = { type: 'item', id: 'milk', action: 'update', expectedVersion: 1, fields: { title: 'Oat milk' } };
   const operation = { apiVersion: 1, accountId: 'alice', operationId: 'pending-id', mutations: [mutation] };
