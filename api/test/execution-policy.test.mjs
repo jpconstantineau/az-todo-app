@@ -111,6 +111,7 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   const server = await startServer({ browserUser: () => browserUser }); t.after(server.close);
   const response = await fetch(`${server.url}/api/v1/operations`, { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' },
     body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: 'execution-browser-setup', mutations: [
+      currentCreate('workspace', 'other', { title: 'Other' }),
       currentCreate('list', 'list', { title: 'Delivery' }),
       currentCreate('project', 'project', { title: 'Launch', outcome: 'Shipped' }),
       ...[['alpha', '2030-02-01'], ['beta', '2030-02-02'], ['gamma', '2030-02-03']].map(([id, plannedDay]) => currentCreate('item', id,
@@ -214,13 +215,39 @@ test('Do exposes keyboard and touch transitions, explicit WIP choices, terminal 
   await showView(page, 'execute');
   await page.getByRole('button', { name: 'Start Gamma', exact: true }).click();
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact('alice')).queue.length === 0);
+  assert.match(await page.locator('#executionStatus').textContent(), /Gamma/);
+  await page.locator('#workspaceSelect').selectOption('other');
+  await page.waitForFunction(() => document.title === 'Do · Other');
+  assert.equal(await page.locator('#executionStatus').textContent(), '');
+  assert.equal(await page.locator('#executionPolicyStatus').textContent(), '');
+  assert.equal(await page.locator('#activeWork').isVisible(), false);
+  assert.doesNotMatch(await page.locator('#execute').textContent(), /Gamma/);
+  await page.locator('#workspaceSelect').selectOption('personal');
+  await page.getByRole('button', { name: 'Pause Gamma', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Pause Gamma', exact: true }).click();
+  await page.getByRole('button', { name: 'Resume Gamma', exact: true }).click();
+  await waitForBrowser(page, async () => { const local = await (await import('/inbox-store.js?v=21')).transact('alice'); return local.queue.length === 0 && local.records['executionPolicy:personal']?.entries.some(e => e.itemId === 'gamma' && e.state === 'started'); });
+  await openPreference(page, 'do'); await page.locator('#wipLimit').fill('1');
+  await page.getByRole('button', { name: 'Save WIP limit', exact: true }).click();
+  await page.locator('#executionPolicyStatus').filter({ hasText: 'WIP limit set to 1' }).waitFor();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=21')).transact('alice')).queue.length === 0);
   await showView(page, 'execute');
+  assert.match(await page.locator('#executionStatus').textContent(), /Gamma/);
   await page.getByRole('button', { name: 'Block Gamma', exact: true }).click();
   await page.locator('#blockWorkForm textarea').fill('Alice private blocker');
   await context.setOffline(true); browserUser = 'bob'; await context.setOffline(false);
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=18')).transact(null)).accountId === 'bob');
   assert.equal(await page.locator('#blockWorkDialog').getAttribute('open'), null);
+  await page.waitForFunction(() => !document.querySelector('#workspace').hidden && document.querySelector('#workspaceSelect').value === 'personal' && document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+  await showView(page, 'execute');
   assert.doesNotMatch(await page.locator('body').innerText(), /Gamma|Alice private blocker/);
+  assert.equal(await page.locator('#executionStatus').textContent(), '');
+  assert.equal(await page.locator('#activeWork').isVisible(), false);
+  assert.equal(await page.locator('#startedItems').textContent(), 'No started work.');
+  await openPreference(page, 'do');
+  assert.equal(await page.locator('#executionPolicyStatus').textContent(), '');
+  assert.equal(await page.locator('#wipLimit').inputValue(), '');
+  assert.doesNotMatch(await page.locator('body').innerText(), /Gamma|Alice private blocker|WIP limit set to 1/);
 });
 
 test('API supports 50 counted entries, unlimited work and ceiling-aware limit changes', { timeout: 30000 }, async t => {

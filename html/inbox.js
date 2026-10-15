@@ -268,7 +268,8 @@ async function saveExecutionPolicy(next, intent, message) {
     local.queue.at(-1).executionTransition = intent;
   });
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the active-work save remains with its original account.');
-  state = saved; statusText(intent.kind === 'limit' ? 'executionPolicyStatus' : 'executionStatus', `${message} ${localMode() ? 'Saved on this device.' : 'Saved on device — pending server confirmation.'}`);
+  state = saved;
+  if (workspaceId === selectedWorkspace) statusText(intent.kind === 'limit' ? 'executionPolicyStatus' : 'executionStatus', `${message} ${localMode() ? 'Saved on this device.' : 'Saved on device — pending server confirmation.'}`);
   clearError(); render(); broadcast(); void sync();
 }
 function openWipDialog(item, stateName, options) {
@@ -315,6 +316,10 @@ function closeExecutionDialogs() {
   $('blockWorkForm').reset();
   $('blockWorkTask').textContent = $('wipLimitDialogMessage').textContent = '';
   $('wipCountedItems').replaceChildren();
+  for (const id of ['executionStatus', 'executionPolicyStatus', 'wipCounter', 'doPreferenceScope']) statusText(id, '');
+  $('executionPolicyForm').reset();
+  for (const id of ['startedItems', 'blockedItems', 'pausedItems']) $(id).replaceChildren();
+  $('activeWork').hidden = $('activeLanes').hidden = true;
 }
 const dialogOpeners = new Map();
 const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
@@ -2782,6 +2787,7 @@ async function sync() {
     if (accountId === owner) {
       const saved = await transact(owner);
       if (accountId === owner) {
+        if (selectedWorkspace !== (saved.selectedWorkspace || PERSONAL)) closeExecutionDialogs();
         state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL; render(); $('workspace').hidden = false;
         continueSync ||= !!state.queue.length && !state.queue[0].failure;
         setTimeout(() => void materializeRecurrence(), 0);
@@ -2829,6 +2835,7 @@ $('recoverProjectPlan').onclick = guard(async () => {
     local.selectedWorkspace = project.workspaceId;
   });
   if (owner !== accountId) return;
+  if (selectedWorkspace !== (saved.selectedWorkspace || PERSONAL)) closeExecutionDialogs();
   state = saved; selectedWorkspace = saved.selectedWorkspace || PERSONAL; render(); restoreDraft(); broadcast(); void sync();
 });
 async function retryExecutionConflict() {
