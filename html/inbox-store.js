@@ -5,6 +5,7 @@ import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-
 import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=2';
 import { validateProjectPlanOperation } from './project-planning-model.js?v=1';
 import { validateExecutionPolicy } from './execution-policy.js?v=2';
+import { checklistResetPlan } from './checklist-reset.js?v=1';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const LOCAL_PROFILE = 'device-local';
@@ -414,6 +415,25 @@ export function enqueue(state, accountId, mutations) {
   const operation = operationFor(state, accountId, mutations);
   addEntries(state, [{ operation }]);
   if (state.undoEdit && mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
+}
+
+export function enqueueChecklistReset(state, accountId, reviewed) {
+  if (state.workspaceMove) throw new Error('Finish or resume the pending collection move before resetting a checklist.');
+  if (state.queue.some(entry => entry.failure)) throw new Error('Resolve the failed save before resetting a checklist.');
+  const records = projected(state), workspace = records[`workspace:${reviewed.workspaceId}`];
+  if (reviewed.workspaceId !== PERSONAL && (!workspace || workspace.deleted || workspace.archived)) throw new Error('Choose an active workspace before resetting a checklist.');
+  const latest = checklistResetPlan(records, reviewed.checklist, reviewed.workspaceId);
+  if (!latest || !latest.mutations.length || JSON.stringify(latest) !== JSON.stringify(reviewed)) {
+    throw new Error('This checklist changed. Review its latest items and reset again.');
+  }
+  const entries = [];
+  for (let index = 0; index < latest.mutations.length; index += MAX_OPERATION_MUTATIONS) {
+    entries.push({ operation: operationFor(state, accountId, latest.mutations.slice(index, index + MAX_OPERATION_MUTATIONS)),
+      checklistReset: { ...latest.checklist, workspaceId: latest.workspaceId } });
+  }
+  // Validate every operation and total capacity before changing the queue.
+  addEntries(state, entries);
+  if (state.undoEdit && latest.mutations.some(mutation => key(mutation) === key(state.undoEdit))) delete state.undoEdit;
 }
 
 function advanceCollectionMove(state, accountId) {

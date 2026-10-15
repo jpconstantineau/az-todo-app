@@ -25,12 +25,248 @@ async function setup(t, items = []) {
   const errors = []; page.on('pageerror', error => errors.push(error.message)); t.after(() => assert.deepEqual(errors, []));
   await page.goto(server.url); await page.locator('#workspace').waitFor(); await synced(page);
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  return { page, context, errors, setUser: value => { user = value; } };
+  return { page, context, errors, server, setUser: value => { user = value; } };
 }
 async function saveEdit(page) {
   await page.getByRole('button', { name: 'Save edit on device', exact: true }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
 }
+
+const checklistSeeds = count => [create('list', 'weekly', { title: 'Weekly chores', kind: 'checklist' }),
+  ...Array.from({ length: count }, (_, index) => create('item', `chore-${String(index).padStart(2, '0')}`, {
+    title: `Chore ${index}`, status: 'completed', description: 'Keep these notes', dueDate: '2026-10-20',
+    timeRequired: '60', energy: 'high', collectionRefs: [ref('list', 'weekly'), ref('list', 'role')], listId: 'weekly'
+  }))];
+const resetOperations = state => state.queue.filter(entry => entry.checklistReset);
+async function openChecklist(page, mode = 'execute') {
+  await showView(page, mode);
+  if (mode === 'execute') {
+    await page.locator('[data-execute-kind=checklist]').click(); await page.locator('#executeList').selectOption('weekly');
+  } else {
+    await page.locator('#view').selectOption('weekly'); await page.locator('#collectionSettingsHeading').click();
+  }
+}
+
+test('checklist reset: keyboard confirmation, filtered 21-item offline save survives reload and receives each exact receipt once', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t, checklistSeeds(21));
+  await openChecklist(page);
+  await page.locator('#executeFilterSummary').click();
+  await page.locator('#executeTimeFilter').selectOption('5'); await page.locator('#executeEnergyFilter').selectOption('low');
+  await context.setOffline(true); await page.waitForFunction(() => !navigator.onLine);
+  const reset = page.locator('#resetExecuteChecklist');
+  assert.match(await reset.textContent(), /21/);
+  await reset.focus();
+  page.once('dialog', async dialog => { assert.match(dialog.message(), /regardless of filters.*every collection.*scheduled recurring/); await dialog.dismiss(); });
+  await page.keyboard.press('Enter');
+  assert.equal(resetOperations(await local(page)).length, 0);
+  assert.equal(await reset.evaluate(control => control === document.activeElement), true);
+  page.once('dialog', dialog => dialog.accept()); await page.keyboard.press('Enter');
+  await waitForBrowser(page, async () => {
+    const store = await import('/inbox-store.js?v=22'), state = await store.transact('alice');
+    return state.queue.filter(entry => entry.checklistReset).length === 2 && store.projected(state)['item:chore-20'].status === 'next';
+  });
+  const queued = resetOperations(await local(page));
+  assert.deepEqual(queued.map(entry => entry.operation.mutations.length), [20, 1]);
+  assert.equal(await page.locator('#executeList').inputValue(), 'weekly');
+  assert.equal(await page.locator('#executeTimeFilter').inputValue(), '5');
+  assert.equal(await page.locator('#executeEnergyFilter').inputValue(), 'low');
+  await page.waitForFunction(() => document.querySelector('#executeChecklistResetStatus').textContent.includes('21 items reopened'));
+  assert.match(await page.locator('#executeChecklistResetStatus').textContent(), /pending server confirmation/);
+  assert.equal(await reset.isDisabled(), true);
+  await page.waitForFunction(() => document.activeElement.id === 'executeList');
+  assert.equal(await page.locator('#executeItems article').count(), 0, 'active filters stay applied');
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  }
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact('alice')).draft.navigation.execute.view === 'weekly');
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.deepEqual(resetOperations(await local(page)), queued, 'reload retains every operation ID, payload and local reset marker');
+  await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); await synced(page);
+  for (const entry of queued) assert.equal(documents.filter(doc => doc.id === `receipt:${entry.operation.operationId}`).length, 1);
+  const records = (await local(page)).records;
+  for (let index = 0; index < 21; index++) {
+    const item = records[`item:chore-${String(index).padStart(2, '0')}`];
+    assert.equal(item.status, 'next'); assert.equal(item.version, 2); assert.equal(item.description, 'Keep these notes');
+    assert.equal(item.dueDate, '2026-10-20'); assert.equal(item.nextAction, true); assert.equal(item.completedUtc, null);
+    assert.equal(item.workflowBeforeTransition.status, 'completed'); assert.equal(item.collectionRefs.length, 2);
+  }
+  await clickControl(page.locator('#resetExecuteFilters'));
+  assert.equal(await page.locator('#executeItems article').count(), 21);
+  await showView(page, 'lists'); await page.locator('#view').selectOption('weekly');
+  await page.getByRole('button', { name: 'Undo state change Chore 0', exact: true }).click(); await synced(page);
+  await waitForBrowser(page, async () => {
+    const state = await (await import('/inbox-store.js?v=22')).transact('alice');
+    return state.records['item:chore-00'].version === 3 && state.records['item:chore-00'].status === 'completed' && !state.queue.length;
+  });
+  assert.equal((await local(page)).records['item:chore-00'].status, 'completed');
+});
+
+test('checklist reset: Organize uses latest direct membership and excludes nested items even with Include nested', { timeout: 90000 }, async t => {
+  const { page, context, server } = await setup(t, [...checklistSeeds(2),
+    create('list', 'child', { title: 'Nested checklist', kind: 'checklist', parentRef: ref('list', 'weekly') }),
+    create('item', 'nested', { title: 'Nested completed', status: 'completed', listId: 'child' }),
+    create('item', 'new-member', { title: 'Added completed', status: 'completed' }),
+    create('item', 'waiting', { title: 'Waiting deliberately', status: 'waiting', waitingOn: 'Someone', listId: 'weekly' })]);
+  const changes = [
+    { type: 'item', id: 'chore-00', action: 'update', expectedVersion: 1, fields: { collectionRefs: [ref('list', 'role')], listId: 'role' } },
+    { type: 'item', id: 'new-member', action: 'update', expectedVersion: 1, fields: { collectionRefs: [ref('list', 'weekly')], listId: 'weekly' } }
+  ];
+  const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: changes }) });
+  assert.equal(response.status, 200, await response.text());
+  await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true })); await synced(page);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact('alice')).records['item:new-member'].version === 2);
+  await openChecklist(page, 'lists'); await page.locator('#statusFilter').selectOption('waiting'); await page.locator('#includeNested').check();
+  assert.match(await page.locator('#resetChecklist').textContent(), /2/);
+  await context.setOffline(true); await page.waitForFunction(() => !navigator.onLine);
+  page.once('dialog', dialog => dialog.accept()); await clickControl(page.locator('#resetChecklist'));
+  await waitForBrowser(page, async () => {
+    const store = await import('/inbox-store.js?v=22'), state = await store.transact('alice');
+    return store.projected(state)['item:new-member'].status === 'next' && state.queue.some(entry => entry.checklistReset);
+  });
+  const state = await local(page), changed = resetOperations(state).flatMap(entry => entry.operation.mutations.map(mutation => mutation.id));
+  assert.deepEqual(changed.sort(), ['chore-01', 'new-member']);
+  assert.equal(await page.locator('#statusFilter').inputValue(), 'waiting'); assert.equal(await page.locator('#includeNested').isChecked(), true);
+  assert.match(await page.locator('#checklistResetStatus').textContent(), /2 items reopened/);
+  await page.locator('#view').selectOption('home'); assert.equal(await page.locator('#checklistResetStatus').textContent(), '');
+});
+
+test('checklist reset: storage failure and stale confirmation leave zero partial local changes', { timeout: 90000 }, async t => {
+  const { page, context } = await setup(t, checklistSeeds(21));
+  await openChecklist(page);
+  await context.setOffline(true); await page.waitForFunction(() => !navigator.onLine);
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact('alice')).draft.navigation.execute.view === 'weekly');
+  await page.evaluate(() => {
+    window.originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      if (value.queue?.some(entry => entry.checklistReset)) throw new DOMException('Reset storage quota exceeded', 'QuotaExceededError');
+      return window.originalPut.call(this, value, ...args);
+    };
+  });
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#resetExecuteChecklist').click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Reset storage quota exceeded'));
+  const failed = await local(page); assert.equal(failed.queue.length, 0);
+  assert.ok(Object.values(failed.records).filter(record => record.type === 'item').every(record => record.status === 'completed'));
+  assert.equal(await page.locator('#executeChecklistResetStatus').textContent(), '');
+  await page.evaluate(async () => {
+    IDBObjectStore.prototype.put = window.originalPut;
+    const store = await import('/inbox-store.js?v=22');
+    window.originalConfirm = window.confirm;
+    window.confirm = () => {
+      // Queue another tab's durable change before the reset transaction reads.
+      window.staleChange = store.transact('alice', state => { state.records['item:chore-20'].version++; state.records['item:chore-20'].collectionRefs = []; });
+      return true;
+    };
+  });
+  await page.locator('#resetExecuteChecklist').click();
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('This checklist changed'));
+  await page.evaluate(async () => { await window.staleChange; window.confirm = window.originalConfirm; });
+  const stale = await local(page); assert.equal(stale.queue.length, 0);
+  assert.ok(Object.values(stale.records).filter(record => record.type === 'item').every(record => record.status === 'completed'));
+  assert.equal(await page.locator('#executeChecklistResetStatus').textContent(), '');
+});
+
+test('checklist reset: a later chunk conflict pauses without reapplying removed membership or losing earlier receipts; account switch clears acknowledgement', { timeout: 90000 }, async t => {
+  const { page, context, server, setUser } = await setup(t, checklistSeeds(21));
+  await openChecklist(page); await context.setOffline(true); await page.waitForFunction(() => !navigator.onLine);
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#resetExecuteChecklist').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact('alice')).queue.filter(entry => entry.checklistReset).length === 2);
+  const original = resetOperations(await local(page));
+  const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
+    { type: 'item', id: 'chore-20', action: 'update', expectedVersion: 1, fields: { collectionRefs: [], listId: null } }
+  ] }) });
+  assert.equal(response.status, 200, await response.text());
+  await context.setOffline(false); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
+  await waitForBrowser(page, async () => {
+    const state = await (await import('/inbox-store.js?v=22')).transact('alice');
+    return state.queue.length === 1 && state.queue[0].receipt?.status === 'conflict';
+  });
+  await page.waitForFunction(() => document.querySelector('#failureMessage').textContent.includes('Earlier server-confirmed chunks remain reset'));
+  assert.equal(await page.locator('#resolve').isVisible(), false);
+  assert.equal(await page.locator('#resetExecuteChecklist').isDisabled(), true);
+  assert.equal(documents.filter(doc => doc.id === `receipt:${original[0].operation.operationId}`).length, 1);
+  const serverItems = documents.filter(doc => doc.id.startsWith('record:item:')).map(doc => doc.record);
+  assert.equal(serverItems.filter(item => item.status === 'next').length, 20);
+  await page.evaluate(() => document.querySelector('#resolve').click());
+  await page.waitForFunction(() => document.querySelector('#error').textContent.includes('Keep the server version'));
+  assert.equal((await local(page)).queue[0].operation.operationId, original[1].operation.operationId);
+  await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#discard').click(); await synced(page);
+  const accepted = (await local(page)).records;
+  assert.equal(accepted['item:chore-20'].status, 'completed'); assert.deepEqual(accepted['item:chore-20'].collectionRefs, []);
+  assert.equal(Object.values(accepted).filter(record => record.status === 'next').length, 20);
+  setUser('bob'); await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact(null)).accountId === 'bob'); await synced(page);
+  assert.equal(await page.locator('#executeChecklistResetStatus').textContent(), '');
+  assert.equal(await page.locator('#checklistResetStatus').textContent(), '');
+  assert.equal(await page.locator('#resetExecuteChecklist').isVisible(), false);
+  assert.equal(await page.locator('#executeList option[value=weekly]').count(), 0);
+  assert.deepEqual((await page.evaluate(async () => (await (await import('/inbox-store.js?v=22')).transact('bob')))).queue, []);
+});
+
+test('checklist reset: an old account transaction completing after account switch cannot publish its state or acknowledgement', { timeout: 90000 }, async t => {
+  const { page, context, server, setUser } = await setup(t, checklistSeeds(1));
+  await openChecklist(page); await context.setOffline(true); await page.waitForFunction(() => !navigator.onLine);
+  await page.evaluate(() => {
+    window.originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      if (value.queue?.some(entry => entry.checklistReset)) {
+        const transaction = this.transaction, complete = transaction.oncomplete;
+        transaction.oncomplete = event => {
+          window.resetCommitted = true;
+          window.releaseResetCompletion = () => complete.call(transaction, event);
+        };
+        IDBObjectStore.prototype.put = window.originalPut;
+      }
+      return window.originalPut.call(this, value, ...args);
+    };
+  });
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#resetExecuteChecklist').click();
+  await page.waitForFunction(() => window.resetCommitted === true);
+  assert.equal(resetOperations(await local(page)).length, 1, 'the old profile transaction committed durably');
+  setUser('bob');
+  const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'bob', operationId: crypto.randomUUID(), mutations: [
+    create('list', 'bob-weekly', { title: 'Bob chores', kind: 'checklist' }), create('item', 'bob-chore', { title: 'Bob chore', status: 'completed', listId: 'bob-weekly' })
+  ] }) });
+  assert.equal(response.status, 200, await response.text());
+  await context.setOffline(false);
+  await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact(null)).accountId === 'bob'); await synced(page);
+  await showView(page, 'execute'); await page.locator('[data-execute-kind=checklist]').click(); await page.locator('#executeList').selectOption('bob-weekly');
+  assert.equal(await page.locator('#resetExecuteChecklist').isDisabled(), true, 'the earlier reset is still completing');
+  await page.evaluate(() => window.releaseResetCompletion());
+  await page.waitForFunction(() => document.querySelector('#executeChecklistResetStatus').textContent === '' && !document.querySelector('#resetExecuteChecklist').disabled);
+  assert.equal(await page.locator('#checklistResetStatus').textContent(), '');
+  assert.equal(await page.locator('#executeList option[value=weekly]').count(), 0);
+  const bob = await page.evaluate(async () => (await import('/inbox-store.js?v=22')).transact('bob'));
+  assert.deepEqual(bob.queue, []); assert.equal(bob.records['item:chore-00'], undefined);
+  assert.equal(resetOperations(await local(page)).length, 1, 'the signed-out account keeps its pending work');
+});
+
+test('checklist reset: archived workspace keeps the count discoverable and disables both reset controls', { timeout: 90000 }, async t => {
+  const { page, server } = await setup(t, [create('workspace', 'work', { title: 'Work' }),
+    create('list', 'weekly', { title: 'Weekly chores', kind: 'checklist', workspaceId: 'work' }),
+    create('item', 'work-chore', { title: 'Work chore', status: 'completed', workspaceId: 'work', listId: 'weekly' })]);
+  const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'alice', operationId: crypto.randomUUID(), mutations: [
+    { type: 'workspace', id: 'work', action: 'update', expectedVersion: 1, fields: { archived: true } }
+  ] }) });
+  assert.equal(response.status, 200, await response.text());
+  await clickControl(page.getByRole('button', { name: 'Sync now', exact: true, includeHidden: true }));
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact('alice')).records['workspace:work']?.archived === true);
+  await page.locator('#workspaceSelect').selectOption('work');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=22')).transact('alice')).selectedWorkspace === 'work');
+  await page.waitForFunction(() => document.querySelector('#workspaceStatus').textContent.includes('read-only'));
+  await openChecklist(page);
+  assert.equal(await page.locator('#resetExecuteChecklist').isVisible(), true);
+  assert.equal(await page.locator('#resetExecuteChecklist').isDisabled(), true);
+  assert.match(await page.locator('#resetExecuteChecklist').textContent(), /1/);
+  await openChecklist(page, 'lists');
+  assert.equal(await page.locator('#resetChecklist').isVisible(), true);
+  assert.equal(await page.locator('#resetChecklist').isDisabled(), true);
+  assert.match(await page.locator('#resetChecklist').textContent(), /1/);
+  assert.equal(resetOperations(await local(page)).length, 0);
+});
 test('collections browser: one editor creates kinds and parents; offline multi-membership and rollups keep one item', async t => {
   const { page, context, errors } = await setup(t, [create('item', 'task', { title: 'Measure cabinets', status: 'next' })]);
   await showView(page, 'lists'); await page.locator('#newList').click();
