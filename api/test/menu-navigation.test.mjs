@@ -97,3 +97,67 @@ test('direct Menu links safely normalize to Capture', async t => {
   assert.equal(await page.locator('#captureText').isVisible(), true);
   assert.equal(await page.title(), 'Capture · Personal');
 });
+
+test('Menu opens from list task options and Back restores the draft and route', async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch(); t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
+  await page.evaluate(async () => {
+    const store = await import('/inbox-store.js?v=19');
+    await store.transact('alice', local => store.enqueue(local, 'alice', [{ type: 'list', id: 'menu-list', action: 'create', expectedVersion: 0, fields: { title: 'Menu list', workspaceId: 'personal' } }]));
+  });
+  await page.locator('#sync').evaluate(control => control.click());
+  await page.waitForFunction(() => [...document.querySelector('#view').options].some(option => option.value === 'menu-list'));
+  const { openListTaskOption } = await import('./navigation-helper.mjs');
+  await openListTaskOption(page, 'Menu list', 'priority');
+  await page.locator('#taskOptionValue').fill('P1\nP2\nCustom draft');
+  const route = new URL(page.url()).hash;
+  await page.locator('#appMenu').click();
+  await page.waitForFunction(() => !document.querySelector('#menuView').hidden, null, { timeout: 3000 });
+  assert.equal(new URL(page.url()).hash, '#menu');
+  await page.locator('#menuBack').click();
+  await page.waitForFunction(expected => location.hash === expected && document.activeElement.id === 'appMenu', route);
+  assert.equal(await page.locator('#taskOptionValue').inputValue(), 'P1\nP2\nCustom draft');
+  await page.locator('#taskOptionEditorBack').click();
+  await page.waitForFunction(() => location.hash === '#lists/menu-list/task-options');
+  await openMenu(page);
+  await page.locator('#menuBack').click();
+  await page.waitForFunction(() => location.hash === '#lists/menu-list/task-options' && document.activeElement.id === 'appMenu');
+});
+
+test('a delayed Menu save cannot override a newer navigation choice', async t => {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  const browser = await chromium.launch(); t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.goto(server.url); await page.locator('#workspace').waitFor();
+  await page.waitForFunction(() => document.querySelector('#connectionLabel').textContent === 'Saved to cloud');
+  await page.evaluate(() => {
+    const transaction = IDBDatabase.prototype.transaction;
+    const complete = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
+    IDBDatabase.prototype.transaction = function (...args) {
+      const result = transaction.apply(this, args);
+      if (args[1] === 'readwrite') {
+        IDBDatabase.prototype.transaction = transaction;
+        Object.defineProperty(result, 'oncomplete', { set(callback) {
+          complete.set.call(result, event => { window.releaseMenuSave = () => callback(event); });
+        } });
+      }
+      return result;
+    };
+  });
+  await page.locator('#appMenu').click();
+  await page.waitForFunction(() => !!window.releaseMenuSave);
+  await page.locator('.workspace-nav a[href="#work"]').click();
+  await page.waitForFunction(() => location.hash === '#work');
+  await page.evaluate(async () => {
+    window.releaseMenuSave();
+    const store = await import('/inbox-store.js?v=19');
+    await store.transact('alice');
+  });
+  assert.equal(new URL(page.url()).hash, '#work');
+  assert.equal(await page.locator('#menuView').isVisible(), false);
+});
