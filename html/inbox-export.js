@@ -4,7 +4,7 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 import { readableBrief } from './briefs.js?v=6';
 import { purgeWorkspaceState } from './workspaces.js?v=5';
 import { occurrenceId, recurrenceRule } from './recurrence-model.js?v=2';
-import { validateExecutionPolicy } from './execution-policy.js?v=1';
+import { validateExecutionPolicy } from './execution-policy.js?v=2';
 const knownTypes = ['workspace', 'item', 'list', 'project', 'projectPlanRevision', 'savedView', 'settings', 'clarification', 'review', 'reviewDecision', 'reviewReflection', 'brief', 'planPreference', 'dailyPlan', 'dailyPlanRevision', 'recurrenceTemplate', 'executionPolicy'];
 const recordFields = ['workspaceId', 'archived', 'id', 'type', 'accountId', 'version', 'createdUtc', 'updatedUtc', 'deleted', 'deletedUtc',
   'title', 'description', 'originalText', 'originalTextProvenance', 'sourceUrl', 'sourceTitle', 'selectedText', 'captureId', 'capturedAt', 'captureTimeZone',

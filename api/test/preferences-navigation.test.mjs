@@ -90,7 +90,7 @@ test('Preferences routes expose only live categories with route, focus, Back and
   assert.equal(new URL(page.url()).hash, '#preferences/do');
   assert.equal(await page.title(), 'Do · Personal');
   assert.equal(await page.locator('#preferencesDoHeading').evaluate(element => element === document.activeElement), true);
-  assert.equal(await page.locator('#activeWork').isVisible(), true);
+  assert.equal(await page.locator('#activeWorkSettings').isVisible(), true);
   assert.equal(await page.locator('#doPreferenceScope').textContent(), 'Personal · Workspace');
   assert.equal(await page.locator('#preference-do').getAttribute('aria-current'), 'page');
   await page.locator('#preferencesDo .preference-back').click();

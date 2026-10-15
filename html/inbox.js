@@ -2,10 +2,10 @@ import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, coll
 import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
-import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=20';
+import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=21';
 import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1';
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems, effectivePriority, priorityFields, refreshPriorityControls } from './inbox-fields.js?v=7';
-import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=21';
+import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=22';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
@@ -19,7 +19,7 @@ import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=7';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=2';
 import { setupRecurrence } from './recurrence-ui.js?v=4';
-import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, retryExecutionCleanupMutations, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=1';
+import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, retryExecutionCleanupMutations, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=2';
 
 const $ = id => document.getElementById(id);
 const ADOPTION_INTENT = 'todo-adopt-local';
@@ -268,7 +268,7 @@ async function saveExecutionPolicy(next, intent, message) {
     local.queue.at(-1).executionTransition = intent;
   });
   if (owner !== accountId || generation !== accountGeneration) throw new Error('Account changed; the active-work save remains with its original account.');
-  state = saved; statusText('executionStatus', `${message} ${localMode() ? 'Saved on this device.' : 'Saved on device — pending server confirmation.'}`);
+  state = saved; statusText(intent.kind === 'limit' ? 'executionPolicyStatus' : 'executionStatus', `${message} ${localMode() ? 'Saved on this device.' : 'Saved on device — pending server confirmation.'}`);
   clearError(); render(); broadcast(); void sync();
 }
 function openWipDialog(item, stateName, options) {
@@ -293,7 +293,7 @@ async function changeExecution(item, stateName, options = {}) {
   if (!policy) throw new Error('Choose and save a WIP limit before starting work.');
   if (!current || current.deleted || current.version !== item.version || !['inbox', 'next'].includes(current.status)) throw new Error('This item changed or is no longer ready. Review its latest state.');
   const previous = activeEntry(policy, item.id), addsSlot = ['started', 'blocked'].includes(stateName) && !['started', 'blocked'].includes(previous?.state);
-  if (addsSlot && executionCount(policy) >= policy.wipLimit && !options.override) { openWipDialog(current, stateName, options); return; }
+  if (policy.wipLimit > 0 && addsSlot && executionCount(policy) >= policy.wipLimit && !options.override) { openWipDialog(current, stateName, options); return; }
   const effective = { ...options, override: options.override ?? (['started', 'blocked'].includes(stateName) && ['started', 'blocked'].includes(previous?.state) && previous.override) };
   const next = transitionPolicy(policy, current, stateName, effective);
   await saveExecutionPolicy(next, { kind: 'transition', itemId: item.id, state: stateName, options: effective }, stateName ? `Moved “${item.title}” to ${stateName}.` : `Returned “${item.title}” to ready.`);
@@ -935,23 +935,24 @@ function taskIcon(control, name, title) {
 function renderActiveWork(recordMap, readOnly) {
   const policy = currentExecutionPolicy(recordMap);
   $('doPreferenceScope').textContent = `${$('workspaceSelect').selectedOptions[0]?.textContent || 'Unavailable'} · Workspace`;
-  $('activeLanes').hidden = !policy?.entries?.length;
+  $('activeWork').hidden = $('activeLanes').hidden = !policy?.entries?.length;
   const limitInput = $('wipLimit');
-  if (document.activeElement !== limitInput) limitInput.value = policy?.wipLimit || '';
+  if (document.activeElement !== limitInput) limitInput.value = policy?.wipLimit ?? '';
   limitInput.disabled = readOnly;
   $('executionPolicyForm').querySelector('button').disabled = readOnly;
   const count = executionCount(policy);
-  $('wipCounter').textContent = policy ? `${count} of ${policy.wipLimit} WIP. Blocked work counts toward WIP.${count > policy.wipLimit ? ' Explicit override active.' : ''} ${policy.localState || 'Server-confirmed'}.`
-    : 'No WIP limit chosen. Save a limit from 1 to 20 before starting work.';
+  $('wipCounter').textContent = policy ? `${policy.wipLimit === 0 ? `${count} WIP · No limit` : `${count} of ${policy.wipLimit} WIP`}. Blocked work counts toward WIP.${policy.wipLimit > 0 && count > policy.wipLimit ? ' Explicit override active.' : ''} ${policy.localState || 'Server-confirmed'}.`
+    : 'No WIP limit chosen. Save 0 (no limit) or 1–50 in Preferences → Do before starting work.';
   const lanes = { started: $('startedItems'), blocked: $('blockedItems'), paused: $('pausedItems') };
   for (const [stateName, container] of Object.entries(lanes)) {
     const entries = (policy?.entries || []).filter(entry => entry.state === stateName);
+    container.closest('.active-lane').hidden = !entries.length;
     container.replaceChildren(...entries.map(entry => {
       const item = recordMap[`item:${entry.itemId}`], title = item?.title || `Unavailable item ${entry.itemId}`;
       const article = document.createElement('article'), heading = document.createElement('h5'), stateLabel = document.createElement('p'), details = document.createElement('p'), actions = document.createElement('div');
       article.className = 'active-card'; article.dataset.itemId = entry.itemId; heading.textContent = title;
-      stateLabel.className = 'active-state-label'; stateLabel.dataset.state = stateName; stateLabel.dataset.override = String(entry.override);
-      stateLabel.textContent = `${stateName[0].toUpperCase()}${stateName.slice(1)}${entry.override ? ' · WIP override' : ''}${item?.localState ? ` · ${item.localState}` : ''}`;
+      stateLabel.className = 'active-state-label'; stateLabel.dataset.state = stateName; stateLabel.dataset.override = String(policy.wipLimit > 0 && entry.override);
+      stateLabel.textContent = `${stateName[0].toUpperCase()}${stateName.slice(1)}${policy.wipLimit > 0 && entry.override ? ' · WIP override' : ''}${item?.localState ? ` · ${item.localState}` : ''}`;
       details.className = 'muted';
       const stale = !item || item.deleted || !['inbox', 'next'].includes(item.status);
       details.textContent = stateName === 'blocked' ? `Reason: ${entry.blockedReason} · Review ${entry.reviewDate} · Counts toward WIP${stale ? ' · Item changed; review and remove explicitly' : ''}`
@@ -1673,7 +1674,7 @@ function preferenceSummary(category) {
   if (category.id === 'process') return `${currentClarificationActions().length} actions · ${category.scope}`;
   if (category.id === 'do') {
     const policy = state && currentExecutionPolicy(projected(state));
-    return policy ? `${executionCount(policy)} of ${policy.wipLimit} WIP · ${category.scope}` : `Not set · ${category.scope}`;
+    return policy ? `${policy.wipLimit === 0 ? 'No limit' : `${executionCount(policy)} of ${policy.wipLimit} WIP`} · ${category.scope}` : `Not set · ${category.scope}`;
   }
   return category.scope;
 }
@@ -2178,7 +2179,7 @@ function workspace(focus = true, { save = true, historyNavigation = false } = {}
   $('preferencesView').hidden = !preferences;
   $('taskOptionsView').hidden = !taskOptions;
   document.querySelector('.workspace-nav').hidden = utility;
-  document.querySelector('.inbox-grid').hidden = utility && !utilityPage;
+  document.querySelector('.inbox-grid').hidden = utility && !utilityPage && !preferences;
   $('workspaceStatus').hidden = utility;
   if (menu) $('appMenu').setAttribute('aria-current', 'page'); else $('appMenu').removeAttribute('aria-current');
   document.querySelector('.capture-panel').hidden = destination !== 'capture';
@@ -2293,11 +2294,11 @@ for (const dialog of [$('editor'), $('clarifier'), $('briefs'), $('projectPlanne
 $('executionPolicyForm').onsubmit = event => {
   event.preventDefault();
   void guard(async () => {
-    const records = projected(state), current = currentExecutionPolicy(records), limit = Number($('wipLimit').value);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 20) throw new Error('Choose a WIP limit from 1 to 20.');
-    if (current && executionCount(current) > limit) throw new Error('Pause or return counted work before lowering the WIP limit.');
+    const records = projected(state), current = currentExecutionPolicy(records), limit = $('wipLimit').valueAsNumber;
+    if (!Number.isSafeInteger(limit) || limit < 0 || limit > 50) throw new Error('Choose a WIP limit from 0 to 50 (0 means no limit).');
+    if (current && limit > 0 && (current.wipLimit === 0 || limit < current.wipLimit) && executionCount(current) > limit) throw new Error('Pause or return counted work before lowering the WIP limit.');
     const next = current ? { ...current, wipLimit: limit } : { type: 'executionPolicy', id: selectedWorkspace, workspaceId: selectedWorkspace, version: 0, wipLimit: limit, entries: [] };
-    await saveExecutionPolicy(next, { kind: 'limit', wipLimit: limit }, `WIP limit set to ${limit}.`);
+    await saveExecutionPolicy(next, { kind: 'limit', wipLimit: limit }, limit === 0 ? 'WIP limit set to No limit.' : `WIP limit set to ${limit}.`);
   })();
 };
 $('cancelWip').onclick = () => { pendingWipTransition = null; $('wipLimitDialog').close(); };
@@ -2837,7 +2838,7 @@ async function retryExecutionConflict() {
   const serverPolicyMutation = failed.operation.mutations.find(mutation => mutation.type === 'executionPolicy');
   const serverPolicy = state.records[key(serverPolicyMutation)];
   if (!serverPolicy || serverPolicy.deleted) throw new Error('The server active-work policy is unavailable. Use server active work, then choose a WIP limit again.');
-  if (intent?.kind === 'limit' && executionCount(serverPolicy) > intent.wipLimit) throw new Error('Latest active work exceeds that lower limit. Pause or return counted work first.');
+  if (intent?.kind === 'limit' && intent.wipLimit > 0 && (serverPolicy.wipLimit === 0 || intent.wipLimit < serverPolicy.wipLimit) && executionCount(serverPolicy) > intent.wipLimit) throw new Error('Latest active work exceeds that lower limit. Pause or return counted work first.');
   const saved = await transact(owner, local => {
     const entry = local.queue[0];
     if (entry?.operation.operationId !== id || !entry.receipt) throw new Error('Queue changed; review it again.');

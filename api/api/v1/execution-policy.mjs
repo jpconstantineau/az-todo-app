@@ -36,15 +36,15 @@ export function executionPolicyFields(action, input) {
   const result = {};
   if ('workspaceId' in input) result.workspaceId = identifier(input.workspaceId, 'workspaceId');
   if ('wipLimit' in input) {
-    if (!Number.isSafeInteger(input.wipLimit) || input.wipLimit < 1 || input.wipLimit > 20) fail('wipLimit must be an integer from 1 to 20.');
+    if (!Number.isSafeInteger(input.wipLimit) || input.wipLimit < 0 || input.wipLimit > 50) fail('wipLimit must be an integer from 0 to 50.');
     result.wipLimit = input.wipLimit;
   }
   if ('entries' in input) {
-    if (!Array.isArray(input.entries) || input.entries.length > 40) fail('entries must contain at most 40 active-work items.');
+    if (!Array.isArray(input.entries)) fail('entries must be an array.');
     result.entries = input.entries.map(entry);
     if (new Set(result.entries.map(value => value.itemId)).size !== result.entries.length) fail('Active-work item IDs must be unique.');
   }
-  if (action === 'create' && (!result.workspaceId || !result.wipLimit || !result.entries)) fail('workspaceId, wipLimit and entries are required.');
+  if (action === 'create' && (!result.workspaceId || !('wipLimit' in result) || !result.entries)) fail('workspaceId, wipLimit and entries are required.');
   if (!Object.keys(result).length) fail('fields must contain an edit.');
   return result;
 }
@@ -71,10 +71,10 @@ export async function validateExecutionPolicy(record, old, lookup) {
     if (countedExecutionStates.has(value.state) && (!prior || !countedExecutionStates.has(prior.state))) changedCounted.push(value);
   }
   const beforeCount = executionCount(old), afterCount = executionCount(record);
-  if (old && record.wipLimit < old.wipLimit && afterCount > record.wipLimit) fail('Pause or return counted work before lowering the WIP limit.');
-  if (afterCount > record.wipLimit && afterCount > beforeCount && changedCounted.some(value => !value.override)) {
+  if (old && record.wipLimit > 0 && (old.wipLimit === 0 || record.wipLimit < old.wipLimit) && afterCount > record.wipLimit) fail('Pause or return counted work before lowering the WIP limit.');
+  if (record.wipLimit > 0 && afterCount > record.wipLimit && afterCount > beforeCount && changedCounted.some(value => !value.override)) {
     fail('Starting or resuming over the WIP limit requires an explicit override.');
   }
   const overrideSlots = record.entries.filter(value => countedExecutionStates.has(value.state) && value.override).length;
-  if (afterCount > record.wipLimit && overrideSlots < afterCount - record.wipLimit) fail('Every WIP slot above the limit needs an explicit override.');
+  if (record.wipLimit > 0 && afterCount > record.wipLimit && overrideSlots < afterCount - record.wipLimit) fail('Every WIP slot above the limit needs an explicit override.');
 }

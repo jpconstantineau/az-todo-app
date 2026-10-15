@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=53" defer></script>
+  <script src="/pwa.js?v=54" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=53"></script>
+  <script type="module" src="/inbox.js?v=54"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -168,16 +168,10 @@
           <div class="menu-page-bar"><button class="preference-back" type="button" aria-label="Back from Do preferences">← Back</button><h1 id="preferencesDoHeading" tabindex="-1">Do</h1></div>
           <div class="preferences-content">
             <p id="doPreferenceScope" class="preference-scope">Workspace</p>
-            <section id="activeWork" class="active-work" aria-labelledby="activeWorkHeading">
-              <div class="active-work-header"><div><h2 id="activeWorkHeading" tabindex="-1">Active work</h2><p id="executionPolicyHelp" class="muted">Choose your WIP limit. Started and blocked work count; paused work does not.</p></div>
-                <form id="executionPolicyForm" class="wip-policy"><label>WIP limit <input id="wipLimit" name="wipLimit" type="number" min="1" max="20" required></label><button type="submit">Save WIP limit</button></form></div>
-              <p id="wipCounter" class="wip-counter" role="status" aria-live="polite"></p>
-              <p id="executionStatus" role="status" aria-live="polite"></p>
-              <div id="activeLanes" class="active-lanes">
-                <section class="active-lane" aria-labelledby="startedLaneHeading"><h3 id="startedLaneHeading" tabindex="-1" data-focus-key="execution:started:heading">Started</h3><div id="startedItems"></div></section>
-                <section class="active-lane" aria-labelledby="blockedLaneHeading"><h3 id="blockedLaneHeading" tabindex="-1" data-focus-key="execution:blocked:heading">Blocked</h3><div id="blockedItems"></div></section>
-                <section class="active-lane" aria-labelledby="pausedLaneHeading"><h3 id="pausedLaneHeading" tabindex="-1" data-focus-key="execution:paused:heading">Paused</h3><div id="pausedItems"></div></section>
-              </div>
+            <section id="activeWorkSettings" class="active-work" aria-labelledby="activeWorkHeading">
+              <div class="active-work-header"><div><h2 id="activeWorkHeading" tabindex="-1">Active work</h2><p id="executionPolicyHelp" class="muted">Choose 0 for no limit, or 1–50. Started and blocked work count; paused work does not.</p></div>
+                <form id="executionPolicyForm" class="wip-policy"><label>WIP limit <input id="wipLimit" name="wipLimit" type="number" min="0" max="50" step="1" required aria-describedby="executionPolicyHelp"></label><button type="submit">Save WIP limit</button></form></div>
+              <p id="executionPolicyStatus" role="status" aria-live="polite"></p>
             </section>
           </div>
         </section>
@@ -404,6 +398,15 @@
     </section>
     <section class="card" id="execute" aria-labelledby="executeHeading" hidden>
       <h2 id="executeHeading" tabindex="-1">Do</h2>
+      <section id="activeWork" class="active-work" aria-label="Active work">
+        <p id="wipCounter" class="wip-counter" role="status" aria-live="polite"></p>
+        <div id="activeLanes" class="active-lanes">
+          <section class="active-lane" aria-labelledby="startedLaneHeading"><h3 id="startedLaneHeading" tabindex="-1" data-focus-key="execution:started:heading">Started</h3><div id="startedItems"></div></section>
+          <section class="active-lane" aria-labelledby="blockedLaneHeading"><h3 id="blockedLaneHeading" tabindex="-1" data-focus-key="execution:blocked:heading">Blocked</h3><div id="blockedItems"></div></section>
+          <section class="active-lane" aria-labelledby="pausedLaneHeading"><h3 id="pausedLaneHeading" tabindex="-1" data-focus-key="execution:paused:heading">Paused</h3><div id="pausedItems"></div></section>
+        </div>
+      </section>
+      <p id="executionStatus" role="status" aria-live="polite"></p>
       <div class="actions execute-kinds" id="executeKinds" role="group" aria-label="Collection type">
         <button type="button" data-execute-kind="list" aria-pressed="false" disabled>List</button>
         <button type="button" data-execute-kind="checklist" aria-pressed="false" disabled>Checklist</button>

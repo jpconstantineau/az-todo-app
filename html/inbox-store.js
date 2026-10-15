@@ -4,7 +4,7 @@ import { workflowFields, validateWorkflow } from './inbox-fields.js?v=7';
 import { nextCollectionMoveOperation, projectCollectionMove } from './workspace-move.js?v=6';
 import { materializationDate, nextAfterResolution, occurrenceId, recurrenceSnapshot } from './recurrence-model.js?v=2';
 import { validateProjectPlanOperation } from './project-planning-model.js?v=1';
-import { validateExecutionPolicy } from './execution-policy.js?v=1';
+import { validateExecutionPolicy } from './execution-policy.js?v=2';
 
 const empty = () => ({ records: {}, queue: [], after: 0, draft: {} });
 export const LOCAL_PROFILE = 'device-local';

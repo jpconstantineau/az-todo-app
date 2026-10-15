@@ -1,5 +1,5 @@
 import { archiveOnly, archivedAncestor, belongsTo, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
-import { key, projected } from './inbox-store.js?v=20';
+import { key, projected } from './inbox-store.js?v=21';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=7';
 
 const $ = id => document.getElementById(id);
