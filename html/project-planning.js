@@ -45,8 +45,8 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
         if (form.elements[name].value !== value) form.elements[name].value = value;
       }
       $('projectPlanCandidates').replaceChildren(...active.candidates.map(candidateRow));
+      $('projectPlanEarlierNotes').hidden = !active.sections.desiredEvidence?.trim() && !active.sections.unresolvedQuestions?.trim();
     }
-    $('projectPlanEarlierNotes').hidden = !active.sections.desiredEvidence?.trim() && !active.sections.unresolvedQuestions?.trim();
     const accepted = project?.planningHeadId ? records()[`projectPlanRevision:${project.planningHeadId}`] : null;
     status(error || (accepted && !accepted.localState ? `Editing from accepted revision ${accepted.id}. Ideas remain uncommitted until Accept plan.` : 'Draft saved only on this device until you accept it.'));
     $('acceptProjectPlan').disabled = busy || !project || project.deleted || !!project.localState;

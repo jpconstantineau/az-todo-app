@@ -98,6 +98,22 @@ test('planner refresh preserves native controls, selection and keyboard removal 
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.candidates.length === 0);
   assert.equal((await local(page)).queue.length, 0);
   assert.equal(documents.filter(row => ['item', 'projectPlanRevision'].includes(row.record?.type)).length, 0);
+
+  await page.evaluate(async () => {
+    await (await import('/inbox-store.js?v=15')).transact('alice', state => {
+      state.draft.projectPlanning.sections.desiredEvidence = 'Earlier evidence';
+    });
+  });
+  await page.reload(); await page.locator('#projectPlanner').waitFor(); await confirmed(page);
+  await page.locator('#projectPlanEarlierNotes summary').click();
+  const evidence = page.locator('#projectPlanEvidence');
+  await evidence.fill('');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.sections.desiredEvidence === '');
+  await refresh();
+  assert.ok(await evidence.isVisible(), 'clearing the last legacy note keeps its section reachable during refresh');
+  assert.ok(await evidence.evaluate(input => document.activeElement === input), 'refresh keeps focus on the cleared legacy note');
+  await page.keyboard.type('Revised evidence');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=15')).transact('alice')).draft.projectPlanning?.sections.desiredEvidence === 'Revised evidence');
 });
 
 test('project planner resumes offline, accepts selected actions, and recovers exact content after conflict', { timeout: 120000 }, async t => {
