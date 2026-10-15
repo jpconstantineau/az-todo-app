@@ -13,7 +13,7 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
     id: row.dataset.candidateId, title: row.querySelector('input').value, kind: row.querySelector('select').value,
     ...(row.dataset.itemId ? { itemId: row.dataset.itemId } : {})
   })) } : null;
-  const status = text => { $('projectPlanningStatus').textContent = text; };
+  const status = text => { if ($('projectPlanningStatus').textContent !== text) $('projectPlanningStatus').textContent = text; };
   function candidateRow(candidate) {
     const row = document.createElement('article'); row.className = 'project-plan-candidate'; row.dataset.candidateId = candidate.id;
     if (candidate.itemId) row.dataset.itemId = candidate.itemId;
@@ -24,16 +24,29 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
     select.append(new Option('Brainstorming only', 'brainstorm'), new Option('Action', 'action'), new Option('Bounded learning step', 'learning'));
     select.value = candidate.kind; select.setAttribute('aria-describedby', 'projectPlanNextActionsHelp'); kind.append(select);
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove idea'; remove.setAttribute('aria-label', `Remove candidate idea: ${candidate.title || 'Untitled'}`);
-    remove.onclick = () => { row.remove(); active = read(); dirty = true; error = ''; status('Draft changed — saving on device…'); void journal(); };
+    input.addEventListener('input', () => remove.setAttribute('aria-label', `Remove candidate idea: ${input.value || 'Untitled'}`));
+    remove.onclick = () => {
+      const focused = row.contains(document.activeElement);
+      const next = row.nextElementSibling || row.previousElementSibling;
+      row.remove(); active = read(); dirty = true; error = ''; status('Draft changed — saving on device…');
+      if (focused) (next?.querySelector('input') || $('addProjectPlanCandidate')).focus();
+      void journal();
+    };
     row.append(title, kind, remove); return row;
   }
-  function draw() {
+  function draw(populate = false) {
     if (!active) return;
     const project = records()[`project:${active.projectId}`];
     $('projectPlanningHeading').textContent = `Plan project: ${project?.title || 'Unavailable project'}`;
-    for (const name of ['outcome', 'purposePrinciples', 'desiredEvidence', 'organizationApproach', 'unresolvedQuestions']) form.elements[name].value = active.sections[name] || '';
+    // Only explicit open/restore replaces editable controls; refreshes keep native focus and selection.
+    if (populate) {
+      for (const name of ['outcome', 'purposePrinciples', 'desiredEvidence', 'organizationApproach', 'unresolvedQuestions']) {
+        const value = active.sections[name] || '';
+        if (form.elements[name].value !== value) form.elements[name].value = value;
+      }
+      $('projectPlanCandidates').replaceChildren(...active.candidates.map(candidateRow));
+    }
     $('projectPlanEarlierNotes').hidden = !active.sections.desiredEvidence?.trim() && !active.sections.unresolvedQuestions?.trim();
-    $('projectPlanCandidates').replaceChildren(...active.candidates.map(candidateRow));
     const accepted = project?.planningHeadId ? records()[`projectPlanRevision:${project.planningHeadId}`] : null;
     status(error || (accepted && !accepted.localState ? `Editing from accepted revision ${accepted.id}. Ideas remain uncommitted until Accept plan.` : 'Draft saved only on this device until you accept it.'));
     $('acceptProjectPlan').disabled = busy || !project || project.deleted || !!project.localState;
@@ -79,7 +92,7 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
       active = resumeProjectPlanDraft(draft || (resume ? read() : draftFromAccepted(project, records())), project);
       error = '';
       dirty = draft ? true : resume && dirty;
-      draw(); showDialog(dialog); form.elements.outcome.focus();
+      draw(true); showDialog(dialog); form.elements.outcome.focus();
       if (discardedOther) void journal();
     },
     snapshot() { return active && dirty ? { ...read(), open: dialog.open } : null; },
@@ -87,7 +100,7 @@ export function setupProjectPlanning({ records, journal, showDialog, save }) {
       active = saved ? resumeProjectPlanDraft(saved, records()[`project:${saved.projectId}`]) : null;
       error = '';
       dirty = !!active;
-      if (active) { draw(); if (saved.open) { showDialog(dialog); form.elements.outcome.focus(); } }
+      if (active) { draw(true); if (saved.open) { showDialog(dialog); form.elements.outcome.focus(); } }
       else if (dialog.open) dialog.close();
     },
     reset() { active = null; dirty = false; error = ''; form.reset(); $('projectPlanCandidates').replaceChildren(); status(''); if (dialog.open) dialog.close(); },
