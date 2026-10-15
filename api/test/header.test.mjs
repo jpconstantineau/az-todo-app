@@ -358,9 +358,9 @@ for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'un
     for (const id of ['extractAuto', 'extractLists', 'extractStart']) {
       assert.equal(await page.locator('#' + id).isDisabled(), expected === 'unavailable' || !!mode.checkFail);
     }
-    assert.equal(await page.locator('#extractManual').count(), 0);
+    assert.equal(await page.locator('#extractManual').isVisible(), true);
     assert.equal(await page.locator('#captureAI').isVisible(), expected !== 'unavailable' && !mode.checkFail);
-    assert.equal(await page.locator('#extractionStatus').isVisible(), false);
+    assert.equal(await page.locator('#extractionStatus').isVisible(), expected === 'unavailable' || !!mode.checkFail);
     assert.deepEqual(await page.evaluate(() => aiCalls), { creates: 0, prompts: 0, destroyed: 0 });
     assert.ok((await button.boundingBox()).x > (await page.locator('#saveStatus').boundingBox()).x);
     if (expected === 'unavailable') { await button.focus(); await page.keyboard.press('Enter'); assert.equal(await page.evaluate(() => aiCalls.creates), 0); }
@@ -380,7 +380,7 @@ test('capture AI controls wait for the initial availability check', async t => {
   await agentStatus(page, 'busy');
   for (const id of ['extractAuto', 'extractLists', 'extractStart']) assert.equal(await page.locator('#' + id).isDisabled(), true);
   assert.equal(await page.locator('#captureAI').isVisible(), false);
-  assert.equal(await page.locator('#extractionStatus').isVisible(), false);
+  assert.equal(await page.locator('#extractionStatus').isVisible(), true);
   await page.evaluate(() => finishCheck('available')); await agentStatus(page, 'available');
   assert.equal(await page.locator('#captureAI').isVisible(), true);
   assert.equal(await page.locator('#extractionStatus').isVisible(), false);
