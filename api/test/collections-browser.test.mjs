@@ -129,6 +129,7 @@ test('checklist reset: Organize uses latest direct membership and excludes neste
   assert.deepEqual(changed.sort(), ['chore-01', 'new-member']);
   assert.equal(await page.locator('#statusFilter').inputValue(), 'waiting'); assert.equal(await page.locator('#includeNested').isChecked(), true);
   assert.match(await page.locator('#checklistResetStatus').textContent(), /2 items reopened/);
+  assert.equal(await page.locator('#resetChecklist').isDisabled(), true, 'Organize disables reset after the last eligible item reopens');
   await page.locator('#view').selectOption('home'); assert.equal(await page.locator('#checklistResetStatus').textContent(), '');
 });
 
@@ -185,6 +186,8 @@ test('checklist reset: a later chunk conflict pauses without reapplying removed 
   await page.waitForFunction(() => document.querySelector('#failureMessage').textContent.includes('Earlier server-confirmed chunks remain reset'));
   assert.equal(await page.locator('#resolve').isVisible(), false);
   assert.equal(await page.locator('#resetExecuteChecklist').isDisabled(), true);
+  await openChecklist(page, 'lists');
+  assert.equal(await page.locator('#resetChecklist').isDisabled(), true, 'Organize disables reset while a failed save needs attention');
   assert.equal(documents.filter(doc => doc.id === `receipt:${original[0].operation.operationId}`).length, 1);
   const serverItems = documents.filter(doc => doc.id.startsWith('record:item:')).map(doc => doc.record);
   assert.equal(serverItems.filter(item => item.status === 'next').length, 20);
@@ -225,6 +228,8 @@ test('checklist reset: an old account transaction completing after account switc
   page.once('dialog', dialog => dialog.accept()); await page.locator('#resetExecuteChecklist').click();
   await page.waitForFunction(() => window.resetCommitted === true);
   assert.equal(resetOperations(await local(page)).length, 1, 'the old profile transaction committed durably');
+  await openChecklist(page, 'lists');
+  assert.equal(await page.locator('#resetChecklist').isDisabled(), true, 'Organize disables reset while its local save is completing');
   setUser('bob');
   const response = await fetch(server.url + '/api/v1/operations', { method: 'POST', headers: { origin: server.url, 'content-type': 'application/json' }, body: JSON.stringify({ apiVersion: 1, accountId: 'bob', operationId: crypto.randomUUID(), mutations: [
     create('list', 'bob-weekly', { title: 'Bob chores', kind: 'checklist' }), create('item', 'bob-chore', { title: 'Bob chore', status: 'completed', listId: 'bob-weekly' })

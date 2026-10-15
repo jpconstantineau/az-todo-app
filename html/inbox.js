@@ -627,7 +627,7 @@ function renderCollectionSettings(context, records, listMode) {
   $('collectionSettingsHelp').textContent = context.type === 'project'
     ? 'Projects stay projects. Parent and revisit changes keep the project outcome, actions and history.'
     : `${collectionKind(context) === 'reference' ? 'Reusable reference is for non-actionable source material. A revisit date only resurfaces the collection; it does not turn entries into actions. ' : ''}Changing type, parent or revisit date keeps contents and history.`;
-  for (const control of collectionSettingsForm.elements) control.disabled = workspaceReadOnly() || control.name === 'kind' && context.type === 'project';
+  for (const control of collectionSettingsForm.elements) if (control.id !== 'resetChecklist') control.disabled = workspaceReadOnly() || control.name === 'kind' && context.type === 'project';
   $('archiveCollection').disabled = workspaceReadOnly();
 }
 collectionSettingsForm.onsubmit = event => {
