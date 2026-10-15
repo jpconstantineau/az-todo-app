@@ -1,5 +1,5 @@
 import { activeMemberships, archiveOnly, archivedAncestor, collectionKinds, collectionKind, isCollection, isEffectivelyArchived, memberships, belongsTo, inCollection, ancestry, refKey, collectionContents, normalizeMembership } from './collection-model.js?v=5';
-import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=5';
+import { organizer, pickerOptions, selectedRefs, membershipFields, collectionLabel, viewKey, parseRef, drawOutline } from './collections.js?v=6';
 import { PERSONAL, workspaceOf, workspaceRecords, workspaceDraft } from './workspaces.js?v=5';
 import { collectionMoveMutations, collectionMovePlan } from './workspace-move.js?v=6';
 import { LOCAL_PROFILE, transact, adoptLocalProfile, purgeAccountProfile, clearDeviceDatabase, deviceResetImpact, key, projected, enqueue as queueMutations, enqueueCapture, applyReceipt, captureMutations, rememberEdit, canUndoEdit, undoEdit, beginCollectionMove, continueCollectionMove, resumeCollectionMove } from './inbox-store.js?v=21';
@@ -9,14 +9,14 @@ import { deviceExport, accountExport, readableExport } from './inbox-export.js?v
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
 import { clarificationUI } from './clarification.js?v=14';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
-import { mergeReflectionConflict, setupReviews } from './reviews.js?v=15';
+import { mergeReflectionConflict, setupReviews } from './reviews.js?v=16';
 import { setupBriefs } from './briefs.js?v=6';
 import { setupProjectPlanning } from './project-planning.js?v=1';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=1';
 import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=6';
 import { setupAgentStatus } from './local-agent.js?v=2';
 import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
-import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=7';
+import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=8';
 import { resolveOccurrenceMutations } from './recurrence-model.js?v=2';
 import { setupRecurrence } from './recurrence-ui.js?v=4';
 import { activeEntry, cleanupExecutionPolicy, executionCount, policyFields, policyKey, retryExecutionCleanupMutations, transitionPolicy, validateExecutionPolicy } from './execution-policy.js?v=2';
@@ -235,7 +235,7 @@ edit.elements.workspaceId.onchange = () => {
   if (editing?.type === 'item') {
     const records = scopedRecords();
     options(edit.elements.listId, moving ? [] : Object.values(records).filter(record => record.type === 'list' && !record.deleted && !isEffectivelyArchived(record, records)), [['', 'No list']]);
-    options(edit.elements.projectId, moving ? [] : Object.values(records).filter(record => record.type === 'project' && !record.deleted && !isEffectivelyArchived(record, records)), [['', 'No project']]);
+    options(edit.elements.projectId, moving ? [] : Object.values(records).filter(record => record.type === 'project' && !record.deleted && !isEffectivelyArchived(record, records)).map(record => ({ ...record, title: collectionLabel(record, records) })), [['', 'No project']]);
     if (moving) { edit.elements.listId.value = edit.elements.projectId.value = ''; pickerOptions(edit.elements.collectionRefs, {}, []); } else pickerOptions(edit.elements.collectionRefs, scopedRecords(), selectedRefs(edit.elements.collectionRefs));
   } else {
     if (moving) edit.elements.parentRef.value = '';
@@ -333,7 +333,7 @@ function closeExecutionDialogs() {
 }
 const dialogOpeners = new Map();
 const recurrence = setupRecurrence({ records: () => accountId ? projected(state) : {}, workspaceId: () => selectedWorkspace,
-  matrix: matrixPriority, readOnly: workspaceReadOnly, showDialog, restoreFocus, journal, label: collectionLabel, save: saveRecurrence });
+  matrix: matrixPriority, readOnly: workspaceReadOnly, showDialog, restoreFocus, journal, label: record => collectionLabel(record, scopedRecords()), save: saveRecurrence });
 async function saveRecurrence(mutations, message, clearRecurrenceDraft = false, targetWorkspaceId = selectedWorkspace) {
   const owner = accountId, generation = accountGeneration;
   if (!owner || workspaceReadOnly(targetWorkspaceId)) throw new Error('Choose an active workspace before changing recurring work.');
@@ -363,7 +363,7 @@ const extraction = setupCaptureExtraction({ matrix: matrixPriority, journal, sho
   current: () => {
     if (!accountId || workspaceReadOnly()) return null;
     const records = scopedRecords();
-    return { ...captureDraft(), accountId, lists: Object.values(records).filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, records)).map(record => ({ id: record.type === 'project' ? refKey(record) : record.id, title: collectionLabel(record) })) };
+    return { ...captureDraft(), accountId, lists: Object.values(records).filter(record => isCollection(record) && !record.deleted && !isEffectivelyArchived(record, records)).map(record => ({ id: record.type === 'project' ? refKey(record) : record.id, title: collectionLabel(record, records) })) };
   },
   save: async submitted => {
     const owner = accountId, generation = accountGeneration;
@@ -579,7 +579,7 @@ function renderCollectionSettings(context, records, listMode) {
   const parents = records.filter(candidate => isCollection(candidate) && !isEffectivelyArchived(candidate, recordMap) && key(candidate) !== key(context) &&
     !ancestry(candidate, recordMap).some(ref => refKey(ref) === key(context)));
   options(collectionSettingsForm.elements.parentRef,
-    parents.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']]);
+    parents.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate, recordMap) })), [['', 'No parent']]);
   collectionSettingsForm.elements.parentRef.value = context.parentRef ? refKey(context.parentRef) : '';
   collectionSettingsForm.elements.revisitDate.value = context.revisitDate || '';
   $('collectionSettingsHelp').textContent = context.type === 'project'
@@ -1038,15 +1038,15 @@ function render() {
     ? undoAvailable ? `Undo edit to “${state.undoEdit.title}” until ${new Date(state.undoEdit.expiresAt).toLocaleString()}.`
       : 'The last edit expired, its record changed, or a save needs attention.'
     : 'No editor save to undo on this device.');
-  options(capture.elements.listId, [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(record => ({ id: refKey(record), title: collectionLabel(record) }))], [['', 'No list']], true);
+  options(capture.elements.listId, [...lists.map(record => ({ ...record, title: collectionLabel(record, recordMap) })), ...projects.map(record => ({ id: refKey(record), title: collectionLabel(record, recordMap) }))], [['', 'No list']], true);
   extraction.refreshLists();
   const moving = editing?.type === 'item' && edit.elements.workspaceId.value && edit.elements.workspaceId.value !== selectedWorkspace;
   options(edit.elements.listId, moving ? [] : lists, [['', 'No list']], !moving);
-  options(edit.elements.projectId, moving ? [] : projects, [['', 'No project']], !moving);
+  options(edit.elements.projectId, moving ? [] : projects.map(record => ({ ...record, title: collectionLabel(record, recordMap) })), [['', 'No project']], !moving);
   const listMode = destination === 'lists';
   recurrence.refresh(listMode);
   const filters = navigation[listMode ? 'lists' : 'work'];
-  options($('view'), [...lists.map(record => ({ ...record, title: collectionLabel(record) })), ...projects.map(project => ({ id: `project:${project.id}`, title: collectionLabel(project) }))],
+  options($('view'), [...lists.map(record => ({ ...record, title: collectionLabel(record, recordMap) })), ...projects.map(project => ({ id: `project:${project.id}`, title: collectionLabel(project, recordMap) }))],
     listMode ? [['', 'Choose collection'], ['@archived', `Archived collections (${archivedCount})`]] : [['inbox', 'Inbox (unprocessed)'], ['all', 'All items'], ['unfiled', 'No list'], ['day', 'Planned day'], ['@search', 'Search workspace']]);
   $('view').value = [...$('view').options].some(option => option.value === filters.view) ? filters.view : listMode ? '' : 'inbox';
   filters.view = $('view').value;
@@ -1126,7 +1126,11 @@ function render() {
   renderArchive(view === '@archived', recordMap);
   renderSearch(searchMode, recordMap);
   $('collectionBreadcrumbs').textContent = context ? ancestry(context, scopedRecords()).reverse().map(ref => scopedRecords()[refKey(ref)]?.title || 'Unavailable parent').join(' / ') : archiveMode ? 'Archived history for this workspace.' : 'Choose a collection.';
-  $('collectionChildren').replaceChildren(...(listMode && context ? records.filter(record => isCollection(record) && !isEffectivelyArchived(record, recordMap) && record.parentRef && refKey(record.parentRef) === key(context)).map(child => button(collectionLabel(child), () => { navigation.lists.view = viewKey(child); render(); void journal(); }, `Open ${collectionLabel(child)}`, `child:${key(child)}`)) : []));
+  $('collectionChildren').replaceChildren(...(listMode && context ? records.filter(record => isCollection(record) && !isEffectivelyArchived(record, recordMap) && record.parentRef && refKey(record.parentRef) === key(context)).map(child => {
+    const open = button(collectionLabel(child, recordMap), () => { navigation.lists.view = viewKey(child); render(); void journal(); }, `Open ${collectionLabel(child, recordMap)}`, `child:${key(child)}`);
+    if (child.type === 'project') open.title = collectionLabel(child, recordMap);
+    return open;
+  }) : []));
   renderCollectionSettings(context, records, listMode && !archiveMode);
   $('addContextItem').hidden = !context;
   $('addContextItem').disabled = workspaceReadOnly();
@@ -1272,7 +1276,7 @@ function render() {
     control.setAttribute('aria-pressed', String(available && control.dataset.executeKind === execute.kind));
   }
   const executeCollections = (execute.kind === 'project' ? projects : lists.filter(list => collectionKind(list) === execute.kind));
-  options($('executeList'), executeCollections.map(record => ({ id: viewKey(record), title: record.title })), [['', `Choose a ${execute.kind}`]]);
+  options($('executeList'), executeCollections.map(record => ({ id: viewKey(record), title: record.type === 'project' ? collectionLabel(record, recordMap) : record.title })), [['', `Choose a ${execute.kind}`]]);
   $('executeList').value = executeCollections.some(record => viewKey(record) === execute.view) ? execute.view : '';
   $('executeList').disabled = !firstAvailableKind;
   $('executeList').setAttribute('aria-label', `Choose ${collectionKinds[execute.kind]}`);
@@ -1439,7 +1443,7 @@ function openEditor(record, focus = true, show = true) {
   for (const option of edit.elements.kind.options) option.disabled = !!record.version && (record.type === 'project' ? option.value !== 'project' : option.value === 'project');
   const scoped = scopedRecords();
   const parentOptions = Object.values(scoped).filter(candidate => isCollection(candidate) && !candidate.deleted && !isEffectivelyArchived(candidate, scoped) && !ancestry(candidate, scoped).some(ref => refKey(ref) === key(record)));
-  options(edit.elements.parentRef, parentOptions.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate) })), [['', 'No parent']], true);
+  options(edit.elements.parentRef, parentOptions.map(candidate => ({ id: refKey(candidate), title: collectionLabel(candidate, scoped) })), [['', 'No parent']], true);
   edit.elements.parentRef.value = fields.parentRef ? refKey(fields.parentRef) : '';
   edit.elements.parentRef.disabled = false;
   options(edit.elements.workspaceId, availableWorkspaces().filter(space => !space.archived), []);
