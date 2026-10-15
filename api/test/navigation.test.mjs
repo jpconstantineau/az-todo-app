@@ -232,7 +232,7 @@ test('navigation: Execute separates lists, projects and checklists and keeps its
   assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), ['Buy milk']);
   assert.equal(await page.locator('#resetExecuteFilters').getAttribute('hidden'), null);
   await page.locator('[data-execute-kind="project"]').click();
-  assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a project', 'Trip']);
+  assert.deepEqual(await page.locator('#executeList option').allTextContents(), ['Choose a project', 'Project: 😞 Trip — No next actions (Active)']);
   await page.locator('#executeList').selectOption('project:project');
   assert.deepEqual(await page.locator('#executeItems .editable-title').allTextContents(), [], 'Execute filters continue across collection types');
   await page.locator('#executeFilters > summary').click();

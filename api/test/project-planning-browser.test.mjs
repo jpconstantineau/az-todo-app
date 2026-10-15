@@ -55,6 +55,7 @@ test('project planner resumes offline, accepts selected actions, and recovers ex
     const state = await (await import('/inbox-store.js?v=15')).transact('alice');
     return state.draft.projectPlanning?.sections.purposePrinciples === 'Help customers finish a first run' && state.draft.projectPlanning.candidates.length === 3;
   });
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
   await context.setOffline(true); await page.reload(); await page.locator('#projectPlanner').waitFor();
   assert.equal(await page.locator('[name=purposePrinciples]').inputValue(), 'Help customers finish a first run');
   assert.deepEqual(await page.locator('.project-plan-candidate input').evaluateAll(inputs => inputs.map(input => input.value)), ['Consider a video', 'Publish the guide', 'Interview pilot users']);

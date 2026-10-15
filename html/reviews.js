@@ -1,3 +1,4 @@
+import { collectionLabel } from './collections.js?v=6';
 import { archiveOnly, archivedAncestor, belongsTo, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
 import { key, projected } from './inbox-store.js?v=21';
 import { workflowFields, reviewReady, localDate, taskFields } from './inbox-fields.js?v=7';
@@ -110,9 +111,10 @@ export function setupReviews({ current, save, journal, edit, clarify, addAction,
     const completion = remaining < 0 ? (available || nextBatch || session.previousReviewId ? ' Batch complete.' : ' Review complete.') : '';
     const progress = `${session.reviewKind} review: ${session.included.filter((_, i) => done(session, i)).length} of ${session.included.length} reviewed. ${session.localState || 'Server-confirmed'}.${completion}`;
     if ($('reviewProgress').textContent !== progress) $('reviewProgress').textContent = progress;
-    $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
+    $('reviewRecord').replaceChildren(...session.included.map((ref, i) => new Option(`${done(session, i) ? 'Reviewed: ' : ''}${records[key(ref)]?.type === 'project' ? collectionLabel(records[key(ref)], records) : records[key(ref)]?.title || 'Unavailable record'} (${ref.type})`, String(i))));
     $('reviewRecord').value = String(index);
-    $('reviewTitle').textContent = target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
+    $('reviewTitle').textContent = target?.type === 'project' ? collectionLabel(target, records) : target?.title || (ref ? 'Unavailable record' : 'Nothing to review');
+    $('reviewTitle').title = target?.type === 'project' ? collectionLabel(target, records) : '';
     const archiveRoots = target && (target.type === 'project' ? [archivedAncestor(target, records)].filter(Boolean) : memberships(target).map(member => archivedAncestor(member, records)).filter(Boolean));
     const targetArchived = target && (target.type === 'project' ? isEffectivelyArchived(target, records) : target.type === 'item' && archiveOnly(target, records));
     const execution = target?.type === 'item' ? records[`executionPolicy:${target.workspaceId}`]?.entries?.find(entry => entry.itemId === target.id) : null;

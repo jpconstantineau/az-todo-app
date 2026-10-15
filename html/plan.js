@@ -1,3 +1,4 @@
+import { collectionLabel, collectionPath } from './collections.js?v=6';
 import { archiveOnly, archivedAncestor, ancestry, collectionKind, collectionKinds, isCollection, isEffectivelyArchived, memberships, refKey } from './collection-model.js?v=5';
 
 import { effectivePriority } from './inbox-fields.js?v=7';
@@ -51,8 +52,9 @@ function collectionTree(collections, records, focus, choose) {
   const expanded = new Set([...$('planHierarchy').querySelectorAll('details[open]')].map(node => node.dataset.ref));
   const row = (record, seen = new Set()) => {
     const item = document.createElement('li');
-    const open = control(`${collectionKinds[collectionKind(record)]}: ${record.title}`, () => choose(refKey(record)),
+    const open = control(record.type === 'project' ? collectionLabel(record, records) : `${collectionKinds[collectionKind(record)]}: ${record.title}`, () => choose(refKey(record)),
       `Plan ${record.title}`, `plan:collection:${refKey(record)}`);
+    if (record.type === 'project') { open.title = collectionLabel(record, records); open.setAttribute('aria-description', open.title); }
     open.setAttribute('aria-pressed', String(refKey(record) === focus));
     const children = collections.filter(child => child.parentRef && refKey(child.parentRef) === refKey(record) && !seen.has(refKey(child)));
     item.append(open);
@@ -242,7 +244,7 @@ export function setupPlan({ matrix = () => false, records, workspaceId, navigati
     plan.focus = resolvePlanningFocus(typeof plan.focus === 'string' ? plan.focus : '', recordMap);
     plan.week = validDay(plan.week) ? plan.week : localMonday();
     const focusRecord = plan.focus ? recordMap[plan.focus] : null;
-    const chooseOptions = [{ value: '', text: 'Whole workspace' }, ...collections.map(record => ({ value: refKey(record), text: `${planningPath(record, recordMap)} · ${collectionKinds[collectionKind(record)]}` }))];
+    const chooseOptions = [{ value: '', text: 'Whole workspace' }, ...collections.map(record => ({ value: refKey(record), text: `${collectionPath(record, recordMap)} · ${collectionKinds[collectionKind(record)]}` }))];
     $('planFocus').replaceChildren(...chooseOptions.map(entry => new Option(entry.text, entry.value)));
     $('planFocus').value = plan.focus;
     $('planHierarchy').replaceChildren(collectionTree(collections, recordMap, plan.focus, choose));

@@ -263,7 +263,7 @@ test('accessibility: contextual dialogs and routed preferences return to their o
   await keyboardActivate(page, '#clarifyInbox'); await page.locator('#clarifier').waitFor();
   await keyboardActivate(page, '#clarifyFlow > .clarify-grid > button:first-child');
   await keyboardActivate(page, '#clarifyStop');
-  const projectValue = await page.locator('#view option').filter({ hasText: 'Project: Insurance' }).getAttribute('value');
+  const projectValue = await page.locator('#view option').filter({ hasText: /Project: .*Insurance/ }).getAttribute('value');
   await page.locator('#view').selectOption(projectValue);
   await page.locator('#addContextItem').focus(); await page.keyboard.press('Enter');
   await expectFocus(page, '#edit [name=title]');
