@@ -137,7 +137,9 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
       $('clarifyTitleLabel').hidden = true; $('clarifyOriginalDetails').hidden = true; $('clarifyOriginal').textContent = '';
       container.append(question('Session summary'), element('p', { id: 'clarifyHelp', textContent: remaining.length ? `${remaining.length} unprocessed item(s) remain in Inbox. Return to start another pass when you are ready.` : 'Every inbox item in this pass has been processed. Draft projects are listed as Needs outcome and included in weekly review.' }));
       if (remaining.length) container.append(control('Return to first unprocessed item', restartUnprocessed));
-      $('clarifySave').hidden = true; $('clarifySkip').hidden = true; $('clarifyStop').textContent = 'Done'; $('clarifyStop').focus(); return;
+      $('clarifySave').hidden = true; $('clarifySkip').hidden = true; $('clarifyStop').textContent = 'Done';
+      if (!busy) $('clarifyStop').focus();
+      return;
     }
     const total = active.ids.length;
     $('clarifyHeading').textContent = 'Clarifying'; $('clarifyProgress').textContent = active.sessionMode ? `${active.index + 1} of ${total}` : 'One item';
@@ -208,6 +210,7 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
       : { ...common, item: null, session: null, proposal: flowProposal(), finished: true, open: true };
   }
   async function convert(kind) {
+    const origin = active;
     const item = active.item, title = requireTitle(values().title), id = crypto.randomUUID(), type = kind === 'project' ? 'project' : 'list';
     const parentRef = values().parentRef || null, containerRef = { type, id }, decision = { type: 'convert', containerRef, containerKind: kind, parentRef, title };
     const fields = { title, description: item.description || '', workspaceId: item.workspaceId, parentRef, ...sourceMetadata(item),
@@ -215,9 +218,10 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
     const mutations = [clarificationMutation(item, session), { type, id, action: 'create', expectedVersion: 0, fields }, { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }];
     const next = nextActive(decision, `Converted to ${collectionKinds[kind]}: ${title}`, true);
-    if (!await save(mutations, next)) return; active = next; draw(); announce(next.previous.message);
+    if (!await save(mutations, next) || active !== origin || !dialog.open) return; active = next; draw(); announce(next.previous.message);
   }
   async function file(destination) {
+    const origin = active;
     const item = active.item, proposal = values(), destinationRef = { type: destination.type, id: destination.id }, after = membershipChange(item, destinationRef);
     if (!after) { announce(`Already filed in ${destination.title}.`); return; }
     const decision = { type: 'file', destinationRef, before: beforeFields(item, after), after };
@@ -225,26 +229,29 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const updated = { ...item, ...after, version: item.version + 1 }, next = nextActive(decision, `Filed in ${destination.title}`, false, updated);
     next.proposal = proposal;
     next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
-    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next)) return;
+    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next) || active !== origin || !dialog.open) return;
     active = next; draw(); announce(next.previous.message);
   }
   async function saveItem(destination) {
+    const origin = active;
     const item = active.item, proposal = values(), destinationRef = destination ? { type: destination.type, id: destination.id } : null;
     const after = itemFields(item, proposal, destinationRef), decision = { type: 'item', before: beforeFields(item, after), after };
     const session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
     const next = nextActive(decision, `Saved ${after.status}: ${after.title}`, true);
     if (destinationRef) next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
-    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next)) return;
+    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next) || active !== origin || !dialog.open) return;
     active = next; draw(); announce(next.previous.message);
   }
   async function trash() {
+    const origin = active;
     if (!confirm(`Move “${active.item.title}” to Deleted? It can be restored.`)) return;
     const item = active.item, decision = { type: 'trash' }, session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
     const next = nextActive(decision, `Moved to Deleted: ${item.title}`, true);
-    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }], next)) return;
+    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }], next) || active !== origin || !dialog.open) return;
     active = next; draw(); announce(next.previous.message);
   }
   async function undo() {
+    const origin = active;
     const previous = active.previous, all = records(), item = all[`item:${previous.itemId}`], clarification = all[`clarification:${previous.itemId}`], d = previous.decision;
     if (!item || !clarification || clarification.decision?.type !== d.type) throw new Error('This decision changed and can no longer be undone.');
     const session = { flowVersion: 3, step: 'reversed', decision: d, proposal: flowProposal(item) };
@@ -259,21 +266,28 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const resume = active.item && active.item.id !== item.id ? { item: active.item, proposal: values(), index: active.index } : null;
     const next = { ...active, item: restored, index: Math.max(0, active.ids.indexOf(item.id)), finished: false, processed: Math.max(0, active.processed - (d.type === 'file' ? 0 : 1)),
       session: { ...session, version: clarification.version + 1 }, proposal: flowProposal(restored), previous: null, resume, open: true };
-    if (!await save(mutations, next)) return; active = next; draw(); announce('Previous clarification decision undone.');
+    if (!await save(mutations, next) || active !== origin || !dialog.open) return; active = next; draw(); announce('Previous clarification decision undone.');
   }
   async function skip() {
     if (!active?.item) return;
     active = { ...nextActive(null, '', true), processed: active.processed, skipped: active.skipped + 1, previous: active.previous };
-    await journal(); draw(); announce(active.finished ? inboxItems().length ? 'All inbox items viewed.' : 'Clarification session complete.' : `Skipped. ${active.item.title}`);
+    const next = active;
+    await journal();
+    if (active !== next || !dialog.open) return;
+    draw(); announce(active.finished ? inboxItems().length ? 'All inbox items viewed.' : 'Clarification session complete.' : `Skipped. ${active.item.title}`);
   }
   async function restartUnprocessed() {
     const items = inboxItems();
-    if (!items.length) { active = { ...active, finished: true }; await journal(); draw(); return; }
-    active = initial(items, true); await journal(); draw(); void guidance.check();
+    active = items.length ? initial(items, true) : { ...active, finished: true };
+    const next = active;
+    await journal();
+    if (active !== next || !dialog.open) return;
+    draw(); void guidance.check();
   }
   function announce(message) { $('clarifyDraftStatus').textContent = `${message} · Saved on device; sync pending.`; }
   async function perform(action) {
     if (busy || !active) return;
+    const origin = active, initiator = document.activeElement;
     guidance.hide(); busy = true; active.proposal = values();
     for (const input of form.elements) input.disabled = true;
     try { await action(); }
@@ -281,7 +295,13 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     finally {
       busy = false;
       for (const input of form.elements) input.disabled = false;
-      if (dialog.open) { updateSaveState(); void guidance.check(); }
+      if (dialog.open && active) {
+        updateSaveState();
+        // Completion is rendered while Done is disabled. Focus it after settling,
+        // unless the user has since chosen Help or opened another session.
+        if (active !== origin && active.finished && active.ids === origin.ids && (document.activeElement === document.body || document.activeElement === initiator)) $('clarifyStop').focus();
+        void guidance.check();
+      }
     }
   }
   form.addEventListener('submit', event => event.preventDefault());

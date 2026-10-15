@@ -46,6 +46,7 @@ async function refresh(page) {
 
 async function delayDeviceSave(page) {
   await page.evaluate(() => {
+    delete window.releaseCaptureSave;
     const descriptor = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete');
     Object.defineProperty(IDBTransaction.prototype, 'oncomplete', { ...descriptor, set(callback) {
       const delay = this.mode === 'readwrite' && window.delayCaptureSave;
@@ -247,6 +248,129 @@ test('accessibility: typing and unchanged refreshes do not repeat live-region an
   await page.waitForFunction(() => document.querySelector('#captureText').value === '');
   assert.ok((await page.evaluate(() => window.announcements)).includes('draftStatus'));
   assert.ok((await page.evaluate(() => window.announcements)).includes('syncStatus'));
+});
+
+test('accessibility: final keyboard Skip focuses enabled Done and returns to its opener', { timeout: 30000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'Read insurance note');
+  await showView(page, 'work');
+  await keyboardActivate(page, '#clarifyInbox');
+  await expectFocus(page, '#clarifyHeading');
+  await keyboardActivate(page, '#clarifySkip');
+  await page.waitForFunction(() => document.querySelector('#clarifyStop').textContent === 'Done' && !document.querySelector('#clarifyStop').disabled);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'clarifyStop');
+  assert.equal(await page.locator('#clarifyProgress').textContent(), '0 processed · 1 skipped · 0 project(s) need outcomes');
+  await page.keyboard.press('Enter');
+  await page.locator('#clarifier').waitFor({ state: 'hidden' });
+  await expectFocus(page, '#clarifyInbox');
+});
+
+test('accessibility: final conversion and Save focus Done after their exact decisions persist', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'Insurance project');
+  await capture(page, 'Call insurer');
+  await showView(page, 'work');
+  await keyboardActivate(page, '[aria-label="Clarify Insurance project"]');
+  await keyboardActivate(page, '#clarifyFlow > .clarify-grid > button:first-child');
+  await expectFocus(page, '#clarifyStop');
+  const conversion = await page.evaluate(async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9');
+    const records = projected(await transact('alice'));
+    const source = Object.values(records).find(record => record.type === 'item' && record.title === 'Insurance project');
+    const decision = records[`clarification:${source.id}`].decision;
+    return { decision, deleted: source.deleted, project: records[`project:${decision.containerRef.id}`] };
+  });
+  assert.equal(conversion.deleted, true);
+  assert.deepEqual(conversion.decision, { type: 'convert', containerRef: { type: 'project', id: conversion.project.id }, containerKind: 'project', parentRef: null, title: 'Insurance project' });
+  assert.equal(conversion.project.status, 'draft');
+  await page.keyboard.press('Enter');
+  await page.locator('#clarifier').waitFor({ state: 'hidden' });
+  await keyboardActivate(page, '[aria-label="Clarify Call insurer"]');
+  await keyboardActivate(page, '[data-focus-key="view:action"]');
+  await expectFocus(page, '#clarifyQuestion');
+  await keyboardActivate(page, '[data-focus-key="status:waiting"]');
+  await keyboardActivate(page, '#clarifySave');
+  await page.locator('#clarifyError:not([hidden])').waitFor();
+  await expectFocus(page, '#clarifySave');
+  await page.locator('[data-proposal=waitingOn]').fill('Insurance agent');
+  await page.locator('#clarifySave').focus(); await page.keyboard.press('Enter');
+  await expectFocus(page, '#clarifyStop');
+  await waitForBrowser(page, async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9');
+    const records = projected(await transact('alice'));
+    const source = Object.values(records).find(record => record.type === 'item' && record.title === 'Call insurer');
+    return source.status === 'waiting' && source.waitingOn === 'Insurance agent' && records[`clarification:${source.id}`].decision.after.waitingOn === 'Insurance agent';
+  });
+  await keyboardActivate(page, '#clarifyResult button');
+  await expectFocus(page, '#clarifyHeading');
+  await waitForBrowser(page, async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9');
+    return Object.values(projected(await transact('alice'))).some(record => record.type === 'item' && record.title === 'Call insurer' && record.status === 'inbox');
+  });
+});
+
+test('accessibility: delayed final Save preserves Help while persisting its exact decision', { timeout: 30000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'Read policy');
+  await showView(page, 'work');
+  await keyboardActivate(page, '#clarifyInbox');
+  await keyboardActivate(page, '[data-focus-key="view:reference"]');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.proposal?.view === 'reference');
+  await delayDeviceSave(page);
+  await keyboardActivate(page, '#clarifySave');
+  await page.waitForFunction(() => !!window.releaseCaptureSave);
+  await page.keyboard.press('Tab');
+  await expectFocus(page, '#clarifier > p > a');
+  await page.evaluate(() => releaseCaptureSave());
+  await page.waitForFunction(() => document.querySelector('#clarifyStop').textContent === 'Done' && !document.querySelector('#clarifyStop').disabled);
+  await expectFocus(page, '#clarifier > p > a');
+  const decision = await page.evaluate(async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9');
+    const records = projected(await transact('alice'));
+    const source = Object.values(records).find(record => record.type === 'item' && record.title === 'Read policy');
+    return { status: source.status, decision: records[`clarification:${source.id}`].decision };
+  });
+  assert.equal(decision.status, 'reference');
+  assert.deepEqual(decision.decision, { type: 'item', before: { title: 'Read policy', status: 'inbox' }, after: { title: 'Read policy', status: 'reference' } });
+});
+
+test('accessibility: delayed final Skip preserves Help and a later dialog focus', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'First note'); await capture(page, 'Second note');
+  await showView(page, 'work');
+  await keyboardActivate(page, '#clarifyInbox');
+  await keyboardActivate(page, '#clarifySkip');
+  await expectFocus(page, '#clarifyHeading');
+  assert.equal(await page.locator('#clarifyProgress').textContent(), '2 of 2');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.index === 1);
+  await delayDeviceSave(page);
+  await keyboardActivate(page, '#clarifySkip');
+  await page.waitForFunction(() => !!window.releaseCaptureSave);
+  await page.keyboard.press('Tab');
+  await expectFocus(page, '#clarifier > p > a');
+  await page.evaluate(() => releaseCaptureSave());
+  await page.waitForFunction(() => document.querySelector('#clarifyStop').textContent === 'Done' && !document.querySelector('#clarifyStop').disabled);
+  await expectFocus(page, '#clarifier > p > a');
+  await page.keyboard.press('Escape');
+  await expectFocus(page, '#clarifyInbox');
+  await keyboardActivate(page, '#clarifyInbox');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.index === 0);
+  await keyboardActivate(page, '#clarifySkip');
+  await expectFocus(page, '#clarifyHeading');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.index === 1);
+  await delayDeviceSave(page);
+  await keyboardActivate(page, '#clarifySkip');
+  await page.waitForFunction(() => !!window.releaseCaptureSave);
+  // Account/workspace transitions can close the sheet while its journal settles.
+  await page.evaluate(() => document.querySelector('#clarifier').close());
+  await expectFocus(page, '#clarifyInbox');
+  await keyboardActivate(page, '#clarifyInbox');
+  await expectFocus(page, '#clarifyHeading');
+  await page.locator('#clarifier > p > a').focus();
+  await page.evaluate(() => releaseCaptureSave());
+  await page.waitForFunction(() => !document.querySelector('#clarifyStop').disabled);
+  await expectFocus(page, '#clarifier > p > a');
+  assert.equal(await page.locator('#clarifyProgress').textContent(), '1 of 2');
 });
 
 test('accessibility: contextual dialogs and routed preferences return to their original controls', { timeout: 60000 }, async t => {
