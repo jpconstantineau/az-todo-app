@@ -373,6 +373,43 @@ test('accessibility: delayed final Skip preserves Help and a later dialog focus'
   assert.equal(await page.locator('#clarifyProgress').textContent(), '1 of 2');
 });
 
+test('accessibility: delayed Skip and restart keep exact checkpoints without taking over a reopened sheet', { timeout: 60000 }, async t => {
+  const { page } = await setup(t);
+  await capture(page, 'First draft'); await capture(page, 'Second draft');
+  await showView(page, 'work');
+  await keyboardActivate(page, '#clarifyInbox');
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.open);
+  const original = await page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification);
+  for (const restart of [false, true]) {
+    if (restart) {
+      await keyboardActivate(page, '#clarifySkip');
+      await page.waitForFunction(() => document.querySelector('#clarifyStop').textContent === 'Done' && !document.querySelector('#clarifyStop').disabled);
+    }
+    await delayDeviceSave(page);
+    if (restart) await page.getByRole('button', { name: 'Return to first unprocessed item', exact: true }).click();
+    else await keyboardActivate(page, '#clarifySkip');
+    await page.waitForFunction(() => !!window.releaseCaptureSave);
+    const held = await page.evaluate(async () => {
+      const { transact, projected } = await import('/inbox-store.js?v=9');
+      const state = await transact('alice'); return { draft: state.draft.clarification, records: projected(state) };
+    });
+    assert.equal(held.draft.item.id, original.ids[restart ? 0 : 1]);
+    assert.equal(held.draft.proposal.title, held.records[`item:${held.draft.item.id}`].title);
+    assert.equal(held.draft.index, restart ? 0 : 1);
+    assert.equal(held.draft.skipped, restart ? 0 : 1); assert.equal(held.draft.processed, 0);
+    await page.evaluate(() => document.querySelector('#clarifier').close());
+    await expectFocus(page, '#clarifyInbox');
+    await keyboardActivate(page, '#clarifyInbox');
+    await expectFocus(page, '#clarifyHeading');
+    await page.locator('#clarifier > p > a').focus();
+    await page.evaluate(() => releaseCaptureSave());
+    await page.waitForFunction(() => !document.querySelector('#clarifyStop').disabled);
+    await expectFocus(page, '#clarifier > p > a');
+    assert.equal(await page.locator('#clarifyTitle').inputValue(), held.draft.proposal.title);
+    assert.equal(await page.locator('#clarifyProgress').textContent(), restart ? '1 of 2' : '2 of 2');
+  }
+});
+
 test('accessibility: contextual dialogs and routed preferences return to their original controls', { timeout: 60000 }, async t => {
   const { page } = await setup(t);
   await capture(page, 'Insurance');
