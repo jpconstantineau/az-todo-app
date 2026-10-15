@@ -257,6 +257,31 @@ test('workspaces: suggested reviews and list-name permission stay with their wor
   assert.equal(items.length, 1); assert.equal(items[0].record.workspaceId, work);
 });
 
+test('workspaces: manual review retains its draft and acceptance in the original workspace', { timeout: 60000 }, async t => {
+  const { page, context } = await setup(t);
+  const work = await createSpace(page, 'Work'); await synced(page);
+  await switchTo(page, work); await context.setOffline(true);
+  await page.locator('#captureText').fill('Prepare the report and check its figures.');
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  await page.locator('#extractionItems [name=title]').fill('Corrected report');
+  await waitForBrowser(page, async work => (await (await import('/inbox-store.js?v=9')).transact('alice')).workspaceDrafts[work].extraction.draft.items[0].title === 'Corrected report', work);
+  const before = (await local(page)).workspaceDrafts[work].extraction.draft;
+  await page.locator('#extractClose').click(); await switchTo(page, 'personal');
+  assert.equal(await page.locator('#extractReview').isVisible(), false);
+  assert.equal(await page.locator('#extractionOriginal').textContent(), '');
+  assert.equal(await page.locator('#captureText').inputValue(), '');
+  await switchTo(page, work); await page.reload(); await page.locator('#workspace').waitFor();
+  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  assert.deepEqual((await local(page)).workspaceDrafts[work].extraction.draft, before);
+  await page.locator('#extractAccept').click(); await page.locator('#extractionReview').waitFor({ state: 'hidden' });
+  const pending = (await local(page)).queue[0].operation;
+  assert.equal(pending.mutations[0].fields.workspaceId, work);
+  assert.equal(pending.mutations[0].id, before.items[0].id);
+  await context.setOffline(false); await clickControl(page.locator('#sync')); await synced(page);
+  const items = documents.filter(row => row.kind === 'record' && row.record.type === 'item');
+  assert.equal(items.length, 1); assert.equal(items[0].record.workspaceId, work);
+});
+
 test('workspaces: archive, delete, offline recovery and responsive management preserve all contents', { timeout: 90000 }, async t => {
   const { page, context } = await setup(t);
   const work = await createSpace(page, 'Work'); await switchTo(page, work);

@@ -199,11 +199,11 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v65')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v66')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=59', '/shared.js?v=59', '/pwa.js?v=59', '/inbox-store.js?v=23', '/inbox-export.js?v=23', '/briefs.js?v=7', '/project-planning.js?v=2', '/project-planning-model.js?v=2', '/inbox.js?v=58', '/shared.js?v=58', '/pwa.js?v=58', '/checklist-reset.js?v=1', '/inbox-store.js?v=22', '/inbox.js?v=57', '/shared.js?v=57', '/pwa.js?v=57', '/collections.js?v=6', '/reviews.js?v=16', '/plan.js?v=8',
+    '/inbox.js?v=60', '/shared.js?v=60', '/pwa.js?v=60', '/capture-extraction.js?v=7', '/inbox.js?v=59', '/shared.js?v=59', '/pwa.js?v=59', '/inbox-store.js?v=23', '/inbox-export.js?v=23', '/briefs.js?v=7', '/project-planning.js?v=2', '/project-planning-model.js?v=2', '/inbox.js?v=58', '/shared.js?v=58', '/pwa.js?v=58', '/checklist-reset.js?v=1', '/inbox-store.js?v=22', '/inbox.js?v=57', '/shared.js?v=57', '/pwa.js?v=57', '/collections.js?v=6', '/reviews.js?v=16', '/plan.js?v=8',
     '/inbox.js?v=56', '/shared.js?v=56', '/pwa.js?v=56', '/inbox.js?v=55', '/shared.js?v=55', '/pwa.js?v=55', '/inbox.js?v=54', '/shared.js?v=54', '/pwa.js?v=54', '/execution-policy.js?v=2', '/inbox-store.js?v=21', '/inbox-export.js?v=22', '/inbox.js?v=53', '/shared.js?v=53', '/pwa.js?v=53', '/inbox.js?v=52', '/shared.js?v=52', '/pwa.js?v=52',
     '/reviews.js?v=15', '/inbox.js?v=51', '/shared.js?v=51', '/pwa.js?v=51', '/inbox-fields.js?v=7', '/inbox-store.js?v=20', '/inbox-export.js?v=21', '/plan.js?v=7', '/recurrence-model.js?v=2', '/recurrence-ui.js?v=4', '/capture-extraction.js?v=6',
     '/inbox.js?v=50', '/inbox-store.js?v=19', '/shared.js?v=50', '/pwa.js?v=50', '/inbox-fields.js?v=6',
@@ -493,19 +493,19 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v64 to v65 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v65 to v66 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v65', 'shell-v64'),
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v66', 'shell-v65'),
   ])));
   previousAssets.set('/', previousAssets.get('/index.html'));
   const currentWorker = await readFile(new URL('inbox-sw.js', root), 'utf8');
   // Keep the current/prior asset pairs intact in the synthetic old worker. Rewriting
   // its current query to the already-retained prior query would make cache.addAll
   // reject duplicate requests before the upgrade scenario can begin.
-  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v65', 'shell-v64'));
+  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v66', 'shell-v65'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => {
     if (!nextShell) return previousAssets.get(path);
@@ -519,7 +519,7 @@ test('shell upgrade from v64 to v65 preserves drafts and an exact queued operati
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v64')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v65')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
@@ -553,7 +553,7 @@ test('shell upgrade from v64 to v65 preserves drafts and an exact queued operati
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v65')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v66')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).preferenceDraft.defaults,
     before.preferenceDraft.defaults);

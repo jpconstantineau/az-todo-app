@@ -27,9 +27,14 @@ availability changes and reloads do not themselves start inference.
 
 **Review tasks manually** opens the same durable batch review without a model,
 including for paragraphs longer than a manual one-line title. Add titles and
-notes using the exact original; nothing runs through AI. Original notes and the
-selected existing list carry into the first task. Stop/reload and resume this
-review offline, then accept through the same repeat-safe outbox.
+notes using the exact original; nothing runs through AI. The first title uses the
+complete capture only if it fits 200 characters; longer captures require your own
+short title. Selected contexts and the existing list carry into the first task.
+Edit manual contexts one per line, retaining commas within a context. To use a new
+list, create it in Lists first, clear **Or create a list**, and select it before
+reviewing. Stop/reload and resume this review offline, then accept through the same
+repeat-safe outbox. Choosing manual review cancels any pending AI attempt and
+resumes existing corrections instead of replacing them.
 
 Edit titles, notes, existing-list destinations, priority, context, area and
 deadlines. Add/edit/remove rows to split tasks. **Merge into previous task** keeps

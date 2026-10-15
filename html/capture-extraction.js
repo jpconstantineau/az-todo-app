@@ -107,13 +107,19 @@ export function extractionMutations(draft, records, workspaceId = 'personal') {
       if (/[\r\n\t]/.test(item[name])) throw new Error(`${name} must be a single line.`);
     }
     for (const name of ['importance', 'urgency']) if (name in item && ![-1, 0, 1].includes(item[name])) throw new Error(`${name} must be -1, 0 or 1.`);
+    const contexts = draft.manual ? item.contexts || [] : item.context ? [item.context] : [];
+    if (!Array.isArray(contexts) || contexts.length > 20) throw new Error('Choose at most 20 contexts.');
+    for (const context of contexts) {
+      text(context, 64, 'Context');
+      if (!context.trim() || /[\r\n\t]/.test(context)) throw new Error('Each context must be a non-empty single line.');
+    }
     const dueDate = day(item.dueDate);
     const dueDateUtc = item.dueTime ? capturedTime(item.dueDate + 'T' + item.dueTime, draft.clock.timeZone) : null;
     const listId = project ? null : item.listId || null, projectId = project ? item.listId.slice(8) : null;
     const fields = { title, description: text(item.description, 4000, 'Notes'), originalText: draft.source, workspaceId,
       captureId: draft.id, capturedAt: draft.clock.capturedAt, captureTimeZone: draft.clock.timeZone,
       listId, projectId, collectionRefs: [['list', listId], ['project', projectId]].filter(([, id]) => id).map(([type, id]) => ({ type, id })),
-      priority: item.priority || null, ...Object.fromEntries(['importance', 'urgency'].filter(name => name in item).map(name => [name, item[name]])), contexts: item.context ? [item.context] : [],
+      priority: item.priority || null, ...Object.fromEntries(['importance', 'urgency'].filter(name => name in item).map(name => [name, item[name]])), contexts,
       dueDate: dueDateUtc ? null : dueDate, dueDateUtc, status: 'inbox' };
     // Leave room for server metadata/default fields in the 32 KiB record limit.
     if (new TextEncoder().encode(JSON.stringify(fields)).length > 30000) throw new Error('A task and its original capture are too large. Copy/export the draft and use a smaller capture.');
@@ -124,10 +130,10 @@ export function extractionMutations(draft, records, workspaceId = 'personal') {
 export function setupCaptureExtraction({ matrix = () => false, current, journal, save, showDialog, recovery, cloudEligible = () => false }) {
   const $ = id => document.getElementById(id);
   const field = $('captureText'), mirror = $('captureMirror');
-  let completion = null, pendingCursor = null, composing = false, listSource = '', startControl;
+  let completion = null, pendingCursor = null, composing = false, listSource = '', startControl, reviewNeedsSave = false, reviewRevision = 0;
   let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, cloudCheck, model, finish, busy = false, timer, enabled = false, includeLists = false, cloudReady = false, cloudLabel = '', cloudPhase = 'unavailable', cloudBusy = false;
-  const unavailableMessage = 'AI suggestions are unavailable here. Use one item per line and Save on device.';
-  const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; $('extractionStatus').hidden = !message || modelReadiness() === 'unavailable' && !cloudEligible(); };
+  const unavailableMessage = 'AI suggestions are unavailable here. Choose Review tasks manually, or use one item per line and Save on device.';
+  const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; $('extractionStatus').hidden = !message; };
   const cloudState = () => ({ active: modelReadiness() === 'unavailable' && cloudEligible(), phase: cloudBusy ? 'busy' : cloudPhase, ready: cloudReady, label: cloudLabel });
   const announceCloud = () => document.dispatchEvent(new CustomEvent('capturecloudstatechange', { detail: cloudState() }));
   function openReview() { showDialog($('extractionReview')); $('extractionHeading').focus(); }
@@ -200,7 +206,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
   function updateControls() {
     const localUnavailable = modelReadiness() === 'unavailable', cloudVisible = localUnavailable && cloudEligible();
     $('captureAI').toggleAttribute('data-unavailable', localUnavailable && !cloudVisible);
-    $('extractionStatus').hidden = !$('extractionStatus').textContent || localUnavailable && !cloudEligible();
+    $('extractionStatus').hidden = !$('extractionStatus').textContent;
     $('extractAuto').disabled = localUnavailable;
     $('extractLists').disabled = localUnavailable && !cloudVisible;
     $('extractStart').disabled = busy || localUnavailable;
@@ -269,40 +275,46 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       : 'These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, use Merge into previous task.';
     $('extractionOriginal').textContent = draft.source;
     $('extractionClock').textContent = `Captured ${draft.clock.capturedAt} · deadlines use ${draft.clock.timeZone}.`;
-    $('extractionNotes').textContent = draft.notes || 'No additional notes suggested.';
+    $('extractionNotes').textContent = draft.notes || (draft.manual ? 'Write a short title for each task. Dates and task boundaries have not been inferred.' : 'No additional notes suggested.');
     $('extractionItems').replaceChildren();
     draft.items.forEach((item, index) => {
       const fieldset = document.createElement('fieldset'), legend = document.createElement('legend'); legend.textContent = `Task ${index + 1}`; fieldset.append(legend);
       const evidence = document.createElement('p'); evidence.textContent = `Source: ${item.evidence || 'Added during review'}`; fieldset.append(evidence);
       if (item.uncertainty) { const warning = document.createElement('p'); warning.textContent = `Review: ${item.uncertainty}`; fieldset.append(warning); }
       for (const [name, labelText] of [['title', 'Title'], ['description', 'Notes'], ['listId', 'List'], ['priority', 'Priority'], ['context', 'Context'], ['dueDate', 'Deadline date'], ['dueTime', 'Deadline time (optional)']]) {
-        const label = document.createElement('label'); label.textContent = labelText;
-        const input = document.createElement(name === 'description' ? 'textarea' : name === 'listId' ? 'select' : 'input'); input.name = name;
+        const manualContexts = draft.manual && name === 'context';
+        const label = document.createElement('label'); label.textContent = manualContexts ? 'Contexts (one per line)' : labelText;
+        const input = document.createElement(name === 'description' || manualContexts || draft.manual && name === 'title' ? 'textarea' : name === 'listId' ? 'select' : 'input'); input.name = name;
         if (name === 'listId') {
           input.append(new Option('No list', ''), ...(current()?.lists || []).map(list => new Option(list.title, list.id)));
           if (item.listId && ![...input.options].some(option => option.value === item.listId)) input.add(new Option('Unavailable list — choose another', item.listId));
         } else if (name === 'dueDate') { input.type = 'date'; input.min = '0001-01-01'; input.max = '9999-12-31'; }
         else if (name === 'dueTime') input.type = 'time';
-        else input.maxLength = name === 'title' ? 200 : name === 'description' ? 4000 : 64;
+        else input.maxLength = manualContexts ? 20 * 64 + 19 : name === 'title' ? 200 : name === 'description' ? 4000 : 64;
         if (name === 'title') input.required = true;
-        input.value = item[name]; input.oninput = () => { item[name] = input.value; renderSummary(); void journal(); };
+        input.value = manualContexts ? (item.contexts || []).join('\n') : item[name];
+        input.oninput = () => {
+          if (manualContexts) item.contexts = input.value.split('\n').map(value => value.trim()).filter(Boolean);
+          else item[name] = input.value;
+          renderSummary(); void journalReview();
+        };
         label.append(input); fieldset.append(label);
       }
-      const matrixControls = addPriorityControls(fieldset, item, (name, score) => { item[name] = score; void journal(); }, `${item.id}-`);
+      const matrixControls = addPriorityControls(fieldset, item, (name, score) => { item[name] = score; void journalReview(); }, `${item.id}-`);
       matrixControls.hidden = !matrix();
       fieldset.querySelector('[name=priority]').closest('label').hidden = matrix();
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = `Remove task ${index + 1}`;
-      remove.onclick = () => { draft.items.splice(index, 1); render(); $('extractAdd').focus(); void journal(); }; fieldset.append(remove);
+      remove.onclick = () => { draft.items.splice(index, 1); render(); $('extractAdd').focus(); void journalReview(); }; fieldset.append(remove);
       if (index > 0) {
         const merge = document.createElement('button'); merge.type = 'button'; merge.textContent = 'Merge into previous task';
         merge.onclick = () => {
           const previous = draft.items[index - 1];
-          const details = [['listId', 'List'], ['priority', 'Priority'], ['importance', 'Importance'], ['urgency', 'Urgency'], ['context', 'Context'], ['dueDate', 'Deadline date'], ['dueTime', 'Deadline time']]
-            .filter(([name]) => ['importance', 'urgency'].includes(name) ? name in item : item[name]).map(([name, label]) => `${label}: ${name === 'listId' ? current()?.lists.find(list => list.id === item.listId)?.title || 'Unavailable list' : item[name]}`).join('\n');
+          const details = [['contexts', 'Contexts'], ['listId', 'List'], ['priority', 'Priority'], ['importance', 'Importance'], ['urgency', 'Urgency'], ['context', 'Context'], ['dueDate', 'Deadline date'], ['dueTime', 'Deadline time']]
+            .filter(([name]) => ['importance', 'urgency'].includes(name) ? name in item : name === 'contexts' ? item.contexts?.length : item[name]).map(([name, label]) => `${label}: ${name === 'listId' ? current()?.lists.find(list => list.id === item.listId)?.title || 'Unavailable list' : item[name]}`).join('\n');
           const combined = [previous.description, item.title, item.description, details, item.uncertainty].filter(Boolean).join('\n');
           if (combined.length > 4000) { $('extractionError').textContent = 'Merged notes would exceed 4,000 characters. Edit the notes before merging.'; return; }
           previous.description = combined; draft.items.splice(index, 1); $('extractionError').textContent = ''; render();
-          $('extractionItems').children[index - 1].querySelector('textarea').focus(); void journal();
+          $('extractionItems').children[index - 1].querySelector('[name=description]').focus(); void journalReview();
         };
         fieldset.append(merge);
       }
@@ -311,13 +323,52 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     $('extractAccept').disabled = !draft.items.length;
     $('extractAdd').disabled = draft.items.length >= 20;
   }
-  $('extractReview').onclick = () => { render(); openReview(); };
+  async function journalReview() {
+    // An older write must not mark newer corrections as durable.
+    const revision = ++reviewRevision, run = generation;
+    reviewNeedsSave = true;
+    const saved = await journal();
+    if (run !== generation || revision !== reviewRevision) return false;
+    if (saved) reviewNeedsSave = false;
+    return saved;
+  }
+  async function resumeReview() {
+    if (!draft) return;
+    const focused = document.activeElement, run = generation, input = current();
+    if (reviewNeedsSave) {
+      const saved = await journalReview();
+      if (!saved || run !== generation || input?.accountId !== current()?.accountId || JSON.stringify(captureInput(input)) !== JSON.stringify(captureInput(current()))) return;
+    }
+    render(); finishInteraction(focused, true);
+  }
+  $('extractManual').onclick = async () => {
+    const focused = document.activeElement;
+    cancel();
+    if (draft) { await resumeReview(); return; }
+    const input = current();
+    if (!input?.text.trim()) { status('Enter a capture first, then choose Review tasks manually.'); return; }
+    if (input.newList?.trim()) { status('Create the list in Lists first, then clear Or create a list and select it in Context or list before reviewing tasks.'); return; }
+    changed(); cancel();
+    const run = generation, owner = input.accountId;
+    try {
+      const source = text(input.original ?? input.text, 16000, 'Original capture');
+      clock ||= captureClock();
+      draft = { id: crypto.randomUUID(), manual: true, source, inputCapture: captureInput(input), clock: structuredClone(clock), notes: '',
+        items: [{ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID(),
+          title: source.length <= 200 ? source : '', listId: input.listId || '', contexts: [...(input.contexts || [])] }] };
+      const saved = await journalReview();
+      if (run !== generation || owner !== current()?.accountId || JSON.stringify(captureInput(current())) !== JSON.stringify(captureInput(input))) return;
+      if (!saved) { status('Review could not be saved. Copy/export the recovery text before leaving, then retry Review tasks manually.'); return; }
+      render(); status('Manual review saved on device. Only acceptance creates tasks.'); finishInteraction(focused, true);
+    } catch (error) { if (run === generation) { status(error.message); recovery(error); } }
+  };
+  $('extractReview').onclick = () => { cancel(); void resumeReview(); };
   $('extractionReview').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   $('extractClose').onclick = () => $('extractionReview').close();
   $('extractAdd').onclick = () => {
     if (!draft || draft.items.length >= 20) return;
     draft.items.push({ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID() }); render();
-    $('extractionItems').lastElementChild.querySelector('input').focus(); void journal();
+    $('extractionItems').lastElementChild.querySelector('[name=title]').focus(); void journalReview();
   };
   $('extractCancel').onclick = () => { const focus = startControl; cancel(); status('Cancelled. Your capture and any reviewed suggestions are kept.'); (focus?.getClientRects().length ? focus : field).focus(); };
   $('extractAuto').onchange = () => {
@@ -358,7 +409,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       const readiness = modelReadiness();
       const useCloud = forceCloud && readiness === 'unavailable' && cloudReady && cloudEligible() && interactive && !inline;
       if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before requesting suggestions. AI capture uses existing lists only.');
-      if (!useCloud && (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness))) throw new Error('AI suggestions are unavailable. Use one item per line and Save on device; comma / semicolon preview is also available.');
+      if (!useCloud && (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness))) throw new Error('AI suggestions are unavailable. Choose Review tasks manually, or use one item per line and Save on device; comma / semicolon preview is also available.');
       if (!interactive && readiness !== 'available') throw new Error('Choose Suggest tasks now to start or continue the browser model download. Manual capture is available.');
       let saved;
       if (useCloud) {
@@ -408,7 +459,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       if (draft) throw new Error('A review is already saved. Accept it or return to the original before requesting another batch.');
       draft = { id: crypto.randomUUID(), source, inputCapture: captureInput(input), clock: structuredClone(clock), ...result };
       render();
-      if (!await journal()) throw new Error('Suggestions could not be saved. Copy/export them before leaving.');
+      if (!await journalReview()) throw new Error('Suggestions could not be saved. Copy/export them before leaving.');
       if (stale()) return;
       status('Suggestions saved on device, not committed. Review every task and deadline.');
       ready = true;
@@ -443,8 +494,8 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     changed, refreshLists,
     suspend() { cancel(); $('extractionReview').close(); },
     snapshot: () => ({ draft: structuredClone(draft), clock, sourceText, enabled, includeLists }),
-    restore(value) { cancel(); draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); void checkCloud(); },
-    reset(keepEnabled = false) { cancel(); cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : ''); updateControls(); },
+    restore(value) { cancel(); reviewNeedsSave = false; draft = value?.draft || null; clock = value?.clock || null; sourceText = value?.sourceText || ''; sourceFields = JSON.stringify(captureInput(current())); enabled = value?.enabled === true; includeLists = value?.includeLists === true; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; render(); void checkCloud(); },
+    reset(keepEnabled = false) { cancel(); reviewNeedsSave = false; cloudReady = false; cloudLabel = ''; cloudPhase = 'unavailable'; draft = null; clock = null; sourceText = ''; sourceFields = ''; enabled = keepEnabled && enabled; includeLists = keepEnabled && includeLists; $('extractAuto').checked = enabled; $('extractLists').checked = includeLists; $('extractionReview').close(); $('extractionItems').replaceChildren(); $('extractionOriginal').textContent = ''; $('extractionNotes').textContent = ''; $('extractionClock').textContent = ''; $('extractionError').textContent = ''; refreshLists(); status(modelReadiness() === 'unavailable' ? unavailableMessage : ''); updateControls(); },
     close() { $('extractionReview').close(); },
     cloudState,
     retryCloud: checkCloud

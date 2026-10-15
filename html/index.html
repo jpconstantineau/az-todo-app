@@ -8,10 +8,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#000000">
   <script src="/theme.js"></script>
-  <script src="/pwa.js?v=59" defer></script>
+  <script src="/pwa.js?v=60" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/inbox.css">
-  <script type="module" src="/inbox.js?v=59"></script>
+  <script type="module" src="/inbox.js?v=60"></script>
 </head>
 <body class="container inbox-page">
   <a id="workspaceSkip" class="skip-link" href="#workspace" hidden>Skip to current view</a>
@@ -232,6 +232,7 @@
         <div id="captureCompletionControls" hidden><p id="captureCompletionHint" class="muted" role="status"></p><button id="captureCompletionUse" type="button">Use suggested text</button><button id="captureCompletionDismiss" type="button">Dismiss suggestion</button></div>
         <p id="extractionStatus" class="muted" role="status" hidden></p>
         <div id="captureTaskPreview" hidden><p id="capturePreviewHeading" class="muted">Suggested tasks — review before saving:</p><ol id="captureSuggestedTasks"></ol><button id="extractReview" type="button" hidden>Review saved suggestions</button></div>
+        <div class="actions"><button id="extractManual" type="button">Review tasks manually</button></div>
         <p id="draftStatus" role="status"></p>
         <p id="captureHelp" class="sr-only">One item per line. For comma- or semicolon-separated items, choose Preview comma / semicolon split before saving. Ctrl/⌘ + Enter saves.</p>
         <p id="previewHelp" hidden>Review and edit the lines above, then choose Save on device to confirm. Original input is retained.</p>
