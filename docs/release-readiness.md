@@ -46,12 +46,12 @@ not reach the production upload. Do not rerun a failed deployment after main has
 moved; the freshness check will reject it.
 
 Create a GitHub environment named `production`, restrict its deployment branches
-to `main`, and store `AZURE_STATIC_WEB_APPS_API_TOKEN_PRODUCTION` only as an
-environment secret. The repository-scoped
-`AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_SMOKE_020A5481E` remains limited to PR
-preview creation and cleanup. Using the same Azure token value for both names
-separates GitHub access but not the Azure credential; true credential and runtime
-isolation requires a separate SWA resource/token and is outside this change.
+to `main`, and retain the configured repository secret
+`AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_SMOKE_020A5481E` for production deployment
+and PR preview creation/cleanup. Do not rename it: the unconfigured replacement
+name broke production uploads (#285). The GitHub environment restricts the
+production job but does not isolate the shared Azure credential; true credential
+and runtime isolation requires a separate SWA resource/token and is outside this change.
 
 PRs from this repository create or update a preview on opened, synchronized, or
 reopened events and close it when the PR closes. The preview declares `main` as

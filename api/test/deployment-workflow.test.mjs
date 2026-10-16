@@ -18,7 +18,7 @@ test('production deploys only the tested, current main candidate', async () => {
   assert.match(production, /git rev-parse HEAD[\s\S]*?CANDIDATE_SHA/);
   assert.match(production, /github\.rest\.git\.getRef[\s\S]*?ref: 'heads\/main'[\s\S]*?reference\.object\.sha !== process\.env\.CANDIDATE_SHA/);
   assert.ok(production.indexOf('Ensure candidate is still main') < production.indexOf('Azure/static-web-apps-deploy@v1'));
-  assert.match(production, /azure_static_web_apps_api_token: \$\{\{ secrets\.AZURE_STATIC_WEB_APPS_API_TOKEN_PRODUCTION \}\}/);
+  assert.match(production, /azure_static_web_apps_api_token: \$\{\{ secrets\.AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_SMOKE_020A5481E \}\}/);
   assert.doesNotMatch(production, /repo_token:/);
   assert.match(production, /Test result[\s\S]*?Event SHA[\s\S]*?Tested candidate SHA[\s\S]*?Deployed checkout SHA/);
   assert.match(production, /deployments\/production/);
