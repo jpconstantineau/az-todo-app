@@ -21,20 +21,21 @@ commits the reviewed batch. **Suggest tasks now** starts an explicit attempt,
 including a browser model download if necessary; typing never initiates downloads.
 
 When the header agent is unavailable, both AI checkboxes and **Suggest tasks now**
-are disabled. Manual capture and task review still work. Saved AI preferences stay
+are disabled. Direct capture and Process still work. Saved AI preferences stay
 with the draft and become usable again when this device supports the model;
 availability changes and reloads do not themselves start inference.
 
-**Review tasks manually** opens the same durable batch review without a model,
-including for paragraphs longer than a manual one-line title. Add titles and
-notes using the exact original; nothing runs through AI. The first title uses the
-complete capture only if it fits 200 characters; longer captures require your own
-short title. Selected contexts and the existing list carry into the first task.
-Edit manual contexts one per line, retaining commas within a context. To use a new
-list, create it in Lists first, clear **Or create a list**, and select it before
-reviewing. Stop/reload and resume this review offline, then accept through the same
-repeat-safe outbox. Choosing manual review cancels any pending AI attempt and
-resumes existing corrections instead of replacing them.
+For capture without AI, enter one item per line, optionally preview comma/semicolon
+splitting, and choose **Save on device**. Use **Process / Clarify inbox** to organize
+the saved items. Capture no longer starts a separate manual task-review batch.
+
+Pre-existing manual review drafts remain available through **Resume saved tasks**,
+including offline after reload. Their corrected titles, notes, contexts, destinations
+and stable IDs are preserved. Edit contexts one per line, retaining commas within a
+context. Explicitly accept through the same repeat-safe outbox, or discard the review
+to keep its capture text. Once accepted or discarded, this compatibility entry
+disappears; new manual batches cannot be created. A saved review must be accepted or
+discarded before direct saving or requesting another AI batch.
 
 Edit titles, notes, existing-list destinations, priority, context, area and
 deadlines. Add/edit/remove rows to split tasks. **Merge into previous task** keeps
@@ -134,7 +135,7 @@ do not establish model quality or latency.
 The [representative quality fixtures](../api/test/fixtures/capture-quality.json)
 are manual real-model checks, not claims that mocked output establishes model
 quality. The capture flow keeps one API/provenance/draft format for automatic
-suggestions, manual batch review, list-context permission and merging. No parallel
+suggestions, recovery of older manual reviews, list-context permission and merging. No parallel
 capture UI or second capture metadata format is shipped. Storage-recovery checks
 wait for the corrected draft to persist and the current failed save to close its
 dialog before reading recovery text.
