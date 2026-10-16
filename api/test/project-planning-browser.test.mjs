@@ -259,7 +259,23 @@ test('planner capacity errors remain visible and preserve the saved draft withou
   const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
   assert.equal((await post(server.url, [mutation('project', 'launch', 0, { title: 'Launch', outcome: 'Customers can use it' })])).status, 200);
   const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
-  const page = await browser.newPage(); await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page);
+  const page = await browser.newPage();
+  let releasePull, pullRequested;
+  const pullHeld = new Promise(resolve => { pullRequested = resolve; });
+  const pullReleased = new Promise(resolve => { releasePull = resolve; });
+  await page.route('**/api/v1/changes?**', async route => {
+    const response = await route.fetch(); pullRequested();
+    await pullReleased; await route.fulfill({ response });
+  });
+  await page.goto(server.url); await page.locator('#workspace').waitFor(); await confirmed(page); await pullHeld;
+  assert.equal((await local(page)).records['project:launch'], undefined, 'the empty-queue label precedes the delayed project pull');
+  releasePull();
+  // The first project pull journals its normalized Execute selection. Let that
+  // exact write finish before seeding a draft behind the application's live state.
+  await waitForBrowser(page, async () => {
+    const state = await (await import('/inbox-store.js?v=23')).transact('alice');
+    return state.records['project:launch']?.version === 1 && state.draft.navigation?.execute?.kind === 'project';
+  });
   await page.evaluate(async () => {
     const { transact } = await import('/inbox-store.js?v=23');
     await transact('alice', state => {

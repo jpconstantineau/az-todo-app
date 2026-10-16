@@ -20,8 +20,8 @@ test('mobile workflow: visible task actions, title editing, focus, offline help 
   assert.notEqual(new URL(page.url()).hash, '#menu');
   assert.equal(await page.locator('#appDeviceConnection').isVisible(), false);
   assert.equal(await page.locator('#export').isVisible(), false);
-  assert.equal(await page.locator('#capture button:visible').count(), 3, 'capture exposes Split, Save and manual review initially');
-  assert.deepEqual(await page.locator('#workspace button:visible').evaluateAll(controls => controls.map(control => control.getAttribute('aria-label') || control.textContent)), ['Preview comma / semicolon split', 'Save on device', 'Review tasks manually']);
+  assert.equal(await page.locator('#capture button:visible').count(), 2, 'capture exposes Split and Save initially');
+  assert.deepEqual(await page.locator('#workspace button:visible').evaluateAll(controls => controls.map(control => control.getAttribute('aria-label') || control.textContent)), ['Preview comma / semicolon split', 'Save on device']);
   assert.equal(await page.locator('#previewSplit .split-label').isHidden(), true);
   await page.locator('#captureText').fill('Buy milk, call Sam; book dentist');
   for (const width of [320, 390]) {

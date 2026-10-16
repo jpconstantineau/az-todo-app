@@ -14,7 +14,7 @@ import { mergeReflectionConflict, setupReviews } from './reviews.js?v=16';
 import { setupBriefs } from './briefs.js?v=7';
 import { setupProjectPlanning } from './project-planning.js?v=3';
 import { recoverProjectPlanDraft } from './project-planning-model.js?v=2';
-import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=7';
+import { setupCaptureExtraction, extractionMutations } from './capture-extraction.js?v=8';
 import { setupAgentStatus } from './local-agent.js?v=2';
 import { setupCaptureCloudPreference } from './capture-cloud-preference.js?v=1';
 import { localMonday, membershipPlanMutations, setupPlan } from './plan.js?v=8';
@@ -1610,7 +1610,7 @@ edit.elements.listId.addEventListener('change', refreshOptions);
 capture.addEventListener('submit', event => {
   event.preventDefault();
   if (saving || switchingWorkspace || !accountId || workspaceReadOnly()) return;
-  if (extraction.snapshot().draft) { error('A suggested batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
+  if (extraction.snapshot().draft) { error('A task batch is saved for review. Accept it or explicitly discard its suggestions before saving this capture manually.'); return; }
   const focused = document.activeElement;
   saving = true; capture.querySelectorAll('[type=submit]').forEach(control => { control.disabled = true; });
   void (async () => {
