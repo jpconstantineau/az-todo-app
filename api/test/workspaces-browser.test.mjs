@@ -257,12 +257,20 @@ test('workspaces: suggested reviews and list-name permission stay with their wor
   assert.equal(items.length, 1); assert.equal(items[0].record.workspaceId, work);
 });
 
-test('workspaces: manual review retains its draft and acceptance in the original workspace', { timeout: 60000 }, async t => {
+test('workspaces: legacy manual review retains its draft and acceptance in the original workspace', { timeout: 60000 }, async t => {
   const { page, context } = await setup(t);
   const work = await createSpace(page, 'Work'); await synced(page);
   await switchTo(page, work); await context.setOffline(true);
   await page.locator('#captureText').fill('Prepare the report and check its figures.');
-  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  await waitForBrowser(page, async work => (await (await import('/inbox-store.js?v=9')).transact('alice')).workspaceDrafts[work].capture.text === 'Prepare the report and check its figures.', work);
+  await page.evaluate(async work => (await import('/inbox-store.js?v=9')).transact('alice', state => {
+    const saved = state.workspaceDrafts[work], inputCapture = structuredClone(saved.capture), source = inputCapture.text;
+    const clock = { capturedAt: '2026-10-03T05:30:00.000Z', timeZone: 'America/Regina', today: '2026-10-02' };
+    saved.extraction = { draft: { id: crypto.randomUUID(), manual: true, source, inputCapture, clock, notes: '',
+      items: [{ id: crypto.randomUUID(), title: source, description: '', listId: '', priority: '', context: '', contexts: [], dueDate: '', dueTime: '', evidence: '', uncertainty: '' }] }, clock, sourceText: source, enabled: false, includeLists: false };
+  }), work);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  await page.locator('#extractReview').click(); await page.locator('#extractionReview').waitFor();
   await page.locator('#extractionItems [name=title]').fill('Corrected report');
   await waitForBrowser(page, async work => (await (await import('/inbox-store.js?v=9')).transact('alice')).workspaceDrafts[work].extraction.draft.items[0].title === 'Corrected report', work);
   const before = (await local(page)).workspaceDrafts[work].extraction.draft;
@@ -271,7 +279,7 @@ test('workspaces: manual review retains its draft and acceptance in the original
   assert.equal(await page.locator('#extractionOriginal').textContent(), '');
   assert.equal(await page.locator('#captureText').inputValue(), '');
   await switchTo(page, work); await page.reload(); await page.locator('#workspace').waitFor();
-  await page.locator('#extractManual').click(); await page.locator('#extractionReview').waitFor();
+  await page.locator('#extractReview').click(); await page.locator('#extractionReview').waitFor();
   assert.deepEqual((await local(page)).workspaceDrafts[work].extraction.draft, before);
   await page.locator('#extractAccept').click(); await page.locator('#extractionReview').waitFor({ state: 'hidden' });
   const pending = (await local(page)).queue[0].operation;
