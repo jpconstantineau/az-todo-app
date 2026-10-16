@@ -199,18 +199,18 @@ test('inbox: saved capture and unsubmitted draft survive browser termination and
   await page.getByRole('button', { name: 'Edit Survive termination', includeHidden: true }).waitFor({ state: 'attached' });
   assert.equal(await page.locator('#captureText').inputValue(), 'Still thinking about this');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).queue, beforeClose.queue);
-  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v68')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
+  const cached = await page.evaluate(async () => (await (await caches.open('todo-inbox-shell-v69')).keys()).map(request => { const url = new URL(request.url); return url.pathname + url.search; }));
   assert.deepEqual(cached.sort(), [
     '/', '/index.html', '/help.html', '/shared.html',
     '/styles.css', '/theme.js', '/inbox.css', '/shared.css',
-    '/inbox.js?v=62', '/shared.js?v=62', '/pwa.js?v=62', '/inbox.js?v=61', '/shared.js?v=61', '/pwa.js?v=61', '/project-planning.js?v=3', '/inbox.js?v=60', '/shared.js?v=60', '/pwa.js?v=60', '/capture-extraction.js?v=7', '/inbox.js?v=59', '/shared.js?v=59', '/pwa.js?v=59', '/inbox-store.js?v=23', '/inbox-export.js?v=23', '/briefs.js?v=7', '/project-planning.js?v=2', '/project-planning-model.js?v=2', '/inbox.js?v=58', '/shared.js?v=58', '/pwa.js?v=58', '/checklist-reset.js?v=1', '/inbox-store.js?v=22', '/inbox.js?v=57', '/shared.js?v=57', '/pwa.js?v=57', '/collections.js?v=6', '/reviews.js?v=16', '/plan.js?v=8',
+    '/inbox.js?v=63', '/shared.js?v=63', '/pwa.js?v=63', '/inbox.js?v=62', '/shared.js?v=62', '/pwa.js?v=62', '/inbox.js?v=61', '/shared.js?v=61', '/pwa.js?v=61', '/project-planning.js?v=3', '/inbox.js?v=60', '/shared.js?v=60', '/pwa.js?v=60', '/capture-extraction.js?v=7', '/inbox.js?v=59', '/shared.js?v=59', '/pwa.js?v=59', '/inbox-store.js?v=23', '/inbox-export.js?v=23', '/briefs.js?v=7', '/project-planning.js?v=2', '/project-planning-model.js?v=2', '/inbox.js?v=58', '/shared.js?v=58', '/pwa.js?v=58', '/checklist-reset.js?v=1', '/inbox-store.js?v=22', '/inbox.js?v=57', '/shared.js?v=57', '/pwa.js?v=57', '/collections.js?v=6', '/reviews.js?v=16', '/plan.js?v=8',
     '/inbox.js?v=56', '/shared.js?v=56', '/pwa.js?v=56', '/inbox.js?v=55', '/shared.js?v=55', '/pwa.js?v=55', '/inbox.js?v=54', '/shared.js?v=54', '/pwa.js?v=54', '/execution-policy.js?v=2', '/inbox-store.js?v=21', '/inbox-export.js?v=22', '/inbox.js?v=53', '/shared.js?v=53', '/pwa.js?v=53', '/inbox.js?v=52', '/shared.js?v=52', '/pwa.js?v=52',
     '/reviews.js?v=15', '/inbox.js?v=51', '/shared.js?v=51', '/pwa.js?v=51', '/inbox-fields.js?v=7', '/inbox-store.js?v=20', '/inbox-export.js?v=21', '/plan.js?v=7', '/recurrence-model.js?v=2', '/recurrence-ui.js?v=4', '/capture-extraction.js?v=6',
     '/inbox.js?v=50', '/inbox-store.js?v=19', '/shared.js?v=50', '/pwa.js?v=50', '/inbox-fields.js?v=6',
     '/inbox.js?v=49', '/shared.js?v=49', '/pwa.js?v=49', '/inbox.js?v=48', '/shared.js?v=48', '/pwa.js?v=48', '/inbox.js?v=47', '/shared.js?v=47', '/pwa.js?v=47', '/inbox.js?v=46', '/inbox-store.js?v=18', '/execution-policy.js?v=1', '/inbox-export.js?v=20', '/workspace-move.js?v=6', '/reviews.js?v=14', '/pwa.js?v=46',
     '/inbox.js?v=45', '/inbox.js?v=44', '/inbox.js?v=43', '/inbox.js?v=42', '/inbox.js?v=41', '/inbox.js?v=40', '/inbox.js?v=39', '/inbox.js?v=38', '/inbox.js?v=37', '/inbox.js?v=36', '/inbox.js?v=35', '/inbox.js?v=34', '/inbox.js?v=33', '/inbox.js?v=32', '/inbox.js?v=31', '/inbox.js?v=30', '/inbox.js?v=29', '/inbox.js?v=28', '/inbox.js?v=27', '/inbox.js?v=26', '/inbox.js?v=25', '/inbox.js?v=24', '/inbox.js?v=23', '/plan.js?v=6', '/plan.js?v=5', '/plan.js?v=4', '/inbox-store.js?v=17', '/inbox-store.js?v=16', '/inbox-store.js?v=15', '/inbox-store.js?v=14', '/inbox-store.js?v=13', '/inbox-store.js?v=12', '/inbox-store.js?v=11', '/inbox-store.js?v=10', '/inbox-store.js?v=9', '/inbox-fields.js?v=5', '/inbox-fields.js?v=4', '/inbox-fields.js?v=3', '/inbox-fields.js?v=2', '/inbox-export.js?v=19', '/inbox-export.js?v=18', '/inbox-export.js?v=17', '/inbox-export.js?v=16', '/inbox-export.js?v=15', '/inbox-export.js?v=14', '/inbox-export.js?v=13', '/inbox-export.js?v=12', '/local-defaults.js?v=1', '/search-model.js?v=1',
     '/collection-model.js?v=5', '/collection-model.js?v=4', '/collection-model.js?v=3', '/collections.js?v=5', '/collections.js?v=4', '/workspace-move.js?v=5', '/workspace-move.js?v=4', '/workspaces.js?v=5', '/workspaces.js?v=4', '/recurrence-model.js?v=1', '/recurrence-ui.js?v=3', '/recurrence-ui.js?v=2', '/recurrence-ui.js?v=1',
-    '/clarification.js?v=15', '/clarification.js?v=14', '/clarification.js?v=13', '/clarification.js?v=12', '/clarification.js?v=11', '/clarification.js?v=10', '/clarification.js?v=9', '/clarification.js?v=8', '/clarification-preferences.js?v=3', '/clarification-preferences.js?v=2', '/clarification-flow.js?v=4', '/reviews.js?v=13', '/reviews.js?v=12', '/reviews.js?v=11', '/reviews.js?v=10', '/reviews.js?v=9', '/briefs.js?v=6', '/briefs.js?v=5', '/briefs.js?v=4', '/project-planning.js?v=1', '/project-planning-model.js?v=1',
+    '/clarification.js?v=16', '/clarification.js?v=15', '/clarification.js?v=14', '/clarification.js?v=13', '/clarification.js?v=12', '/clarification.js?v=11', '/clarification.js?v=10', '/clarification.js?v=9', '/clarification.js?v=8', '/clarification-preferences.js?v=3', '/clarification-preferences.js?v=2', '/clarification-flow.js?v=4', '/reviews.js?v=13', '/reviews.js?v=12', '/reviews.js?v=11', '/reviews.js?v=10', '/reviews.js?v=9', '/briefs.js?v=6', '/briefs.js?v=5', '/briefs.js?v=4', '/project-planning.js?v=1', '/project-planning-model.js?v=1',
     '/capture-extraction.js?v=5', '/capture-extraction.js?v=4', '/capture-extraction.js?v=3', '/capture-extraction.js?v=2', '/capture-cloud-preference.js?v=1', '/local-guidance.js?v=3', '/local-guidance.js?v=2', '/local-guidance.js?v=1', '/local-agent.js?v=2', '/local-agent.js?v=1', '/cloud-ai.js?v=1', '/shared.js?v=46', '/shared.js?v=45', '/shared.js?v=44', '/shared.js?v=43', '/shared.js?v=42', '/shared.js?v=41', '/shared.js?v=40', '/shared.js?v=39', '/shared.js?v=38', '/shared.js?v=37', '/shared.js?v=36', '/shared.js?v=35', '/shared.js?v=34', '/shared.js?v=33', '/shared.js?v=32', '/shared.js?v=31', '/shared.js?v=30', '/shared.js?v=29', '/shared.js?v=28', '/shared.js?v=27', '/shared.js?v=26', '/shared.js?v=25', '/shared.js?v=24', '/shared.js?v=23', '/shared.js?v=22', '/shared.js?v=21',
     '/pwa.js?v=45', '/pwa.js?v=44', '/pwa.js?v=43', '/pwa.js?v=42', '/pwa.js?v=41', '/pwa.js?v=40', '/pwa.js?v=39', '/pwa.js?v=38', '/pwa.js?v=37', '/pwa.js?v=36', '/pwa.js?v=35', '/pwa.js?v=34', '/pwa.js?v=33', '/pwa.js?v=32', '/pwa.js?v=31', '/pwa.js?v=30', '/pwa.js?v=29', '/pwa.js?v=28', '/pwa.js?v=27', '/pwa.js?v=26', '/pwa.js?v=25', '/pwa.js?v=24', '/pwa.js?v=23', '/pwa.js?v=22', '/pwa.js?v=21', '/manifest.json',
     '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png',
@@ -493,19 +493,19 @@ test('inbox: rejected server write stays failed and recoverable until explicitly
   assert.equal((await local(page)).queue.length, 0);
 });
 
-test('shell upgrade from v67 to v68 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
+test('shell upgrade from v68 to v69 preserves drafts and an exact queued operation through failure, activation and offline reload', { timeout: 90000 }, async t => {
   documents.length = 0;
   const root = new URL('../../html/', import.meta.url);
   const previousAssets = new Map(await Promise.all((await readdir(root)).filter(name => /\.(?:html|js)$/.test(name)).map(async name => [
     '/' + name,
-    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v68', 'shell-v67'),
+    (await readFile(new URL(name, root), 'utf8')).replaceAll('shell-v69', 'shell-v68'),
   ])));
   previousAssets.set('/', previousAssets.get('/index.html'));
   const currentWorker = await readFile(new URL('inbox-sw.js', root), 'utf8');
   // Keep the current/prior asset pairs intact in the synthetic old worker. Rewriting
   // its current query to the already-retained prior query would make cache.addAll
   // reject duplicate requests before the upgrade scenario can begin.
-  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v68', 'shell-v67'));
+  previousAssets.set('/inbox-sw.js', currentWorker.replaceAll('shell-v69', 'shell-v68'));
   let nextShell = false, rejectUpgrade = false, rejectOperations = true;
   const server = await startServer({ browserUser: () => 'alice', rejectOperations: () => rejectOperations, assetContents: path => {
     if (!nextShell) return previousAssets.get(path);
@@ -519,7 +519,7 @@ test('shell upgrade from v67 to v68 preserves drafts and an exact queued operati
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v67')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v68')));
   await capture(page, 'Queued across upgrade');
   await showView(page, 'capture'); await page.locator('#captureText').fill('Draft across upgrade');
   await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.capture.text === 'Draft across upgrade');
@@ -553,7 +553,7 @@ test('shell upgrade from v67 to v68 preserves drafts and an exact queued operati
   page = await context.newPage();
   await page.goto(server.url); await page.locator('#workspace').waitFor();
   await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
-  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v68')));
+  assert.ok(await page.evaluate(() => caches.has('todo-inbox-shell-v69')));
   assert.equal(await page.locator('#captureText').inputValue(), 'Draft across upgrade');
   assert.deepEqual((await page.evaluate(async () => (await import('/inbox-store.js?v=9')).transact('alice'))).preferenceDraft.defaults,
     before.preferenceDraft.defaults);

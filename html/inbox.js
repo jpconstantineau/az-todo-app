@@ -8,7 +8,7 @@ import { defaultSettings as localDefaultSettings } from './local-defaults.js?v=1
 import { optionFields, optionsFromText, formValues, fillValues, localDate, taskFields, addTaskControls, refreshTaskOptions, validateWorkflow, reviewReady, matchesExecutionFilters, readyToExecute, compareExecutionItems, effectivePriority, priorityFields, refreshPriorityControls } from './inbox-fields.js?v=7';
 import { deviceExport, accountExport, readableExport } from './inbox-export.js?v=23';
 import { collectionPaths, defaultSearch, searchWorkspace } from './search-model.js?v=1';
-import { clarificationUI } from './clarification.js?v=15';
+import { clarificationUI } from './clarification.js?v=16';
 import { currentClarificationActions, setupClarificationPreferences } from './clarification-preferences.js?v=3';
 import { mergeReflectionConflict, setupReviews } from './reviews.js?v=16';
 import { setupBriefs } from './briefs.js?v=7';
@@ -425,8 +425,8 @@ const projectPlanning = setupProjectPlanning({ records: () => accountId ? scoped
 } });
 const clarification = clarificationUI({ records: () => scopedRecords(), journal, save: saveClarification, showDialog, actions: currentClarificationActions,
   cloudEligible: () => !!accountId && accountId !== LOCAL_PROFILE });
-async function saveClarification(mutations, next) {
-  const owner = accountId;
+async function saveClarification(mutations, next, committed) {
+  const owner = accountId, generation = accountGeneration;
   if (!owner) return false;
   const saved = await transact(owner, local => {
     const records = projected(local);
@@ -445,8 +445,8 @@ async function saveClarification(mutations, next) {
     enqueue(local, owner, complete);
     currentDraft(local).clarification = next;
   }).catch(failure => { if (owner === accountId) storageFailure(failure); throw failure; });
-  if (owner !== accountId) return false;
-  state = saved; render(); broadcast(); void sync(); return true;
+  if (owner !== accountId || generation !== accountGeneration) return false;
+  state = saved; committed(); render(); broadcast(); void sync(); return true;
 }
 let destination = 'capture';
 const emptyNavigation = () => ({ work: { view: 'inbox', status: '', search: defaultSearch() }, lists: { view: '', status: '' }, plan: { focus: '', week: localMonday() }, execute: { kind: 'list', view: '' } });

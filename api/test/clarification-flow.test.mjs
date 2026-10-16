@@ -87,6 +87,178 @@ test('conversion undo is version checked, atomic, and ordinary restore cannot by
 });
 
 const confirmed = page => page.waitForFunction(() => document.querySelector('#syncStatus').textContent === 'All saved work is server-confirmed.');
+
+async function draftScenario(t, sources) {
+  documents.length = 0;
+  const server = await startServer({ browserUser: () => 'alice' }); t.after(server.close);
+  assert.equal((await post(server.url, sources.map(({ id, ...fields }) => createItem(id, fields)))).status, 200);
+  const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined }); t.after(() => browser.close());
+  const context = await browser.newContext(), page = await context.newPage();
+  await page.goto(server.url + '/#work'); await page.locator('#workspace').waitFor(); await confirmed(page);
+  await page.waitForFunction(() => document.querySelector('#offlineStatus').textContent === 'Ready to reopen this inbox offline.');
+  await context.setOffline(true);
+  await clickControl(page.locator('#clarifyInbox'));
+  await waitForBrowser(page, async () => !!(await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.open);
+  return { page, context };
+}
+const localDraft = page => page.evaluate(async () => (await (await import('/inbox-store.js?v=9')).transact('alice')));
+const twoSources = [
+  { id: 'a-first', title: 'First note', originalText: 'First original\nKeep every line', sourceUrl: 'https://example.com/first' },
+  { id: 'b-second', title: 'Second note', originalText: 'Second original\nExact source', sourceUrl: 'https://example.com/second' }
+];
+
+test('clarification Skip and restart checkpoint only their own proposal, reload and accept without renaming', { timeout: 60000 }, async t => {
+  const { page } = await draftScenario(t, twoSources);
+  const initial = (await localDraft(page)).draft.clarification;
+  assert.deepEqual(initial.ids, twoSources.map(source => source.id));
+  await page.getByRole('button', { name: 'Action', exact: true }).click();
+  await page.getByRole('button', { name: 'Waiting', exact: true }).click();
+  await page.locator('#clarifyTitle').fill('Intentional first edit');
+  await page.locator('[data-proposal=waitingOn]').fill('First dependency');
+  await page.locator('[data-proposal=reviewDate]').fill('2030-05-06');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.proposal.reviewDate === '2030-05-06');
+  await page.locator('#clarifySkip').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.item?.id === 'b-second');
+  const skipped = await localDraft(page);
+  assert.deepEqual(skipped.draft.clarification.proposal, flowProposal(twoSources[1]));
+  assert.equal(skipped.draft.clarification.skipped, 1); assert.equal(skipped.draft.clarification.processed, 0);
+  assert.equal(skipped.queue.length, 0);
+  assert.equal(skipped.records['item:a-first'].title, 'First note');
+  await page.reload(); await page.locator('#clarifier').waitFor();
+  assert.equal(await page.locator('#clarifyTitle').inputValue(), 'Second note');
+  await page.getByRole('button', { name: 'Action', exact: true }).click();
+  await page.getByRole('button', { name: 'Waiting', exact: true }).click();
+  await page.locator('[data-proposal=waitingOn]').fill('Second dependency');
+  await page.locator('#clarifySkip').click();
+  await page.waitForFunction(() => document.querySelector('#clarifyStop').textContent === 'Done' && !document.querySelector('#clarifyStop').disabled);
+  await page.getByRole('button', { name: 'Return to first unprocessed item', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.index === 0);
+  const restarted = (await localDraft(page)).draft.clarification;
+  assert.deepEqual(restarted.proposal, flowProposal(twoSources[0]));
+  assert.deepEqual(restarted.ids, initial.ids);
+  assert.equal(restarted.skipped, 0); assert.equal(restarted.processed, 0);
+  await page.reload(); await page.locator('#clarifier').waitFor();
+  assert.equal(await page.locator('#clarifyTitle').inputValue(), 'First note');
+  await page.locator('#clarifySkip').click();
+  await page.waitForFunction(() => document.querySelector('#clarifyTitle').value === 'Second note' && !document.querySelector('#clarifySkip').disabled);
+  await page.getByRole('button', { name: 'Reference', exact: true }).click();
+  await page.locator('#clarifySave').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).queue.length === 1);
+  const accepted = await page.evaluate(async () => (await import('/inbox-store.js?v=9')).projected(await (await import('/inbox-store.js?v=9')).transact('alice')));
+  assert.equal(accepted['item:b-second'].title, twoSources[1].title);
+  assert.equal(accepted['item:b-second'].originalText, twoSources[1].originalText);
+  assert.equal(accepted['item:b-second'].sourceUrl, twoSources[1].sourceUrl);
+  assert.equal(accepted['item:b-second'].status, 'reference');
+  assert.equal(accepted['item:a-first'].status, 'inbox');
+});
+
+test('clarification conversion publishes its committed session before the render-triggered journal', { timeout: 60000 }, async t => {
+  const { page } = await draftScenario(t, [twoSources[0]]);
+  await page.evaluate(() => {
+    window.checkpoints = [];
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, ...args) {
+      if (value.draft?.clarification) window.checkpoints.push(structuredClone({ draft: value.draft, queue: value.queue }));
+      return put.call(this, value, ...args);
+    };
+  });
+  await page.getByRole('button', { name: 'Make project', exact: true }).click();
+  await page.waitForFunction(() => window.checkpoints.some(value => value.draft.navigation.execute.kind === 'project' && value.queue.length === 1));
+  const committed = (await localDraft(page)).draft.clarification;
+  assert.equal(committed.finished, true); assert.equal(committed.item, null);
+  assert.equal(committed.processed, 1); assert.equal(committed.previous.itemId, twoSources[0].id);
+  assert.equal(committed.previous.decision.type, 'convert');
+  await page.reload(); await page.locator('#clarifier').waitFor();
+  await page.waitForFunction(() => document.querySelector('#clarifyHeading').textContent === 'Clarify inbox complete');
+  await page.getByRole('button', { name: 'Undo previous decision', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.previous === null);
+  const undone = await page.evaluate(async () => {
+    const { transact, projected } = await import('/inbox-store.js?v=9'); return projected(await transact('alice'));
+  });
+  assert.equal(undone['item:a-first'].deleted, false);
+  assert.equal(Object.values(undone).find(record => record.type === 'project').deleted, true);
+  assert.equal(undone['clarification:a-first'].step, 'reversed');
+});
+
+test('clarification nonfinal conversion and Undo retain the edited resume proposal through Skip and trash', { timeout: 60000 }, async t => {
+  const { page } = await draftScenario(t, twoSources);
+  await page.getByRole('button', { name: 'Make project', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const draft = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft;
+    return draft.navigation.execute.kind === 'project' && draft.clarification?.item?.id === 'b-second';
+  });
+  assert.deepEqual((await localDraft(page)).draft.clarification.proposal, flowProposal(twoSources[1]));
+  await page.locator('#clarifyTitle').fill('Edited second action');
+  await page.getByRole('button', { name: 'Action', exact: true }).click();
+  await page.getByRole('button', { name: 'Waiting', exact: true }).click();
+  await page.locator('[data-proposal=waitingOn]').fill('Edited dependency');
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.proposal.waitingOn === 'Edited dependency');
+  await page.getByRole('button', { name: 'Undo previous decision', exact: true }).click();
+  await waitForBrowser(page, async () => {
+    const draft = (await (await import('/inbox-store.js?v=9')).transact('alice')).draft;
+    return draft.navigation.execute.kind === 'list' && draft.clarification?.resume?.item.id === 'b-second';
+  });
+  const resumed = (await localDraft(page)).draft.clarification;
+  assert.deepEqual(resumed.proposal, flowProposal(twoSources[0]));
+  assert.equal(resumed.resume.proposal.title, 'Edited second action');
+  assert.equal(resumed.resume.proposal.waitingOn, 'Edited dependency');
+  await page.reload(); await page.locator('#clarifier').waitFor();
+  await page.locator('#clarifySkip').click();
+  await page.waitForFunction(() => document.querySelector('#clarifyTitle').value === 'Edited second action' && !document.querySelector('#clarifySkip').disabled);
+  assert.equal(await page.locator('[data-proposal=waitingOn]').inputValue(), 'Edited dependency');
+  await page.getByRole('button', { name: 'Back to choices', exact: true }).click();
+  await page.locator('#clarifyFlow details > summary').click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Move to Deleted', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.finished === true);
+  const trashed = (await localDraft(page)).draft.clarification;
+  assert.equal(trashed.previous.decision.type, 'trash');
+  await page.reload(); await page.locator('#clarifier').waitFor();
+  await page.getByRole('button', { name: 'Undo previous decision', exact: true }).click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.item?.id === 'b-second');
+  assert.equal((await localDraft(page)).draft.clarification.proposal.title, 'Second note');
+  await page.locator('#clarifyStop').click();
+  await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.open === false);
+  await page.reload(); await page.locator('#workspace').waitFor();
+  assert.equal(await page.locator('#clarifier').isVisible(), false);
+});
+
+test('clarification failed checkpoints and decisions retain coherent recovery text without partial writes', { timeout: 60000 }, async t => {
+  for (const operation of ['skip', 'restart', 'decision']) await t.test(operation, async t => {
+    const { page } = await draftScenario(t, twoSources);
+    if (operation === 'restart') {
+      await page.locator('#clarifySkip').click();
+      await page.waitForFunction(() => document.querySelector('#clarifyTitle').value === 'Second note' && !document.querySelector('#clarifySkip').disabled);
+      await page.locator('#clarifySkip').click();
+      await page.waitForFunction(() => document.querySelector('#clarifyStop').textContent === 'Done' && !document.querySelector('#clarifyStop').disabled);
+    } else {
+      await page.getByRole('button', { name: 'Reference', exact: true }).click();
+      await page.locator('#clarifyTitle').fill('Recover intentional edit');
+      await waitForBrowser(page, async () => (await (await import('/inbox-store.js?v=9')).transact('alice')).draft.clarification?.proposal.title === 'Recover intentional edit');
+    }
+    const before = await localDraft(page);
+    await page.evaluate(() => {
+      window.originalPut = IDBObjectStore.prototype.put;
+      window.failedPuts = 0;
+      IDBObjectStore.prototype.put = function () { window.failedPuts++; throw new DOMException('Checkpoint quota failure', 'QuotaExceededError'); };
+    });
+    if (operation === 'restart') await page.getByRole('button', { name: 'Return to first unprocessed item', exact: true }).click();
+    else await page.locator(operation === 'skip' ? '#clarifySkip' : '#clarifySave').click();
+    const expected = operation === 'skip' ? twoSources[1] : twoSources[0];
+    await page.waitForFunction(id => window.failedPuts > 0 && !document.querySelector('#recovery').hidden
+      && JSON.parse(document.querySelector('#recoveryText').value).draft.clarification?.item?.id === id, expected.id);
+    const recovery = JSON.parse(await page.locator('#recoveryText').inputValue());
+    assert.equal(recovery.accountId, 'alice'); assert.equal(recovery.draft.workspaceId, 'personal');
+    assert.equal(recovery.draft.clarification.item.id, expected.id);
+    assert.equal(recovery.draft.clarification.proposal.title, operation === 'decision' ? 'Recover intentional edit' : expected.title);
+    assert.equal(await page.locator('#draftStatus').textContent(), 'Not saved on device');
+    assert.doesNotMatch(await page.locator('#clarifyDraftStatus').textContent(), /Skipped\.|Saved reference:|sync pending/);
+    const failed = await localDraft(page);
+    assert.deepEqual(failed.queue, before.queue); assert.deepEqual(failed.records, before.records);
+    assert.deepEqual(failed.draft.clarification, before.draft.clarification);
+    await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalPut; });
+  });
+});
 test('mobile clarification uses the staged parent picker, resumes its draft, converts, and undoes', { timeout: 60000 }, async t => {
   documents.length = 0; const server = await startServer({ browserUser: true }); t.after(server.close);
   assert.equal((await post(server.url, [create('list', 'family', { title: 'Family', kind: 'area' }), createItem('capture'), createItem('second', { title: 'Call electrician', description: '', originalText: 'Call electrician', sourceUrl: null })], undefined, 'disposable-test-user')).status, 200);

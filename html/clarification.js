@@ -11,7 +11,7 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const fresh = newFlow(item);
     return { ...fresh, version: saved?.version || 0 };
   };
-  const snapshot = () => active ? { ...structuredClone(active), proposal: values(), open: dialog.open } : null;
+  const snapshot = () => active ? { ...structuredClone(active), open: dialog.open } : null;
   const values = () => {
     if (!active?.item) return active?.proposal || flowProposal();
     const proposal = { ...active.proposal };
@@ -209,8 +209,15 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     return nextItem ? { ...common, item: nextItem, session: currentSession(nextItem), proposal: resuming ? active.resume.proposal : advance ? flowProposal(nextItem) : flowProposal(updatedItem), finished: false, open: true }
       : { ...common, item: null, session: null, proposal: flowProposal(), finished: true, open: true };
   }
-  async function convert(kind) {
+  async function saveDecision(mutations, next, message = next.previous?.message) {
     const origin = active;
+    $('clarifyDraftStatus').textContent = '';
+    // Publish the committed session before application rendering can journal it.
+    const saved = await save(mutations, next, () => { if (active === origin && dialog.open) active = next; });
+    if (!saved || active !== next || !dialog.open) return;
+    draw(); announce(message);
+  }
+  async function convert(kind) {
     const item = active.item, title = requireTitle(values().title), id = crypto.randomUUID(), type = kind === 'project' ? 'project' : 'list';
     const parentRef = values().parentRef || null, containerRef = { type, id }, decision = { type: 'convert', containerRef, containerKind: kind, parentRef, title };
     const fields = { title, description: item.description || '', workspaceId: item.workspaceId, parentRef, ...sourceMetadata(item),
@@ -218,10 +225,9 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
     const mutations = [clarificationMutation(item, session), { type, id, action: 'create', expectedVersion: 0, fields }, { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }];
     const next = nextActive(decision, `Converted to ${collectionKinds[kind]}: ${title}`, true);
-    if (!await save(mutations, next) || active !== origin || !dialog.open) return; active = next; draw(); announce(next.previous.message);
+    await saveDecision(mutations, next);
   }
   async function file(destination) {
-    const origin = active;
     const item = active.item, proposal = values(), destinationRef = { type: destination.type, id: destination.id }, after = membershipChange(item, destinationRef);
     if (!after) { announce(`Already filed in ${destination.title}.`); return; }
     const decision = { type: 'file', destinationRef, before: beforeFields(item, after), after };
@@ -229,29 +235,23 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const updated = { ...item, ...after, version: item.version + 1 }, next = nextActive(decision, `Filed in ${destination.title}`, false, updated);
     next.proposal = proposal;
     next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
-    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next) || active !== origin || !dialog.open) return;
-    active = next; draw(); announce(next.previous.message);
+    await saveDecision([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next);
   }
   async function saveItem(destination) {
-    const origin = active;
     const item = active.item, proposal = values(), destinationRef = destination ? { type: destination.type, id: destination.id } : null;
     const after = itemFields(item, proposal, destinationRef), decision = { type: 'item', before: beforeFields(item, after), after };
     const session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
     const next = nextActive(decision, `Saved ${after.status}: ${after.title}`, true);
     if (destinationRef) next.recentRefs = [refKey(destinationRef), ...(active.recentRefs || []).filter(value => value !== refKey(destinationRef))].slice(0, 5);
-    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next) || active !== origin || !dialog.open) return;
-    active = next; draw(); announce(next.previous.message);
+    await saveDecision([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'update', expectedVersion: item.version, fields: after }], next);
   }
   async function trash() {
-    const origin = active;
     if (!confirm(`Move “${active.item.title}” to Deleted? It can be restored.`)) return;
     const item = active.item, decision = { type: 'trash' }, session = { flowVersion: 3, step: 'complete', decision, proposal: flowProposal(item) };
     const next = nextActive(decision, `Moved to Deleted: ${item.title}`, true);
-    if (!await save([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }], next) || active !== origin || !dialog.open) return;
-    active = next; draw(); announce(next.previous.message);
+    await saveDecision([clarificationMutation(item, session), { type: 'item', id: item.id, action: 'delete', expectedVersion: item.version }], next);
   }
   async function undo() {
-    const origin = active;
     const previous = active.previous, all = records(), item = all[`item:${previous.itemId}`], clarification = all[`clarification:${previous.itemId}`], d = previous.decision;
     if (!item || !clarification || clarification.decision?.type !== d.type) throw new Error('This decision changed and can no longer be undone.');
     const session = { flowVersion: 3, step: 'reversed', decision: d, proposal: flowProposal(item) };
@@ -266,22 +266,22 @@ export function clarificationUI({ records, save, journal, showDialog, actions, c
     const resume = active.item && active.item.id !== item.id ? { item: active.item, proposal: values(), index: active.index } : null;
     const next = { ...active, item: restored, index: Math.max(0, active.ids.indexOf(item.id)), finished: false, processed: Math.max(0, active.processed - (d.type === 'file' ? 0 : 1)),
       session: { ...session, version: clarification.version + 1 }, proposal: flowProposal(restored), previous: null, resume, open: true };
-    if (!await save(mutations, next) || active !== origin || !dialog.open) return; active = next; draw(); announce('Previous clarification decision undone.');
+    await saveDecision(mutations, next, 'Previous clarification decision undone.');
   }
   async function skip() {
     if (!active?.item) return;
     active = { ...nextActive(null, '', true), processed: active.processed, skipped: active.skipped + 1, previous: active.previous };
     const next = active;
-    await journal();
-    if (active !== next || !dialog.open) return;
+    $('clarifyDraftStatus').textContent = '';
+    if (!await journal() || active !== next || !dialog.open) return;
     draw(); announce(active.finished ? inboxItems().length ? 'All inbox items viewed.' : 'Clarification session complete.' : `Skipped. ${active.item.title}`);
   }
   async function restartUnprocessed() {
     const items = inboxItems();
     active = items.length ? initial(items, true) : { ...active, finished: true };
     const next = active;
-    await journal();
-    if (active !== next || !dialog.open) return;
+    $('clarifyDraftStatus').textContent = '';
+    if (!await journal() || active !== next || !dialog.open) return;
     draw(); void guidance.check();
   }
   function announce(message) { $('clarifyDraftStatus').textContent = `${message} · Saved on device; sync pending.`; }

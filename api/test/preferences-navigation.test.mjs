@@ -520,6 +520,10 @@ test('A moved list keeps its task-option draft recoverable without allowing a wr
   await page.locator('#edit [name=title]').fill('Other list');
   await page.getByRole('button', { name: 'Save edit on device' }).click();
   await page.locator('#editor').waitFor({ state: 'hidden' });
+  await waitForBrowser(page, async () => {
+    const local = await (await import('/inbox-store.js?v=15')).transact('alice');
+    return local.queue.length === 0 && Object.values(local.records).some(record => record.type === 'list' && record.title === 'Other list');
+  });
   await page.locator('#view').selectOption({ label: 'Other list' });
   await page.getByRole('button', { name: 'Task options: Other list', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#error').textContent.includes('draft opened instead'));
