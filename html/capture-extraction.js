@@ -132,7 +132,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
   const field = $('captureText'), mirror = $('captureMirror');
   let completion = null, pendingCursor = null, composing = false, listSource = '', startControl, reviewNeedsSave = false, reviewRevision = 0;
   let draft = null, clock = null, sourceText = '', sourceFields = '', generation = 0, controller, cloudCheck, model, finish, busy = false, timer, enabled = false, includeLists = false, cloudReady = false, cloudLabel = '', cloudPhase = 'unavailable', cloudBusy = false;
-  const unavailableMessage = 'AI suggestions are unavailable here. Choose Review tasks manually, or use one item per line and Save on device.';
+  const unavailableMessage = 'AI is unavailable. Use one item per line and Save on device, then organize in Process.';
   const status = message => { if ($('extractionStatus').textContent !== message) $('extractionStatus').textContent = message; $('extractionStatus').hidden = !message; };
   const cloudState = () => ({ active: modelReadiness() === 'unavailable' && cloudEligible(), phase: cloudBusy ? 'busy' : cloudPhase, ready: cloudReady, label: cloudLabel });
   const announceCloud = () => document.dispatchEvent(new CustomEvent('capturecloudstatechange', { detail: cloudState() }));
@@ -161,6 +161,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     $('captureSuggestedTasks').replaceChildren();
     if (!draft) return;
     $('capturePreviewHeading').textContent = draft.manual ? 'Tasks to review before saving:' : 'Suggested tasks — review before saving:';
+    $('extractReview').textContent = draft.manual ? 'Resume saved tasks' : 'Review saved suggestions';
     for (const item of draft.items) {
       const row = document.createElement('li'), list = current()?.lists.find(list => list.id === item.listId);
       row.textContent = (item.title || 'Untitled task') + (list ? ' → ' + list.title : '');
@@ -186,7 +187,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     const { inserted, caret, cursor } = completion;
     cancel(); field.setRangeText(inserted, cursor, cursor, 'end'); field.setSelectionRange(caret, caret); field.focus();
     field.dispatchEvent(new Event('input', { bubbles: true }));
-    status('Suggested entry inserted. The cursor is ready on the next line. Edit it, then save your capture or review tasks.');
+    status('Suggested entry inserted. The cursor is ready on the next line. Edit it, then Save on device and organize your items in Process.');
     return true;
   }
   $('captureCompletionUse').onclick = useCompletion;
@@ -269,7 +270,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
   function render() {
     refreshLists();
     if (!draft) return;
-    $('extractionHeading').textContent = draft.manual ? 'Review tasks' : 'Suggested tasks';
+    $('extractionHeading').textContent = draft.manual ? 'Resume saved tasks' : 'Suggested tasks';
     $('extractionHelp').textContent = draft.manual
       ? 'No AI was used. Add and edit your tasks using the original below. To split, add a task and edit both; to merge, use Merge into previous task. Only acceptance creates tasks.'
       : 'These are unaccepted AI suggestions. Check every title, note and attribute. Dates may be inferred; clear uncertain values. To split, add a task and edit both; to merge, use Merge into previous task.';
@@ -341,27 +342,6 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
     }
     render(); finishInteraction(focused, true);
   }
-  $('extractManual').onclick = async () => {
-    const focused = document.activeElement;
-    cancel();
-    if (draft) { await resumeReview(); return; }
-    const input = current();
-    if (!input?.text.trim()) { status('Enter a capture first, then choose Review tasks manually.'); return; }
-    if (input.newList?.trim()) { status('Create the list in Lists first, then clear Or create a list and select it in Context or list before reviewing tasks.'); return; }
-    changed(); cancel();
-    const run = generation, owner = input.accountId;
-    try {
-      const source = text(input.original ?? input.text, 16000, 'Original capture');
-      clock ||= captureClock();
-      draft = { id: crypto.randomUUID(), manual: true, source, inputCapture: captureInput(input), clock: structuredClone(clock), notes: '',
-        items: [{ ...Object.fromEntries(itemKeys.map(key => [key, ''])), id: crypto.randomUUID(),
-          title: source.length <= 200 ? source : '', listId: input.listId || '', contexts: [...(input.contexts || [])] }] };
-      const saved = await journalReview();
-      if (run !== generation || owner !== current()?.accountId || JSON.stringify(captureInput(current())) !== JSON.stringify(captureInput(input))) return;
-      if (!saved) { status('Review could not be saved. Copy/export the recovery text before leaving, then retry Review tasks manually.'); return; }
-      render(); status('Manual review saved on device. Only acceptance creates tasks.'); finishInteraction(focused, true);
-    } catch (error) { if (run === generation) { status(error.message); recovery(error); } }
-  };
   $('extractReview').onclick = () => { cancel(); void resumeReview(); };
   $('extractionReview').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   $('extractClose').onclick = () => $('extractionReview').close();
@@ -409,7 +389,7 @@ export function setupCaptureExtraction({ matrix = () => false, current, journal,
       const readiness = modelReadiness();
       const useCloud = forceCloud && readiness === 'unavailable' && cloudReady && cloudEligible() && interactive && !inline;
       if (input.newList?.trim()) throw new Error('Create the new list first, or clear its name before requesting suggestions. AI capture uses existing lists only.');
-      if (!useCloud && (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness))) throw new Error('AI suggestions are unavailable. Choose Review tasks manually, or use one item per line and Save on device; comma / semicolon preview is also available.');
+      if (!useCloud && (!api?.create || !['available', 'downloadable', 'downloading'].includes(readiness))) throw new Error(unavailableMessage);
       if (!interactive && readiness !== 'available') throw new Error('Choose Suggest tasks now to start or continue the browser model download. Manual capture is available.');
       let saved;
       if (useCloud) {

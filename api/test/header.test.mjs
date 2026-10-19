@@ -358,7 +358,7 @@ for (const [mode, expected] of [[{ absent: true }, 'unavailable'], [{ state: 'un
     for (const id of ['extractAuto', 'extractLists', 'extractStart']) {
       assert.equal(await page.locator('#' + id).isDisabled(), expected === 'unavailable' || !!mode.checkFail);
     }
-    assert.equal(await page.locator('#extractManual').isVisible(), true);
+    assert.equal(await page.locator('#extractManual').count(), 0);
     assert.equal(await page.locator('#captureAI').isVisible(), expected !== 'unavailable' && !mode.checkFail);
     assert.equal(await page.locator('#extractionStatus').isVisible(), expected === 'unavailable' || !!mode.checkFail);
     assert.deepEqual(await page.evaluate(() => aiCalls), { creates: 0, prompts: 0, destroyed: 0 });
